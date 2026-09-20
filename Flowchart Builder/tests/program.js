@@ -231,6 +231,57 @@ function wanted(one) {                   // what run.py said it should print
     }
   }
 
+  // ---- the puzzles: each one broken, each fix mending it -------------
+  // A puzzle is only a puzzle if it gets something wrong, and only fair if
+  // there is a way to put it right.  Neither is true by looking: both are
+  // true by running.  So each one is run twice over -- as it is shipped,
+  // which has to come out wrong somewhere, and as tests/puzzles/<key>.txt
+  // mends it, which has to come out right everywhere.  The mends live here
+  // and not beside the puzzles because a page that carries the answers has
+  // given the game away to anybody who opens it.
+  function same(said, want) {
+    return said.length === want.length &&
+           want.every(function (line, n) { return said[n] === line; });
+  }
+
+  for (var p = 0; p < (asked.puzzles || []).length; p++) {
+    var pz = asked.puzzles[p], wrongSomewhere = false;
+    for (var t = 0; t < pz.tries.length; t++) {
+      var each = pz.tries[t], where = pz.name + " try " + (t + 1);
+
+      // The mend has to answer for every set of answers, not just one.
+      var mended = null;
+      try { mended = await go.quietly(pz.fixed, each.give.slice()); }
+      catch (blew) {
+        bad.push(where + ": the mend threw -- " + (blew && blew.message || blew));
+      }
+      if (mended) {
+        if (mended.faults.length) {
+          bad.push(where + ": the mend stopped -- " + mended.faults[0].say);
+        } else if (!same(mended.printed, each.want)) {
+          bad.push(where + ": the mend is wrong\n      wanted " +
+                   JSON.stringify(each.want) + "\n      got    " +
+                   JSON.stringify(mended.printed));
+        }
+      }
+
+      // The puzzle itself.  Throwing, stopping or printing the wrong thing
+      // all count as broken -- a loop that never ends is a fault to find
+      // like any other.
+      var asShipped = null;
+      try { asShipped = await go.quietly(pz.broken, each.give.slice()); }
+      catch (blew) { wrongSomewhere = true; }
+      if (asShipped &&
+          (asShipped.faults.length || !same(asShipped.printed, each.want))) {
+        wrongSomewhere = true;
+      }
+    }
+    if (!wrongSomewhere) {
+      bad.push(pz.name + ": nothing is wrong with it -- it already prints " +
+               "what every try asks for, so there is no puzzle to solve");
+    }
+  }
+
   // ---- and the same programs, written out as code --------------------
   (asked.written || []).forEach(function (one) {
     var text;

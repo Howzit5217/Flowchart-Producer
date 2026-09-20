@@ -1058,6 +1058,84 @@ def _():
 
 
 # ------------------------------------------------ the part that runs in node --
+PUZZLE_JS = os.path.join(HERE, "..", "flowchart", "ui", "js", "28-puzzles.js")
+PUZZLE_MENDS = os.path.join(HERE, "puzzles")
+
+
+def puzzle_list():
+    """The puzzles, read out of the studio's own file rather than a copy.
+
+    They are written in JavaScript, so JavaScript is what reads them: the
+    file is a fragment of the page's one big function, and everything in it
+    past the list wants a page to live in.  Cut it off there and the list
+    is all that is left to hand back.
+    """
+    lift = ("var fs = require('fs');"
+            "var src = fs.readFileSync(process.argv[1], 'utf8');"
+            "var body = src.slice(0, src.indexOf('var solved')) +"
+            "           ' return PUZZLES;';"
+            "var out = [];"
+            "new Function(body)().forEach(function (level) {"
+            "  level[1].forEach(function (one) { out.push(one); });"
+            "});"
+            "process.stdout.write(JSON.stringify(out));")
+    got = subprocess.run(["node", "-e", lift, PUZZLE_JS],
+                         capture_output=True, text=True)
+    if got.returncode:
+        raise RuntimeError("could not read the puzzles: " + got.stderr.strip())
+    return json.loads(got.stdout)
+
+
+@check("every puzzle is broken, and every mend puts it right")
+def _():
+    """Both halves of a puzzle, run rather than read.
+
+    A puzzle that already does what it is asked cannot be solved, and a
+    puzzle nothing can be typed to make right cannot be solved either.
+    Neither shows up by looking at the pseudocode -- the first one looks
+    exactly like a puzzle, and the second looks like a hard one.  So each
+    is run: the program as it ships has to come out wrong for at least one
+    set of answers, and the mend in tests/puzzles has to come out right for
+    every set.
+
+    The mends are kept here rather than beside the puzzles on purpose.  The
+    page is sent to whoever opens it, and a page carrying the answers has
+    handed them over along with the questions.
+    """
+    if not node_there():
+        return None, "node is not installed -- skipped"
+    fb = builder()
+    puzzles = puzzle_list()
+    gone = [one["key"] for one in puzzles
+            if not os.path.exists(os.path.join(PUZZLE_MENDS, one["key"] + ".txt"))]
+    if gone:
+        return False, "%d of %d have no mend written: %s" % (
+            len(gone), len(puzzles), ", ".join(gone[:5]))
+    asked = {"words": fb.WORDS["en"], "cases": [], "puzzles": []}
+    for one in puzzles:
+        with io.open(os.path.join(PUZZLE_MENDS, one["key"] + ".txt"),
+                     encoding="utf-8") as f:
+            mend = f.read().strip()
+        asked["puzzles"].append({
+            "name": "puzzle %d (%s)" % (one["no"], one["key"]),
+            "broken": read_as_data(one["start"]),
+            "fixed": read_as_data(mend),
+            "tries": one["tries"]})
+    handle, where = tempfile.mkstemp(suffix=".json")
+    try:
+        with io.open(handle, "w", encoding="utf-8") as f:
+            f.write(json.dumps(asked))
+        got = subprocess.run(["node", os.path.join(HERE, "program.js"), where],
+                             capture_output=True, text=True)
+    finally:
+        os.remove(where)
+    said = (got.stdout + got.stderr).strip()
+    tries = sum(len(one["tries"]) for one in puzzles)
+    return got.returncode == 0, (
+        "%d puzzles, %d sets of answers" % (len(puzzles), tries)
+        if got.returncode == 0 else said.replace("\n", "\n       "))
+
+
 def node_there():
     try:
         subprocess.run(["node", "--version"], capture_output=True, check=True)
