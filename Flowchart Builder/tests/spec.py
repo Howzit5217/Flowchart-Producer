@@ -40,12 +40,17 @@ def tried(puzzles):
     fb = R.builder()
     asked = {"words": fb.WORDS["en"], "cases": [], "puzzles": []}
     for n, one in enumerate(puzzles, 1):
-        for field in ("key", "start", "mend", "tries", "b"):
+        for field in ("key", "start", "mend", "tries", "t", "b", "s"):
             if field not in one:
                 raise SystemExit("puzzle %d has no %s" % (n, field))
-        for lang in ("en", "de", "es", "fr"):
-            if not one["b"].get(lang):
-                raise SystemExit("%s has no %s brief" % (one["key"], lang))
+        # t is what it is about, b is what it must do, s is what it does
+        # now.  All three in all four languages, or the card comes out with
+        # a heading over a blank in whichever one was forgotten.
+        for field in ("t", "b", "s"):
+            for lang in ("en", "de", "es", "fr"):
+                if not one[field].get(lang):
+                    raise SystemExit("%s has no %s in %s" % (
+                        one["key"], field, lang))
         broken = R.read_as_data(one["start"].strip())
         mended = R.read_as_data(one["mend"].strip())
         for which, data in (("start", broken), ("mend", mended)):
