@@ -340,7 +340,15 @@
   function showPuzzles(open) {
     var over = el("#pz-over");
     if (!over) { return; }
-    if (open) { buildPuzzles(); }
+    if (open) {
+      buildPuzzles();
+      // Looked at, so no longer new.  The dot goes out here rather than on
+      // the way back out, because the sheet is open in front of you: being
+      // told again, once you are standing in it, that there is something
+      // to come and see is the thing that made it meaningless.
+      noteSeen();
+      dressPuzzleButton();
+    }
     over.hidden = !open;
     if (el("#puzzles")) {
       el("#puzzles").setAttribute("aria-expanded", open ? "true" : "false");
@@ -537,14 +545,43 @@
 
   // The button in the bar wears a dot while there is anything left to
   // solve, and stops wearing it when there is not.
+  // Which levels have been looked at since they opened.
+  function seenLevels() {
+    try { return JSON.parse(localStorage.getItem("flowchart-pz-seen")) || {}; }
+    catch (e) { return {}; }
+  }
+
+  function noteSeen() {
+    var seen = seenLevels();
+    PUZZLES.forEach(function (level, i) {
+      if (levelOpen(i)) { seen["l" + i] = true; }
+    });
+    try { localStorage.setItem("flowchart-pz-seen", JSON.stringify(seen)); }
+    catch (e) { /* storage turned off: the dot comes back next time */ }
+  }
+
+  // Is there a level open that has not been looked at yet?
+  function anythingNew() {
+    var seen = seenLevels(), found = false;
+    PUZZLES.forEach(function (level, i) {
+      if (levelOpen(i) && !seen["l" + i]) { found = true; }
+    });
+    return found;
+  }
+
   function dressPuzzleButton() {
     var button = el("#puzzles");
     if (!button) { return; }
     var count = puzzlesDone();
-    if (count.done && count.done < count.all) { button.classList.add("some"); }
-    else { button.classList.remove("some"); }
-    if (count.done === count.all) { button.classList.add("won"); }
-    else { button.classList.remove("won"); }
+    // The dot was on from the first puzzle solved until all fifty were,
+    // which is a progress bar wearing a notification's clothes: it looks
+    // like something to go and see, and going and seeing it did nothing,
+    // so after the first solve it was on for good and said nothing at all.
+    // It marks a level that has opened and not been looked at now, which
+    // is the one thing here worth being told about -- and looking at it is
+    // what puts it out.
+    button.classList.toggle("some", anythingNew());
+    button.classList.toggle("won", count.all > 0 && count.done === count.all);
   }
 
   if (el("#puzzles")) {
