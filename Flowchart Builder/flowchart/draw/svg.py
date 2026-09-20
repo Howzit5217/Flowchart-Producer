@@ -88,15 +88,25 @@ def to_svg(elems, title=None, author=None):
             out.append(f'<text class="author" x="{settings.MARGIN}" y="42" stroke="none" '
                        f'fill="{settings.INK}">{html.escape(author)}</text>')
 
-    # A route gets an arrowhead where it arrives at a shape, and also where
-    # it arrives side-on at a line that carries on past the point -- a
-    # branch rejoining the flow it left.  It points at that line, which is
-    # what it is really arriving at.
+    # A route gets an arrowhead where it arrives at a shape.  That is the
+    # whole rule.
     #
-    # What never gets a head is a route that merely meets another one: the
-    # two sides of an If coming back together arrive nose to nose at the
-    # same point, and two heads there read as a collision rather than a
-    # join.  There the single arrow leaving the meeting says where it goes.
+    # It used to get one where it arrived side-on at a line that carried on
+    # past the point as well -- a branch rejoining the flow it left, aimed
+    # at the line it was rejoining.  The reasoning was sound and the result
+    # was not.  Those joins happen on the rail a few pixels above the shape
+    # the rail runs into, so the head landed on the line with another head
+    # just below it that really was arriving somewhere, and a loop going
+    # round again put a third one on the same rail from the other side.
+    # Two and three heads clustered at the foot of a diamond read as a
+    # pile-up rather than as a join.
+    #
+    # A line that joins another needs no head of its own: the line it joins
+    # is going somewhere and carries the head that says where.  Which is
+    # what the two sides of an If have always done here -- they arrive nose
+    # to nose at one point and neither carries a head, because two heads
+    # meeting there read as a collision.  The same is true of every other
+    # join; it was only ever this one that argued otherwise.
     nodes = 0                            # shapes get a number as they go
     boxes = [(e[2] - e[4] / 2.0, e[3] - e[5] / 2.0,
               e[2] + e[4] / 2.0, e[3] + e[5] / 2.0)
@@ -109,41 +119,6 @@ def to_svg(elems, title=None, author=None):
                 return True
         return False
 
-    upright = lambda dx, dy: abs(dy) > abs(dx)
-    at = lambda x, y: (round(x, 1), round(y, 1))
-    leaving, arriving = {}, {}           # which way lines go at each point
-    down_x, across_y = {}, {}            # verticals by x, horizontals by y
-    for _, x1, y1, x2, y2, _a in segs:
-        way = upright(x2 - x1, y2 - y1)
-        leaving.setdefault(at(x1, y1), set()).add(way)
-        arriving.setdefault(at(x2, y2), set()).add(way)
-        if abs(x1 - x2) < 0.5:
-            down_x.setdefault(round(x1, 1), []).append((min(y1, y2), max(y1, y2)))
-        elif abs(y1 - y2) < 0.5:
-            across_y.setdefault(round(y1, 1), []).append((min(x1, x2), max(x1, x2)))
-
-    def runs_through(pt):
-        """Is there a line at pt that carries on past it, rather than one
-        that stops there?  Either a single segment pt sits inside, or one
-        arriving and one leaving the same way, which is one line with a
-        join drawn in the middle of it."""
-        if leaving.get(pt, set()) & arriving.get(pt, set()):
-            return True
-        for lo, hi in down_x.get(pt[0], ()):
-            if lo + 1.5 < pt[1] < hi - 1.5:
-                return True
-        for lo, hi in across_y.get(pt[1], ()):
-            if lo + 1.5 < pt[0] < hi - 1.5:
-                return True
-        return False
-
-    def joins_a_line(pts):
-        """Does this route arrive side-on at a line that carries on past?"""
-        pt = at(*pts[-1])
-        (ax, ay), (bx, by) = pts[-2], pts[-1]
-        came = upright(bx - ax, by - ay)
-        return came not in leaving.get(pt, set()) and runs_through(pt)
-
     # Routes first, because the shapes and the labels are meant to paint over
     # them.  The tips are held back to the very end: a label carries a patch
     # of blank paper behind it so the line does not run through the word, and
@@ -152,7 +127,7 @@ def to_svg(elems, title=None, author=None):
     tips = []
     for pts, arrow in chain_lines(segs):
         head = None
-        if reaches_a_shape(pts[-1]) or joins_a_line(pts):
+        if reaches_a_shape(pts[-1]):
             head, pts = arrow_head(pts)
         d = path_d(pts)
         if d:
