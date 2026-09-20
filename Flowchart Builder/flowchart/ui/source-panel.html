@@ -72,9 +72,13 @@
           </button>
         </div>
         <p id="pz-said"></p>
-        <button class="btn primary wide" id="pz-check"
-                data-w="pz_check">__W(pz_check)__</button>
+        <!-- No Check button of its own.  Run is the button, and while a
+             puzzle is open it says Check: the way to find out whether you
+             have fixed it is to run it, which is the way to find out
+             anywhere else too. -->
         <p class="hint" id="pz-mark"></p>
+        <button class="btn primary wide" id="pz-next"
+                data-w="pz_next" hidden>__W(pz_next)__</button>
       </div>
       <div class="go build-row">
         <button class="btn primary wide" id="build" data-w="build">__W(build)__</button>

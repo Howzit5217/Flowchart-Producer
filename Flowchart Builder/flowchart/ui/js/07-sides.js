@@ -79,6 +79,28 @@
     };
   });
 
+  // And the ones written to fold in the page itself rather than gathered
+  // up here.  "Shape for each kind" is written `class="card fold shut"`,
+  // which is enough for the styling to hide everything under the heading
+  // and put a chevron on it -- and the only thing that ever handed a
+  // heading something to do when it was pressed was the loop above, which
+  // looks in the colours panel, and that section is in the chart one.  So
+  // it sat there shut for good: a heading, a chevron that turned nothing,
+  // and six shape pickers nobody could reach.  Folded by its own id, so
+  // the ones above keep the names they have been saved under.
+  all("section.fold[id]").forEach(function (card) {
+    var head = el("h2", card);
+    if (!head || head.onclick) { return; }
+    var name = card.id;
+    card.classList.toggle("shut", folded[name] !== false);
+    head.onclick = function () {
+      card.classList.toggle("shut");
+      folded[name] = card.classList.contains("shut");
+      try { localStorage.setItem("flowchart-folded", JSON.stringify(folded)); }
+      catch (e) { /* fine */ }
+    };
+  });
+
   // Drag to move about -- which, locked, means scrolling the stage under a
   // chart that stays put.  Loose, the chart is what moves instead, and
   // 06-chart.js has that; there is nothing to scroll then, so this stands

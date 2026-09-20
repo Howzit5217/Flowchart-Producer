@@ -766,3 +766,33 @@
     }
     return { said: said, wentWrong: wentWrong };
   }
+
+  // The same thing, watched.  Marking a puzzle used to happen out of
+  // sight: you pressed a button and were told yes or no, which is a
+  // verdict rather than a run, and a verdict teaches nothing about the
+  // program that earned it.  This runs the program the way pressing Run
+  // runs it -- down the chart, a shape at a time, printing as it goes --
+  // and only answers the questions for you, so what you watch is the
+  // thing being marked rather than a report on it.
+  async function runWatched(feed) {
+    var said = [], wentWrong = false;
+    var wasAsk = ask, wasTalk = talk;
+    var given = (feed || []).slice();
+    ask = function () {
+      return Promise.resolve(given.length ? String(given.shift()) : "");
+    };
+    talk = function (what, how) {
+      if (!how) { said.push(String(what)); }
+      if (how === "bad") { wentWrong = true; }
+      return wasTalk(what, how);         // and still put it on the tape
+    };
+    try {
+      await runIt();
+    } catch (e) {
+      wentWrong = true;
+    } finally {
+      ask = wasAsk; talk = wasTalk;
+      running = false; stopping = false;
+    }
+    return { said: said, wentWrong: wentWrong };
+  }

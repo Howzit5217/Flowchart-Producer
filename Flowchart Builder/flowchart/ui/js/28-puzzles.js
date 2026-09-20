@@ -338,7 +338,51 @@
     dressPuzzle();
   }
 
+  // Which level a puzzle belongs to, and where to go when it is beaten.
+  function levelIndexOf(one) {
+    for (var i = 0; i < PUZZLES.length; i++) {
+      if (PUZZLES[i][1].indexOf(one) >= 0) { return i; }
+    }
+    return -1;
+  }
+
+  // The next one worth opening: the next unsolved puzzle in this level,
+  // then the first unsolved one in the next level that solving this has
+  // opened, and failing both, anything skipped further back.  Finishing a
+  // puzzle should hand you the next thing to do rather than the sheet you
+  // came from -- the sheet is still a click away, and nobody who has just
+  // fixed something wants to be sent back to a menu to find out what is
+  // next.
+  function nextAfter(one) {
+    var at = levelIndexOf(one), i, j;
+    if (at < 0) { return null; }
+    var here = PUZZLES[at][1];
+    for (j = here.indexOf(one) + 1; j < here.length; j++) {
+      if (!solved[here[j].key]) { return here[j]; }
+    }
+    for (i = at + 1; i < PUZZLES.length; i++) {
+      if (!levelOpen(i)) { break; }
+      for (j = 0; j < PUZZLES[i][1].length; j++) {
+        if (!solved[PUZZLES[i][1][j].key]) { return PUZZLES[i][1][j]; }
+      }
+    }
+    for (i = 0; i < PUZZLES.length; i++) {
+      if (!levelOpen(i)) { break; }
+      for (j = 0; j < PUZZLES[i][1].length; j++) {
+        if (!solved[PUZZLES[i][1][j].key]) { return PUZZLES[i][1][j]; }
+      }
+    }
+    return null;
+  }
+
   function dressPuzzle() {
+    // Run is the button that marks it, so Run is what it has to say it
+    // does.  It goes back to saying Run the moment the puzzle is shut.
+    var run = el("#run");
+    if (run) {
+      run.textContent = onPuzzle ? (TXT.pz_check || "Check")
+                                 : (TXT.r_run || "Run");
+    }
     var card = el("#pz-card");
     if (!card) { return; }
     if (!onPuzzle) { card.hidden = true; return; }
@@ -348,9 +392,20 @@
     var mark = el("#pz-mark");
     mark.className = "hint";
     mark.textContent = "";
-    if (solved[onPuzzle.key]) {
+    var done = !!solved[onPuzzle.key];
+    if (done) {
       mark.className = "good";
       mark.textContent = TXT.pz_right;
+    }
+    var on = el("#pz-next");
+    if (on) {
+      var after = done ? nextAfter(onPuzzle) : null;
+      on.hidden = !after;
+      if (after) {
+        on.textContent = levelIndexOf(after) === levelIndexOf(onPuzzle)
+                       ? (TXT.pz_next || "Next puzzle")
+                       : (TXT.pz_next_level || "Next level");
+      }
     }
   }
 
@@ -394,34 +449,43 @@
       mark.textContent = TXT.pz_none;
       return;
     }
-    var button = el("#pz-check");
-    button.disabled = true;
+    var button = el("#run");
+    if (button) { button.disabled = true; }
     mark.className = "hint";
-    mark.textContent = TXT.rendering;
+    mark.textContent = "";
     var beaten = true, why = null;
     for (var i = 0; i < onPuzzle.tries.length; i++) {
       var go = onPuzzle.tries[i];
-      var got = await runQuietly(go.give);
+      // The first set of answers is run where it can be watched: down the
+      // chart, a shape at a time, printing as it goes, with the answers
+      // typed in for you.  The rest are run out of sight -- it is the same
+      // program, and watching it go round five times says nothing the
+      // first time round did not.
+      var got = i === 0 ? await runWatched(go.give)
+                        : await runQuietly(go.give);
       if (got.wentWrong || !readsSame(got.said, go.want)) {
         beaten = false;
         why = { go: go, got: got };
         break;
       }
     }
-    button.disabled = false;
+    if (button) { button.disabled = false; }
     if (beaten) {
       solved[onPuzzle.key] = true;
       keepSolved();
-      mark.className = "good";
-      mark.textContent = TXT.pz_right;
       briefly(el("#pz-card"), "won", 900);
       dressPuzzleButton();
+      dressPuzzle();                     // says it is solved, offers the next
       return;
     }
+    // What it should have said is not said back.  Being told the answer is
+    // the one thing that stops a puzzle being one, and "it should say 6.60"
+    // is the answer to a puzzle about working out change.  What it was
+    // given and what it did with it are both fair: they are what anybody
+    // watching the run just saw for themselves.
     mark.className = "hint bad";
     mark.textContent = say(why.got.wentWrong ? "pz_broke" : "pz_wrong", {
       give: listed(why.go.give),
-      want: listed(why.go.want),
       said: listed(why.got.said)
     });
   }
@@ -449,7 +513,22 @@
       if (ev.target === el("#pz-over")) { showPuzzles(false); }
     };
   }
-  if (el("#pz-check")) { el("#pz-check").onclick = markPuzzle; }
+  // Run does the marking while a puzzle is open, and goes on being Run the
+  // rest of the time.  The handler it already has is kept and called: this
+  // part of the script is not the one that knows how to run a program.
+  if (el("#run")) {
+    var runAnyway = el("#run").onclick;
+    el("#run").onclick = function (ev) {
+      if (onPuzzle) { return markPuzzle(); }
+      return runAnyway ? runAnyway.call(this, ev) : undefined;
+    };
+  }
+  if (el("#pz-next")) {
+    el("#pz-next").onclick = function () {
+      var after = onPuzzle && nextAfter(onPuzzle);
+      if (after) { openPuzzle(after); }
+    };
+  }
   if (el("#pz-shut")) { el("#pz-shut").onclick = shutPuzzle; }
   window.addEventListener("keydown", function (ev) {
     if (ev.key === "Escape" && el("#pz-over") && !el("#pz-over").hidden) {
