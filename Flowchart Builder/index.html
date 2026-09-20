@@ -7046,8 +7046,24 @@
   var R_CASH_TYPE = /^(currency|money)$/i;
   var R_CASH_SIGN = /[$\u00a3\u20ac\u00a5\u20b9]\s*$/;
 
+  // The names declared to hold a number, and what a number typed in looks
+  // like.  A price is the value most likely to be typed with both places --
+  // 23.50, not 23.5 -- and what is typed is text until something decides
+  // otherwise.  Deciding by how the number reads keeps 23.50 as the text
+  // "23.50", and text is joined by + rather than added, so a bill of 23.50
+  // and a tip of 4.23 came to "23.504.23".  What the program declared the
+  // name to hold is the thing to go by instead: Currency, Real and Integer
+  // all said, before anything was typed, that a number is what belongs
+  // there.  Anything undeclared is left as it was -- an order number with
+  // a leading zero is not improved by being turned into a number.
+  var NUMERIC = {};                      // the names declared to hold numbers
+  var R_NUM_TYPE = /^(int|integer|real|num|number|float|double|currency|money|decimal)$/i;
+  var R_READS_NUM = /^[-+]?(\d+\.?\d*|\.\d+)([eE][-+]?\d+)?$/;
+
   function noteCash(name, type) {
-    if (R_CASH_TYPE.test(String(type || "").trim())) { CASH[name] = true; }
+    var kind = String(type || "").trim();
+    if (R_CASH_TYPE.test(kind)) { CASH[name] = true; }
+    if (R_NUM_TYPE.test(kind)) { NUMERIC[name] = true; }
   }
 
   function cashy(src) {                  // does this expression handle money?
@@ -7133,10 +7149,14 @@
         case "input":
           var typed = await ask(item.text);
           if (stopping) { throw new Stop(); }
-          var asNum = parseFloat(typed);
-          putIn(where, item.var,
-                (typed.trim() !== "" && !isNaN(asNum) &&
-                 String(asNum) === typed.trim()) ? asNum : typed,
+          var said = typed.trim(), asNum = parseFloat(said);
+          // A name declared to hold a number holds one, however it was
+          // written down; anything else has to read back exactly as it was
+          // typed before it stops being text.
+          var isNum = said !== "" && !isNaN(asNum) &&
+                      (NUMERIC[item.var] ? R_READS_NUM.test(said)
+                                         : String(asNum) === said);
+          putIn(where, item.var, isNum ? asNum : typed,
                 item.scope === "global");
           break;
         case "call":
