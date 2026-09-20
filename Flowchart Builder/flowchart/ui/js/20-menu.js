@@ -198,3 +198,76 @@
     ]));
   }
 
+
+  // ------------------------------------------------- asking, before undoing --
+  // A press that would throw away something already happening asks first.
+  // There is one of these rather than a sheet per question: what is being
+  // asked changes, the shape of the asking does not.  It is the smallest
+  // sheet on the page and it has exactly two ways out of it, because a
+  // question with three answers is not a question anybody reads.
+  //
+  // The safe answer is the one under the fingers: it takes the focus on
+  // opening, Escape gives it, and so does a press on the dimmed page
+  // behind.  Going on with it has to be asked for.
+  var sureGo = null;
+
+  function areYouSure(head, said, yes, go) {
+    var over = el("#sure-over");
+    if (!over) { go(); return; }        // nothing to ask with: get on with it
+    el("#sure-head").textContent = head;
+    el("#sure-said").textContent = said;
+    el("#sure-yes").textContent = yes;
+    el("#sure-no").textContent = TXT.s_no;
+    sureGo = go;
+    over.hidden = false;
+    el("#sure-no").focus();
+  }
+
+  function sureShut(andGo) {
+    var over = el("#sure-over");
+    if (!over || over.hidden) { return false; }
+    over.hidden = true;
+    var go = sureGo;
+    sureGo = null;
+    if (andGo && go) { go(); }
+    return true;
+  }
+
+  if (el("#sure-over")) {
+    el("#sure-yes").onclick = function () { sureShut(true); };
+    el("#sure-no").onclick = function () { sureShut(false); };
+    el("#sure-over").onclick = function (ev) {
+      if (ev.target === el("#sure-over")) { sureShut(false); }
+    };
+    // Above the screens that fill the page, so a question asked while one
+    // of them is up is asked in front of it -- and answered before them,
+    // so one Escape does not shut both.
+    window.addEventListener("keydown", function (ev) {
+      if (ev.key !== "Escape") { return; }
+      if (sureShut(false)) { ev.stopImmediatePropagation(); }
+    }, true);
+  }
+
+  // Building draws a new chart over the one the runner is walking through.
+  // Left to itself the run carried on regardless: shapes lighting up on a
+  // chart that was no longer there, lines printing into the tape of a
+  // program that had been replaced, and Stop still sitting in the panel for
+  // a program nobody could point at.  So the run is stopped first -- and
+  // stopping a run is somebody's work ending early, which is worth asking
+  // about rather than doing quietly.
+  function stopThenBuild(go) {
+    if (!running) { go(); return; }
+    areYouSure(TXT.s_stop_head, TXT.s_stop_said, TXT.s_stop_yes, function () {
+      runIt();                          // pressed while running, this stops it
+      // Stopping is a request, not an event: the runner notices it on its
+      // next step, which may be a moment away if it is sat waiting to be
+      // typed into.  Building on top of a run that has not finished
+      // unwinding would put the new chart up and then let the old run tidy
+      // away over it, so this waits for the runner to really be done.
+      var waited = 0;
+      (function ready() {
+        if (!running || ++waited > 200) { go(); return; }
+        setTimeout(ready, 20);
+      })();
+    });
+  }

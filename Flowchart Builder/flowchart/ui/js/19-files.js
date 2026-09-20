@@ -5,11 +5,17 @@
 //  in the order parts.py lists them, and share everything between them.
 // ---------------------------------------------------------------------------
   // ------------------------------------------------------- keeping a copy --
-  // Everything that makes this chart what it is, in one small file: the
+  // Everything that makes this chart what it is, in one small thing: the
   // pseudocode or the shapes you placed, the colors, and which shape draws
   // which kind of step.  Open it again here and you are back where you were.
-  function projectJson() {
-    return JSON.stringify({
+  //
+  // One object, two ways out of here.  A file writes it spread over lines
+  // to be read; a link writes it squeezed flat.  It is the same work
+  // either way, so there is one description of what the work is and both
+  // go through it -- and one reader, openProject, that takes back
+  // whichever of them arrives.
+  function projectData() {
+    return {
       what: "flowchart-builder", version: 1,
       mode: byHand ? "hand" : "code",
       hand: hand,
@@ -20,7 +26,11 @@
         options: chartOptions()
       } : null,
       style: style, geom: geom
-    }, null, 1);
+    };
+  }
+
+  function projectJson() {
+    return JSON.stringify(projectData(), null, 1);
   }
 
   function saveProject() {
@@ -117,4 +127,115 @@
     buildGlobals();
     paint();
   }
+
+  // ------------------------------------------------------- the work, in a link --
+  // There is no server behind this page -- it is a folder of files that
+  // runs entirely in whoever's browser is looking at it -- so a link
+  // cannot point at a copy kept somewhere.  It carries the work itself,
+  // after the # where a browser keeps what it never sends anywhere.  Open
+  // the link and the same chart is there: the program, the title, the
+  // colors, the shapes.  Which is what a class wants and a file is a
+  // clumsy way to do: here is the program, have a look.
+  //
+  // What a URL is allowed to carry is a narrow set of letters, and what is
+  // being carried is text in whatever language the program was written in.
+  // So it goes as bytes, and the bytes as base64 -- in the spelling of it
+  // that uses - and _ , because + and / mean something else in a URL.
+  function intoLink(text) {
+    var bytes = new TextEncoder().encode(text);
+    var raw = "";
+    // In armfuls: apply() takes its arguments on the stack, and a program
+    // of any size handed over in one go is more arguments than there is
+    // stack to put them on.
+    for (var at = 0; at < bytes.length; at += 0x8000) {
+      raw += String.fromCharCode.apply(null, bytes.subarray(at, at + 0x8000));
+    }
+    return btoa(raw).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+  }
+
+  function outOfLink(packed) {
+    var raw = atob(String(packed).replace(/-/g, "+").replace(/_/g, "/"));
+    var bytes = new Uint8Array(raw.length);
+    for (var i = 0; i < raw.length; i++) { bytes[i] = raw.charCodeAt(i); }
+    return new TextDecoder().decode(bytes);
+  }
+
+  function shareLink() {
+    return location.href.split("#")[0] +
+           "#p=" + intoLink(JSON.stringify(projectData()));
+  }
+
+  // Said under the button, the way the note about a file is.  A link that
+  // has come out very long is worth a word: nothing here will refuse it,
+  // but chat apps and mail clients cut long ones short, and a link cut
+  // short is a link that opens nothing.
+  function linkSays(what, bad) {
+    var note = el("#link-note");
+    if (!note) { return; }
+    note.className = bad ? "hint bad" : "hint";
+    note.textContent = what || "";
+  }
+
+  if (el("#link-copy")) {
+    var linkButton = el("#link-copy");
+    linkButton.onclick = function () {
+      var link;
+      try { link = shareLink(); }
+      catch (e) { linkSays(TXT.l_bad, true); return; }
+      function well() {
+        linkButton.textContent = TXT.l_copied;
+        var over = link.length > 8000;
+        linkSays(over ? say("l_long", { n: link.length }) : "", over);
+        setTimeout(function () { linkButton.textContent = TXT.l_copy; }, 1400);
+      }
+      function badly() {
+        linkSays(TXT.l_copy_no, true);
+        setTimeout(function () { linkButton.textContent = TXT.l_copy; }, 2200);
+      }
+      // The same two ways round as everywhere else on this page: the new
+      // one where the browser has it, and the old one -- which is all
+      // there is on a page served over plain http, and serving this to the
+      // tablet in the next room is exactly that.
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(link).then(well, function () {
+          if (oldCopy(link)) { well(); } else { badly(); }
+        });
+        return;
+      }
+      if (oldCopy(link)) { well(); } else { badly(); }
+    };
+  }
+
+  // A link, opened.  It goes through openProject, which is the same reader
+  // a saved file goes through, so there is one answer to what opening
+  // somebody's work does.
+  //
+  // The link is then taken out of the address bar.  Left there, every
+  // reload would put the sender's program back and quietly throw away an
+  // afternoon of whatever was done to it -- so the link hands the work
+  // over once, and after that the page is yours.
+  function openLink() {
+    var got = /^#p=([A-Za-z0-9\-_]+)$/.exec(String(location.hash || ""));
+    if (!got) { return false; }
+    var was = null;
+    try { was = JSON.parse(outOfLink(got[1])); } catch (e) { was = null; }
+    try {
+      history.replaceState(null, "", location.pathname + location.search);
+    } catch (e) { /* older browser: the # stays, and does no harm */ }
+    if (!was || was.what !== "flowchart-builder") {
+      linkSays(TXT.l_bad, true);
+      return false;
+    }
+    opening = true;                      // opened, not asked for
+    openProject(was);
+    fileSays(TXT.l_opened);
+    return true;
+  }
+
+  // And one pasted into the address bar of a page that is already open,
+  // which is a thing people do and which would otherwise sit there doing
+  // nothing at all.
+  window.addEventListener("hashchange", function () {
+    if (/^#p=/.test(String(location.hash || ""))) { openLink(); }
+  });
 

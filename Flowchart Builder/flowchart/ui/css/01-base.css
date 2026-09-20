@@ -23,6 +23,7 @@
     --code-bad: #fbdcdc;                /*   or the line it stopped at */
     --warn: #8a5a00;   /* said, but not fatal: a line it could not do */
     --bad-glow: rgba(164, 38, 44, .55);
+    --here-glow: rgba(20, 66, 124, .42);  /* the shape the cursor is in */
     --code-well: rgba(16, 24, 40, .05);
     --dim: rgba(16, 24, 40, .34);   /* behind a sheet that fills the screen */
     --pick-arrow: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='%235d6b7a' stroke-width='1.7' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M4 6.5 8 10.5 12 6.5'/%3E%3C/svg%3E");
@@ -48,6 +49,7 @@
     --code-bad: #3d1e20;
     --warn: #e0b341;
     --bad-glow: rgba(255, 139, 139, .5);
+    --here-glow: rgba(91, 155, 240, .55);  /* the shape the cursor is in */
       --code-well: rgba(0, 0, 0, .35);
       --dim: rgba(0, 0, 0, .58);   /* behind a sheet that fills the screen */
       --good: #57c7a2;
@@ -67,6 +69,7 @@
     --code-bad: #3d1e20;
     --warn: #e0b341;
     --bad-glow: rgba(255, 139, 139, .5);
+    --here-glow: rgba(91, 155, 240, .55);  /* the shape the cursor is in */
     --code-well: rgba(0, 0, 0, .35);
     --dim: rgba(0, 0, 0, .58);   /* behind a sheet that fills the screen */
     --bg: #12161c;
@@ -89,6 +92,11 @@
   }
   * { box-sizing: border-box; }
   [hidden] { display: none !important; }   /* flex and grid outrank it otherwise */
+  /* ---------------------------------------------------- bars that scroll -- */
+  /* The machine's own, coloured as near to ours as they can be got.  They
+     are what is left showing inside a dropdown's list and anywhere too
+     small to be worth a bar of our own, and they are what comes back on a
+     touch screen, where ours are put away and a finger scrolls by dragging. */
   * { scrollbar-width: thin; scrollbar-color: var(--line) transparent; }
   ::-webkit-scrollbar { width: 11px; height: 11px; }
   ::-webkit-scrollbar-track, ::-webkit-scrollbar-corner { background: transparent; }
@@ -97,6 +105,95 @@
     border: 3px solid transparent; background-clip: content-box;
   }
   ::-webkit-scrollbar-thumb:hover { background: var(--muted); background-clip: content-box; }
+
+  /* And ours, which every box on this page that scrolls is given instead --
+     the chart, the panel, the box the pseudocode is written in, the tape,
+     the sheets that come up over the page, the print preview.  A box that
+     has them puts the machine's away, in both spellings, and hangs ours in
+     a frame around itself; 24-scroll.js builds them and says when they are
+     needed.  What they look like is here rather than beside the chart,
+     because they are not the chart's any more.
+
+     A bar is given a strip of the frame's own width to stand in wherever
+     what it scrolls is words -- laid over them it covers the ends of them.
+     Over a sheet of paper, which has a wide margin already, it simply
+     lies on top. */
+  .own-sliders { scrollbar-width: none; }
+  .own-sliders::-webkit-scrollbar { width: 0; height: 0; }
+  .slide-frame { position: relative; }
+  .slide-frame.slide-gone { display: none !important; }
+  .slide-frame.room.has-y { padding-right: 15px; }
+  .slide-frame.room.has-x { padding-bottom: 15px; }
+  .slider {
+    position: absolute; z-index: 6; display: flex; background: var(--line-soft);
+  }
+  .slider.x { left: 0; right: 0; bottom: 0; height: 15px;
+              border-top: 1px solid var(--line); }
+  .slider.y { top: 0; bottom: 0; right: 0; width: 15px;
+              flex-direction: column; border-left: 1px solid var(--line); }
+  /* each keeps clear of the other, and only of the other: a bar that
+     stopped short of a corner that was not there left a gap at the end of
+     itself for nothing */
+  .slide-frame.has-y > .slider.x { right: 15px; }
+  .slide-frame.has-x > .slider.y { bottom: 15px; }
+  .slider.none { display: none; }
+  .slider-track { position: relative; flex: 1; min-width: 0; min-height: 0; }
+  .slider-grip {
+    position: absolute; border-radius: 99px; background: var(--line);
+    transition: background .12s;
+  }
+  .slider.x .slider-grip { top: 3px; bottom: 3px; left: 0; }
+  .slider.y .slider-grip { left: 3px; right: 3px; top: 0; }
+  .slider-track:hover .slider-grip { background: var(--muted); }
+  body.sliding .slider-grip { background: var(--accent); }
+  body.sliding { -webkit-user-select: none; user-select: none; }
+
+  /* the little buttons at each end */
+  .slider-step {
+    flex: none; display: flex; align-items: center; justify-content: center;
+    width: 15px; height: 15px; padding: 0; border: 0; cursor: pointer;
+    background: none; color: var(--muted);
+  }
+  .slider-step:hover { background: var(--line); color: var(--ink); }
+  .slider-step:active { background: var(--accent-soft); color: var(--accent); }
+  .slider-step svg {
+    width: 9px; height: 9px; fill: none; stroke: currentColor;
+    stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round;
+  }
+  .slider.x .slider-step.less svg { transform: rotate(180deg); }
+  .slider.y .slider-step.less svg { transform: rotate(-90deg); }
+  .slider.y .slider-step.more svg { transform: rotate(90deg); }
+  /* the small square where the two bars meet, and only where they do */
+  .slide-frame.has-x.has-y::after {
+    content: ""; position: absolute; right: 0; bottom: 0; width: 15px;
+    height: 15px; background: var(--line-soft);
+    border-left: 1px solid var(--line); border-top: 1px solid var(--line);
+  }
+
+  /* A bar in a field of its own -- the tape at the foot of the panel, the
+     box the pseudocode is written in -- stands inside the field's border
+     rather than outside it, and its outer corners follow the field's.
+     Beside the field it read as a separate strip of furniture sitting next
+     to a box, rather than as the box's own bar. */
+  :is(#code-home, #runner) > .slide-frame.room.has-y { padding-right: 0; }
+  :is(#code-home, #runner) > .slide-frame.room.has-x { padding-bottom: 0; }
+  :is(#code-home, #runner) > .slide-frame > .slider { overflow: hidden; }
+  :is(#code-home, #runner) > .slide-frame > .slider.y {
+    top: 1px; right: 1px; bottom: 1px; border-radius: 0 7px 7px 0;
+  }
+  :is(#code-home, #runner) > .slide-frame > .slider.x {
+    left: 1px; right: 1px; bottom: 1px; border-radius: 0 0 7px 7px;
+  }
+  :is(#code-home, #runner) > .slide-frame.has-y > .slider.x { right: 16px; }
+  :is(#code-home, #runner) > .slide-frame.has-x > .slider.y { bottom: 16px; }
+  :is(#code-home, #runner) > .slide-frame.has-x.has-y::after {
+    right: 1px; bottom: 1px;
+  }
+  /* and the words keep clear of it from the inside instead */
+  :is(#code-home, #runner) > .slide-frame.has-y > .own-sliders {
+    padding-right: 19px;
+  }
+
   html, body { height: 100%; }
   body {
     margin: 0; display: flex; flex-direction: column; overflow: hidden;

@@ -81,6 +81,7 @@
   function freshTape() {
     if (el("#tape")) { el("#tape").innerHTML = ""; }
     if (el("#code-out")) { el("#code-out").innerHTML = ""; }
+    watchClear();                        // a new program holds nothing yet
     tapeShow("run");
     tapeSays("r_head", TXT.r_head, "");
   }
@@ -88,10 +89,17 @@
   function tapeFull(want) {
     var box = el("#tape"), over = el("#tape-over"), home = el("#runner");
     if (!box || !over || !home) { return; }
+    var going = slideHome(box);          // the box, and the bars around it
+    // What the program is holding travels with what it printed: they are
+    // two halves of watching the same run, and leaving one of them behind
+    // in a panel nobody can see while the other fills the screen is
+    // leaving behind the half that answers "why".
+    var held = el("#watch");
     if (want && over.hidden) {
       codeFull(false);                   // one screen at a time
+      el("#tape-slot").appendChild(going);
+      if (held) { el("#tape-slot").insertBefore(held, going); }
       over.hidden = false;
-      el("#tape-slot").appendChild(box);
       document.body.classList.add("tape-full");
       // An empty screen with a bar across the top and nothing under it
       // looks broken rather than ready, so it says what it is for.  The
@@ -107,7 +115,8 @@
       tapeShow("run");
       tapeSays("r_head", TXT.r_head, "");
       over.hidden = true;
-      home.appendChild(box);
+      home.appendChild(going);
+      if (held) { home.insertBefore(held, going); }
       document.body.classList.remove("tape-full");
     }
     var button = el("#run-big");

@@ -604,6 +604,99 @@
     return Object.keys(LANGS)[0];
   }
 
+  // --------------------------------------- a program, on a screen of its own --
+  // Code is the thing the panel has least room for: `pre` does not wrap, so
+  // a line of Java in a column that narrow is read sideways a word at a
+  // time.  Asking for a program is therefore taken as asking to read it,
+  // and it is put where it can be read.  Esc or Done gives the panel back.
+  //
+  // Two things are read on this screen: the code a chart is written out as,
+  // and the pseudocode a drawing amounts to.  They are the same thing to
+  // read -- a program, a line at a time -- so they are read in the same
+  // place rather than on two screens that would have to be kept alike.
+
+  // Copying, whichever way this browser has.  navigator.clipboard is only
+  // there on a page served over https or from localhost: open the studio on
+  // a machine's own address over http -- which is exactly what serving it
+  // to the tablet in the next room looks like -- and the whole of
+  // navigator.clipboard is missing, so this threw before it could even
+  // reach the promise, and the button did nothing and said nothing.  The
+  // old way still works everywhere, and where even that will not, the
+  // button says so rather than pretending it worked.
+  function copyButton(text) {
+    var copy = document.createElement("button");
+    copy.className = "btn small";
+    copy.textContent = TXT.r_copy;
+    copy.onclick = function () {
+      function well() {
+        copy.textContent = TXT.r_copied;
+        setTimeout(function () { copy.textContent = TXT.r_copy; }, 1400);
+      }
+      function badly() {
+        copy.textContent = TXT.r_copy_no || TXT.r_copy;
+        setTimeout(function () { copy.textContent = TXT.r_copy; }, 2200);
+      }
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(text).then(well, function () {
+          if (!oldCopy(text)) { badly(); } else { well(); }
+        });
+        return;
+      }
+      if (oldCopy(text)) { well(); } else { badly(); }
+    };
+    return copy;
+  }
+
+  // A file of whatever is on the screen, named after the chart.
+  function saveButton(text, named, ext) {
+    var down = document.createElement("button");
+    down.className = "btn small";
+    down.textContent = TXT.r_save_code;
+    down.onclick = function () {
+      save(new Blob([text], { type: "text/plain;charset=utf-8" }),
+           named + "." + ext);
+    };
+    return down;
+  }
+
+  // Numbered down the side and ruled under each line, the way the
+  // pseudocode box is.  The numbers are a column of their own, so a long
+  // line takes the program sideways and leaves them where they are.
+  function codePage(text, name, more) {
+    var out = el("#code-out");
+    if (!out) { return; }
+    out.innerHTML = "";
+    var page = document.createElement("div");
+    page.className = "code-page";
+    var rows = text.split("\n").length;
+    var numbers = [];
+    for (var n = 1; n <= rows; n++) { numbers.push(n); }
+    var nums = document.createElement("pre");
+    nums.className = "code-nums";
+    nums.setAttribute("aria-hidden", "true");
+    nums.textContent = numbers.join("\n");
+    var pre = document.createElement("pre");
+    pre.className = "code";
+    pre.textContent = text;
+    page.appendChild(nums);
+    page.appendChild(pre);
+    out.appendChild(page);
+    var row = document.createElement("div");
+    row.className = "go";
+    row.style.cssText = "display:flex; gap:8px; margin-top:8px";
+    row.appendChild(copyButton(text));
+    (more || []).forEach(function (one) { row.appendChild(one); });
+    out.appendChild(row);
+    tapeFull(true);
+    tapeShow("code");
+    tapeSays("", name, say("code_lines", { n: rows }));
+  }
+
+  function chartFileName() {
+    return ((el("#f-title") && el("#f-title").value) || "flowchart")
+           .replace(/[^A-Za-z0-9 _-]/g, "");
+  }
+
   function showCode(want) {
     var lang = want || nowLang();
     if (!AST || !(AST.main || []).length) {
@@ -623,87 +716,56 @@
       talkOnce(thrown.message || String(thrown), "bad");
       return;
     }
-    var text = made.text;
     // Into its own box, not over the top of the run.  The tape keeps what
     // the program did; this is only what it says.
     // The picker in the bar says what is under it, however the code was
     // asked for -- from the run, from the panel, or by changing it here.
+    if (el("#tape-lang")) { el("#tape-lang").hidden = false; }
     if (el("#tape-lang")) { el("#tape-lang").value = lang; }
-    var out = el("#code-out");
-    out.innerHTML = "";
-    // Numbered down the side and ruled under each line, the way the
-    // pseudocode box is.  The two are the same thing to read -- a program,
-    // a line at a time -- and a line of Java is longer and harder to keep
-    // your place in than the pseudocode it came from, not easier.  The
-    // numbers are a column of their own, so a long line takes the code
-    // sideways and leaves them where they are.
-    var page = document.createElement("div");
-    page.className = "code-page";
-    var rows = text.split("\n").length;
-    var numbers = [];
-    for (var n = 1; n <= rows; n++) { numbers.push(n); }
-    var down = document.createElement("pre");
-    down.className = "code-nums";
-    down.setAttribute("aria-hidden", "true");
-    down.textContent = numbers.join("\n");
-    var pre = document.createElement("pre");
-    pre.className = "code";
-    pre.textContent = text;
-    page.appendChild(down);
-    page.appendChild(pre);
-    out.appendChild(page);
-    var row = document.createElement("div");
-    row.className = "go";
-    row.style.cssText = "display:flex; gap:8px; margin-top:8px";
-    var copy = document.createElement("button");
-    copy.className = "btn small";
-    copy.textContent = TXT.r_copy;
-    // Copying, whichever way this browser has.  navigator.clipboard is only
-    // there on a page served over https or from localhost: open the studio
-    // on a machine's own address over http -- which is exactly what serving
-    // it to the tablet in the next room looks like -- and the whole of
-    // navigator.clipboard is missing, so this threw before it could even
-    // reach the promise, and the button did nothing and said nothing.  The
-    // old way still works everywhere, and where even that will not, the
-    // button says so rather than pretending it worked.
-    copy.onclick = function () {
-      function well() {
-        copy.textContent = TXT.r_copied;
-        setTimeout(function () { copy.textContent = TXT.r_copy; }, 1400);
-      }
-      function badly() {
-        copy.textContent = TXT.r_copy_no || TXT.r_copy;
-        setTimeout(function () { copy.textContent = TXT.r_copy; }, 2200);
-      }
-      if (navigator.clipboard && navigator.clipboard.writeText) {
-        navigator.clipboard.writeText(text).then(well, function () {
-          if (!oldCopy(text)) { badly(); } else { well(); }
-        });
-        return;
-      }
-      if (oldCopy(text)) { well(); } else { badly(); }
-    };
-    var down = document.createElement("button");
-    down.className = "btn small";
-    down.textContent = TXT.r_save_code;
-    down.onclick = function () {
-      // Java and C# want the file named after the class inside it; the
-      // others take the chart's name.
-      var named = LANGS[lang].kinds
-                ? made.file
-                : (el("#f-title").value || "flowchart").replace(/[^A-Za-z0-9 _-]/g, "");
-      save(new Blob([text], { type: "text/plain;charset=utf-8" }),
-           named + "." + made.ext);
-    };
-    row.appendChild(copy);
-    row.appendChild(down);
-    out.appendChild(row);
-    // Code is the thing the panel has least room for: `pre` does not wrap,
-    // so a line of Java in a column that narrow is read sideways a word at
-    // a time.  Asking for it is therefore taken as asking to read it, and
-    // it is put where it can be read.  Esc or Done gives the panel back.
-    tapeFull(true);
-    tapeShow("code");
-    tapeSays("", langName(lang),
-             say("code_lines", { n: text.split("\n").length }));
+    // Java and C# want the file named after the class inside it; the
+    // others take the chart's name.
+    codePage(made.text, langName(lang),
+             [saveButton(made.text,
+                         LANGS[lang].kinds ? made.file : chartFileName(),
+                         made.ext)]);
+  }
+
+  // And the drawing, written out as the pseudocode it amounts to.
+  //
+  // The page has always known how to do this -- pressing Check works it
+  // out, hands it over to be built into a program that can be run, and
+  // throws it away.  Nobody had ever been shown it, which is a strange
+  // thing to withhold: the writing is what a class is usually marked on,
+  // and a chart drawn by hand is otherwise a drawing and nothing else.
+  //
+  // The language picker goes for this one.  What is on the screen is the
+  // pseudocode itself, not one of the languages it can be turned into.
+  function showHandCode() {
+    var text;
+    try { text = handAsPseudocode(); }
+    catch (thrown) {
+      handSays(thrown.message || String(thrown), true);
+      return;
+    }
+    var more = [saveButton(text, chartFileName(), "txt")];
+    if (el("#code")) {
+      // The way across.  The drawing stays exactly where it is -- each way
+      // of working keeps its own paper and is handed it back on returning
+      // -- so this gives the writing somewhere to be edited and run
+      // without taking the drawing away.  What was in the box is written
+      // over, which is what the button is for and what its tooltip says.
+      var into = document.createElement("button");
+      into.className = "btn small primary";
+      into.textContent = TXT.h_into_box;
+      into.title = TXT.h_into_box_tip;
+      into.onclick = function () {
+        el("#code").value = text;
+        tapeFull(false);
+        setMode(false);
+        el("#build").click();
+      };
+      more.unshift(into);
+    }
+    codePage(text, TXT.pseudocode, more);
+    if (el("#tape-lang")) { el("#tape-lang").hidden = true; }
   }

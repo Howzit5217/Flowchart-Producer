@@ -144,37 +144,88 @@
   }
   scaleSel.onchange = sizeNote;
 
+  // The chart, drawn onto a canvas at whatever size is chosen, as a PNG.
+  // Both buttons below want exactly this and differ only in what they do
+  // with what comes out of it, so it is asked for once.
+  function asPng(p) {
+    return new Promise(function (ready, sorry) {
+      var url = URL.createObjectURL(
+          new Blob([plain(p.scale)], { type: "image/svg+xml;charset=utf-8" }));
+      var img = new Image();
+      img.onload = function () {
+        var canvas = document.createElement("canvas");
+        canvas.width = p.cw;
+        canvas.height = p.ch;
+        var pen = canvas.getContext("2d");
+        pen.fillStyle = style.sheet || "#ffffff";
+        pen.fillRect(0, 0, canvas.width, canvas.height);
+        pen.drawImage(img, p.dx, p.dy, p.dw, p.dh);
+        URL.revokeObjectURL(url);
+        canvas.toBlob(function (blob) {
+          if (blob) { ready(blob); } else { sorry(new Error(TXT.png_big)); }
+        }, "image/png");
+      };
+      img.onerror = function () {
+        URL.revokeObjectURL(url);
+        sorry(new Error(TXT.png_fail));
+      };
+      img.src = url;
+    });
+  }
+
   var button = el("#png");
   button.onclick = function () {
     var p = plan();
     button.disabled = true;
     button.textContent = TXT.rendering;
     function done() { button.disabled = false; button.textContent = TXT.dl_png; }
-    var url = URL.createObjectURL(
-        new Blob([plain(p.scale)], { type: "image/svg+xml;charset=utf-8" }));
-    var img = new Image();
-    img.onload = function () {
-      var canvas = document.createElement("canvas");
-      canvas.width = p.cw;
-      canvas.height = p.ch;
-      var pen = canvas.getContext("2d");
-      pen.fillStyle = style.sheet || "#ffffff";
-      pen.fillRect(0, 0, canvas.width, canvas.height);
-      pen.drawImage(img, p.dx, p.dy, p.dw, p.dh);
-      URL.revokeObjectURL(url);
+    asPng(p).then(function (blob) {
       done();
-      canvas.toBlob(function (blob) {
-        if (blob) { save(blob, FILE + ".png"); }
-        else { sizeBad(TXT.png_big); }
-      }, "image/png");
-    };
-    img.onerror = function () {
-      URL.revokeObjectURL(url);
+      save(blob, FILE + ".png");
+    }, function (why) {
       done();
-      sizeBad(TXT.png_fail);
-    };
-    img.src = url;
+      sizeBad(why.message);
+    });
   };
+
+  // ------------------------------------------ the chart, on the clipboard --
+  // Downloading a picture and then going and inserting the file is three
+  // steps where the thing anybody actually wants -- the chart, in the
+  // document they are writing -- is one.
+  //
+  // The awkward part is that a browser only lets a page reach the clipboard
+  // while it is still dealing with the press, and drawing the chart onto a
+  // canvas takes longer than that.  So the clipboard is handed the promise
+  // of a picture rather than a picture: the write is asked for inside the
+  // press, and what it is writing arrives afterwards.  Safari counts the
+  // press as over otherwise and refuses, which looked exactly like the
+  // button doing nothing.
+  var copyPng = el("#png-copy");
+  if (copyPng) {
+    copyPng.onclick = function () {
+      var p = plan();
+      function back(word, bad) {
+        copyPng.disabled = false;
+        copyPng.textContent = word;
+        if (bad) { sizeBad(bad); }
+        setTimeout(function () { copyPng.textContent = TXT.dl_copy; },
+                   bad ? 2200 : 1400);
+      }
+      if (!(window.ClipboardItem && navigator.clipboard &&
+            navigator.clipboard.write)) {
+        back(TXT.dl_copy, TXT.dl_copy_no);
+        return;
+      }
+      copyPng.disabled = true;
+      copyPng.textContent = TXT.rendering;
+      note.textContent = "";             // whatever went wrong last time, did
+      var why = null;
+      var shot = asPng(p).catch(function (e) { why = e; throw e; });
+      navigator.clipboard.write([new ClipboardItem({ "image/png": shot })])
+        .then(function () { back(TXT.dl_copied); },
+              function () { back(TXT.dl_copy, why ? why.message : TXT.dl_copy_no); });
+    };
+  }
 
   // Delete and Escape used to be answered here as well as in the keyboard
   // part.  Two handlers for one key is one handler too many: this one ran

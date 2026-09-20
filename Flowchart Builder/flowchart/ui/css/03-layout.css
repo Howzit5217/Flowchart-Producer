@@ -3,10 +3,25 @@
    --------------------------------------------------------------------------- */
   /* ----------------------------------------------------------- layout -- */
   main { flex: 1; display: flex; min-height: 0; }
+  /* The panel holds the bar that scrolls it and no longer does the
+     scrolling itself: how wide it is, where it sits, how it closes to
+     nothing and what becomes of it on a narrow screen are settled in four
+     stylesheets between them, all of them naming #panel, and a wrapper put
+     around it would mean saying every word of that again about the
+     wrapper.  So the scrolling moves inward instead, into a box that
+     24-scroll.js puts around whatever was in the panel. */
   #panel {
     flex: none; width: 312px; background: var(--panel);
-    border-right: 1px solid var(--line); overflow-y: auto; overflow-x: hidden;
-    display: flex; flex-direction: column;
+    border-right: 1px solid var(--line); overflow: hidden;
+    display: flex;
+  }
+  /* It fills the panel and is never squeezed narrower than it asks to be:
+     07-motion.css holds it at the width it had while the panel closes to
+     nothing around it, and a box that could be shrunk would simply be
+     shrunk instead -- every word in it re-wrapping on the way out. */
+  #panel > .slide-in {
+    flex: 1 0 auto; min-width: 0; display: flex; flex-direction: column;
+    overflow-y: auto; overflow-x: hidden;
   }
   #panel.hide { display: none; }
   .panel-top {

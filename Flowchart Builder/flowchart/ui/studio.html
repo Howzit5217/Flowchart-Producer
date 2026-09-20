@@ -73,8 +73,18 @@ __OPTIONS__
       </select>
     </div>
     <button class="btn wide" id="png" data-w="dl_png">__W(dl_png)__</button>
+    <!-- A picture of the chart, straight onto the clipboard.  Downloading
+         it and then going and inserting the file is three steps where the
+         thing anybody actually wants -- the chart, in the document they
+         are writing -- is one. -->
+    <button class="btn wide" id="png-copy" data-w="dl_copy">__W(dl_copy)__</button>
     <p class="hint" id="note"></p>
     <button class="btn wide" id="save-file" data-w="f_save">__W(f_save)__</button>
+    <!-- The whole program in a link.  There is no server here to keep
+         anything on, so the link carries the work itself: send it and
+         whoever opens it is looking at the same chart. -->
+    <button class="btn wide" id="link-copy" data-w="l_copy">__W(l_copy)__</button>
+    <p class="hint" id="link-note"></p>
     <h3 data-w="print_head">__W(print_head)__</h3>
     <button class="btn wide" id="print-open" data-w="print_it">__W(print_it)__</button>
     <h3 data-w="import_head">__W(import_head)__</h3>
@@ -385,6 +395,33 @@ __SVG__
   </div>
 </div>
 <style id="print-size">@page { size: a4 portrait; margin: 12mm; }</style>
+
+<!-- Asking, before something already happening is thrown away.  One
+     sheet, told what to say: the question changes, the shape of the asking
+     does not.  It is the smallest sheet here and has exactly two ways out,
+     because a question with three answers is not one anybody reads. -->
+<div id="sure-over" hidden>
+  <div class="code-sheet sure-sheet" role="alertdialog"
+       aria-labelledby="sure-head" aria-describedby="sure-said">
+    <div class="code-bar">
+      <span class="mark small" aria-hidden="true">
+        <svg viewBox="0 0 24 24">
+          <path d="M12 3.2 1.8 20.8h20.4z"/>
+          <path d="M12 9.4v5"/>
+          <path d="M12 17.6v.2"/>
+        </svg>
+      </span>
+      <strong id="sure-head"></strong>
+    </div>
+    <div class="sure-body">
+      <p id="sure-said"></p>
+      <div class="sure-row">
+        <button class="btn" id="sure-no"></button>
+        <button class="btn primary" id="sure-yes"></button>
+      </div>
+    </div>
+  </div>
+</div>
 
 <div id="tape-over" hidden>
   <div class="code-sheet">

@@ -122,10 +122,17 @@
        in both spellings.  Only the Firefox one was said here, so on a touch
        screen in Chrome, Edge or Safari the stage was left with our bars
        hidden and the browser's still squashed to nothing: a chart wider
-       than the screen with no bar anywhere to say so. */
-    #stage.own-sliders { scrollbar-width: auto; }
-    #stage.own-sliders::-webkit-scrollbar { width: 11px; height: 11px; }
-    .stage-frame::after { display: none; }
+       than the screen with no bar anywhere to say so.  It is said of every
+       box that has ours now, not of the stage alone. */
+    .own-sliders { scrollbar-width: auto; }
+    .own-sliders::-webkit-scrollbar { width: 11px; height: 11px; }
+    .slide-frame.has-x.has-y::after { display: none; }
+    /* and the strip ours stood in goes back to what it was scrolling.  The
+       little that the two fields keep -- the tape, the box the pseudocode
+       is written in -- is left where it is: the machine's bar is drawn
+       inside those rather than beside them, and wants the room. */
+    .slide-frame.room.has-y { padding-right: 0; }
+    .slide-frame.room.has-x { padding-bottom: 0; }
     /* The dots a line is drawn from and aimed at are sized by 10-hand.js
        rather than here.  `r` is a CSS property in some browsers and not in
        others, so said here it grew them on a touch screen in Chrome and

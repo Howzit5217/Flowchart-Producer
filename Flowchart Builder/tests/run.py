@@ -242,6 +242,33 @@ def _():
                                     "" if not bad else " -- " + ", ".join(bad))
 
 
+@check("every word the page asks for is a word we have")
+def _():
+    """The page names its words twice over: once as __W(key)__, which is
+    filled in when the page is poured together, and once as data-w="key",
+    which is how the script puts the page into another language without
+    reloading it.
+
+    A key that is not a word fails neither time.  __W(bad)__ comes out
+    empty, so the button is built blank; data-w="bad" reads nothing back,
+    so the button goes blank the moment somebody changes the language --
+    which is the worse of the two, because it is a control that was there a
+    second ago and is not there now, and nothing anywhere says why.
+    """
+    import re as _re
+    fb = builder()
+    have = set(fb.WORDS["en"])
+    bad = []
+    for name in ("studio.html", "source-panel.html"):
+        text = fb.read_ui(name)
+        for want in (_re.findall(r"__W\((\w+)\)__", text) +
+                     _re.findall(r'data-w(?:-title)?="(\w+)"', text)):
+            if want not in have:
+                bad.append("%s: %s" % (name, want))
+    return not bad, "%d words%s" % (
+        len(have), "" if not bad else " -- " + ", ".join(sorted(set(bad))[:4]))
+
+
 @check("every language says everything")
 def _():
     fb = builder()

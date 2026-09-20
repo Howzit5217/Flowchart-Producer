@@ -425,6 +425,27 @@
              wide: x };
   }
 
+  // The point half way along a path, by length rather than by how many
+  // corners it happens to have.
+  function halfWay(pts) {
+    function leg(i) {
+      return Math.hypot(pts[i + 1][0] - pts[i][0], pts[i + 1][1] - pts[i][1]);
+    }
+    var far = 0, i;
+    for (i = 0; i < pts.length - 1; i++) { far += leg(i); }
+    var want = far / 2, gone = 0;
+    for (i = 0; i < pts.length - 1; i++) {
+      var here = leg(i);
+      if (here > 0 && gone + here >= want) {
+        var part = (want - gone) / here;
+        return [pts[i][0] + (pts[i + 1][0] - pts[i][0]) * part,
+                pts[i][1] + (pts[i + 1][1] - pts[i][1]) * part];
+      }
+      gone += here;
+    }
+    return pts[pts.length - 1];
+  }
+
   function drawHand() {
     var pad = 40, maxx = 520, maxy = 280, ox = 0, oy = 0;
     hand.nodes.forEach(function (n) {       // the paper keeps its corner, so
@@ -488,7 +509,15 @@
                  'stroke-width="0.6" stroke-linejoin="miter"/>');
       }
       if (link.label) {
-        var mid = pts[Math.floor(pts.length / 2)];
+        // Half way along the line, measured -- not at whichever corner
+        // happens to sit in the middle of the list of them.  A straight
+        // arrow has two points in it, so the middle of that list was the
+        // far end of the arrow: the word was written on the arrowhead,
+        // and on an arrow pointing rightwards that put it inside the
+        // shape it was pointing at, where the shape is drawn over the top
+        // of it and nobody ever saw it.  Which is why the False on a
+        // decision could be read going one way and not the other.
+        var mid = halfWay(pts);
         out.push('<rect class="patch" x="' + (mid[0] + 4) + '" y="' + (mid[1] - 16) +
                  '" width="' + (link.label.length * 7 + 8) + '" height="13" ' +
                  'fill="#ffffff" stroke="none"/>');

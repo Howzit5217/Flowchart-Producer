@@ -195,10 +195,25 @@
     return [yes, no];
   }
 
+  // Which shape each line of the writing came from.  Filled in as the
+  // writing is made, because it cannot be worked out afterwards: several
+  // shapes can say the same words, and half the lines -- End If, Else, End
+  // While -- came from no shape at all.  Tidy up reads it to find its way
+  // back from a laid-out chart to the shapes on the paper.
+  var handLine = {};                     // line of pseudocode -> shape number
+
   function handAsPseudocode() {
     var head = hand.nodes.filter(function (n) { return !intoOf(n.id).length; })[0];
     if (!head) { throw new Error(TXT.h_no_start); }
-    var out = ["Start"], been = {};
+    var out = [], been = {};
+    handLine = {};
+
+    function put(words, id) {
+      out.push(words);
+      if (id) { handLine[out.length] = id; }
+    }
+
+    put("Start", head.id);
 
     function step(deep) { return new Array(deep + 1).join("    "); }
 
@@ -210,7 +225,7 @@
         if (!node) { return; }
         var outs = outOf(id);
         if (!outs.length) {              // an End, and the flow stops here
-          out.push(step(deep) + "End");
+          put(step(deep) + "End", node.id);
           return;
         }
         if (node.kind === "diamond") {
@@ -220,36 +235,36 @@
           if (yesBack && noBack) { throw new Error(TXT.h_tangled); }
           if (yesBack || noBack) {       // a question you come back to: a loop
             var body = yesBack ? yes : no, on = yesBack ? no : yes;
-            out.push(step(deep) +
-                     (yesBack ? "While " + asked
-                              : "While NOT (" + asked + ")"));
+            put(step(deep) +
+                (yesBack ? "While " + asked
+                         : "While NOT (" + asked + ")"), node.id);
             write(body.to, id, deep + 1);
-            out.push(step(deep) + "End While");
+            put(step(deep) + "End While");
             id = on.to;
             continue;
           }
           var join = meetAgain(yes.to, no.to);
-          out.push(step(deep) + "If " + asked + " Then");
+          put(step(deep) + "If " + asked + " Then", node.id);
           write(yes.to, join, deep + 1);
           if (no.to !== join) {
-            out.push(step(deep) + "Else");
+            put(step(deep) + "Else");
             write(no.to, join, deep + 1);
           }
-          out.push(step(deep) + "End If");
+          put(step(deep) + "End If");
           if (!join) { return; }         // both ways ended on their own
           id = join;
           continue;
         }
         if (id !== head.id) {            // the first oval is the Start above
           var words = saidIn(node);
-          if (words) { out.push(step(deep) + words); }
+          if (words) { put(step(deep) + words, node.id); }
         }
         id = outs[0].to;
       }
     }
 
     write(head.id, null, 0);
-    if (out[out.length - 1] !== "End") { out.push("End"); }
+    if (out[out.length - 1] !== "End") { put("End"); }
     return out.join("\n");
   }
 
@@ -287,7 +302,7 @@
           return;
         }
         AST = data.ast;
-        lineOf = {};
+        forgetLines();
         handWas = mine;
         dressRunner();
         handSays(TXT.h_runnable);
@@ -302,4 +317,194 @@
   function handChanged() {
     if (!byHand || !handWas) { return; }
     if (JSON.stringify(hand) !== handWas) { forgetProgram(); handWas = null; }
+  }
+
+  // ---- tidying a drawing up ----------------------------------------------
+  // The best thing this package owns is the way it lays a chart out: nothing
+  // overlapping, no arrow doubling back on itself, every shape on the
+  // ruling, branches given columns of their own.  There are tests for all
+  // three.  A chart drawn by hand could reach none of it -- you moved every
+  // shape yourself and it looked like it.
+  //
+  // It can reach it now, because the drawing can be written out as
+  // pseudocode: the writing goes to the very same drawing code the
+  // pseudocode side uses, the chart that comes back says where each shape
+  // wants to be, and those places are handed to the shapes on the paper.
+  // The shapes themselves do not change -- their words, their colors, their
+  // kind and the arrows between them are all left exactly as they are.
+  // Only where they stand changes, which is the whole of what is being
+  // asked for.
+  var TIDY_GAP = 26;                     // the least room between two shapes
+  // And more again where the arrow between two of them carries a word.
+  // True and False are written along the line that carries them, so two
+  // shapes parted by exactly the length of the arrow leave the word lying
+  // over one of them -- which is how False came to be written across the
+  // front of the box it was pointing at.
+  var TIDY_WORD = 46;
+  var TIDY_STRETCH = 3;                  // and the most it may pull them apart
+
+  // The line each statement of the built program came from, by its number
+  // in the chart -- which is the same number the drawn shapes carry.
+  function linesById(ast) {
+    var found = {};
+    function walk(items) {
+      (items || []).forEach(function (item) {
+        if (item.id && item.line) { found[item.id] = item.line; }
+        ["then", "else", "body"].forEach(function (key) {
+          if (item[key]) { walk(item[key]); }
+        });
+        (item.cases || []).forEach(function (one) { walk(one.body); });
+      });
+    }
+    walk(ast.main);
+    (ast.modules || []).forEach(function (mod) { walk(mod.body); });
+    return found;
+  }
+
+  // Where each shape of a drawn chart stands, measured off the drawing
+  // itself rather than read out of its attributes: a shape is a rectangle
+  // in one chart and a six-sided thing in the next, and the browser knows
+  // the size of both.  It has to be on the page to be measured, so it is
+  // put somewhere nobody is looking and taken away again.
+  function spotsIn(svgText) {
+    var hidden = document.createElement("div");
+    hidden.style.cssText = "position:fixed; left:-99999px; top:0;" +
+                           " width:1px; height:1px; overflow:hidden";
+    hidden.innerHTML = svgText;
+    document.body.appendChild(hidden);
+    var found = {};
+    try {
+      all(".node", hidden).forEach(function (g) {
+        var box = g.getBBox();
+        if (!box.width && !box.height) { return; }
+        found[g.dataset.i] = { x: box.x + box.width / 2,
+                               y: box.y + box.height / 2 };
+      });
+    } catch (e) { found = {}; }          // an SVG the browser would not measure
+    hidden.remove();
+    return found;
+  }
+
+  // The shapes on the paper are drawn a good deal bigger than the ones in a
+  // built chart -- a box is 170 by 58 here and 140 by 40 there -- so the
+  // places that came back can be too close together to put these in.  Every
+  // pair that would sit on top of another says how much further apart it
+  // needs to be; the worst of them stretches the whole arrangement by that
+  // much, which keeps every row and every column exactly as the drawing
+  // code arranged them.  Stretching one pair on its own would not.
+  function wordBetween(a, b) {           // is the arrow between them labelled?
+    return hand.links.some(function (l) {
+      return String(l.label || "").trim() &&
+             ((l.from === a && l.to === b) || (l.from === b && l.to === a));
+    });
+  }
+
+  function tidyStretch(places) {
+    var ids = Object.keys(places), worst = 1;
+    for (var i = 0; i < ids.length; i++) {
+      for (var j = i + 1; j < ids.length; j++) {
+        var a = places[ids[i]], b = places[ids[j]];
+        var word = wordBetween(a.node.id, b.node.id) ? TIDY_WORD : 0;
+        var needX = (a.node.w + b.node.w) / 2 + TIDY_GAP + word;
+        var needY = (a.node.h + b.node.h) / 2 + TIDY_GAP;
+        var gotX = Math.abs(a.x - b.x), gotY = Math.abs(a.y - b.y);
+        if (gotX >= needX || gotY >= needY) { continue; }
+        // Apart on whichever axis is the cheaper of the two: two shapes
+        // side by side want the columns widened, not the rows.
+        var by = Math.min(gotX > 0.5 ? needX / gotX : Infinity,
+                          gotY > 0.5 ? needY / gotY : Infinity);
+        if (by > worst) { worst = by; }
+      }
+    }
+    return Math.min(worst, TIDY_STRETCH);
+  }
+
+  function tidySays(what, bad) {
+    handSays(what, bad);
+  }
+
+  var tidying = false;
+  function tidyUp() {
+    if (!byHand || tidying) { return; }
+    if (!hand.nodes.length) { tidySays(TXT.h_tidy_none, true); return; }
+    var text;
+    try { text = handAsPseudocode(); }
+    catch (thrown) { tidySays(thrown.message || String(thrown), true); return; }
+    var fromLine = {};                   // line -> shape, as it was written
+    Object.keys(handLine).forEach(function (at) { fromLine[at] = handLine[at]; });
+    var button = el("#hand-tidy");
+    tidying = true;
+    if (button) { button.disabled = true; button.classList.add("working"); }
+    function done() {
+      tidying = false;
+      if (button) { button.disabled = false; button.classList.remove("working"); }
+    }
+    // Drawn by the same code the pseudocode side draws with, and asked for
+    // the same way -- so a chart tidied here stands where the very same
+    // chart built from writing would stand.
+    askFor({ text: text, title: "", author: "", shape: "auto", seed: "",
+             lang: el("#f-lang") ? el("#f-lang").value : "",
+             legend: false, grid: true, shapes: geom })
+      .then(function (data) {
+        done();
+        if (!byHand) { return; }
+        if (!data || !data.ok || !data.ast || !data.svg) {
+          tidySays((data && data.error) || TXT.h_not_a_program, true);
+          return;
+        }
+        var lineOfShape = linesById(data.ast);
+        var spots = spotsIn(data.svg);
+        var places = {};
+        Object.keys(spots).forEach(function (drawn) {
+          var line = lineOfShape[drawn];
+          var mine = line && fromLine[line];
+          var node = mine && nodeById(+mine);
+          // The first place a shape is named wins.  A shape a flow comes
+          // back to is written out more than once -- the line before a
+          // loop's End While is the same shape as the one after it -- and
+          // it can only stand in one of the places that came back.
+          if (node && !places[node.id]) {
+            places[node.id] = { x: spots[drawn].x, y: spots[drawn].y, node: node };
+          }
+        });
+        var moving = Object.keys(places);
+        if (!moving.length) { tidySays(TXT.h_tidy_none, true); return; }
+        var by = tidyStretch(places);
+        // Kept where it already is on the paper, near enough: a tidy up
+        // that also threw the whole chart into a corner would be two
+        // things happening at once, and only one of them was asked for.
+        var least = { x: Infinity, y: Infinity };
+        moving.forEach(function (id) {
+          least.x = Math.min(least.x, places[id].x * by - places[id].node.w / 2);
+          least.y = Math.min(least.y, places[id].y * by - places[id].node.h / 2);
+        });
+        var was = { x: Infinity, y: Infinity };
+        moving.forEach(function (id) {
+          var n = places[id].node;
+          was.x = Math.min(was.x, n.x - n.w / 2);
+          was.y = Math.min(was.y, n.y - n.h / 2);
+        });
+        keepUndo();
+        moving.forEach(function (id) {
+          var spot = places[id], node = spot.node;
+          node.x = Math.round((spot.x * by - least.x + was.x) / HAND_GRID) * HAND_GRID;
+          node.y = Math.round((spot.y * by - least.y + was.y) / HAND_GRID) * HAND_GRID;
+        });
+        drawHand();
+        drawHandPanel();
+        showReport();
+        el("#fit").click();              // and put the whole of it in view
+        tidySays(say("h_tidied", { n: moving.length }));
+      })
+      .catch(function (err) {
+        done();
+        tidySays(String(err && err.message ? err.message : err), true);
+      });
+  }
+
+  if (el("#hand-tidy")) {
+    el("#hand-tidy").onclick = tidyUp;
+  }
+  if (el("#hand-code")) {
+    el("#hand-code").onclick = showHandCode;
   }

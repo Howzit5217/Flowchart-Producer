@@ -132,6 +132,40 @@ FR = {
     "f_not_ours": "C’est un fichier JSON, mais pas un schéma enregistré ici.",
     "f_opened": "{name} est ouvert.",
     "f_empty": "Il n’y a rien d’écrit dedans.",
+    "dl_copy": "Copier le schéma",
+    "dl_copied": "Copié",
+    "dl_copy_no": "Ce navigateur ne laisse pas une page mettre une image dans "
+                  "le presse-papiers. Télécharge-la plutôt.",
+    "l_copy": "Copier un lien vers ceci",
+    "l_copied": "Lien copié",
+    "l_copy_no": "Ce navigateur ne l’a pas copié. Prends-le dans la barre "
+                 "d’adresse.",
+    "l_opened": "Ouvert depuis un lien.",
+    "l_long": "Ce lien fait {n} caractères. Les messageries raccourcissent "
+              "les liens longs, et un lien raccourci n’ouvre rien — envoie "
+              "plutôt le fichier.",
+    "l_bad": "Ce lien ne porte aucun schéma que cette page sache lire.",
+    "held_head": "Ce qu’il retient",
+    "held_in": "dans {name}",
+    "held_shared": "Déclaré hors de tout module, donc visible par chaque schéma",
+    "held_none": "rien encore",
+    "h_tidy": "Ranger",
+    "h_tidy_tip": "Placer chaque forme là où cette page la dessinerait, en "
+                  "gardant les mots, les couleurs et les flèches",
+    "h_tidied": "Rangé : {n} formes déplacées.",
+    "h_tidy_none": "Il n’y a encore rien à ranger ici.",
+    "h_write": "En pseudocode",
+    "h_write_tip": "Écrire le dessin sous forme du pseudocode auquel il "
+                   "revient",
+    "h_into_box": "Le mettre dans le cadre",
+    "h_into_box_tip": "Écrire ceci dans le cadre de pseudocode et y "
+                      "travailler. Le dessin reste où il est ; ce qu’il y "
+                      "avait dans le cadre est remplacé.",
+    "s_no": "Laisse",
+    "s_stop_head": "Le programme tourne encore",
+    "s_stop_said": "Dessiner un nouveau schéma remplace le programme en "
+                   "cours. L’exécution sera arrêtée.",
+    "s_stop_yes": "Arrêter et dessiner",
     "n_roundrect": "Boîte arrondie",
     "n_offpage": "Hors page", "n_loop": "Limite de boucle", "n_parallel": "En parallèle",
     "n_text": "Texte", "n_actor": "Personne", "n_callout": "Bulle",

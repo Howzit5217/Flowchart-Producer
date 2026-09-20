@@ -10,6 +10,11 @@
   // pseudocode, in the line of pseudocode it came from, because that is
   // where those words actually live.
   var lineOf = {};                       // shape number -> line of pseudocode
+  // And the same table read the other way.  It cannot be worked out from
+  // lineOf afterwards: one box can hold several lines -- a run of Displays
+  // is drawn as one shape -- so lineOf keeps only the last of them, and a
+  // line in the middle of such a box would find nothing.
+  var shapeOf = {};                      // line of pseudocode -> shape number
 
   // A box being typed into closes when you go elsewhere.  Leaning on blur
   // alone is not quite enough: a box that never gets focus never loses it,
@@ -27,9 +32,18 @@
     return function () { document.removeEventListener("pointerdown", away, true); };
   }
 
+  // Both tables go together, so they are emptied together: one of them
+  // left behind after the other was cleared points the two halves of the
+  // page at a program that is no longer on the paper.
+  function forgetLines() {
+    lineOf = {};
+    shapeOf = {};
+  }
+
   function noteLines(items) {
     (items || []).forEach(function (item) {
       if (item.id && item.line) { lineOf[item.id] = item.line; }
+      if (item.id && item.line) { shapeOf[item.line] = item.id; }
       ["then", "else", "body"].forEach(function (key) {
         if (item[key]) { noteLines(item[key]); }
       });
@@ -265,6 +279,92 @@
     var span = lineSpan(code, at);
     if (!span) { return; }
     code.scrollTop = Math.max(0, span.top + span.tall / 2 - code.clientHeight / 2);
+  }
+
+  // ------------------------------------ the chart and the words, in step --
+  // One shape, one line -- and until now the two halves of the page had no
+  // way of pointing at each other.  Reading a chart of forty shapes meant
+  // counting down the pseudocode to find which line had drawn the one you
+  // were looking at, and the same walk back again to find the shape a line
+  // had turned into.  The page knows both: every statement carries the
+  // line it came from, and there is a test that says so.  It was simply
+  // never shown to anybody.
+  //
+  // Marking, not selecting.  Clicking a shape is how you pick it to color
+  // it, and taking the focus away to the pseudocode box in the middle of
+  // that would be answering a press with something nobody asked for.
+
+  // The band is the one a run uses, in a quieter color: there is only ever
+  // one line being pointed at, so there is only ever one band.  A run owns
+  // it while it is going -- markLine drops this the moment it has anything
+  // of its own to say -- because where the program has got to matters more
+  // than where you last clicked.
+  function spotLine(at) {
+    var code = el("#code");
+    if (!code) { return; }
+    var span = at ? lineSpan(code, at) : null;
+    if (!span) { spotOff(); return; }
+    code.style.setProperty("--at-top", (10 + span.top) + "px");
+    code.style.setProperty("--at-tall", span.tall + "px");
+    code.classList.remove("wrong");
+    code.classList.add("at");
+    code.classList.add("spot");
+    showLine(code, at);
+  }
+
+  function spotOff() {
+    var code = el("#code");
+    if (!code || !code.classList.contains("spot")) { return; }
+    code.classList.remove("spot");
+    code.classList.remove("at");
+  }
+
+  // The other direction: the shape a line was drawn into, marked on the
+  // paper.  Quietly -- it is a place-marker, not a selection and not a run.
+  function spotShape(at) {
+    if (!chart) { return; }
+    all(".node.here", chart).forEach(function (g) { g.classList.remove("here"); });
+    var id = at ? shapeOf[at] : 0;
+    if (!id || byHand) { return; }
+    all('.node[data-i="' + id + '"]', chart).forEach(function (g) {
+      g.classList.add("here");
+    });
+  }
+
+  function caretLine(code) {
+    return code.value.slice(0, code.selectionStart).split("\n").length;
+  }
+
+  // Once a frame, however many times it is asked for: a cursor held down on
+  // the arrow keys asks on every repeat, and each one reads the chart.
+  var spotDue = false;
+  function spotSoon() {
+    if (spotDue || byHand) { return; }
+    spotDue = true;
+    requestAnimationFrame(function () {
+      spotDue = false;
+      var code = el("#code");
+      if (code) { spotShape(caretLine(code)); }
+    });
+  }
+
+  if (el("#code")) {
+    // A cursor moves in more ways than there are events for it -- typed
+    // into, clicked into, arrowed through, dragged across, put there by
+    // something else on the page -- and an arrow key held down moves it
+    // over and over without ever being let go of.  The document says so
+    // once, for all of them, however it moved.
+    document.addEventListener("selectionchange", function () {
+      if (document.activeElement === el("#code")) { spotSoon(); }
+    });
+    el("#code").addEventListener("focus", spotSoon);
+    // Editing the words means the chart on the paper is no longer the
+    // chart they describe, so the band pointing into them comes down
+    // rather than stay marking a line that has since moved.
+    el("#code").addEventListener("input", function () {
+      spotOff();
+      spotSoon();
+    });
   }
 
   // Which line to put the cursor on.  Usually the shape says: one shape,

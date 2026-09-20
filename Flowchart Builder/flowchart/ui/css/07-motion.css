@@ -271,9 +271,13 @@
      stylesheets between them; nothing here needs to know which.  The script
      measures it as it starts to close and says so here, and the width goes
      back to being whatever it was once it is open again. */
-  #panel > * { width: var(--panel-w, 100%); }
+  #panel > .slide-in { width: var(--panel-w, 100%); }
+  /* Nothing means nothing: the strip the panel keeps for its slider bar
+     has a width of its own, and a box told to be no wider than nothing
+     still comes out as wide as what it is padded by -- so a panel that
+     had closed all the way left fifteen pixels of itself behind. */
   #panel.hide {
-    display: flex; width: 0; opacity: 0; visibility: hidden;
+    display: flex; width: 0; padding: 0; opacity: 0; visibility: hidden;
     border-color: transparent; pointer-events: none;
     transition: width var(--move) var(--ease),
                 opacity .16s var(--ease-soft),
@@ -375,6 +379,23 @@
     22% { transform: translateX(4px); }
     58% { transform: translateX(-3px); }
     82% { transform: translateX(1px); }
+  }
+
+  /* The name that has just been written into.  A table of six numbers all
+     changing at once tells you nothing about which step did what; one row
+     lighting up as the value lands is the whole point of watching a
+     program go round rather than reading what it printed at the end.
+     Told to keep still, briefly() never adds the class at all, so a
+     changed value simply appears -- which is what keeping still means. */
+  .watch-row.just { animation: watch-just .52s var(--ease-soft); }
+  @keyframes watch-just {
+    0%, 30% { background: var(--accent-soft); }
+    100% { background: transparent; }
+  }
+  .watch-row.just .watch-val { animation: watch-said .52s var(--ease-soft); }
+  @keyframes watch-said {
+    0% { color: var(--accent); font-weight: 700; }
+    100% { color: var(--ink); font-weight: 400; }
   }
 
   /* what the build button is doing, said in light as well as in color */

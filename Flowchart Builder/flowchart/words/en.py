@@ -131,6 +131,39 @@ EN = {
     "f_not_ours": "That is a JSON file, but not a design saved from here.",
     "f_opened": "Opened {name}.",
     "f_empty": "There is nothing written in that one.",
+    "dl_copy": "Copy the chart",
+    "dl_copied": "Copied",
+    "dl_copy_no": "This browser will not let a page put a picture on the "
+                  "clipboard. Download it instead.",
+    "l_copy": "Copy a link to this",
+    "l_copied": "Link copied",
+    "l_copy_no": "This browser would not copy it. Take it from the address "
+                 "bar instead.",
+    "l_opened": "Opened from a link.",
+    "l_long": "That link is {n} characters long. Mail and chat apps cut long "
+              "links short, and a link cut short opens nothing — send the "
+              "file instead.",
+    "l_bad": "That link does not carry a chart this page can read.",
+    "held_head": "What it is holding",
+    "held_in": "in {name}",
+    "held_shared": "Declared outside every module, so every chart can see it",
+    "held_none": "nothing yet",
+    "h_tidy": "Tidy up",
+    "h_tidy_tip": "Stand every shape where this page would draw it, "
+                  "keeping the words, the colors and the arrows",
+    "h_tidied": "Tidied up: {n} shapes moved.",
+    "h_tidy_none": "There is nothing here to tidy up yet.",
+    "h_write": "As pseudocode",
+    "h_write_tip": "Write the drawing out as the pseudocode it amounts to",
+    "h_into_box": "Put it in the box",
+    "h_into_box_tip": "Write this into the pseudocode box and work on it "
+                      "there. The drawing stays where it is; whatever was "
+                      "in the box is written over.",
+    "s_no": "Leave it",
+    "s_stop_head": "It is still running",
+    "s_stop_said": "Drawing a new chart replaces the program that is "
+                   "running. The run will be stopped.",
+    "s_stop_yes": "Stop it and draw",
     "n_roundrect": "Rounded box",
     "n_offpage": "Off-page", "n_loop": "Loop limit", "n_parallel": "Side by side",
     "n_text": "Text", "n_actor": "Person", "n_callout": "Speech",

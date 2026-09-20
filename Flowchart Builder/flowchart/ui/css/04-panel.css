@@ -95,6 +95,8 @@
     min-height: 120px;                  /* five: enough to see where you are */
     max-height: 520px;                  /* twenty-five, and then no further */
   }
+  /* the frame the box's own slider bar hangs in, which is the box's size */
+  #code-home > .slide-frame { flex: 1; min-width: 0; display: flex; }
   #source textarea {
     display: block; flex: 1; width: 100%; height: 100%; resize: none;
     min-width: 0;
@@ -130,6 +132,10 @@
      there when the run ends: an error you have to catch as it flies past is
      hardly better than no error at all. */
   #source textarea.at.wrong { --at-ink: var(--code-bad); }
+  /* And the same band again, quieter, for the line that drew the shape you
+     have just picked on the paper.  A run takes the band back the moment it
+     has anything of its own to mark. */
+  #source textarea.at.spot { --at-ink: var(--accent-soft); }
   #source textarea::placeholder { color: var(--muted); }
   #source textarea:focus {
     outline: 0; border-color: var(--accent);
@@ -307,7 +313,15 @@
   #puzzles.won { border-color: var(--good); color: var(--good); }
   #source .build-row { margin-top: 12px; }
   #hand-switches:empty { display: none; }
-  #hand .check-row { margin-top: 12px; }
+  /* The two things to do with a finished drawing, in a row of their own
+     above the one that says whether it works.  Plain buttons, because
+     Check is the thing this card is for and only one button on a card
+     should look like the point of it. */
+  #hand .hand-row {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 12px;
+  }
+  #hand .hand-row .btn { width: 100%; justify-content: center; }
+  #hand .check-row { margin-top: 8px; }
   #hand-switches .switches { margin-top: 0; margin-bottom: 4px; }
   .btn.wide { width: 100%; justify-content: center; }
   /* what the button is doing, said in color */
@@ -366,6 +380,60 @@
   #next-row.here > .next-in { padding-top: 10px; }
   #run-note { margin-top: 10px; }
   #run-note:empty { display: none; }
+  /* --------------------------------------------- what it is holding -- */
+  /* A short table of every name the chart the run is standing in can see,
+     and what is in it now.  It sits above the tape because the two are
+     halves of the same thing: the tape is what the program said, this is
+     why it said it.
+     Names are set in the code face and lined up in a column of their own,
+     values in the other -- the eye runs down one column looking for the
+     name and across one row for the value, and a name and a value run
+     together in one sentence makes it do neither. */
+  #watch {
+    margin-top: 10px; border: 1px solid var(--line); border-radius: 8px;
+    background: var(--field); overflow: hidden;
+  }
+  #watch[hidden] { display: none !important; }
+  .watch-top {
+    display: flex; align-items: baseline; justify-content: space-between;
+    gap: 8px; padding: 6px 10px; border-bottom: 1px solid var(--line-soft);
+    font-size: 11px; letter-spacing: .07em; text-transform: uppercase;
+    color: var(--muted); font-weight: 650;
+  }
+  /* Which chart the run is standing in, when it is not the main one.  A
+     module's names are its own, and a list of names with no word about
+     whose they are is a list that looks wrong from inside a module. */
+  .watch-where {
+    text-transform: none; letter-spacing: 0; font-weight: 500;
+    font-family: Consolas, "Courier New", monospace; color: var(--accent);
+  }
+  .watch-rows {
+    max-height: 170px; overflow: auto;
+    font-family: Consolas, "Courier New", monospace; font-size: 12.5px;
+  }
+  /* A long program holds more names than there is room for, so the list
+     scrolls -- on the page's own slider bar, inside the box's border,
+     like everything else here that scrolls. */
+  #watch > .slide-frame { min-width: 0; }
+  .watch-row {
+    display: flex; gap: 10px; align-items: baseline;
+    padding: 4px 10px; border-top: 1px solid var(--line-soft);
+  }
+  .watch-row:first-child { border-top: 0; }
+  .watch-name {
+    flex: none; width: 40%; min-width: 0; color: var(--muted);
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .watch-val {
+    flex: 1; min-width: 0; color: var(--ink);
+    overflow-wrap: anywhere; font-variant-numeric: tabular-nums;
+  }
+  /* Declared outside every module, so every chart can see it.  Marked,
+     because a name that is everybody's behaves differently from one that
+     belongs to the chart you are looking at. */
+  .watch-row.shared .watch-name::before {
+    content: "\2022"; margin-right: 5px; color: var(--accent);
+  }
   .tape {
     margin-top: 10px; max-height: 260px; overflow: auto; border-radius: 8px;
     border: 1px solid var(--line); background: var(--field); padding: 8px 10px;
@@ -373,6 +441,10 @@
     line-height: 1.5; display: none;
   }
   .tape:not(:empty) { display: block; }
+  /* The frame its bar hangs in stands exactly where the tape stands, and
+     takes no width of its own; while the tape is empty 24-scroll.js puts
+     the frame away with it, so there is no bordered nothing left behind. */
+  #runner > .slide-frame { min-width: 0; }
   .tape .said { white-space: pre-wrap; overflow-wrap: anywhere; }
   .tape .said.note { color: var(--muted); }
   .tape .said.good { color: var(--good); }
@@ -418,8 +490,18 @@
   .tape .asking { display: flex; gap: 6px; margin: 4px 0; }
   .tape .asking .field { flex: 1; padding: 4px 7px; font-family: inherit; }
   .tape .code { margin: 0; white-space: pre; overflow-x: auto; }
+  /* The small boxes inside the tape -- a line of a program too long for
+     the width it is being read at -- get bars of their own too, and the
+     frames those hang in take no room of their own. */
+  .tape .slide-frame { min-width: 0; }
   svg .node.now > :is(rect, ellipse, polygon, path) { stroke-width: 3; }
   svg .node.now { filter: drop-shadow(0 0 8px rgba(17, 97, 73, .65)); }
+  /* The shape the cursor is standing in, over in the pseudocode.  Lighter
+     than the one you have picked to color and lighter again than the one a
+     run is standing on, because it is only saying where you are: the line
+     under the cursor made this. */
+  svg .node.here > :is(rect, ellipse, polygon, path) { stroke-width: 2.2; }
+  svg .node.here { filter: drop-shadow(0 0 6px var(--here-glow)); }
   /* and the one it stopped at, which stays marked after it has stopped */
   svg .node.wrong > :is(rect, ellipse, polygon, path) {
     stroke: var(--bad); stroke-width: 3;

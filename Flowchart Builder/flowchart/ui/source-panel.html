@@ -10,6 +10,17 @@
       <div class="adders" id="adders"></div>
       <div id="hand-sel"></div>
       <div id="hand-switches"></div>
+      <!-- Two things to do with a finished drawing, side by side above the
+           one that says whether it works.  Tidy up hands the shapes to the
+           same layout the pseudocode side is drawn by; As pseudocode shows
+           the writing the drawing amounts to, which is the half of the work
+           a drawing on its own never gave you. -->
+      <div class="hand-row">
+        <button class="btn" id="hand-tidy" data-w="h_tidy"
+                data-w-title="h_tidy_tip" title="__W(h_tidy_tip)__">__W(h_tidy)__</button>
+        <button class="btn" id="hand-code" data-w="h_write"
+                data-w-title="h_write_tip" title="__W(h_write_tip)__">__W(h_write)__</button>
+      </div>
       <div class="check-row">
         <button class="btn primary wide" id="check" data-w="check">__W(check)__</button>
       </div>
@@ -150,6 +161,19 @@
         <button class="btn primary wide" id="next" data-w="r_next">__W(r_next)__</button>
       </div></div>
       <p class="hint" id="run-note"></p>
+      <!-- What the program is holding, while it is holding it.  The tape
+           says what a program printed; it never said what it had in its
+           hands, and what it has in its hands is the thing a class spends
+           the lesson arguing about -- the total that comes out one too
+           many, the counter that never moves, the name that is still
+           empty because the Input went into a different box. -->
+      <div id="watch" hidden>
+        <div class="watch-top">
+          <span data-w="held_head">__W(held_head)__</span>
+          <span class="watch-where" id="watch-where"></span>
+        </div>
+        <div class="watch-rows" id="watch-rows"></div>
+      </div>
       <div id="tape" class="tape"></div>
     </section>
 

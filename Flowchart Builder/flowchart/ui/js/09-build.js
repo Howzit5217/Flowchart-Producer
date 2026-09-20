@@ -632,8 +632,12 @@
     };
   }
   var build = el("#build");
-  if (build) {
-    build.onclick = function () {
+  // Drawing a new chart throws away the program that is on the paper, and a
+  // run is a walk through that program.  Carrying on regardless left the
+  // runner stepping through a chart nobody could see any more and printing
+  // into the tape of a program that had been replaced -- so if something is
+  // running when the button is pressed, it asks first.  See stopThenBuild.
+  function drawItNow() {
       var says = el("#build-note");
       // The button says what it is doing by what color it is: red while it
       // is drawing, green the moment it is done, then back to blue a second
@@ -691,7 +695,7 @@
                                  data.h + " px";
         AST = data.ast || null;
         dressRunner();                   // there is something to run now
-        lineOf = {};
+        forgetLines();
         if (AST) {
           noteLines(AST.main);
           (AST.modules || []).forEach(function (mod) { noteLines(mod.body); });
@@ -714,7 +718,9 @@
         says.className = "bad";
         says.textContent = say("not_answering", { err: (err && err.message) || err });
       });
-    };
+  }
+  if (build) {
+    build.onclick = function () { stopThenBuild(drawItNow); };
   }
 
 

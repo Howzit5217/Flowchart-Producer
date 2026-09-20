@@ -83,54 +83,23 @@
     body, main, #stage { display: block; overflow: visible; background: #fff; }
     #stage { padding: 0; background-image: none; }
     .sheet { box-shadow: none; border-radius: 0; }
+    /* Nothing on paper scrolls, so the slider bars and the frames they
+       hang in step out of the way and leave behind what they were
+       holding.  Said here rather than twice: the sheet that chooses how
+       the chart is printed goes through the same printer. */
+    .slider, .slide-frame::after { display: none !important; }
+    main .slide-frame, #print-over .slide-frame {
+      display: block !important; padding: 0 !important;
+    }
   }
-  /* ------------------------------------------------- slider bars of ours -- */
-  /* The stage keeps its own scrolling but hides the browser's bars, and the
-     two below are drawn over the edges of it instead. */
-  #stage.own-sliders { scrollbar-width: none; }
-  #stage.own-sliders::-webkit-scrollbar { width: 0; height: 0; }
-  .stage-frame { position: relative; flex: 1; display: flex; min-width: 0; }
+  /* ------------------------------------------------ the frame it sits in -- */
+  /* The stage keeps its own scrolling and hangs the page's slider bars --
+     01-base.css draws those -- around the edges of it.  They belong to a
+     frame of the stage's own rather than to the row the stage sits in:
+     put in the row they run the width of the panel as well, and the grip
+     comes out the wrong length because it is measuring the wrong thing. */
+  .stage-frame { flex: 1; display: flex; min-width: 0; }
   .stage-frame > #stage { flex: 1; }
-  .slider {
-    position: absolute; z-index: 6; display: flex; background: var(--line-soft);
-  }
-  .slider.x { left: 0; right: 15px; bottom: 0; height: 15px;
-              border-top: 1px solid var(--line); }
-  .slider.y { top: 0; bottom: 15px; right: 0; width: 15px;
-              flex-direction: column; border-left: 1px solid var(--line); }
-  .slider.none { display: none; }
-  .slider-track { position: relative; flex: 1; min-width: 0; min-height: 0; }
-  .slider-grip {
-    position: absolute; border-radius: 99px; background: var(--line);
-    transition: background .12s;
-  }
-  .slider.x .slider-grip { top: 3px; bottom: 3px; left: 0; }
-  .slider.y .slider-grip { left: 3px; right: 3px; top: 0; }
-  .slider-track:hover .slider-grip { background: var(--muted); }
-  body.sliding .slider-grip { background: var(--accent); }
-  body.sliding { -webkit-user-select: none; user-select: none; }
-
-  /* the little buttons at each end */
-  .slider-step {
-    flex: none; display: flex; align-items: center; justify-content: center;
-    width: 15px; height: 15px; padding: 0; border: 0; cursor: pointer;
-    background: none; color: var(--muted);
-  }
-  .slider-step:hover { background: var(--line); color: var(--ink); }
-  .slider-step:active { background: var(--accent-soft); color: var(--accent); }
-  .slider-step svg {
-    width: 9px; height: 9px; fill: none; stroke: currentColor;
-    stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round;
-  }
-  .slider.x .slider-step.less svg { transform: rotate(180deg); }
-  .slider.y .slider-step.less svg { transform: rotate(-90deg); }
-  .slider.y .slider-step.more svg { transform: rotate(90deg); }
-  /* the small square where the two bars meet */
-  .stage-frame::after {
-    content: ""; position: absolute; right: 0; bottom: 0; width: 15px;
-    height: 15px; background: var(--line-soft);
-    border-left: 1px solid var(--line); border-top: 1px solid var(--line);
-  }
 
   /* ------------------------------------- the pseudocode, filling the screen -- */
   /* Filling the screen does not mean filling the width: a line of pseudocode
@@ -172,7 +141,32 @@
     display: none !important;
   }
   .more-sheet { width: min(460px, 100%); height: auto; max-height: 100%; }
+  /* ------------------------------------------------------- asking first -- */
+  /* Above the screens that fill the page, because it is asked about what is
+     on one of them.  Narrower than they are and no taller than what is in
+     it: a question the size of a settings sheet reads as a place to be
+     rather than as a thing to answer and be done with. */
+  #sure-over {
+    position: fixed; inset: 0; z-index: 70; display: flex;
+    align-items: center; justify-content: center; padding: 26px;
+    background: var(--dim);
+    -webkit-backdrop-filter: blur(3px); backdrop-filter: blur(3px);
+  }
+  #sure-over[hidden] { display: none !important; }
+  .sure-sheet { width: min(400px, 100%); height: auto; max-height: 100%; }
+  .sure-body { padding: 16px 18px 18px; }
+  .sure-body p { margin: 0; color: var(--ink); }
+  /* The safe answer first and the one that goes on with it last, which is
+     the way round every other question on a screen is asked. */
+  .sure-row {
+    display: flex; gap: 8px; justify-content: flex-end; margin-top: 18px;
+  }
   .more-body { overflow: auto; padding: 4px 18px 18px; }
+  /* The frame its slider bar hangs in takes its height from what is in it,
+     the way the body did, and gives it up again when the sheet runs out of
+     screen -- which is the whole of what the sheet is doing here. */
+  .more-sheet > .slide-frame { min-height: 0; display: flex; }
+  .more-sheet > .slide-frame > .more-body { flex: 1; min-width: 0; }
   /* The examples are a list of names to press, two to a row where there
      is room for two: a column of fifteen full-width buttons is a longer
      thing to read than the programs behind them. */
@@ -249,6 +243,13 @@
     -webkit-user-select: none; user-select: none;
     font-variant-numeric: tabular-nums;
   }
+  /* the frame the box's slider bars hang in, which is the box's size */
+  #code-slot > .slide-frame { flex: 1; min-width: 0; display: flex; }
+  /* The numbers are not inside that frame and do not lose the strip the
+     bar along the bottom stands in, so they are asked to give it up: a
+     column of numbers that ran one line lower than the words beside it
+     was a line numbered against nothing. */
+  #code-slot:has(> .slide-frame.has-x) > .code-rule { padding-bottom: 25px; }
   #code-slot #code {
     flex: 1; height: auto; min-height: 0; resize: none;
     border: 0; border-radius: 0; box-shadow: none;
@@ -278,16 +279,33 @@
     -webkit-backdrop-filter: blur(3px); backdrop-filter: blur(3px);
   }
   #tape-over[hidden] { display: none !important; }
+  /* A column, because two things stand in here now: what the program is
+     holding, across the top, and under it the tape -- what it said. */
   #tape-slot {
-    flex: 1; display: flex; min-height: 0;
+    flex: 1; display: flex; flex-direction: column; min-height: 0;
     padding: 14px 16px 16px; background: var(--code-bg);
     border-top: 1px solid var(--line-soft);
   }
+  /* Up here there is room to read it across rather than down: the names go
+     in a row of their own boxes instead of a column of narrow lines. */
+  #tape-slot > #watch {
+    flex: none; margin: 0 0 12px; max-height: 40%;
+    display: flex; flex-direction: column; min-height: 0;
+  }
+  #tape-slot > #watch > .slide-frame { flex: 1; min-height: 0; display: flex; }
+  #tape-slot > #watch .watch-rows {
+    max-height: none; min-height: 0; flex: 1; min-width: 0;
+    display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+    gap: 0;
+  }
+  #tape-slot > #watch .watch-row { border-top: 1px solid var(--line-soft); }
+  #tape-slot > #watch .watch-row:first-child { border-top: 1px solid var(--line-soft); }
   /* In the panel the tape is a small box with a border of its own that
      grows to a point and then scrolls, and which is not there at all until
      something is put in it.  Up here it is the sheet: no border, all the
      room there is, and shown even while it is empty -- a screen with a bar
      and nothing under it looks broken. */
+  #tape-slot > .slide-frame { flex: 1; min-width: 0; display: flex; }
   #tape-slot .tape {
     display: block; flex: 1; margin: 0; padding: 0 4px; max-height: none;
     border: 0; border-radius: 0; background: none; overflow: auto;
@@ -308,8 +326,12 @@
      run the whole thing again and type the same answers in.  So the code is
      given a box of its own, the tape is left alone, and the bar carries a
      way back between them. */
+  #tape-over .code-sheet > .slide-frame {
+    flex: 1; min-height: 0; display: flex;
+  }
   #code-out {
-    flex: 1; display: flex; flex-direction: column; min-height: 0;
+    flex: 1; min-width: 0;
+    display: flex; flex-direction: column; min-height: 0;
     padding: 14px 16px 16px; overflow: auto;
     background: var(--code-bg); border-top: 1px solid var(--line-soft);
   }
@@ -318,6 +340,9 @@
      height -- 22px -- so a number sits against the line it belongs to and
      the ruling lands under both. */
   .code-page { display: flex; flex: none; min-width: 0; }
+  /* the code itself keeps its own bar along the foot of it, in a frame
+     that stands where the code stood */
+  .code-page > .slide-frame { flex: 1; min-width: 0; display: flex; }
   #code-out .code-nums {
     flex: none; margin: 0; padding: 0 10px 0 0; min-width: 32px;
     border-right: 1px solid var(--line-soft);
@@ -366,10 +391,15 @@
     flex: 1; display: flex; min-height: 0; gap: 0;
     background: var(--code-bg); border-top: 1px solid var(--line-soft);
   }
-  /* the switches down one side, the sheet itself on the other */
+  /* the switches down one side, the sheet itself on the other.  The line
+     between the two is drawn by the frame rather than by the switches, so
+     that the strip their slider bar stands in falls on their side of it. */
+  #print-body > .slide-frame:first-child {
+    flex: none; display: flex; border-right: 1px solid var(--line-soft);
+  }
+  #print-body > .slide-frame:last-child { flex: 1; min-width: 0; display: flex; }
   .print-side {
     flex: none; width: 216px; padding: 16px; overflow: auto;
-    border-right: 1px solid var(--line-soft);
   }
   .print-side > label:first-child {
     display: block; font-size: 11.5px; color: var(--muted); margin-bottom: 4px;

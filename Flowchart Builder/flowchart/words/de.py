@@ -131,6 +131,40 @@ DE = {
     "f_not_ours": "Das ist eine JSON-Datei, aber kein hier gespeicherter Entwurf.",
     "f_opened": "{name} geöffnet.",
     "f_empty": "Darin steht nichts.",
+    "dl_copy": "Diagramm kopieren",
+    "dl_copied": "Kopiert",
+    "dl_copy_no": "Dieser Browser lässt eine Seite kein Bild in die "
+                  "Zwischenablage legen. Lade es stattdessen herunter.",
+    "l_copy": "Link dazu kopieren",
+    "l_copied": "Link kopiert",
+    "l_copy_no": "Dieser Browser hat ihn nicht kopiert. Nimm ihn aus der "
+                 "Adresszeile.",
+    "l_opened": "Aus einem Link geöffnet.",
+    "l_long": "Dieser Link ist {n} Zeichen lang. Mail- und Chat-Programme "
+              "kürzen lange Links, und ein gekürzter Link öffnet nichts "
+              "— schick lieber die Datei.",
+    "l_bad": "Dieser Link enthält kein Diagramm, das diese Seite lesen kann.",
+    "held_head": "Was es gerade hält",
+    "held_in": "in {name}",
+    "held_shared": "Außerhalb aller Module deklariert, also für jedes Diagramm sichtbar",
+    "held_none": "noch nichts",
+    "h_tidy": "Aufräumen",
+    "h_tidy_tip": "Jede Form dorthin stellen, wo diese Seite sie zeichnen "
+                  "würde — Wörter, Farben und Pfeile bleiben",
+    "h_tidied": "Aufgeräumt: {n} Formen verschoben.",
+    "h_tidy_none": "Hier gibt es noch nichts aufzuräumen.",
+    "h_write": "Als Pseudocode",
+    "h_write_tip": "Die Zeichnung als den Pseudocode schreiben, auf den sie "
+                   "hinausläuft",
+    "h_into_box": "In das Feld schreiben",
+    "h_into_box_tip": "Das hier in das Pseudocode-Feld schreiben und dort "
+                      "weiterarbeiten. Die Zeichnung bleibt, wo sie ist; "
+                      "was im Feld stand, wird überschrieben.",
+    "s_no": "Lass es",
+    "s_stop_head": "Es läuft noch",
+    "s_stop_said": "Ein neues Diagramm ersetzt das Programm, das gerade "
+                   "läuft. Der Lauf wird abgebrochen.",
+    "s_stop_yes": "Abbrechen und zeichnen",
     "n_roundrect": "Abgerundeter Kasten",
     "n_offpage": "Andere Seite", "n_loop": "Schleifengrenze", "n_parallel": "Nebeneinander",
     "n_text": "Text", "n_actor": "Person", "n_callout": "Sprechblase",

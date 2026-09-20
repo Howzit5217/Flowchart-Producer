@@ -143,6 +143,12 @@
     sel = g || null;
     if (sel) { sel.classList.add("on"); }
     drawSelection();
+    // And the line it was written on, marked over in the panel.  Picking a
+    // shape is the moment somebody is asking what this one is, and the
+    // answer to that is the line of pseudocode that drew it.
+    if (!byHand) {
+      spotLine(sel ? lineOf[+sel.dataset.i] : 0);
+    }
   }
 
   function buildPresets() {

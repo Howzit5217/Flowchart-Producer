@@ -169,8 +169,13 @@
       // is already shut -- which happens, on a narrow screen, every time a
       // chart is drawn -- the width to note would be none, and the panel
       // would open again on nothing.
-      if (!open && !panel.classList.contains("hide") && panel.clientWidth > 0) {
-        panel.style.setProperty("--panel-w", panel.clientWidth + "px");
+      // What is measured is the box that scrolls inside it rather than the
+      // panel itself: the panel keeps a strip of its width for its slider
+      // bar, and giving that width back to the words would re-wrap every
+      // one of them at the moment the panel started to close.
+      var inner = el(".slide-in", panel) || panel;
+      if (!open && !panel.classList.contains("hide") && inner.clientWidth > 0) {
+        panel.style.setProperty("--panel-w", inner.clientWidth + "px");
       } else if (open) {
         widthTimer = setTimeout(function () {
           panel.style.removeProperty("--panel-w");

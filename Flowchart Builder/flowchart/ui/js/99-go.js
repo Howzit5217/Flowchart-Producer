@@ -45,8 +45,13 @@
   // the box opens empty and stays empty until somebody writes in it -- but
   // a program handed to --serve on the command line arrives already in it,
   // and that was asked for, so it is drawn without being asked for twice.
+  //
+  // A link carrying a program is asked about first, and wins: somebody who
+  // has just followed one is here to see what is in it, not what was in
+  // the box before they clicked.
   if (el("#code")) {
-    if (el("#code").value.trim()) {
+    if (openLink()) { /* the link brought its own program, and drew it */ }
+    else if (el("#code").value.trim()) {
       opening = true;                    // drawn on opening, not asked for
       el("#build").click();
     }

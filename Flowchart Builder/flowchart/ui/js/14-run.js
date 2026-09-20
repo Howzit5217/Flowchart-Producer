@@ -97,22 +97,24 @@
   // program while the other way of working has the paper, and is handed it
   // back when it returns -- so the chart that comes back is the one that
   // can be run, without being built all over again.
-  var keptAST = null, keptLines = null;
+  var keptAST = null, keptLines = null, keptShapes = null;
 
   function keepProgram() {
     keptAST = AST;
     keptLines = lineOf;
+    keptShapes = shapeOf;
   }
 
   function restoreProgram() {
     AST = keptAST;
     lineOf = keptLines || {};
+    shapeOf = keptShapes || {};
     dressRunner();
   }
 
   function forgetProgram() {
     AST = null;
-    lineOf = {};
+    forgetLines();
     lightUp(null);
     freshTape();
     dressRunner();
@@ -176,6 +178,9 @@
   function markLine(id, line) {
     var code = el("#code");
     if (!code) { return; }
+    // There is one band, and a run outranks a click: where the program has
+    // got to matters more than the shape somebody last picked.
+    code.classList.remove("spot");
     var at = (id && following()) ? (line || (lineOf || {})[id]) : 0;
     var span = at ? lineSpan(code, at) : null;
     if (!span) {
@@ -192,6 +197,125 @@
     code.style.setProperty("--at-tall", span.tall + "px");
     code.classList.add("at");
     showLine(code, at);
+  }
+
+  // ---- what it is holding -------------------------------------------------
+  // The tape says what a program printed.  It never said what the program
+  // had in its hands, and that is the thing a lesson actually spends its
+  // time arguing about: the total that comes out one too many, the counter
+  // that never moves, the name that is still empty because the Input went
+  // into a different box.  All of it was here already -- every chart runs
+  // in its own set of names, and has since modules arrived -- and none of
+  // it had ever been shown to anybody.
+  //
+  // What is shown is the chart the run is standing in: that chart's own
+  // names, and the ones declared outside every module, which every chart
+  // can see.  A module's names are the module's, which is most of the
+  // reason for writing one, so showing main's while the run is inside
+  // average() would be showing the wrong tin.
+  var watchAt = null;                    // the chart whose names are shown
+  var watchDue = false;
+  var watchCell = {};                    // name -> the box its value is in
+  var watchList = "";                    // the names, as they were last built
+
+  function watchClear() {
+    watchAt = null;
+    watchList = "";
+    watchCell = {};
+    if (el("#watch")) { el("#watch").hidden = true; }
+    if (el("#watch-rows")) { el("#watch-rows").textContent = ""; }
+    if (el("#watch-where")) { el("#watch-where").textContent = ""; }
+  }
+
+  // A value written down the way the pseudocode writes it, so that 12 and
+  // "12" do not look alike on the way past -- they behave quite differently
+  // the moment anything is added to either, and telling them apart is half
+  // of what somebody is looking at this for.
+  function watchSays(v) {
+    if (v === null || v === undefined) { return TXT.held_none; }
+    if (typeof v === "string") { return '"' + v + '"'; }
+    if (typeof v === "boolean") { return v ? TXT.yes : TXT.no; }
+    if (Array.isArray(v)) { return "[" + v.map(watchSays).join(", ") + "]"; }
+    return String(v);
+  }
+
+  // Once a frame, however many steps go by.  A program at full speed does
+  // thousands of them a second and nobody can read thousands of anything;
+  // what is wanted is the latest, which is what this shows.
+  //
+  // This is called after every single statement of a run that may be two
+  // hundred thousand statements long, so it looks the box up once and
+  // remembers it -- the box moves about the page, between the panel and
+  // the screen it fills, but it is always the same box.  A page with no
+  // panel at all -- the viewer written beside an .svg -- remembers that
+  // there is none, rather than asking the document afresh every step.
+  var watchBox;                          // undefined until first asked
+  function watchNow(where) {
+    if (quiet) { return; }
+    if (watchBox === undefined) { watchBox = el("#watch") || null; }
+    if (!watchBox) { return; }
+    watchAt = where;
+    if (watchDue) { return; }
+    watchDue = true;
+    requestAnimationFrame(function () { watchDue = false; watchDraw(); });
+  }
+
+  function watchDraw() {
+    var box = el("#watch"), rows = el("#watch-rows");
+    if (!box || !rows || !watchAt) { return; }
+    var mine = watchAt.vars || {};
+    var names = Object.keys(mine);
+    var shared = {};
+    Object.keys(GLOBALS).forEach(function (name) {
+      // A name the chart has of its own hides the shared one, which is
+      // what holderOf does when the program reads it, so it is what the
+      // list has to say as well.
+      if (!Object.prototype.hasOwnProperty.call(mine, name)) {
+        names.push(name);
+        shared[name] = true;
+      }
+    });
+    if (!names.length) { box.hidden = true; return; }
+    box.hidden = false;
+    var says = el("#watch-where");
+    if (says) {
+      says.textContent = (watchAt.name && watchAt.name !== "main")
+        ? say("held_in", { name: watchAt.name + "()" }) : "";
+    }
+    // The rows are built again only when the names change -- a name is
+    // declared, or the run walks into another chart.  A value arriving in
+    // a name that is already there is written into the box it is already
+    // in, so that the row can be marked as having just changed rather than
+    // being thrown away and made afresh, which marks nothing.
+    var now = names.join("|");
+    if (now !== watchList) {
+      watchList = now;
+      watchCell = {};
+      rows.textContent = "";
+      names.forEach(function (name) {
+        var row = document.createElement("div");
+        row.className = "watch-row" + (shared[name] ? " shared" : "");
+        var who = document.createElement("span");
+        who.className = "watch-name";
+        who.textContent = name;
+        if (shared[name]) { who.title = TXT.held_shared; }
+        var val = document.createElement("span");
+        val.className = "watch-val";
+        row.appendChild(who);
+        row.appendChild(val);
+        rows.appendChild(row);
+        watchCell[name] = val;
+      });
+    }
+    names.forEach(function (name) {
+      var cell = watchCell[name];
+      if (!cell) { return; }
+      var said = watchSays(shared[name] ? GLOBALS[name] : mine[name]);
+      if (cell.textContent === said) { return; }
+      var first = cell.textContent === "";
+      cell.textContent = said;
+      if (!first) { briefly(cell.parentNode, "just", 520); }
+    });
   }
 
   // ---- the run itself ---------------------------------------------------
@@ -490,6 +614,7 @@
       if (slow() && !inside) { await hold(); }
       if (stopping) { throw new Stop(); }
       await doStep(item, where);
+      watchNow(where);                   // and what it is holding now
     }
   }
 
@@ -687,6 +812,7 @@
       if (following()) { keepView(); }   // to give back at the end of it
       runSays(TXT.r_stop);
       el("#tape").innerHTML = "";
+      watchClear();                      // nothing held yet, this time round
     }
     var where = { vars: {}, name: "main" };
     var broke = null;

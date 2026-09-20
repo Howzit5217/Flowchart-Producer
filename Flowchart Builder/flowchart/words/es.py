@@ -132,6 +132,39 @@ ES = {
     "f_not_ours": "Es un archivo JSON, pero no un diseño guardado desde aquí.",
     "f_opened": "Se abrió {name}.",
     "f_empty": "Ese no tiene nada escrito.",
+    "dl_copy": "Copiar el diagrama",
+    "dl_copied": "Copiado",
+    "dl_copy_no": "Este navegador no deja que una página ponga una imagen "
+                  "en el portapapeles. Descárgala en su lugar.",
+    "l_copy": "Copiar un enlace a esto",
+    "l_copied": "Enlace copiado",
+    "l_copy_no": "Este navegador no lo copió. Tómalo de la barra de "
+                 "direcciones.",
+    "l_opened": "Abierto desde un enlace.",
+    "l_long": "Ese enlace tiene {n} caracteres. El correo y los chats cortan "
+              "los enlaces largos, y un enlace cortado no abre nada: mejor "
+              "envía el archivo.",
+    "l_bad": "Ese enlace no lleva ningún diagrama que esta página pueda leer.",
+    "held_head": "Lo que tiene guardado",
+    "held_in": "en {name}",
+    "held_shared": "Declarado fuera de todo módulo, así que lo ve cada diagrama",
+    "held_none": "nada todavía",
+    "h_tidy": "Ordenar",
+    "h_tidy_tip": "Colocar cada figura donde esta página la dibujaría, "
+                  "conservando las palabras, los colores y las flechas",
+    "h_tidied": "Ordenado: {n} figuras movidas.",
+    "h_tidy_none": "Todavía no hay nada que ordenar aquí.",
+    "h_write": "Como pseudocódigo",
+    "h_write_tip": "Escribir el dibujo como el pseudocódigo al que equivale",
+    "h_into_box": "Ponerlo en el cuadro",
+    "h_into_box_tip": "Escribir esto en el cuadro de pseudocódigo y "
+                      "seguir ahí. El dibujo se queda donde está; lo que "
+                      "hubiera en el cuadro se sobrescribe.",
+    "s_no": "Déjalo",
+    "s_stop_head": "Todavía se está ejecutando",
+    "s_stop_said": "Dibujar un diagrama nuevo reemplaza el programa que se "
+                   "está ejecutando. La ejecución se detendrá.",
+    "s_stop_yes": "Detener y dibujar",
     "n_roundrect": "Caja redondeada",
     "n_offpage": "Fuera de página", "n_loop": "Límite de bucle", "n_parallel": "En paralelo",
     "n_text": "Texto", "n_actor": "Persona", "n_callout": "Bocadillo",
