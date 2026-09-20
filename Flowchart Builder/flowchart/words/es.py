@@ -325,7 +325,7 @@ ES = {
     "try_one": "¿Es tu primera vez? Empieza con uno de estos:",
     "eg_decision": "Una decisión", "eg_loop": "Un bucle", "eg_module": "Un módulo",
     "r_pace": "Cómo se ejecuta", "r_at_once": "De una vez",
-    "r_by_step": "Paso a paso", "r_next": "Siguiente paso",
+    "r_by_step": "Uno a uno", "r_next": "Siguiente paso",
     "chart_desc": "Diagrama de flujo con {n} formas: {kinds}.",
     "yes_plain": "Sí", "no_plain": "No",
     "more_head": "Opciones del diagrama",

@@ -325,7 +325,7 @@ FR = {
     "try_one": "Vous débutez ? Commencez par l’un de ceux-ci :",
     "eg_decision": "Une décision", "eg_loop": "Une boucle", "eg_module": "Un module",
     "r_pace": "Comment ça s’exécute", "r_at_once": "D’un coup",
-    "r_by_step": "Pas à pas", "r_next": "Étape suivante",
+    "r_by_step": "Un par un", "r_next": "Étape suivante",
     "chart_desc": "Organigramme de {n} formes : {kinds}.",
     "yes_plain": "Oui", "no_plain": "Non",
     "more_head": "Options du schéma",

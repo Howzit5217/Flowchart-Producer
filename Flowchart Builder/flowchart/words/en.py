@@ -324,7 +324,7 @@ EN = {
     "try_one": "New to this? Start from one of these:",
     "eg_decision": "A decision", "eg_loop": "A loop", "eg_module": "A module",
     "r_pace": "How it runs", "r_at_once": "All at once",
-    "r_by_step": "One step at a time", "r_next": "Next step",
+    "r_by_step": "One at a time", "r_next": "Next step",
     "chart_desc": "Flowchart with {n} shapes: {kinds}.",
     "yes_plain": "Yes", "no_plain": "No",
     "more_head": "Chart options",

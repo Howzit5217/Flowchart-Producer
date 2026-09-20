@@ -324,7 +324,7 @@ DE = {
     "try_one": "Neu hier? Fangen Sie mit einem davon an:",
     "eg_decision": "Eine Entscheidung", "eg_loop": "Eine Schleife", "eg_module": "Ein Modul",
     "r_pace": "Wie es läuft", "r_at_once": "Auf einmal",
-    "r_by_step": "Schritt für Schritt", "r_next": "Nächster Schritt",
+    "r_by_step": "Einzeln", "r_next": "Nächster Schritt",
     "chart_desc": "Flussdiagramm mit {n} Formen: {kinds}.",
     "yes_plain": "Ja", "no_plain": "Nein",
     "more_head": "Diagramm-Optionen",
