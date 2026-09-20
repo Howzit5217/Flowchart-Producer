@@ -1,0 +1,13 @@
+# Python's own cache.  It reappears every time anything is run, and none of
+# it belongs to anybody.
+__pycache__/
+*.py[cod]
+
+# What the checks write while they run.  tests/run.py clears up after
+# itself; this is in case one of them stops early.
+tests/_out*
+tests/_site/
+
+# index.html is not ignored.  It is generated -- by `python -m flowchart
+# --site .` -- but it is the page GitHub Pages publishes from the root of
+# this repository, so it has to be committed.

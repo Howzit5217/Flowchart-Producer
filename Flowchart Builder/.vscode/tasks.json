@@ -1,0 +1,35 @@
+{
+  // The code is the flowchart/ package and runs straight from it:
+  //     python -m flowchart
+  // The website is this folder: index.html beside that package, which the
+  // page fetches and runs in the browser.  Nothing is built from the
+  // Python, so Ctrl+Shift+B only rewrites the page -- and only the page's
+  // own HTML, CSS or script needs it.
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Open the studio",
+      "type": "shell",
+      "command": "python",
+      "args": ["-m", "flowchart"],
+      "problemMatcher": []
+    },
+    {
+      "label": "Refresh the website's page",
+      "type": "shell",
+      "command": "python",
+      "args": ["-m", "flowchart", "--site", "."],
+      "group": { "kind": "build", "isDefault": true },
+      "presentation": { "reveal": "silent", "panel": "shared", "clear": true },
+      "problemMatcher": []
+    },
+    {
+      "label": "Run every check",
+      "type": "shell",
+      "command": "python",
+      "args": ["tests/run.py"],
+      "group": { "kind": "test", "isDefault": true },
+      "problemMatcher": []
+    }
+  ]
+}

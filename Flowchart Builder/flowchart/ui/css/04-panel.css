@@ -1,0 +1,514 @@
+/* ---------------------------------------------------------------------------
+   04-panel.css -- everything inside the panel
+   --------------------------------------------------------------------------- */
+  /* ---------------------------------------------------------- palette -- */
+  .presets { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+  .preset {
+    border: 1px solid var(--line); border-radius: 8px; background: var(--panel);
+    padding: 7px 6px 6px; cursor: pointer; text-align: center;
+  }
+  .preset:hover { border-color: var(--accent); }
+  .preset.on { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-soft); }
+  .preset .chips { display: flex; gap: 3px; justify-content: center; margin-bottom: 5px; }
+  .preset .chip { width: 12px; height: 12px; border-radius: 3px; border: 1px solid rgba(0,0,0,.18); }
+  .preset span { font-size: 11.5px; color: var(--muted); }
+
+  /* ------------------------------------------------------- color rows -- */
+  .row {
+    display: flex; align-items: center; gap: 8px; padding: 5px 0;
+  }
+  .row + .row { border-top: 1px solid var(--line-soft); }
+  .row .name { flex: 1; font-size: 13px; }
+  .row .count { color: var(--muted); font-size: 11.5px; }
+  .row.pick { cursor: pointer; border-radius: 6px; }
+  .row.pick:hover { background: var(--line-soft); }
+  .swatch {
+    width: 26px; height: 26px; padding: 0; border-radius: 7px; cursor: pointer;
+    border: 1px solid var(--line); background: var(--panel); overflow: hidden;
+  }
+  .swatch::-webkit-color-swatch-wrapper { padding: 2px; }
+  .swatch::-webkit-color-swatch { border: none; border-radius: 5px; }
+  .swatch::-moz-color-swatch { border: none; border-radius: 5px; }
+  .legendkey { width: 22px; height: 16px; flex: none; }
+
+  /* -------------------------------------------- shape for each kind -- */
+  /* A name and a dropdown, six times down the panel.  The dropdown used
+     to size itself to the longest of the thirty shape names it offers,
+     which took two thirds of a 312px panel: the six boxes ended up shoved
+     against the right-hand edge with a ragged gap in front of each, and
+     the names left so little room that "Input / Output" and "Call a
+     module" broke over two lines.
+
+     A column of its own instead.  Every box begins at the same place,
+     every name has a line to itself, and a shape name too long for the
+     box is cut short rather than allowed to widen it -- the whole list is
+     there the moment the box is opened, and the full name is on the box
+     as a tooltip. */
+  /* the line that says what the six boxes below it do */
+  #roles .hint { margin: 0 0 4px; }
+  #role-rows .row { gap: 10px; }
+  #role-rows .name { min-width: 0; }
+  #role-rows select {
+    flex: 0 0 140px; width: 140px; font-size: 13px;
+    padding: 5px 28px 5px 9px; background-position: right 8px center;
+  }
+  .legendkey svg { display: block; overflow: visible; }
+
+  #sel-card .none { color: var(--muted); font-size: 12.5px; }
+  #sel-card .what { font-weight: 600; margin-bottom: 2px; }
+  #sel-card .said {
+    color: var(--muted); font-size: 12.5px; margin-bottom: 10px;
+    overflow-wrap: anywhere;
+  }
+  .switch { display: flex; align-items: center; gap: 8px; font-size: 13px; }
+  .switch input { width: 15px; height: 15px; accent-color: var(--accent); }
+
+  /* ----------------------------------------------------------- source -- */
+  /* Where the pseudocode is written.  It was a plain gray box, which is a
+     dull thing to look at for as long as this one gets looked at.  It keeps
+     to grays -- the code in it is the only thing with any color to it -- but
+     it is given the things that make somewhere feel like somewhere to write:
+     a little depth, room to breathe, a ruled edge down the left the way an
+     editor has, and a clear ring when it is the thing being typed into. */
+  /* The ruling has to be the same height as a line of the type sitting on
+     it, and has to start where the type starts.  It was neither: the lines
+     were 20.8 apart against type set on 20, and they began at the very top
+     of the box while the words began ten pixels down -- so the first line
+     looked nearly right and every line after it drifted further off.
+     Everything here is in whole pixels for that reason. */
+  /* It can be pulled taller or shorter, but only between a floor and a
+     ceiling: a box of two lines is no use to anybody, and one that can grow
+     without end leaves the rest of the panel somewhere below the bottom of
+     the screen.  Both ends are whole numbers of lines -- 10 of padding, then
+     twenty to a line -- so it never stops halfway through one.  Past the
+     ceiling there is the button beside the heading, which gives the whole
+     screen over to it.
+
+     There are no numbers down the side of this one.  A gutter is worth its
+     room in the expanded box, where a long program is actually read; in a
+     panel this narrow it takes width the words need, and it only works if
+     lines are stopped from wrapping, which costs more again. */
+  #code-home {
+    position: relative; display: flex; resize: vertical; overflow: hidden;
+    border-radius: 8px;
+    height: 200px;                      /* nine lines to begin with */
+    min-height: 120px;                  /* five: enough to see where you are */
+    max-height: 520px;                  /* twenty-five, and then no further */
+  }
+  #source textarea {
+    display: block; flex: 1; width: 100%; height: 100%; resize: none;
+    min-width: 0;
+    border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px;
+    font-family: "Cascadia Mono", Consolas, "SF Mono", Menlo, monospace;
+    font-size: 12.5px; line-height: 20px; color: var(--ink);
+    white-space: pre-wrap; overflow-wrap: anywhere;
+    background:
+      linear-gradient(var(--code-line) 1px, transparent 1px) 0 10px / 100% 20px,
+      var(--code-bg);
+    background-attachment: local, local;
+    box-shadow: inset 0 1px 2px var(--code-well);
+    transition: border-color .14s, box-shadow .14s;
+    tab-size: 4;
+  }
+  /* The line the program is on while it is being followed.  A band laid over
+     the ruling rather than a selection, because selecting means focusing,
+     and focus during a run belongs to whatever the program is asking to be
+     typed.  Where it goes and how tall it is are measured by the script and
+     handed down: a line too long for the column wraps, and the mark has to
+     sit where the wrapped words actually are and cover as many rows as they
+     take.  It is laid on the same local attachment as the ruling, so it
+     scrolls with the words rather than sitting still while they move. */
+  #source textarea.at {
+    background:
+      linear-gradient(var(--at-ink, var(--code-at)), var(--at-ink, var(--code-at)))
+        0 var(--at-top, 10px) / 100% var(--at-tall, 20px) no-repeat,
+      linear-gradient(var(--code-line) 1px, transparent 1px) 0 10px / 100% 20px,
+      var(--code-bg);
+    background-attachment: local, local, local;
+  }
+  /* The same band, in red, for the line a run stopped at.  It is left
+     there when the run ends: an error you have to catch as it flies past is
+     hardly better than no error at all. */
+  #source textarea.at.wrong { --at-ink: var(--code-bad); }
+  #source textarea::placeholder { color: var(--muted); }
+  #source textarea:focus {
+    outline: 0; border-color: var(--accent);
+    box-shadow: inset 0 1px 2px var(--code-well), 0 0 0 3px var(--accent-soft);
+  }
+  #code-slot #code { border-radius: 10px; }
+  #source .fields {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 12px;
+  }
+  #source .fields > div { min-width: 0; }   /* a long word cannot widen a column */
+  #source input[type="text"], #source select, .field {
+    width: 100%; border: 1px solid var(--line); border-radius: 8px; padding: 7px 9px;
+    background-color: var(--field); color: var(--ink);
+  }
+  /* A box you open is not a box you type in, and the two used to be
+     impossible to tell apart: same sunken paper, same border, and a small
+     gray chevron the only difference between them.  A dropdown takes the
+     panel's own surface instead -- the surface every other thing that is
+     pressed on this page has -- so it reads as something that opens, and
+     the chevron lights up in the accent as the pointer crosses it and
+     while the list is being chosen from.
+
+     The room on the right is kept clear of the words, and is a little
+     wider than the chevron needs: a name that runs right up to the arrow
+     looks like a mistake even when it fits. */
+  #source select, select.field {
+    padding-right: 34px;
+    background-color: var(--panel);
+    background-position: right 11px center;
+    background-size: 14px 14px;
+  }
+  #source select:hover, select.field:hover,
+  #source select:focus, select.field:focus {
+    border-color: var(--accent);
+    background-image: var(--pick-arrow-lit);
+  }
+  #source select:hover, select.field:hover { background-color: var(--accent-soft); }
+  /* The label over a field and the label beside a switch are different
+     things.  This one is for the field labels; saying so keeps it from
+     taking the switches with it, which is what made Grid and Key come out
+     small and gray while Step slowly, sitting outside #source, did not. */
+  #source label:not(.switch) {
+    display: block; font-size: 11.5px; color: var(--muted); margin-bottom: 3px;
+  }
+  /* Three short programs, under the box, for anybody who has never seen
+     this pseudocode before.  They close rather than vanish: a row that
+     disappeared the instant the first letter was typed read as something
+     having gone wrong, where a row that folds away reads as the page
+     getting out of the way.  A grid of one row can go from all of the
+     space to none of it, which a height cannot -- the same trick the
+     folding cards use. */
+  #starts { display: grid; grid-template-rows: 1fr; }
+  #starts > .starts-in {
+    min-height: 0; overflow: hidden; padding-top: 8px;
+    display: flex; align-items: baseline; gap: 6px; flex-wrap: wrap;
+    font-size: 12px;
+  }
+  #starts .starts-said { color: var(--muted); }
+  /* The way in is a word you press rather than a button: a button here
+     was a thing with weight in a line that is only an offer. */
+  #starts .starts-go {
+    border: 0; background: none; padding: 0; font: inherit; cursor: pointer;
+    color: var(--accent); font-weight: 600; text-decoration: underline;
+    text-underline-offset: 2px; border-radius: 4px;
+  }
+  #starts .starts-go:hover { text-decoration-thickness: 2px; }
+  /* The last row of the grid: two tick boxes on one side, and on the other
+     the way in to the settings that are not worth a box each.  Two tick
+     boxes are shorter than a field, so the row they used to have to
+     themselves was mostly empty; a button is the same height as one of
+     them, so the row is even.
+     The pair still moves bodily to the by-hand card when the mode changes
+     -- they belong to the chart, not to the way it was made -- and there
+     they are a row again, which is why this says where rather than what. */
+  #source .fields > #chart-switches {
+    gap: 8px; margin-top: 0; align-content: center;
+  }
+  #source .more-cell { display: flex; align-items: center; }
+  /* It carries no chevron.  Nothing else on this page that opens something
+     does -- Files opens a sheet with nothing but its name on it -- and one
+     button wearing a little arrow among a panel of buttons that do not is
+     the odd one out rather than the clear one.  What it does instead is
+     what every other thing on this page that is currently on does: it
+     wears the accent while its menu is open. */
+  #more { width: 100%; justify-content: center; position: relative; }
+  #more[aria-expanded="true"] {
+    border-color: var(--accent); background-color: var(--accent-soft);
+  }
+  /* A dot when something behind the button has been moved off what it
+     started as.  It is laid over the corner rather than set beside the
+     word: as one of the row it was a thing the word had to make space
+     for, so More sat a few pixels left of the middle of its own button
+     whether or not the dot was showing. */
+  #more::after {
+    content: ""; position: absolute; right: 9px; top: 50%;
+    width: 6px; height: 6px; border-radius: 50%;
+    background: var(--accent); opacity: 0;
+    transform: translateY(-50%) scale(.4);
+  }
+  #more.some::after { opacity: 1; transform: translateY(-50%) scale(1); }
+
+  /* ------------------------------------------- a menu that holds settings -- */
+  /* The same menu the right button opens, with two things added: a heading,
+     so a menu of choices can say what the choices are for, and room at the
+     front of every row for a tick, so the words all start in the same place
+     whether or not the row is the one that is on. */
+  .menu h4 {
+    margin: 6px 9px 4px; font-size: 11px; letter-spacing: .07em;
+    text-transform: uppercase; color: var(--muted); font-weight: 650;
+  }
+  .menu h4:first-child { margin-top: 2px; }
+  .menu .tick { width: 15px; height: 15px; flex: none; color: var(--accent); }
+  /* Two of a kind, side by side, on the same two columns as the fields
+     above them -- so everything down the panel lines up on one pair of
+     edges instead of each row finding its own. */
+  .switches {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 12px;
+    align-items: center;
+  }
+  #source .go {
+    margin-top: 12px; display: flex; gap: 10px; align-items: center;
+    justify-content: space-between;
+  }
+  #source .go .btn { flex: none; }
+  /* two buttons of equal weight, filling the width between them */
+  .pair-wide {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 12px;
+  }
+  .pair-wide .btn { justify-content: center; }
+  .switches .field { width: 100%; }
+  /* Two switches in the cell one would take, for a pair where the
+     second only means anything while the first is on. */
+  .switches .stack { display: grid; gap: 7px; }
+  .switch.off { opacity: .5; }
+  .switch.off input { cursor: default; }
+  /* The puzzle being worked on.  It is ruled off top and bottom rather
+     than boxed, because it is part of the card it sits in rather than a
+     thing laid on top of it. */
+  #pz-card {
+    margin-top: 14px; padding: 12px 0 2px;
+    border-top: 1px solid var(--line);
+  }
+  #pz-card .pz-top {
+    display: flex; align-items: center; gap: 8px; margin-bottom: 4px;
+  }
+  #pz-card .pz-top strong { flex: 1; font-size: 13.5px; }
+  #pz-card .icon.small { width: 26px; height: 26px; flex: none; }
+  #pz-card .icon.small svg { width: 15px; height: 15px; }
+  #pz-card #pz-said {
+    margin: 0 0 10px; font-size: 12.5px; color: var(--muted); line-height: 1.45;
+  }
+  #pz-card #pz-mark { margin-top: 8px; }
+  #pz-card #pz-mark:empty { display: none; }
+  /* A puzzle already solved, opened again to look at.  The whole card
+     says so rather than only the line at the foot of it. */
+  #pz-card.won { border-color: var(--good); }
+  /* The names in the list carry a tick once they have been beaten, and
+     room for one before that so they all start in the same place. */
+  .pz .tick { width: 15px; height: 15px; flex: none; color: var(--good); }
+  .pz.won { border-color: var(--good); }
+  .pz-shut { margin: 0; }
+  /* The button in the bar: a dot while there is something left to solve,
+     and the whole thing in the good color once there is not. */
+  #puzzles { position: relative; }
+  #puzzles::after {
+    content: ""; position: absolute; right: 7px; top: 7px;
+    width: 6px; height: 6px; border-radius: 50%;
+    background: var(--accent); opacity: 0; transform: scale(.4);
+  }
+  #puzzles.some::after { opacity: 1; transform: scale(1); }
+  #puzzles.won { border-color: var(--good); color: var(--good); }
+  #source .build-row { margin-top: 12px; }
+  #hand-switches:empty { display: none; }
+  #hand .check-row { margin-top: 12px; }
+  #hand-switches .switches { margin-top: 0; margin-bottom: 4px; }
+  .btn.wide { width: 100%; justify-content: center; }
+  /* what the button is doing, said in color */
+  .btn.primary.working {
+    background: var(--busy); border-color: var(--busy); color: #fff;
+  }
+  .btn.primary.done {
+    background: var(--good); border-color: var(--good); color: #fff;
+  }
+  .btn.primary.working, .btn.primary.done { transition: background .2s, border-color .2s; }
+  /* The Build button is switched off while it builds, and it keeps its
+     color: it is busy, not dead.  That used to be said of every disabled
+     primary button, so Run came out bright blue and wearing a waiting
+     cursor at the very moment it had nothing whatever to run. */
+  .btn.primary.working[disabled], .btn.primary.done[disabled] {
+    opacity: 1; cursor: progress;
+  }
+  /* The line under the button keeps its place whether it is saying anything
+     or not.  It was holding 1em open -- the size of the letters -- while a
+     line of those letters takes up the whole line height, so the moment it
+     said "Drawing..." it grew five pixels and pushed everything below it
+     down, then shrank back the moment it finished.  It never wraps, so one
+     line is exactly the room to keep. */
+  #build-note { font-size: 12.5px; line-height: 18px; min-height: 18px;
+                color: var(--muted); text-align: center;
+                margin-top: 8px; overflow: hidden;
+                text-overflow: ellipsis; white-space: nowrap; }
+  #build-note.bad { color: var(--bad); }
+
+  /* ---------------------------------------------------------- by hand -- */
+  .tabs { display: flex; gap: 6px; }
+  .tab {
+    flex: 1; border: 1px solid var(--line); background: var(--panel);
+    border-radius: 8px; padding: 7px 8px; cursor: pointer; font-size: 13px;
+  }
+  .tab.on { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .adders { display: grid; grid-template-columns: repeat(6, 1fr); gap: 5px; }
+  .adders .btn {
+    padding: 5px 2px; justify-content: center; border-radius: 7px;
+  }
+  .adders .legendkey { width: 24px; height: 17px; }
+  textarea.field { resize: vertical; }
+  .trio { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px;
+          margin-top: 10px; }
+  .trio label { display: flex; flex-direction: column; gap: 3px;
+                font-size: 11.5px; color: var(--muted); }
+  .trio input[type="number"] { width: 100%; padding: 5px 7px; }
+  .trio .swatch { width: 100%; height: 28px; }
+  .small-head { font-size: 11.5px; color: var(--muted); margin-top: 12px; }
+  /* The button that asks for the next step.  It is only there while the
+     run is standing still waiting to be asked, so it takes no room at all
+     the rest of the time -- a grid of one row, which can go from all of
+     the space to none of it the way the folding cards do. */
+  #next-row { display: grid; grid-template-rows: 0fr; }
+  #next-row > .next-in { min-height: 0; overflow: hidden; }
+  #next-row.here > .next-in { padding-top: 10px; }
+  #run-note { margin-top: 10px; }
+  #run-note:empty { display: none; }
+  .tape {
+    margin-top: 10px; max-height: 260px; overflow: auto; border-radius: 8px;
+    border: 1px solid var(--line); background: var(--field); padding: 8px 10px;
+    font-family: Consolas, "Courier New", monospace; font-size: 12.5px;
+    line-height: 1.5; display: none;
+  }
+  .tape:not(:empty) { display: block; }
+  .tape .said { white-space: pre-wrap; overflow-wrap: anywhere; }
+  .tape .said.note { color: var(--muted); }
+  .tape .said.good { color: var(--good); }
+  .tape .said.bad { color: var(--bad); }
+  .tape .said.typed { color: var(--accent); }
+  .tape .said.warn { color: var(--warn); }
+  /* Where a run stopped, and why.  Four short rows: the line it was on, the
+     line itself with the piece at fault underlined beneath it, what went
+     wrong, and what was probably meant instead -- then, under a fault
+     inside a module, how it was got to.  The whole block is a button,
+     because the one thing anybody wants next is to be taken to that line. */
+  .tape .said.blame {
+    display: block; width: 100%; text-align: left; margin: 6px 0;
+    padding: 7px 9px; border-radius: 8px; line-height: 1.4;
+    border: 1px solid var(--line); border-left: 3px solid var(--bad);
+    background: var(--panel); font: inherit; cursor: pointer;
+  }
+  .tape .said.blame.warn { border-left-color: var(--warn); }
+  .tape .said.blame .where { font-size: 11px; color: var(--muted); }
+  .tape .said.blame .bit {
+    margin: 3px 0 5px; padding: 0; white-space: pre; overflow-x: auto;
+    font: inherit; color: var(--ink);
+  }
+  .tape .said.blame .why { color: var(--bad); }
+  .tape .said.blame.warn .why { color: var(--warn); }
+  .tape .said.blame .tip, .tape .said.blame .trail {
+    color: var(--muted); font-size: 11.5px; margin-top: 3px;
+  }
+  .tape .said.blame:hover { border-color: var(--accent); }
+  /* And the one row of a warning that does something rather than say
+     something: what would put it right.  It is marked out from the rows
+     above it -- outlined, in the accent, its own thing to press -- because
+     everything else in the box is there to be read and this one edits what
+     you wrote. */
+  .mend {
+    display: inline-block; margin-top: 6px; padding: 3px 9px;
+    border: 1px solid var(--accent); border-radius: 999px;
+    background: transparent; color: var(--accent);
+    font: inherit; font-size: 11.5px; cursor: pointer; line-height: 1.4;
+  }
+  .mend:hover, .mend:focus-visible { background: var(--accent); color: #fff; }
+  #build-faults .mend { margin: 5px 0 2px 13px; }
+  .tape .asking { display: flex; gap: 6px; margin: 4px 0; }
+  .tape .asking .field { flex: 1; padding: 4px 7px; font-family: inherit; }
+  .tape .code { margin: 0; white-space: pre; overflow-x: auto; }
+  svg .node.now > :is(rect, ellipse, polygon, path) { stroke-width: 3; }
+  svg .node.now { filter: drop-shadow(0 0 8px rgba(17, 97, 73, .65)); }
+  /* and the one it stopped at, which stays marked after it has stopped */
+  svg .node.wrong > :is(rect, ellipse, polygon, path) {
+    stroke: var(--bad); stroke-width: 3;
+  }
+  svg .node.wrong { filter: drop-shadow(0 0 8px var(--bad-glow)); }
+  /* Above the sheets that fill the screen, not under them: the language
+     list is opened from the bar of one of those, and a menu that opened
+     behind the thing it was asked from would be a menu nobody could see. */
+  .menu {
+    position: fixed; z-index: 70; min-width: 176px; padding: 5px;
+    background: var(--panel); border: 1px solid var(--line);
+    border-radius: 10px; box-shadow: var(--shadow);
+  }
+  .menu button {
+    display: flex; align-items: center; gap: 9px; width: 100%;
+    border: 0; background: none; color: inherit; text-align: left;
+    padding: 7px 9px; border-radius: 7px; cursor: pointer; font-size: 13px;
+  }
+  .menu button:hover { background: var(--accent-soft); }
+  .menu hr { border: 0; border-top: 1px solid var(--line-soft); margin: 4px 2px; }
+  svg .link { cursor: pointer; }
+  svg .link.on .flow { stroke-width: 3; }
+  svg .link.on { filter: drop-shadow(0 0 6px rgba(20, 66, 124, .6)); }
+  svg .knob { cursor: crosshair; }
+  /* A dot answers being pointed at by growing, where the browser will size
+     a circle from CSS, and by lighting up everywhere.  Growing alone was
+     the whole of the answer, so on a browser without `r` as a CSS property
+     -- Firefox, until 128 -- pointing at one did nothing visible at all,
+     and the only way to learn that these could be dragged from was to try. */
+  svg .knob:hover { r: 7; fill: #2f6fc4; }
+  /* the dot a line is coming from, while it is being aimed */
+  svg .knob.lit { fill: var(--accent); }
+  /* and the dots on every other shape, waiting to be picked */
+  svg .spot {
+    cursor: pointer; fill: var(--accent); fill-opacity: .18;
+    stroke: var(--accent); stroke-width: 1.6;
+    animation: breathe 1.5s ease-in-out infinite;
+  }
+  svg .spot:hover { fill-opacity: .9; r: 8; animation: none; }
+  @keyframes breathe {
+    0%, 100% { fill-opacity: .18; }
+    50% { fill-opacity: .55; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    svg .spot { animation: none; fill-opacity: .4; }
+  }
+  svg .grip { cursor: nwse-resize; }
+  /* the line that says what you have lined a shape up with */
+  svg .guide {
+    stroke: #e01020; stroke-width: 1.4; stroke-dasharray: 7 4;
+    pointer-events: none; shape-rendering: crispEdges;
+  }
+  svg .ghost { fill: none !important; stroke: none !important; }
+  /* writing straight into a shape */
+  .writing {
+    width: 100%; height: 100%; display: flex; align-items: center;
+    justify-content: center; text-align: center; outline: 0;
+    font: 12.5px/1.2 Arial, Helvetica, sans-serif; overflow: hidden;
+    caret-color: var(--accent); word-break: break-word;
+  }
+  svg .typing-here { overflow: visible; }
+  svg .node[data-kind="text"]:hover .ghost {
+    stroke: var(--line) !important; stroke-dasharray: 4 3;
+  }
+  svg .node[data-kind="text"].on .ghost {
+    stroke: var(--accent) !important; stroke-dasharray: 4 3;
+  }
+  svg .node { cursor: move; }
+  svg .band { pointer-events: none; }
+  svg .band-line { stroke: var(--accent); stroke-width: 2; stroke-linecap: round; }
+  svg .band-tip { fill: var(--accent); stroke: var(--accent); stroke-width: .6;
+                  stroke-linejoin: miter; }
+  #stage.joining { cursor: crosshair; }
+  .edit-box {
+    position: absolute; z-index: 20; border: 2px solid var(--accent);
+    border-radius: 6px; padding: 4px 6px; font: inherit; font-size: 12px;
+    text-align: center; resize: none; background: #fff; color: #10151b;
+    box-shadow: var(--shadow);
+  }
+  .good { color: var(--good); font-size: 12.5px; margin: 10px 0 0; }
+  .hint.bad { color: var(--bad); }
+  .fault {
+    display: block; width: 100%; text-align: left; margin-top: 6px;
+    border: 1px solid var(--line); border-left: 3px solid var(--bad);
+    background: var(--panel); color: inherit; border-radius: 7px;
+    padding: 6px 9px; font-size: 12.5px; cursor: pointer; line-height: 1.35;
+  }
+  .fault:hover { background: var(--line-soft); }
+  .fault.warn { border-left-color: var(--warn); }
+  /* What the reading had to paper over, under the button that did it.  A
+     chart still came out -- these are not refusals -- so they sit quietly
+     under it rather than in place of it. */
+  #build-faults { margin-top: 4px; }
+  #build-faults:empty { display: none; }
+  #build-faults .hint { margin: 6px 0 0; font-size: 12px; }
+

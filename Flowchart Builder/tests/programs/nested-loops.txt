@@ -1,0 +1,13 @@
+Start
+Declare Integer row
+Declare Integer col
+Set row = 1
+While row <= 5
+    While col <= row
+        Display "*"
+        Set col = col + 1
+    End While
+    Display " "
+    Set row = row + 1
+End While
+End

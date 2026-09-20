@@ -1,0 +1,57 @@
+/* ---------------------------------------------------------------------------
+   02-bar.css -- the bar along the top
+   --------------------------------------------------------------------------- */
+  /* ---------------------------------------------------------- top bar -- */
+  .bar {
+    flex: none; background: var(--panel); border-bottom: 1px solid var(--line);
+    display: flex; align-items: center; gap: 10px 16px;
+    padding: 10px 16px; flex-wrap: wrap; z-index: 5;
+  }
+  /* the mark, at the head of the bar */
+  .mark {
+    flex: none; display: inline-flex; align-items: center; justify-content: center;
+    width: 32px; height: 32px; border-radius: 9px;
+    background: var(--accent-soft); color: var(--accent);
+  }
+  .mark svg {
+    width: 20px; height: 20px; fill: none; stroke: currentColor;
+    stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round;
+  }
+  .brand { font-weight: 650; font-size: 15px; margin-right: auto; line-height: 1.25;
+           min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .saves { display: flex; gap: 8px; align-items: center; }
+  .brand small { display: block; font-weight: 400; font-size: 12px; color: var(--muted); }
+  .grow { margin-right: auto; }
+  .btn {
+    border: 1px solid var(--line); background-color: #fff; border-radius: 8px;
+    padding: 7px 12px; cursor: pointer; white-space: nowrap;
+    text-decoration: none; color: inherit; display: inline-flex;
+    align-items: center; gap: 7px; transition: background .12s, border-color .12s;
+  }
+  .btn { background-color: var(--panel); }
+  /* Nothing answers a hover or a press on a button that is switched off.
+     It used to light up and dip under the finger exactly as a live one
+     does, and then do nothing, which reads as the button being broken
+     rather than as there being nothing for it to do. */
+  /* The pale wash is for the plain buttons only.  A blue one is already
+     the color this would paint it towards, and it carries white letters:
+     `:not([disabled]):hover` outweighs the plain `.btn.primary` below, so
+     hovering Build or Run swapped the blue for the palest wash on the
+     page and left the white writing on top of it.  In the dark the wash
+     is dark and nobody saw it; in the light the button went blank. */
+  .btn:not(.primary):not([disabled]):hover {
+    background-color: var(--accent-soft); border-color: var(--accent);
+  }
+  .btn:not([disabled]):active { filter: brightness(.96); }
+  .btn.primary { background-color: var(--accent); border-color: var(--accent); color: #fff; }
+  .btn.primary:not([disabled]):hover { filter: brightness(1.12); }
+  .btn.ghost { background-color: transparent; }
+  /* A button with nothing to do says so by being dim and dead.  The
+     waiting cursor belongs to the one that is busy, not to every button
+     that happens to be switched off. */
+  .btn[disabled] { opacity: .5; cursor: default; }
+  .btn.small { padding: 4px 9px; font-size: 12.5px; border-radius: 7px; }
+  /* a button that is a dropdown: the same box, with the words starting
+     where a button's words start and the arrow given its own room */
+  select.btn { display: inline-block; padding: 7px 32px 7px 12px; }
+

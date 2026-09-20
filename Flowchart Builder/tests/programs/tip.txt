@@ -1,0 +1,15 @@
+Start
+Declare Real bill
+Declare Real tip
+Display "What did the meal come to?"
+Input bill
+While bill <= 0
+    Display "That is not a bill. Try again."
+    Input bill
+End While
+Set tip = bill * 0.18
+If tip < 2 Then
+    Set tip = 2
+End If
+Display "Leave ", tip
+End

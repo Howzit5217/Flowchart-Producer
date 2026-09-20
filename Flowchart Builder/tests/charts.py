@@ -1,0 +1,213 @@
+"""Reading a finished chart back, and saying what is wrong with it.
+
+Every one of these started as a complaint about a chart that looked wrong.
+Rather than fix each by eye and hope, the thing being complained about was
+written down as something countable -- a line that doubles back, a line that
+runs through a shape, an arrow whose point has been painted over -- so that
+the fix could be shown to work and, more to the point, shown to still work
+later on.
+"""
+import math
+import re
+
+
+# --------------------------------------------------------------- reading it --
+def paths(svg):
+    """Every arrow in the chart, as its corner points."""
+    out = []
+    for d in re.findall(r'<path[^>]*class="[^"]*flow[^"]*"[^>]*\sd="([^"]+)"', svg):
+        pts = []
+        for bit in re.finditer(r"([MLQ])([-\d.,\s]+)", d):
+            n = [float(v) for v in re.findall(r"-?\d+(?:\.\d+)?", bit.group(2))]
+            if bit.group(1) == "Q":
+                pts.append((n[2], n[3]))        # the far end of a rounded corner
+            else:
+                for i in range(0, len(n) - 1, 2):
+                    pts.append((n[i], n[i + 1]))
+        if len(pts) > 1:
+            out.append(pts)
+    return out
+
+
+def legs(pts, least=10.0):
+    """The straight runs of a route: (way, how far, from, to)."""
+    out = []
+    for a, b in zip(pts, pts[1:]):
+        dx, dy = b[0] - a[0], b[1] - a[1]
+        if abs(dx) < 1.5 and abs(dy) < 1.5:
+            continue
+        way = ("right" if dx > 0 else "left") if abs(dx) > abs(dy) else \
+              ("down" if dy > 0 else "up")
+        out.append((way, math.hypot(dx, dy), a, b))
+    return [g for g in out if g[1] > least]
+
+
+def shapes(svg):
+    """The box each shape occupies: (left, top, right, foot, sure).
+
+    `sure` says whether the box is exact.  A rectangle, a polygon or an
+    ellipse can be measured exactly from what is written down; a shape drawn
+    as a path with curves in it -- a page, a drum, a cloud -- can only be
+    guessed at from the numbers in the path, so anything that has to be right
+    leaves those alone.  The words inside a shape are not part of it and are
+    not measured: reading them as coordinates was what once made this say
+    every chart was a pile of overlapping shapes.
+    """
+    out = []
+    for g in re.finditer(r'<g class="node"[^>]*>(.*?)</g>', svg, re.S):
+        xs, ys, sure = [], [], True
+        for tag in re.findall(r"<(?:rect|polygon|ellipse|circle|path)[^>]*>",
+                              g.group(1)):
+            if 'class="ghost"' in tag or 'class="trim"' in tag:
+                continue
+            box = re.search(r'x="(-?[\d.]+)"[^>]*y="(-?[\d.]+)"'
+                            r'[^>]*width="([\d.]+)"[^>]*height="([\d.]+)"', tag)
+            if box:
+                x, y, w, h = (float(v) for v in box.groups())
+                xs += [x, x + w]
+                ys += [y, y + h]
+                continue
+            corners = re.search(r'points="([^"]+)"', tag)
+            if corners:
+                n = [float(v) for v in re.findall(r"-?[\d.]+", corners.group(1))]
+                xs += n[0::2]
+                ys += n[1::2]
+                continue
+            round_ = re.search(r'cx="(-?[\d.]+)"[^>]*cy="(-?[\d.]+)"'
+                               r'[^>]*rx="([\d.]+)"[^>]*ry="([\d.]+)"', tag)
+            if round_:
+                cx, cy, rx, ry = (float(v) for v in round_.groups())
+                xs += [cx - rx, cx + rx]
+                ys += [cy - ry, cy + ry]
+                continue
+            dot = re.search(r'cx="(-?[\d.]+)"[^>]*cy="(-?[\d.]+)"[^>]*r="([\d.]+)"', tag)
+            if dot:
+                cx, cy, r = (float(v) for v in dot.groups())
+                xs += [cx - r, cx + r]
+                ys += [cy - r, cy + r]
+                continue
+            drawn = re.search(r'\sd="([^"]+)"', tag)
+            if drawn:                           # a curve: near enough, not exact
+                n = [float(v) for v in re.findall(r"-?\d+(?:\.\d+)?", drawn.group(1))]
+                xs += n[0::2]
+                ys += n[1::2]
+                sure = False
+        if xs and ys:
+            out.append((min(xs), min(ys), max(xs), max(ys), sure))
+    return out
+
+
+# ------------------------------------------------------- what can be wrong --
+def doubles_back(svg):
+    """A route that goes one way and then back the other, gaining nothing.
+
+    Going round something is fine: the test is whether it travelled far
+    enough across the other way to have been worth the turn.
+    """
+    hits = 0
+    for pts in paths(svg):
+        run = legs(pts)
+        found = False
+        for i in range(len(run) - 1):
+            for j in range(i + 1, len(run)):
+                pair = {run[i][0], run[j][0]}
+                if pair not in ({"left", "right"}, {"down", "up"}):
+                    continue
+                across = sum(g[1] for g in run[i + 1:j] if g[0] not in pair)
+                if across < min(run[i][1], run[j][1]) * 0.9:
+                    found = True
+                    break
+            if found:
+                break
+        hits += 1 if found else 0
+    return hits
+
+
+def wraps_a_shape(svg):
+    """A line that drops out of a shape's foot only to climb back past it."""
+    boxes = shapes(svg)
+    hits = 0
+    for pts in paths(svg):
+        run = legs(pts)
+        if not run:
+            continue
+        start = run[0][2]
+        near = [b for b in boxes
+                if b[0] - 14 <= start[0] <= b[2] + 14
+                and b[1] - 14 <= start[1] <= b[3] + 14]
+        if not near:
+            continue
+        box = near[0]
+        left_the_foot = abs(start[1] - box[3]) < 12
+        climbs_past = any(g[0] == "up" and g[3][1] < box[1] for g in run)
+        hits += 1 if (left_the_foot and climbs_past) else 0
+    return hits
+
+
+def covered_tips(svg):
+    """An arrow's point painted over by the blank patch behind a label."""
+    heads, patches = [], []
+    for m in re.finditer(r"<(rect|polygon)[^>]*>", svg):
+        tag = m.group(0)
+        if 'class="patch"' in tag:
+            box = [float(re.search(r'%s="(-?[\d.]+)"' % k, tag).group(1))
+                   for k in ("x", "y", "width", "height")]
+            patches.append((m.start(), box[0], box[1],
+                            box[0] + box[2], box[1] + box[3]))
+        elif m.group(1) == "polygon" and 'class="head"' in tag:
+            n = [float(v) for v in
+                 re.findall(r"-?[\d.]+", re.search(r'points="([^"]+)"', tag).group(1))]
+            xs, ys = n[0::2], n[1::2]
+            heads.append((m.start(), min(xs), min(ys), max(xs), max(ys)))
+    hits = 0
+    for at, hx0, hy0, hx1, hy1 in heads:
+        for pat, px0, py0, px1, py1 in patches:
+            if pat < at:                        # drawn first: harmless
+                continue
+            if hx0 < px1 and px0 < hx1 and hy0 < py1 and py0 < hy1:
+                hits += 1
+                break
+    return hits
+
+
+def most_turns(svg):
+    """The most corners any one route in this chart takes."""
+    worst = 0
+    for pts in paths(svg):
+        run = legs(pts)
+        turns = sum(1 for i in range(1, len(run)) if run[i][0] != run[i - 1][0])
+        worst = max(worst, turns)
+    return worst
+
+
+def overlapping(svg):
+    """Two shapes drawn on top of one another."""
+    boxes = [b for b in shapes(svg)
+             if b[4] and b[2] - b[0] > 4 and b[3] - b[1] > 4]
+    hits = 0
+    for i in range(len(boxes)):
+        for j in range(i + 1, len(boxes)):
+            a, b = boxes[i], boxes[j]
+            if a[0] < b[2] - 2 and b[0] < a[2] - 2 \
+                    and a[1] < b[3] - 2 and b[1] < a[3] - 2:
+                hits += 1
+    return hits
+
+
+def off_the_grid(svg, step):
+    """Shape edges that do not sit on a grid line: (how many, of how many).
+
+    The grid is ruled from the chart's corner in steps of `step`, so a shape
+    is on it when its top and its foot are whole steps down.  Only the ones
+    measured exactly are counted -- a page or a drum drawn as a curve cannot
+    be measured from what is written down.
+    """
+    off = seen = 0
+    for left, top, right, foot, sure in shapes(svg):
+        if not sure:
+            continue
+        for edge in (top, foot):
+            seen += 1
+            if abs(edge / step - round(edge / step)) > 0.02:
+                off += 1
+    return off, seen

@@ -1,0 +1,148 @@
+/* ---------------------------------------------------------------------------
+   01-base.css -- colors, light and dark, and the plain elements
+   --------------------------------------------------------------------------- */
+  :root {
+    --bg: #eceff3;
+    --panel: #ffffff;
+    --field: #fcfdfe;
+    --ink: #10151b;
+    --muted: #5d6b7a;
+    --line: #d7dde5;
+    --line-soft: #e8edf3;
+    --accent: #14427c;
+    --accent-soft: #e8effa;
+    --good: #116149;
+    --busy: #c62828;   /* the color of something being done right now */
+    --bad: #a4262c;
+    --dots: #d3d9e2;
+    --shadow: 0 1px 2px rgba(16, 24, 40, .06), 0 8px 24px rgba(16, 24, 40, .06);
+    --radius: 10px;
+    --code-bg: #f7f9fb;                 /* where the pseudocode is written */
+    --code-line: #eef2f6;               /*   ruled, the way paper is */
+    --code-at: #fdf0d5;                 /*   and the line being run, now */
+    --code-bad: #fbdcdc;                /*   or the line it stopped at */
+    --warn: #8a5a00;   /* said, but not fatal: a line it could not do */
+    --bad-glow: rgba(164, 38, 44, .55);
+    --code-well: rgba(16, 24, 40, .05);
+    --dim: rgba(16, 24, 40, .34);   /* behind a sheet that fills the screen */
+    --pick-arrow: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='%235d6b7a' stroke-width='1.7' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M4 6.5 8 10.5 12 6.5'/%3E%3C/svg%3E");
+    --pick-arrow-lit: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='%2314427c' stroke-width='1.9' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M4 6.5 8 10.5 12 6.5'/%3E%3C/svg%3E");
+    color-scheme: light;
+  }
+  /* Dark, when the computer is set dark and the page has not been told
+     otherwise -- and whenever it has been told to be. */
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #12161c;
+      --panel: #1a2029;
+      --field: #141a22;
+      --ink: #e7ecf2;
+      --muted: #9aa8b8;
+      --line: #2c3540;
+      --line-soft: #232b35;
+      --accent: #5b9bf0;
+      --accent-soft: #1d2a3d;
+      --code-bg: #10151b;
+      --code-line: #171e26;
+      --code-at: #2e2418;
+    --code-bad: #3d1e20;
+    --warn: #e0b341;
+    --bad-glow: rgba(255, 139, 139, .5);
+      --code-well: rgba(0, 0, 0, .35);
+      --dim: rgba(0, 0, 0, .58);   /* behind a sheet that fills the screen */
+      --good: #57c7a2;
+      --busy: #ff6b6b;   /* the color of something being done right now */
+      --bad: #ff8b8b;
+      --dots: #2a323d;
+      --shadow: 0 1px 2px rgba(0, 0, 0, .4), 0 10px 26px rgba(0, 0, 0, .34);
+      --pick-arrow: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='%239aa8b8' stroke-width='1.7' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M4 6.5 8 10.5 12 6.5'/%3E%3C/svg%3E");
+      --pick-arrow-lit: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='%235b9bf0' stroke-width='1.9' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M4 6.5 8 10.5 12 6.5'/%3E%3C/svg%3E");
+      color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"] {
+    --code-bg: #10151b;
+    --code-line: #171e26;
+    --code-at: #2e2418;
+    --code-bad: #3d1e20;
+    --warn: #e0b341;
+    --bad-glow: rgba(255, 139, 139, .5);
+    --code-well: rgba(0, 0, 0, .35);
+    --dim: rgba(0, 0, 0, .58);   /* behind a sheet that fills the screen */
+    --bg: #12161c;
+    --panel: #1a2029;
+    --field: #141a22;
+    --ink: #e7ecf2;
+    --muted: #9aa8b8;
+    --line: #2c3540;
+    --line-soft: #232b35;
+    --accent: #5b9bf0;
+    --accent-soft: #1d2a3d;
+    --good: #57c7a2;
+    --busy: #ff6b6b;   /* the color of something being done right now */
+    --bad: #ff8b8b;
+    --dots: #2a323d;
+    --shadow: 0 1px 2px rgba(0, 0, 0, .4), 0 10px 26px rgba(0, 0, 0, .34);
+    --pick-arrow: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='%239aa8b8' stroke-width='1.7' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M4 6.5 8 10.5 12 6.5'/%3E%3C/svg%3E");
+    --pick-arrow-lit: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='%235b9bf0' stroke-width='1.9' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M4 6.5 8 10.5 12 6.5'/%3E%3C/svg%3E");
+    color-scheme: dark;
+  }
+  * { box-sizing: border-box; }
+  [hidden] { display: none !important; }   /* flex and grid outrank it otherwise */
+  * { scrollbar-width: thin; scrollbar-color: var(--line) transparent; }
+  ::-webkit-scrollbar { width: 11px; height: 11px; }
+  ::-webkit-scrollbar-track, ::-webkit-scrollbar-corner { background: transparent; }
+  ::-webkit-scrollbar-thumb {
+    background: var(--line); border-radius: 8px;
+    border: 3px solid transparent; background-clip: content-box;
+  }
+  ::-webkit-scrollbar-thumb:hover { background: var(--muted); background-clip: content-box; }
+  html, body { height: 100%; }
+  body {
+    margin: 0; display: flex; flex-direction: column; overflow: hidden;
+    background: var(--bg); color: var(--ink);
+    font: 14px/1.45 "Segoe UI", system-ui, Arial, Helvetica, sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  button, input, select, textarea { font: inherit; color: inherit; }
+
+  /* --------------------------------------------- the dropdown boxes -- */
+  /* A <select> left to itself is drawn by the machine, not by this page:
+     a chunky gray arrow in a well of its own, sitting among controls that
+     are drawn here with a 1.7px stroke and an 8px corner.  It also keeps
+     its own counsel about where the words go and how much room the arrow
+     needs, which is how the words came to sit hard up against the arrow
+     with a gap in front of them instead of starting where every other
+     field's words start.
+
+     So the shut box is drawn here.  The list that drops out of it is the
+     machine's own and is left alone -- it cannot be styled honestly, and
+     it is the one part of this page nobody has to be taught to use.  What
+     is set here is only what the shut box looks like: the same chevron as
+     the rest of the page, in the same ink, with room set aside on the
+     right so the two never meet, and the words left-aligned like the
+     words in the boxes beside them.
+
+     Room is set aside per place rather than here, because every one of
+     these also sets `padding` in full, and a shorthand would wipe it. */
+  select {
+    appearance: none; -webkit-appearance: none; -moz-appearance: none;
+    text-align: left; text-align-last: left;
+    cursor: pointer; overflow: hidden; text-overflow: ellipsis;
+    background-image: var(--pick-arrow);
+    background-repeat: no-repeat;
+    background-position: right 11px center;
+    background-size: 14px 14px;
+  }
+  select::-ms-expand { display: none; }
+  /* The list itself is still the machine's own -- it cannot be styled
+     honestly and it is the one part of this page nobody has to be taught
+     to use -- but what it is painted in can be said, and where that is
+     listened to the list comes up in the page's own paper and ink rather
+     than the system's default white.  Where it is not listened to, the
+     list is exactly what it always was. */
+  select option {
+    background-color: var(--panel);
+    color: var(--ink);
+  }
+

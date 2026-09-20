@@ -1,0 +1,155 @@
+/* ---------------------------------------------------------------------------
+   06-screens.css -- fitting the screen it is actually on
+   ---------------------------------------------------------------------------
+   Three things vary and all three matter: how wide the screen is, how tall it
+   is, and whether it is being pointed at with a mouse or prodded with a
+   finger.  A phone held upright is narrow; the same phone turned on its side
+   is short; a laptop window dragged narrow is both.  So none of this asks
+   what device it is -- it asks how much room there is and what is doing the
+   pointing, which is the same question whether it is a phone, a tablet or a
+   window someone has squashed.
+   --------------------------------------------------------------------------- */
+
+  /* The veil only ever exists on a narrow screen.  Said plainly here so that
+     on a wide one it is not a stray box sitting in the row with the panel
+     and the stage, quietly taking part in the layout. */
+  .veil { display: none; }
+
+  /* ----------------------------------------------- not as wide as it likes -- */
+  /* Under this, the panel stops taking a share of the width and lies over the
+     chart instead, with the chart full width underneath it.  Taking a third
+     of a narrow screen for the panel leaves the chart a column too thin to
+     read, and the panel is not wanted all the time -- the chart is. */
+  @media (max-width: 899px) {
+    main { position: relative; }
+    #panel {
+      position: absolute; top: 0; bottom: 0; left: 0; z-index: 12;
+      width: min(320px, 86vw); box-shadow: var(--shadow);
+      border-right: 1px solid var(--line);
+    }
+    body[data-side="right"] #panel {
+      left: auto; right: 0; border-right: 0; border-left: 1px solid var(--line);
+    }
+    #rail { position: absolute; top: 0; bottom: 0; left: 0; z-index: 11; }
+    body[data-side="right"] #rail { left: auto; right: 0; }
+    /* the rail lies over the stage, so the chart is kept clear of it */
+    body.railed #stage { padding-left: 64px; }
+    body.railed[data-side="right"] #stage { padding-left: 10px; padding-right: 64px; }
+
+    /* something to tap to put it away again */
+    .veil {
+      display: block; position: absolute; inset: 0; z-index: 11;
+      background: var(--dim); opacity: 0; pointer-events: none;
+      transition: opacity .16s;
+    }
+    body.drawer .veil { opacity: 1; pointer-events: auto; }
+    /* The bars have to stay above the drawer.  The drawer lies over the
+       chart, which is the whole point of it at this width -- but it was
+       never meant to lie over the bar that opens it, and it did: the bar
+       itself cleared the top of the drawer by a pixel or two and looked
+       fine, while the sheets that hang off it came down inside it and were
+       covered, so Download opened onto nothing you could see. */
+    .bar { z-index: 14; }
+    .brand small { display: none; }
+  }
+
+  /* ------------------------------------------------------- narrow enough -- */
+  /* A phone held upright.  The panel takes the screen while it is open,
+     because there is no room to show it beside anything, and the bar loses
+     what it can spare. */
+  @media (max-width: 599px) {
+    #panel { width: min(400px, 100vw); }
+    .bar { padding: 8px 10px; gap: 8px 10px; }
+    .brand { font-size: 14px; }
+    .mark { width: 28px; height: 28px; border-radius: 8px; }
+    .mark svg { width: 17px; height: 17px; }
+    #stage { padding: 10px; }
+    .sheet-menu { right: 8px; left: 8px; width: auto; }
+    #save-menu { width: auto; }
+    footer.bar { justify-content: center; }
+    footer.bar .grow { display: none; }
+    /* the two padlocks say which it is on their own; there is no room in
+       the foot bar for the words as well */
+    #hold-seg .seg-btn span { display: none; }
+    #hold-seg .seg-btn { padding: 0 10px; }
+    /* There is no Esc to press on a phone, and the bar wants the width for
+       what the screen is and what can be done to it.  The little mark is
+       decoration; the runner's bar carries four things besides it and was
+       breaking onto a second row to fit them. */
+    .code-esc, .code-bar .mark { display: none; }
+    #tape-done { margin-left: auto; }
+    /* the bar has five things in it on this screen and room for four, so
+       the count goes and the way back says it in one word */
+    .code-bar .code-count { display: none; }
+    .btn.back .full { display: none; }
+    .btn.back .short { display: inline; }
+    #tape-over { padding: 0; }
+    #tape-over .code-sheet { border: 0; border-radius: 0; }
+  }
+
+  /* --------------------------------------------------------- not as tall -- */
+  /* A phone on its side, or a short window.  Height is what is scarce, so
+     everything that is not the chart gives some back. */
+  @media (max-height: 560px) {
+    .bar { padding: 6px 12px; }
+    .brand { line-height: 1.15; }
+    .brand small { display: none; }
+    #stage { padding: 8px; }
+    footer.bar { padding: 5px 12px; --foot-h: 24px; }
+    .btn.small { padding: 3px 8px; }
+    section.card { padding: 10px 14px; }
+    #code-home { height: 120px; min-height: 90px; }
+    #code-over, #tape-over { padding: 10px; }
+    .code-bar { padding: 8px 12px; }
+  }
+
+  /* -------------------------------------------------- prodded, not pointed -- */
+  /* A finger is a blunter instrument than a mouse: everything it has to hit
+     is given the room to be hit, and the things that only exist to answer a
+     hover are put away. */
+  @media (pointer: coarse) {
+    .btn { padding: 9px 14px; }
+    .btn.small { padding: 7px 11px; }
+    .icon { width: 40px; height: 40px; }
+    #rail { width: 56px; }
+    #rail .icon { width: 44px; height: 44px; }
+    body.railed #stage { padding-left: 72px; }
+    body.railed[data-side="right"] #stage { padding-right: 72px; }
+    .seg-btn { padding: 9px 10px; }
+    .menu button { padding: 10px 11px; }
+    .slider { display: none; }              /* a finger scrolls by dragging */
+    /* Ours go, so the machine's come back -- and they have to be given back
+       in both spellings.  Only the Firefox one was said here, so on a touch
+       screen in Chrome, Edge or Safari the stage was left with our bars
+       hidden and the browser's still squashed to nothing: a chart wider
+       than the screen with no bar anywhere to say so. */
+    #stage.own-sliders { scrollbar-width: auto; }
+    #stage.own-sliders::-webkit-scrollbar { width: 11px; height: 11px; }
+    .stage-frame::after { display: none; }
+    /* The dots a line is drawn from and aimed at are sized by 10-hand.js
+       rather than here.  `r` is a CSS property in some browsers and not in
+       others, so said here it grew them on a touch screen in Chrome and
+       Safari and left them mouse-sized on Firefox, which is where they
+       were hardest to hit.  Written onto the circle itself it is the same
+       size everywhere.  The corner on a grip is only a corner, so it can
+       stay -- nothing is harder to take hold of for want of it. */
+    svg .grip { rx: 3; }
+    .adders .btn { padding: 8px; }
+  }
+
+  /* ------------------------------------------------------- room to breathe -- */
+  /* On a big screen the chart is given the middle and the panel keeps its
+     own width rather than stretching across half a desk. */
+  @media (min-width: 1500px) {
+    #panel { width: 360px; }
+    #stage { padding: 32px; }
+  }
+
+  /* --------------------------------------------- phones with a notch in them -- */
+  /* The bars keep clear of whatever the screen has taken out of itself. */
+  @supports (padding: max(0px)) {
+    .bar { padding-left: max(16px, env(safe-area-inset-left));
+           padding-right: max(16px, env(safe-area-inset-right)); }
+    footer.bar { padding-bottom: max(10px, env(safe-area-inset-bottom)); }
+    #rail { padding-left: env(safe-area-inset-left); }
+  }

@@ -1,0 +1,116 @@
+/* ---------------------------------------------------------------------------
+   03-layout.css -- the panel, the rail and the stage around it
+   --------------------------------------------------------------------------- */
+  /* ----------------------------------------------------------- layout -- */
+  main { flex: 1; display: flex; min-height: 0; }
+  #panel {
+    flex: none; width: 312px; background: var(--panel);
+    border-right: 1px solid var(--line); overflow-y: auto; overflow-x: hidden;
+    display: flex; flex-direction: column;
+  }
+  #panel.hide { display: none; }
+  .panel-top {
+    position: sticky; top: 0; z-index: 3; background: var(--panel);
+    border-bottom: 1px solid var(--line); padding: 10px 12px;
+    display: flex; gap: 8px; align-items: center;
+  }
+  .seg {
+    flex: 1; display: flex; gap: 2px; padding: 2px; border-radius: 9px;
+    background: var(--line-soft);
+  }
+  .seg-btn {
+    flex: 1; border: 0; background: none; color: var(--muted); cursor: pointer;
+    border-radius: 7px; padding: 6px 8px; font-size: 13px; font-weight: 550;
+  }
+  .seg-btn.on { background: var(--panel); color: var(--ink);
+                box-shadow: 0 1px 2px rgba(16, 24, 40, .12); }
+  .icon {
+    flex: none; width: 34px; height: 34px; padding: 0; cursor: pointer;
+    border: 1px solid transparent; border-radius: 9px; background: none;
+    color: var(--muted); display: inline-flex; align-items: center;
+    justify-content: center;
+  }
+  .icon:hover { background: var(--line-soft); color: var(--ink); }
+  .icon svg { width: 19px; height: 19px; fill: none; stroke: currentColor;
+              stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+  #rail {
+    flex: none; width: 48px; background: var(--panel);
+    border-right: 1px solid var(--line); padding: 10px 0;
+    display: flex; flex-direction: column; align-items: center; gap: 6px;
+  }
+  #rail .icon { width: 36px; height: 36px; }
+  #side-chart-panel, #side-colors-panel { padding-bottom: 20px; }
+  section.card { border-bottom: 1px solid var(--line-soft); padding: 14px 16px; }
+  section.card h2 {
+    margin: 0 0 10px; font-size: 11.5px; letter-spacing: .07em;
+    text-transform: uppercase; color: var(--muted); font-weight: 650;
+    display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  }
+  section.fold h2 { cursor: pointer; margin-bottom: 10px; }
+  section.fold h2::after {
+    content: ""; width: 6px; height: 6px; flex: none; margin-right: 2px;
+    border: solid currentColor; border-width: 0 1.5px 1.5px 0;
+    transform: rotate(45deg) translate(-1px, -2px); transition: transform .15s;
+  }
+  section.fold.shut h2 { margin-bottom: 0; }
+  section.fold.shut h2::after { transform: rotate(-45deg) translate(-2px, -1px); }
+  section.fold.shut > *:not(h2) { display: none; }
+  section.card:last-child { border-bottom: 0; }
+  .hint { color: var(--muted); font-size: 12.5px; margin: 8px 0 0; }
+  .hint.bad { color: var(--bad); }
+
+  /* ------------------------------------------------- the settings sheet -- */
+  /* Anchored under the bar on the right, where its button is.  It is a
+     plain box rather than a menu of actions: what is in it are choices you
+     set and leave, so each one shows its state rather than doing something
+     the moment you touch it. */
+  .sheet-menu {
+    position: fixed; z-index: 30; top: 56px; right: 14px; width: 244px;
+    padding: 12px 14px 14px; background: var(--panel);
+    border: 1px solid var(--line); border-radius: 12px; box-shadow: var(--shadow);
+  }
+  .sheet-menu h3 {
+    margin: 4px 0 7px; font-size: 11.5px; letter-spacing: .07em;
+    text-transform: uppercase; color: var(--muted); font-weight: 650;
+  }
+  .sheet-menu h3:first-child { margin-top: 0; }
+  .sheet-menu .seg { margin-bottom: 4px; }
+  .switch.wide {
+    display: flex; align-items: center; justify-content: space-between;
+    gap: 10px; width: 100%; margin-top: 12px; padding-top: 12px;
+    border-top: 1px solid var(--line-soft); font-size: 13px;
+  }
+  .switch.wide[hidden] { display: none !important; }
+
+  /* --------------------------------------------- the panel on the right -- */
+  /* Flex order does the moving, so nothing in the panel has to know where
+     it sits.  Only the borders and the arrow on the collapse button care
+     which way round it is. */
+  body[data-side="right"] #stage,
+  body[data-side="right"] .stage-frame { order: 1; }
+  body[data-side="right"] #panel { order: 2; }
+  body[data-side="right"] #rail  { order: 3; }
+  body[data-side="right"] #panel,
+  body[data-side="right"] #rail {
+    border-right: 0; border-left: 1px solid var(--line);
+  }
+  body[data-side="right"] #collapse svg { transform: scaleX(-1); }
+  /* ------------------------------------------------- the download sheet -- */
+  .sheet-menu .btn.wide {
+    display: flex; width: 100%; justify-content: center; margin-top: 8px;
+  }
+  /* The word sits above the box, not beside it.  Beside it, the row was one
+     wide label with a narrow control at the end: a click anywhere along it
+     -- the word, and the empty middle, which was the larger part of it --
+     opened the list, so the thing that answered a press was half again the
+     size of the thing you could see.  Above it, what answers a press is
+     exactly the box; and the box gets the whole width, which the longest of
+     the sizes needs and at 148px never had. */
+  .sheet-menu .pick { margin-top: 12px; font-size: 13px; }
+  .sheet-menu .pick > label {
+    display: block; margin-bottom: 4px; font-size: 11.5px; color: var(--muted);
+  }
+  .sheet-menu .pick select { display: block; width: 100%; }
+  .sheet-menu .hint:empty { display: none; }
+  .sheet-menu .hint { margin-top: 10px; }
+  #save-menu { width: 262px; }

@@ -1,0 +1,34 @@
+Constant Real TAX = 0.08
+Declare Integer sold
+
+Module main()
+    Declare Real price
+    Declare Real bill
+    Set sold = 0
+    Display "The till"
+    Input price
+    While price > 0
+        Set bill = withTax(price)
+        Display "That comes to $", bill
+        Set sold = sold + 1
+        Input price
+    End While
+    Call receipt(sold)
+End Module
+
+Function Real withTax(Real amount)
+    Declare Real added
+    Set added = amount * TAX
+    Return amount + added
+End Function
+
+Module receipt(Integer count)
+    If count = 0 Then
+        Display "Nothing sold today."
+    Else
+        For i = 1 To count
+            Display "Item ", i
+        End For
+        Display "Items sold: ", count
+    End If
+End Module

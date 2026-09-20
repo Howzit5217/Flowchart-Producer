@@ -1,0 +1,20 @@
+Start
+Declare Integer score
+Declare Integer count
+Declare Integer total
+Display "Type a score between 0 and 100"
+Input score
+While score < 0 OR score > 100
+    Display "That is not a score. Try again."
+    Input score
+End While
+While score >= 0
+    Set total = total + score
+    Input score
+End While
+If count > 0 Then
+    Display "Average: ", total / count
+End If
+Set count = count + 1
+Display "Scores counted: ", count
+End

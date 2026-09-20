@@ -1,0 +1,1117 @@
+#!/usr/bin/env python3
+"""Everything worth checking about the Flowchart Builder, in one command.
+
+    python tests/run.py            run them all
+    python tests/run.py -q         only say what failed
+    python tests/run.py --only shapes    just the checks whose name has that in
+
+Each of these was a bug once.  Rather than fix a chart by eye and hope, the
+thing that was wrong was written down as something countable, so that the fix
+could be shown to work -- and, far more usefully, shown to still work months
+later.  Nothing here needs anything installed; where node is about, a few more
+checks run that need it.
+
+What is beside this file
+------------------------
+    programs/     six pseudocode programs, between them using every kind of
+                  statement there is: declarations, a run of Displays, input,
+                  If and Else If, nested loops, a Do ... Until, a For, a
+                  Select Case, and a program written as modules -- which is
+                  several flowcharts rather than one.  Most of the checks
+                  draw all six at four shapes and three seeds and then
+                  measure the result: no line doubling back, no shape over
+                  another, every shape on the grid.  They are the checks'
+                  subject matter, and without them nothing here runs at all.
+    charts.py     the measuring: reading an .svg back and counting what is
+                  wrong with it.
+    router.js     the by-hand arrow router, lifted out of the page's script
+                  and tried in every arrangement.  Only where node is
+                  installed.
+    program.js    the runner itself, lifted out the same way: it runs real
+                  programs with a stand-in for the browser and reads the
+                  tape afterwards, which is the only way to tell a chart
+                  that is drawn from a chart that works.  node as well.
+    written.py    a shelf of programs, and the means to really run the
+                  Python, Java, C#, C++ and JavaScript that As code writes
+                  from them -- whichever of those this machine can run.
+"""
+import io
+import json
+import os
+import re
+import subprocess
+import sys
+import tempfile
+import time
+
+HERE = os.path.dirname(os.path.abspath(__file__))
+HOME = os.path.dirname(HERE)
+sys.path.insert(0, HERE)
+
+import charts                                       # noqa: E402
+import written                                      # noqa: E402
+
+# What is checked is the package -- it is the code, and it is the only copy
+# of it.  The website runs these very files in the browser, so there is
+# nothing built to check as well.
+sys.path.insert(0, HOME)
+RUN = [sys.executable, "-m", "flowchart"]
+PROGRAMS = sorted(f for f in os.listdir(os.path.join(HERE, "programs"))
+                  if f.endswith(".txt"))
+
+done = []                                           # (name, ok, what it found)
+
+
+def check(name):
+    """Name a check; the function it wraps returns (ok, what it found)."""
+    def keep(fn):
+        done.append((name, fn))
+        return fn
+    return keep
+
+
+def builder():
+    """The package, with everything it offers in one place to ask.
+
+    The modules keep their own names -- settings.VGAP is settings.VGAP --
+    but a check wants one handle, so this hands back an object that reaches
+    into all of them.  Anything set on it lands in the module that owns it,
+    which is the point: that is how --seed and --roomy reach it too.
+    """
+    if not hasattr(builder, "it"):
+        import flowchart
+        from flowchart import measure, settings, shapes
+        from flowchart.draw import arrows, grid, outlines, svg
+        from flowchart.layout import blocks, columns
+        from flowchart.make import chart, fit, legend, shake
+        from flowchart.parse import clean, data, keywords, nodes, read, trouble
+        from flowchart.studio import drawing, serve, site, web
+        from flowchart.words import lookup
+
+        from flowchart import page, parts
+
+        holds = [settings, measure, shapes, page, parts, lookup, chart,
+                 shake, fit, legend, svg, grid, outlines, arrows,
+                 blocks, columns, read, data, clean, nodes, keywords,
+                 trouble, drawing, site, serve, web]
+
+        class Everything(object):
+            """Every module of the package, answering as one."""
+
+            def __getattr__(self, name):
+                for mod in holds:
+                    if hasattr(mod, name):
+                        return getattr(mod, name)
+                raise AttributeError(name)
+
+            def __setattr__(self, name, value):
+                for mod in holds:
+                    if hasattr(mod, name):
+                        setattr(mod, name, value)
+                        return
+                raise AttributeError(name)
+
+        builder.it = Everything()
+    return builder.it
+
+
+def drawn(program, **how):
+    """One chart, as SVG, with the settings put back afterwards."""
+    fb = builder()
+    text = io.open(os.path.join(HERE, "programs", program),
+                   encoding="utf-8").read()
+    keep = (fb.SHAPE, fb.VARIETY, fb.SHAKE)
+    try:
+        fb.SHAPE = how.get("shape", "auto")
+        fb.VARIETY = how.get("variety", False)
+        fb.SHAKE = None
+        if how.get("seed") is not None:
+            fb.style_variety(how["seed"])
+        return fb.make_flowchart(text, title=how.get("title", "Test"),
+                                 max_h=how.get("max_h", 0))
+    finally:
+        fb.SHAPE, fb.VARIETY, fb.SHAKE = keep
+
+
+def every_chart():
+    """A good spread of charts: each program, several shapes, several seeds."""
+    for program in PROGRAMS:
+        for shape in ("auto", "page", "square", "wide"):
+            for seed in (1, 4, 7):
+                yield "%s %s seed %d" % (program[:-4], shape, seed), \
+                      drawn(program, shape=shape, seed=seed)
+
+
+# ---------------------------------------------------------- the lines on it --
+@check("lines never double back")
+def _():
+    worst, hits = None, 0
+    for name, svg in every_chart():
+        n = charts.doubles_back(svg)
+        hits += n
+        if n and worst is None:
+            worst = name
+    return hits == 0, "%d found%s" % (hits, " (first: %s)" % worst if worst else "")
+
+
+@check("no line wraps round its own shape")
+def _():
+    hits = sum(charts.wraps_a_shape(svg) for _, svg in every_chart())
+    return hits == 0, "%d found" % hits
+
+
+@check("no arrow point is painted over")
+def _():
+    hits = tips = 0
+    for _, svg in every_chart():
+        hits += charts.covered_tips(svg)
+        tips += svg.count('class="head"')
+    return hits == 0, "%d of %d tips covered" % (hits, tips)
+
+
+@check("no route takes more than five turns")
+def _():
+    worst = max(charts.most_turns(svg) for _, svg in every_chart())
+    return worst <= 5, "worst is %d" % worst
+
+
+@check("no two shapes overlap")
+def _():
+    hits = sum(charts.overlapping(svg) for _, svg in every_chart())
+    return hits == 0, "%d found" % hits
+
+
+@check("wrapping into columns never breaks a chart")
+def _():
+    bad = []
+    for program in PROGRAMS:
+        for height in (0, 400, 700, 1100, 1500, 2200):
+            try:
+                svg = drawn(program, max_h=height)
+            except Exception as oops:                # noqa: BLE001
+                bad.append("%s at %d: %s" % (program, height, oops))
+                continue
+            if charts.doubles_back(svg) or charts.wraps_a_shape(svg):
+                bad.append("%s at %d" % (program, height))
+    return not bad, "%d heights x %d programs%s" % (
+        6, len(PROGRAMS), "" if not bad else " -- " + "; ".join(bad[:3]))
+
+
+@check("shapes sit on the grid they are drawn over")
+def _():
+    fb = builder()
+    off = seen = 0
+    for _, svg in every_chart():
+        a, b = charts.off_the_grid(svg, fb.GRID_STEP)
+        off += a
+        seen += b
+    share = 0 if not seen else off * 100.0 / seen
+    return share < 2, "%d of %d edges off the ruling (%.0f%%)" % (off, seen, share)
+
+
+# ------------------------------------------------------------- the shapes --
+@check("every shape is drawn, named and sized")
+def _():
+    fb = builder()
+    missing = [k for k in fb.SHAPE_ORDER if k not in fb.SHAPES]
+    unnamed = []
+    for code in fb.WORDS:
+        unnamed += ["%s/%s" % (code, k) for k in fb.SHAPE_ORDER
+                    if ("n_" + k) not in fb.WORDS[code]]
+    return not missing and not unnamed, "%d shapes, %d languages%s" % (
+        len(fb.SHAPE_ORDER), len(fb.WORDS),
+        "" if not (missing or unnamed) else " -- %s %s" % (missing, unnamed[:4]))
+
+
+@check("every shape can stand in for any step")
+def _():
+    fb = builder()
+    text = io.open(os.path.join(HERE, "programs", "tip.txt"), encoding="utf-8").read()
+    bad = []
+    for kind in fb.SHAPE_ORDER:
+        try:
+            fb.GEOM["rect"] = kind
+            svg = fb.make_flowchart(text, title="Test")
+            if "<svg" not in svg:
+                bad.append(kind)
+        except Exception:                            # noqa: BLE001
+            bad.append(kind)
+        finally:
+            fb.GEOM["rect"] = fb.DEFAULT_GEOM["rect"]
+    return not bad, "%d tried%s" % (len(fb.SHAPE_ORDER),
+                                    "" if not bad else " -- " + ", ".join(bad))
+
+
+@check("every language says everything")
+def _():
+    fb = builder()
+    full = set(fb.WORDS["en"])
+    short = {code: sorted(full - set(fb.WORDS[code])) for code in fb.WORDS}
+    missing = {c: w for c, w in short.items() if w}
+    return not missing, "%d languages%s" % (
+        len(fb.WORDS), "" if not missing else " -- " + str(missing)[:90])
+
+
+@check("every language fills in the same blanks")
+def _():
+    """A line says "{n} lines" and its translation says "{lineas}".
+
+    Nothing would fail.  The word is simply never filled in, and the page
+    shows a reader the inside of the program -- a literal {n} where a number
+    was meant.  Cheap to find, invisible otherwise."""
+    import re as _re
+    fb = builder()
+    bad = []
+    for key, said in fb.WORDS["en"].items():
+        want = set(_re.findall(r"\{(\w+)\}", said))
+        for code, words in fb.WORDS.items():
+            if code == "en" or key not in words:
+                continue
+            got = set(_re.findall(r"\{(\w+)\}", words[key]))
+            if got != want:
+                bad.append("%s/%s wants %s, has %s"
+                           % (code, key, sorted(want) or "nothing",
+                              sorted(got) or "nothing"))
+    return not bad, "%d keys x %d languages%s" % (
+        len(fb.WORDS["en"]), len(fb.WORDS) - 1,
+        "" if not bad else " -- " + "; ".join(bad[:3]))
+
+
+@check("a language names itself, and nothing names it twice")
+def _():
+    """Adding a language used to mean editing three places: the table, the
+    names beside the picker, and the imports.  Now the file says who it is
+    and the rest follows, so this is here to keep it that way."""
+    fb = builder()
+    folder = os.path.join(HOME, "flowchart", "words")
+    files = sorted(f[:-3] for f in os.listdir(folder)
+                   if f.endswith(".py") and f not in ("__init__.py", "lookup.py"))
+    known = sorted(fb.WORDS)
+    named = [c for c in known if fb.NAMES.get(c)]
+    return files == known and len(named) == len(known), \
+        "%d files, %d registered, %d named" % (len(files), len(known), len(named))
+
+
+# ------------------------------------------------- pointing at the trouble --
+# A chart that draws is only half of it.  When a run stops, or the reading
+# has to paper something over, the answer has to say *where* -- and that
+# rests on every statement carrying the number of the line it was typed on.
+# Each of these was wrong once: an Else If that carried no number at all, a
+# run of Displays where all five claimed the first one's line, and a Start
+# that borrowed whichever line happened to be read last.
+def statements(ast):
+    """Every statement in a program, whatever it is nested inside."""
+    def walk(items):
+        for item in items or []:
+            yield item
+            for key in ("then", "else", "body"):
+                for deep in walk(item.get(key)):
+                    yield deep
+            for case in item.get("cases") or []:
+                for deep in walk(case["body"]):
+                    yield deep
+    for item in walk(ast["main"]):
+        yield item
+    for mod in ast["modules"]:
+        for item in walk(mod["body"]):
+            yield item
+
+
+def read_as_data(text):
+    fb = builder()
+    return fb.program_json(fb.parse_program(text))
+
+
+@check("every statement points at the line it came from")
+def _():
+    fb = builder()
+    bad, seen = [], 0
+    for program in PROGRAMS:
+        text = io.open(os.path.join(HERE, "programs", program),
+                       encoding="utf-8").read()
+        lines = text.splitlines()
+        for item in statements(read_as_data(text)):
+            at = item.get("line") or 0
+            if not at:                          # a Start or End nobody typed
+                continue
+            seen += 1
+            if at > len(lines):
+                bad.append("%s: line %d of %d" % (program, at, len(lines)))
+                continue
+            first = (item.get("text") or item.get("cond") or
+                     item.get("expr") or "").strip().split(" ")[0]
+            said = fb.tidy(fb.clean(lines[at - 1]))
+            if first and first.lower() not in said.lower():
+                bad.append("%s line %d: %r is not in %r"
+                           % (program, at, first, said[:40]))
+    return not bad, "%d statements%s" % (
+        seen, "" if not bad else " -- " + "; ".join(bad[:3]))
+
+
+@check("an Else If is numbered like every other statement")
+def _():
+    text = ("Start\nInput score\nIf score >= 90 Then\n    Display \"A\"\n"
+            "Else If score >= 80 Then\n    Display \"B\"\n"
+            "Else If score >= 70 Then\n    Display \"C\"\n"
+            "Else\n    Display \"F\"\nEnd If\nEnd\n")
+    tests = [i for i in statements(read_as_data(text)) if i.get("op") == "if"]
+    numbered = [i for i in tests if i["id"] and i["line"]]
+    ids = set(i["id"] for i in tests)
+    return len(tests) == 3 and len(numbered) == 3 and len(ids) == 3, \
+        "%d of %d numbered, %d different" % (len(numbered), len(tests), len(ids))
+
+
+@check("a run of Displays keeps each line of its own")
+def _():
+    text = ("Start\n" + "".join('Display "line %d"\n' % n for n in range(1, 6))
+            + "End\n")
+    said = [i for i in statements(read_as_data(text)) if i.get("op") == "display"]
+    want = list(range(2, 7))
+    got = [i["line"] for i in said]
+    return got == want, "%s" % (got if got != want else "lines 2 to 6")
+
+
+@check("a block left open is reported, with its line")
+def _():
+    fb = builder()
+    open_if = ("Start\nDeclare Integer n\nSet n = 5\nIf n > 3 Then\n"
+               "    Display \"big\"\nDisplay \"always\"\nEnd\n")
+    shut = open_if.replace('Display "always"', "End If\nDisplay \"always\"")
+    found = read_as_data(open_if)["problems"]
+    quiet = read_as_data(shut)["problems"]
+    stray = read_as_data("Start\nDisplay \"hi\"\nEnd If\nEnd\n")["problems"]
+    ok = (len(found) == 1 and found[0]["line"] == 4
+          and found[0]["why"] == "w_open_if"
+          and not quiet
+          and len(stray) == 1 and stray[0]["line"] == 3)
+    return ok, "%d open, %d when closed, %d stray" % (len(found), len(quiet),
+                                                      len(stray))
+
+
+@check("the words are measured the same however often they are asked for")
+def _():
+    """The widths are kept rather than worked out again, which is what makes
+    a big chart quick -- but a kept width that outlives the size it was
+    measured at would size every box wrongly and silently."""
+    fb = builder()
+    keep = fb.FONT_SIZE
+    try:
+        small = fb.text_w("Display the total")
+        fb.FONT_SIZE = keep * 2
+        big = fb.text_w("Display the total")
+        fb.FONT_SIZE = keep
+        again = fb.text_w("Display the total")
+    finally:
+        fb.FONT_SIZE = keep
+    ok = abs(big - small * 2) < 1e-9 and again == small
+    return ok, "%.1f at %d, %.1f at %d" % (small, keep, big, keep * 2)
+
+
+@check("the page draws off its own thread")
+def _():
+    """Pyodide runs where it is called from, and a chart of a few thousand
+    shapes is seconds of arithmetic: on the page's thread the tab stops
+    dead.  It is handed to a worker instead, and this is here so that the
+    worker cannot quietly go missing again."""
+    fb = builder()
+    page = fb.to_page(fb.make_flowchart("Start\nDisplay \"hi\"\nEnd\n",
+                                        title="Test"), title="Test", web=True)
+    has = [bit for bit in ("new Worker(", "importScripts(", "drawAside")
+           if bit in page]
+    return len(has) == 3, "%d of 3 signs of it" % len(has)
+
+
+@check("every language it writes code in answers for itself")
+def _():
+    """The writer used to know each language by name in thirty-one places.
+    It now reads a block per language, and a block that is missing one of
+    the answers would write a chart out as `undefined`.  So: every block is
+    asked for all of them."""
+    fb = builder()
+    page = fb.to_page(fb.make_flowchart("Start\nDisplay \"hi\"\nEnd\n",
+                                        title="Test"), title="Test")
+    got = re.search(r"var LANGS = \{(.*?)\n  \};", page, re.S)
+    if not got:
+        return False, "no table of languages in the page"
+    inside = got.group(1)
+    langs = re.findall(r"^    (\w+): \{", inside, re.M)
+    wants = ["name", "ext", "say", "ask", "whole", "join", "test",
+             "declare", "param", "repeat", "count", "pick",
+             "kinds", "kept", "calls", "refs", "quit", "into"]
+    shared = re.search(r"var CURLY = \{(.*?)\n  \};", page, re.S).group(1)
+    bad = []
+    for lang in langs:
+        block = re.search(r"\n    %s: \{(.*?)\n    \}" % lang, inside, re.S)
+        mine = block.group(1) if block else ""
+        curly = "like: CURLY" in mine
+        for want in wants:
+            if re.search(r"(?<![\w.])%s:" % want, mine):
+                continue
+            if curly and re.search(r"(?<![\w.])%s:" % want, shared):
+                continue
+            bad.append("%s has no %s" % (lang, want))
+    return len(langs) >= 4 and not bad, "%d languages, %d answers each%s" % (
+        len(langs), len(wants), "" if not bad else " -- " + "; ".join(bad[:3]))
+
+
+# ---------------------------------------------------------------- the build --
+@check("the page asks for every module it needs, and no more")
+def _():
+    """The page fetches the package into the browser and imports it there,
+    from a list worked out by following the imports.  A module missed off
+    the list is a browser that cannot draw; a module on it that is only
+    ever used from the command line is weight nobody needs.  Both used to
+    be impossible to notice until the website was live."""
+    fb = builder()
+    asked = fb.needed()
+    # everything on the list exists, and nothing on it is command-line only
+    gone = [w for w in asked if not os.path.exists(os.path.join(HOME, w))]
+    never = [w for w in ("flowchart/make/command.py", "flowchart/make/options.py",
+                         "flowchart/studio/serve.py", "flowchart/studio/site.py",
+                         "flowchart/parts.py") if w in asked]
+    # and the drawing really does work with only those
+    short = [w for w in ("flowchart/settings.py", "flowchart/parse/read.py",
+                         "flowchart/layout/branches.py", "flowchart/layout/loops.py",
+                         "flowchart/layout/cases.py", "flowchart/words/en.py",
+                         "flowchart/layout/__init__.py", "flowchart/words/__init__.py")
+             if w not in asked]
+    kb = sum(os.path.getsize(os.path.join(HOME, w)) for w in asked
+             if os.path.exists(os.path.join(HOME, w))) / 1024.0
+    return not (gone or never or short), "%d modules, %d KB%s" % (
+        len(asked), kb,
+        "" if not (gone or never or short)
+        else " -- missing %s, extra %s" % (short + gone, never))
+
+
+@check("the page carries the list, and it matches")
+def _():
+    fb = builder()
+    page = fb.to_page(fb.make_flowchart("Start\nDisplay \"hi\"\nEnd\n",
+                                        title="Test"), title="Test", web=True)
+    got = re.search(r"var PYFILES = (\[.*?\]);", page)
+    if not got:
+        return False, "the page does not say which modules to fetch"
+    import json
+    listed = json.loads(got.group(1))
+    beside = fb.to_page(fb.make_flowchart("Start\nEnd\n", title="T"), title="T")
+    quiet = re.search(r"var PYFILES = (\[.*?\]);", beside)
+    return listed == fb.needed() and quiet and quiet.group(1) == "[]", \
+        "%d in the site page, %s in a viewer" % (
+            len(listed), quiet.group(1) if quiet else "?")
+
+
+@check("no two parts of the page's script share a name")
+def _():
+    """The script's parts run inside one function and share everything,
+    which is what lets a later part use what an earlier one made.  The cost
+    is that two parts using the same name are not two things: the later
+    declaration replaces the earlier, silently."""
+    fb = builder()
+    clash = fb.clashes()
+    return not clash, "%d found%s" % (
+        len(clash), "" if not clash else " -- " + ", ".join(c[0] for c in clash[:4]))
+
+
+@check("the styling says the things browsers spell differently")
+def _():
+    """Three of these were bugs on a browser nobody here was looking at.
+
+    `user-select` is not a property Safari has ever had under that name, so
+    a rule that only says the plain one lets the page select text behind a
+    chart being dragged.  `backdrop-filter` is the same story until Safari
+    18.  And `r` -- the radius of a circle -- is a CSS property in some
+    browsers and not in others, so sizing a thing somebody has to hit with a
+    finger by CSS `r` sizes it on some phones and not on others; the dots on
+    a shape are given their size in the script instead, where every browser
+    understands it.
+
+    None of these can be caught by drawing a chart and measuring it: they
+    are a browser quietly ignoring a line.  So the lines themselves are what
+    is counted.
+    """
+    import flowchart.parts as parts
+    twins = ("user-select", "backdrop-filter")
+    geometry = re.compile(r"(?<![-\w])(?:r|cx|cy)\s*:")
+    bad = []
+    for name in parts.CSS:
+        text = re.sub(r"/\*.*?\*/", "", parts.read_ui(name), flags=re.S)
+        for block in re.findall(r"\{([^{}]*)\}", text):
+            for want in twins:
+                said = re.search(r"(?<![-\w])%s\s*:" % want, block)
+                if said and "-webkit-" + want not in block:
+                    bad.append("%s: %s without -webkit-" % (name, want))
+        # a touch target sized by a property not every browser has
+        for at in re.finditer(r"@media[^{]*pointer\s*:\s*coarse[^{]*\{", text):
+            depth, i = 1, at.end()
+            while i < len(text) and depth:
+                depth += (text[i] == "{") - (text[i] == "}")
+                i += 1
+            if geometry.search(text[at.end():i]):
+                bad.append("%s: a finger-sized shape set by CSS r/cx/cy" % name)
+    return not bad, "%d stylesheets%s" % (
+        len(parts.CSS), "" if not bad else " -- " + "; ".join(sorted(set(bad))[:4]))
+
+
+@check("every module can be imported on its own")
+def _():
+    """A package whose parts only work when the whole thing is read is a
+    single file wearing a folder for a hat."""
+    import importlib
+    bad = []
+    for root, folders, files in os.walk(os.path.join(HOME, "flowchart")):
+        folders[:] = [f for f in folders if f not in ("ui", "__pycache__")]
+        for name in sorted(files):
+            if not name.endswith(".py") or name == "__main__.py":
+                continue
+            where = os.path.relpath(os.path.join(root, name),
+                                    HOME)[:-3].replace(os.sep, ".")
+            try:
+                importlib.import_module(where)
+            except Exception as oops:                # noqa: BLE001
+                bad.append("%s: %s" % (where, oops))
+    return not bad, "%d modules%s" % (
+        len(bad) if bad else count_modules(),
+        "" if not bad else " -- " + "; ".join(bad[:2]))
+
+
+def count_modules():
+    n = 0
+    for root, folders, files in os.walk(os.path.join(HOME, "flowchart")):
+        folders[:] = [f for f in folders if f not in ("ui", "__pycache__")]
+        n += len([f for f in files if f.endswith(".py")])
+    return n
+
+
+@check("the command line still answers to everything")
+def _():
+    one = os.path.join(HERE, "programs", "bug-collector.txt")
+    out = os.path.join(HERE, "_out.svg")
+    flags = [["--lang", c] for c in ("en", "es", "fr", "de")]
+    flags += [["--shape", s] for s in ("square", "wide", "page", "1920x1080")]
+    flags += [["--legend"], ["--no-grid"], ["--mono"], ["--color"], ["--roomy"],
+              ["--no-variety"], ["--for-style", "expand"], ["--for-style", "hexagon"],
+              ["--split"], ["--no-page"], ["--chain-limit", "0"],
+              ["--columns-height", "900"], ["--seed", "7"]]
+    bad = []
+    for flag in flags:
+        got = subprocess.run(RUN + [one, "-o", out] + flag,
+                             cwd=HOME, capture_output=True, text=True)
+        if got.returncode:
+            bad.append(" ".join(flag))
+    # --split writes one file per module -- _out_main.svg and the rest --
+    # so sweeping for the exact two names left those behind in tests/ every
+    # run, which is how two of them came to be sitting there for weeks.
+    base = os.path.basename(out)[:-4]
+    for leftover in os.listdir(HERE):
+        if leftover.startswith(base) and leftover.endswith((".svg", ".html")):
+            os.remove(os.path.join(HERE, leftover))
+    return not bad, "%d flags%s" % (len(flags),
+                                    "" if not bad else " -- " + ", ".join(bad))
+
+
+@check("--serve opens with no terminal behind it")
+def _():
+    """It read stdin before it looked at --serve.
+
+    Started from anything that is not a terminal -- a shortcut, a scheduled
+    task, an editor's run button -- the studio got a pipe nobody would ever
+    write to or close, sat there reading it, and never listened on the port
+    at all.  So this starts it the way those do, with a pipe for stdin, and
+    asks whether the port answers.
+    """
+    import socket
+    port = 8779
+    going = subprocess.Popen(RUN + ["--serve", str(port)],
+                             cwd=HOME, stdin=subprocess.PIPE,
+                             stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    try:
+        answered = False
+        for _ in range(60):                          # up to six seconds
+            if going.poll() is not None:
+                break
+            try:
+                with socket.create_connection(("127.0.0.1", port), 0.2):
+                    answered = True
+                    break
+            except OSError:
+                time.sleep(0.1)
+        return answered, "listening" if answered else "never listened"
+    finally:
+        going.kill()
+        going.communicate()
+
+
+@check("the website still writes itself, and carries what it runs")
+def _():
+    """Written somewhere other than here, the site has to take the package
+    with it -- every module the page will ask the browser to fetch, at the
+    path the page asks for it by.  One missing and the site is a page that
+    cannot draw, which nothing notices until it is live."""
+    fb = builder()
+    where = os.path.join(HERE, "_site")
+    got = subprocess.run(RUN + ["--site", where],
+                         cwd=HOME, capture_output=True, text=True)
+    ok = got.returncode == 0
+    want = ("index.html", "README.md", ".nojekyll")
+    there = [f for f in want if os.path.exists(os.path.join(where, f))]
+    page = ""
+    if os.path.exists(os.path.join(where, "index.html")):
+        page = io.open(os.path.join(where, "index.html"), encoding="utf-8").read()
+    # every module the page will go looking for is actually beside it
+    asked = fb.needed()
+    missing = [w for w in asked
+               if not os.path.exists(os.path.join(where, w.replace("/", os.sep)))]
+    import shutil
+    shutil.rmtree(where, ignore_errors=True)
+    big = len(page) > 200000
+    return ok and len(there) == len(want) and big and not missing, \
+        "%d files, %d modules beside them, page %d KB%s" % (
+            len(there), len(asked) - len(missing), len(page) // 1024,
+            "" if not missing else " -- missing " + ", ".join(missing[:3]))
+
+
+@check("the seed is nowhere to be seen")
+def _():
+    fb = builder()
+    text = io.open(os.path.join(HERE, "programs", "tip.txt"), encoding="utf-8").read()
+    page = fb.to_page(fb.make_flowchart(text, title="Test"), title="Test")
+    shown = 'id="f-seed"' in page or "· seed" in page
+    return not shown, "not in the page"
+
+
+# ------------------------------------------------- every chart, not just one --
+# A program with modules is several flowcharts, and the runner used to be two
+# runners: a whole one for the main chart, and beside it a handful of cases
+# for everything else.  An If inside a module was stepped over, a loop in one
+# never went round, a module could not be typed into, and what came back was
+# quietly wrong.  These run real programs through the page's own runner and
+# read the tape afterwards, which is the only way to tell the difference
+# between a chart that is drawn and a chart that works.
+RUNS = [
+    ("a module's loops and branches really run", """
+Module main()
+    Declare Integer n
+    Input n
+    Display "Factorial: ", factorial(n)
+    Call report(n)
+End Module
+
+Function Integer factorial(Integer k)
+    Declare Integer acc
+    Declare Integer i
+    Set acc = 1
+    For i = 1 To k
+        Set acc = acc * i
+    End For
+    Return acc
+End Function
+
+Module report(Integer n)
+    If n > 3 Then
+        Display "That is a big one."
+    Else
+        Display "Small."
+    End If
+End Module
+""", ["5"], ["Factorial: 120", "That is a big one.", {"key": "r_done"}], None),
+
+    ("a While inside a module goes round", """
+Module main()
+    Call countTo(3)
+End Module
+
+Module countTo(Integer n)
+    Declare Integer i
+    Set i = 1
+    While i <= n
+        Display i
+        Set i = i + 1
+    End While
+End Module
+""", [], ["1", "2", "3", {"key": "r_done"}], None),
+
+    ("a Select Case inside a module picks a branch", """
+Module main()
+    Call weekday(3)
+End Module
+
+Module weekday(Integer n)
+    Select Case n
+        Case 1
+            Display "Monday"
+        Case 3
+            Display "Wednesday"
+        Default
+            Display "Some other day"
+    End Select
+End Module
+""", [], ["Wednesday", {"key": "r_done"}], None),
+
+    ("a module can be typed into, and hands the answer back", """
+Module main()
+    Declare Real hours
+    Call getHours(hours)
+    Display "You worked ", hours
+End Module
+
+Module getHours(Real Ref h)
+    Display "How many hours?"
+    Input h
+End Module
+""", ["7"], ["How many hours?", "You worked 7", {"key": "r_done"}], None),
+
+    ("what is written outside every module, every module can read", """
+Constant Real TAX = 0.1
+
+Module main()
+    Display withTax(200)
+End Module
+
+Function Real withTax(Real amount)
+    Return amount + amount * TAX
+End Function
+""", [], ["220", {"key": "r_done"}], None),
+
+    ("a fault inside a module says how the run got there", """
+Module main()
+    Display half(10)
+End Module
+
+Function Real half(Real n)
+    Return n / zero()
+End Function
+
+Function Integer zero()
+    Return 0
+End Function
+""", [], [{"key": "r_zero"}], ["half()"]),
+
+    ("a module that never stops calling itself is stopped", """
+Module main()
+    Call onAndOn(1)
+End Module
+
+Module onAndOn(Integer n)
+    Call onAndOn(n + 1)
+End Module
+""", [], [{"key": "r_too_deep", "fill": {"name": "onAndOn()"}}], None),
+
+    ("a module handed the wrong number of things says so", """
+Module main()
+    Call greet("Ann", 3)
+End Module
+
+Module greet(String who)
+    Display "Hello ", who
+End Module
+""", [], [{"key": "r_args",
+           "fill": {"name": "greet()", "want": 1, "got": 2}}], None),
+
+    ("a page with no main flow runs the chart it has", """
+Module hello()
+    Display "Hello from a module."
+End Module
+""", [], [{"key": "r_no_main", "fill": {"name": "hello()"}},
+          "Hello from a module.", {"key": "r_done"}], None),
+
+    ("a program without modules runs as it always did", """
+Start
+Declare Integer n
+Input n
+If n > 10 Then
+    Display "big"
+Else
+    Display "small"
+End If
+Display "done"
+End
+""", ["12"], ["big", "done", {"key": "r_done"}], None),
+]
+
+
+# The same, for the code it writes out.  A name shared by every chart has
+# to be written somewhere every chart can reach, and in a class-shaped
+# language that is not inside main.
+WRITTEN = """
+Constant Real TAX = 0.1
+
+Module main()
+    Declare Real bill
+    Set bill = withTax(200)
+    Display bill
+End Module
+
+Function Real withTax(Real amount)
+    Return amount + amount * TAX
+End Function
+"""
+
+WRITES = [
+    ("java", ["static final double TAX = 0.1;"],
+     [["static final double TAX", "static void main"]]),
+    ("csharp", ["const double TAX = 0.1;"],
+     [["const double TAX", "static void Main"]]),
+    ("python", ["\nTAX = 0.1"], [["def withTax", "TAX = 0.1"]]),
+    ("javascript", ["\nconst TAX = 0.1;"],
+     [["function withTax", "const TAX = 0.1;"]]),
+]
+
+
+# ---------------------------------------------- and putting it right again --
+# A warning that says what is wrong and stops there leaves the typing to
+# somebody who has just been told they cannot type.  Each of these is a fix
+# the page offers to make for you: what it writes, and where.
+MENDS = [
+    ("a word swapped, and only where it is a word",
+     'Start\nSet total = 0\nDisplay "tally: ", tally\nEnd\n',
+     {"how": "change", "word": "tally", "instead": "total"}, 3,
+     'Start\nSet total = 0\nDisplay "tally: ", total\nEnd\n'),
+
+    ("a closer with nothing to close, taken out",
+     'Start\nDisplay "hi"\nEnd If\nEnd\n',
+     {"how": "drop", "at": 3}, 0,
+     'Start\nDisplay "hi"\nEnd\n'),
+
+    ("the last line of all, taken out without leaving a blank",
+     'Start\nDisplay "hi"\nEnd If',
+     {"how": "drop", "at": 3}, 0,
+     'Start\nDisplay "hi"'),
+
+    ("a missing End If, put in where the indenting says it goes",
+     'Start\nIf n > 5 Then\n    Display "big"\nDisplay "after"\nEnd\n',
+     {"how": "insert", "text": "End If", "at": 4, "like": 2}, 0,
+     'Start\nIf n > 5 Then\n    Display "big"\nEnd If\nDisplay "after"\nEnd\n'),
+
+    ("a closer set in as far as the line it closes",
+     'Module main()\n    If n > 5 Then\n        Display "big"\n    Display "after"\nEnd Module\n',
+     {"how": "insert", "text": "End If", "at": 4, "like": 2}, 0,
+     'Module main()\n    If n > 5 Then\n        Display "big"\n    End If\n    Display "after"\nEnd Module\n'),
+
+    ("a warning gone stale leaves the box alone",
+     'Start\nDisplay "hi"\nEnd\n',
+     {"how": "change", "word": "tally", "instead": "total"}, 2,
+     'Start\nDisplay "hi"\nEnd\n'),
+]
+
+# The whole way round: run it, and put right whatever it stopped at.
+MENDED_RUNS = [
+    ("a name one letter out, put right from the tape",
+     'Start\nDeclare Integer total\nSet total = 5\nDisplay tota\nEnd\n', [],
+     {"how": "change", "word": "tota", "instead": "total"},
+     'Start\nDeclare Integer total\nSet total = 5\nDisplay total\nEnd\n'),
+
+    ("a keyword one letter out, put right from the tape",
+     'Start\nDispay "hi"\nEnd\n', [],
+     {"how": "change", "word": "Dispay", "instead": "Display"},
+     'Start\nDisplay "hi"\nEnd\n'),
+
+    ("a module called by a name one letter out",
+     'Module main()\n    Display twce(3)\nEnd Module\n\n'
+     'Function Integer twice(Integer n)\n    Return n * 2\nEnd Function\n', [],
+     {"how": "change", "word": "twce", "instead": "twice"},
+     'Module main()\n    Display twice(3)\nEnd Module\n\n'
+     'Function Integer twice(Integer n)\n    Return n * 2\nEnd Function\n'),
+]
+
+
+@check("a warning says what would put it right")
+def _():
+    """What the reading offers to do about what it had to paper over.
+
+    Only where there is one right answer.  A Do with no test needs a test
+    that is nobody's to invent, and an If with nothing indented under it
+    could be closed in as many places as it has lines below it -- so both
+    are left saying what is wrong and offering nothing, which is the honest
+    answer and the one this pins down.
+    """
+    want = [
+        ('Start\nDisplay "hi"\nEnd If\nEnd\n',
+         [("w_no_if", {"how": "drop", "at": 3})]),
+        ('Start\nIf n > 5 Then\n    Display "big"\nDisplay "after"\nEnd\n',
+         [("w_open_if", {"how": "insert", "text": "End If", "at": 4, "like": 2})]),
+        ('Start\nFor i = 1 To 5\n    Display i\nEnd\n',
+         [("w_open_for", {"how": "insert", "text": "End For", "at": 4, "like": 2})]),
+        ('Start\nDo\n    Display "round"\nEnd\n',
+         [("w_open_loop", {})]),                    # a test is not ours to invent
+        ('Start\nIf n > 5 Then\nDisplay "after"\nEnd\n',
+         [("w_open_if", {})]),                      # nothing indented: nothing to go on
+    ]
+    bad = []
+    for text, expect in want:
+        got = [(p["why"], p["fix"]) for p in read_as_data(text)["problems"]]
+        if got != expect:
+            bad.append("%r gave %r, not %r" % (text.split("\n")[1], got, expect))
+    return not bad, "%d warnings%s" % (
+        len(want), "" if not bad else " -- " + "; ".join(bad[:2]))
+
+
+@check("every chart in a program runs, not only the first")
+def _():
+    if not node_there():
+        return None, "node is not installed -- skipped"
+    fb = builder()
+    cases = []
+    for name, text, typed, want, trail in RUNS:
+        cases.append({"name": name, "ast": read_as_data(text.strip("\n")),
+                      "typed": typed, "want": want, "trail": trail})
+    written = [{"name": "a name every chart shares", "lang": lang,
+                "ast": read_as_data(WRITTEN.strip("\n")),
+                "has": has, "before": before}
+               for lang, has, before in WRITES]
+    mends = [{"name": name, "source": source, "fix": fix, "line": line,
+              "want": want}
+             for name, source, fix, line, want in MENDS]
+    ran = [{"name": name, "source": source, "typed": typed, "fix": fix,
+            "want": want, "ast": read_as_data(source)}
+           for name, source, typed, fix, want in MENDED_RUNS]
+    asked = {"words": fb.WORDS["en"], "cases": cases, "written": written,
+             "mends": mends, "ran": ran}
+    handle, where = tempfile.mkstemp(suffix=".json")
+    try:
+        with io.open(handle, "w", encoding="utf-8") as f:
+            f.write(json.dumps(asked))
+        got = subprocess.run(["node", os.path.join(HERE, "program.js"), where],
+                             capture_output=True, text=True)
+    finally:
+        os.remove(where)
+    said = (got.stdout + got.stderr).strip()
+    return got.returncode == 0, said.replace("\n", "\n       ")
+
+
+@check("the code it writes out really runs")
+def _():
+    """Every program there is here, written out in every language and run.
+
+    See tests/written.py, which does the running and says why.  Python and
+    JavaScript are run wherever node is; Java, C# and C++ wherever this
+    machine has something to compile them with, and said to be missing where
+    it has not, so that a row of passes is never mistaken for a row of
+    languages that were tried.
+    """
+    if not node_there():
+        return None, "node is not installed -- skipped"
+    import shutil
+    fb = builder()
+    shelf = []
+    for program in PROGRAMS:
+        text = io.open(os.path.join(HERE, "programs", program), encoding="utf-8").read()
+        shelf.append((program, text, written.TYPED.get(program, [])))
+    shelf += [(name, text, typed) for name, text, typed, want, trail in RUNS]
+    shelf += written.SHELF
+    cases = [{"name": name, "typed": typed, "title": "Shelf %02d" % n,
+              "ast": read_as_data(text.strip("\n"))}
+             for n, (name, text, typed) in enumerate(shelf)]
+    folder = tempfile.mkdtemp(prefix="_out-written-", dir=HERE)
+    try:
+        asked = {"words": fb.WORDS["en"], "cases": [], "shelf": cases,
+                 "shelfOut": os.path.join(folder, "shelf.json")}
+        with io.open(os.path.join(folder, "asked.json"), "w", encoding="utf-8") as f:
+            f.write(json.dumps(asked))
+        got = subprocess.run(["node", os.path.join(HERE, "program.js"),
+                              os.path.join(folder, "asked.json")],
+                             capture_output=True, text=True)
+        if got.returncode:
+            return False, (got.stdout + got.stderr).strip()[-300:]
+        with io.open(asked["shelfOut"], encoding="utf-8") as f:
+            results = json.load(f)
+        wrong, tally = written.marked(cases, results, folder)
+    finally:
+        shutil.rmtree(folder, ignore_errors=True)
+    said = []
+    for lang in sorted(tally):
+        count = tally[lang]
+        said.append("%s %s" % (lang, "not here" if count["skip"] and not count["right"]
+                               else "%d" % count["right"] if not count["built"]
+                               else "%d (and %d only built)" % (count["right"], count["built"])))
+    note = "%d programs: %s" % (len(cases), ", ".join(said))
+    if wrong:
+        note += "\n       " + "\n       ".join(wrong[:6])
+    return not wrong, note
+
+
+@check("the page's script reads as one script")
+def _():
+    """Every part poured together, and node asked whether it parses.
+
+    The parts are poured into one function and run in strict mode, which the
+    pieces on their own are not: a name declared twice, an await outside an
+    async function, an octal left in a string -- none of those show up until
+    the page is opened and the whole script refuses to run, taking every
+    button on it with it.  Here they show up in a second.
+    """
+    if not node_there():
+        return None, "node is not installed -- skipped"
+    fb = builder()
+    whole = "".join(fb.without_header(fb.read_ui(name), fb.JS_HEAD_END)
+                    for name in fb.JS)
+    handle, where = tempfile.mkstemp(suffix=".js")
+    with io.open(handle, "w", encoding="utf-8") as f:
+        f.write('"use strict";\nasync function studio() {\n' + whole + "\n}\n")
+    try:
+        got = subprocess.run(["node", "--check", where],
+                             capture_output=True, text=True)
+    finally:
+        os.remove(where)
+    return got.returncode == 0, ("%d parts, %d KB" % (len(fb.JS), len(whole) // 1024)
+                                 if got.returncode == 0
+                                 else got.stderr.strip().split("\n")[-1][:120])
+
+
+# ------------------------------------------------ the part that runs in node --
+def node_there():
+    try:
+        subprocess.run(["node", "--version"], capture_output=True, check=True)
+        return True
+    except Exception:                                # noqa: BLE001
+        return False
+
+
+@check("the by-hand router keeps its promises")
+def _():
+    if not node_there():
+        return None, "node is not installed -- skipped"
+    got = subprocess.run(["node", os.path.join(HERE, "router.js")],
+                         cwd=HOME, capture_output=True, text=True)
+    if got.returncode:
+        return False, (got.stderr.strip().split(chr(10)) or ["failed"])[-1][:90]
+    return True, got.stdout.strip().replace(chr(10), "; ")
+
+
+# -------------------------------------------------------------------- go --
+def main():
+    quiet = "-q" in sys.argv
+    only = ""
+    if "--only" in sys.argv:
+        only = sys.argv[sys.argv.index("--only") + 1]
+
+    began = time.time()
+    ran = failed = skipped = 0
+    print("Flowchart Builder -- checking%s" % ("" if not only else " (%s)" % only))
+    print()
+    for name, fn in done:
+        if only and only.lower() not in name.lower():
+            continue
+        try:
+            ok, note = fn()
+        except Exception as oops:                    # noqa: BLE001
+            ok, note = False, "%s: %s" % (type(oops).__name__, oops)
+        ran += 1
+        if ok is None:
+            skipped += 1
+            mark = "skip"
+        elif ok:
+            mark = "ok  "
+        else:
+            failed += 1
+            mark = "FAIL"
+        if not quiet or not ok:
+            print("  %s  %-44s %s" % (mark, name, note))
+
+    print()
+    print("%d checked, %d failed, %d skipped, %.1fs"
+          % (ran, failed, skipped, time.time() - began))
+    return 1 if failed else 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

@@ -1,0 +1,54 @@
+{
+  // What the Run menu runs.  Without this file it runs whichever file
+  // happens to be open, and this package cannot be started that way:
+  // flowchart/__main__.py imports its own package relatively, so running
+  // it as a plain script fails with "attempted relative import with no
+  // known parent package".  It has to be `python -m flowchart` from the
+  // folder above it, which is what "module" below means.
+  //
+  // The first one is what F5 and Ctrl+F5 use unless another is picked in
+  // the Run and Debug sidebar.
+  "version": "0.2.0",
+  "configurations": [
+    {
+      // Ctrl+F5.  Serves the studio on localhost and opens the browser at
+      // it; Ctrl+C in the terminal, or the stop button, ends it.
+      "name": "The studio",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "flowchart",
+      "cwd": "${workspaceFolder}",
+      "console": "integratedTerminal"
+    },
+    {
+      // The same thing the Ctrl+Shift+B task does: rewrites index.html so
+      // the website carries whatever the studio is already showing.
+      "name": "Refresh the website's page",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "flowchart",
+      "args": ["--site", "."],
+      "cwd": "${workspaceFolder}",
+      "console": "integratedTerminal"
+    },
+    {
+      "name": "Every check",
+      "type": "debugpy",
+      "request": "launch",
+      "program": "${workspaceFolder}/tests/run.py",
+      "cwd": "${workspaceFolder}",
+      "console": "integratedTerminal"
+    },
+    {
+      // One pseudocode file straight to an .svg, with a viewer page beside
+      // it -- whichever .txt is open in the editor at the time.
+      "name": "Draw the open file",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "flowchart",
+      "args": ["${file}"],
+      "cwd": "${workspaceFolder}",
+      "console": "integratedTerminal"
+    }
+  ]
+}

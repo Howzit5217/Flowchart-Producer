@@ -1,0 +1,607 @@
+/* ---------------------------------------------------------------------------
+   07-motion.css -- how everything moves
+   --------------------------------------------------------------------------- */
+  /* Nothing here changes what anything is, or where it ends up.  It is only
+     about the getting there: a thing that moves on its way in is easier to
+     follow than one that simply appears, and a thing that answers the moment
+     it is touched feels made rather than assembled.
+
+     Two rules run through all of it.  Everything is short -- nothing has to
+     wait on an animation before it can be used -- and everything stops when
+     the computer has been asked to keep still, which is at the foot of this
+     file. */
+
+  /* ------------------------------------------------- how fast, and how -- */
+  /* One set of speeds and curves for the whole page, so that two things
+     moving at once look like one thing moving.  The curve starts quickly and
+     settles, the way something with weight does; the "back" one overshoots by
+     a hair, which is what makes a thing look eager rather than dragged. */
+  :root {
+    --ease: cubic-bezier(.22, 1, .36, 1);
+    --ease-soft: cubic-bezier(.4, 0, .2, 1);
+    --ease-back: cubic-bezier(.34, 1.36, .64, 1);
+    --tap: .11s;                        /* answering a press */
+    --quick: .17s;                      /* a color, a shadow */
+    --move: .26s;                       /* something going somewhere */
+    --sheet-t: .32s;                    /* a whole panel arriving */
+    --lift: 0 2px 10px rgba(16, 24, 40, .10);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) { --lift: 0 2px 10px rgba(0, 0, 0, .44); }
+  }
+  :root[data-theme="dark"] { --lift: 0 2px 10px rgba(0, 0, 0, .44); }
+
+  /* ---------------------------------------------------------- arriving -- */
+  /* The page puts itself together in about half a second: the bars in from
+     their own edges, the panel from its side, the paper up from below.  Each
+     one holds its starting look until its turn comes and holds nothing
+     afterwards, so ordinary styling takes over the moment a thing has landed
+     -- which is what lets the panel still fold away later. */
+  header.bar { animation: bar-down .45s var(--ease) backwards; }
+  footer.bar { animation: bar-up .45s var(--ease) .05s backwards; }
+  #panel { animation: panel-in .5s var(--ease) .06s backwards; }
+  #stage { animation: fade-in .5s var(--ease-soft) .04s backwards; }
+  /* The paper arrives on the wrapper round it, not on the paper itself,
+     and that is load-bearing rather than tidiness.
+
+     An `animation` written on .sheet is not a thing that happens once: it
+     is a standing property of the element.  .sheet.fresh overrides it with
+     chart-in while a new drawing arrives, so taking `fresh` off again
+     changed the property back -- and a changed animation-name starts from
+     the beginning.  So every build ran chart-in, and then, half a second
+     later, ran paper-in from nothing: the chart appeared, vanished for the
+     twelfth of a second of delay, and faded back in.  Appears, disappears,
+     reappears, every single time.
+
+     Nothing ever adds or removes a class on .wrap, so put there it can
+     only happen once.  It also keeps this off the `rect class="sheet"`
+     inside every drawing, which this selector was quietly catching too. */
+  .wrap { animation: paper-in .55s var(--ease) .12s backwards; }
+  body[data-side="right"] #panel { animation-name: panel-in-right; }
+  @keyframes bar-down { from { opacity: 0; transform: translateY(-10px); } }
+  @keyframes bar-up { from { opacity: 0; transform: translateY(10px); } }
+  @keyframes panel-in { from { opacity: 0; transform: translateX(-14px); } }
+  @keyframes panel-in-right { from { opacity: 0; transform: translateX(14px); } }
+  @keyframes fade-in { from { opacity: 0; } }
+  @keyframes paper-in { from { opacity: 0; transform: translateY(12px) scale(.985); } }
+
+  /* The mark draws itself, once, the way it would be drawn by hand.  The
+     dashes exist only while it is being drawn -- afterwards the strokes are
+     plain strokes again, which is why the run is told to hold nothing. */
+  header .mark svg > * { animation: mark-draw .9s var(--ease-soft) .1s backwards; }
+  header .mark svg > *:nth-child(2) { animation-delay: .22s; }
+  header .mark svg > *:nth-child(3) { animation-delay: .3s; }
+  header .mark svg > *:nth-child(4) { animation-delay: .42s; }
+  @keyframes mark-draw {
+    from { stroke-dasharray: 48; stroke-dashoffset: 48; opacity: .25; }
+    to { stroke-dasharray: 48; stroke-dashoffset: 0; opacity: 1; }
+  }
+  .mark { transition: transform var(--move) var(--ease-back),
+                      background-color var(--quick) var(--ease-soft); }
+  .mark:hover { transform: rotate(-3deg) scale(1.05); }
+
+  /* ------------------------------------------------------------- press -- */
+  /* On a phone the browser draws its own answer to a tap before the page
+     gets to draw anything: a gray block the size of the element's box.
+     It is a plain rectangle -- it knows nothing about a rounded corner --
+     so the settings button, every icon in the rail, and every rounded
+     button on the page flashed square for a moment under the finger, a
+     shape none of them has.  The page says a tap has landed by sinking
+     the thing that was tapped, which is the same answer on a phone as on
+     a mouse, so the block is taken off everywhere and what is left is the
+     page's own. */
+  html { -webkit-tap-highlight-color: transparent; }
+
+  /* A button rises a hair under the mouse and sinks under the press.  The
+     sinking is faster than the rising, on purpose: going down should feel
+     like the button answering, coming back up like it settling. */
+  .btn {
+    transition: background-color var(--quick) var(--ease-soft),
+                border-color var(--quick) var(--ease-soft),
+                color var(--quick) var(--ease-soft),
+                box-shadow var(--quick) var(--ease-soft),
+                filter var(--quick) var(--ease-soft),
+                transform var(--tap) var(--ease-soft);
+  }
+  .btn:hover { transform: translateY(-1px); box-shadow: var(--lift); }
+  .btn:active { transform: translateY(0) scale(.975); transition-duration: .05s; }
+  .btn[disabled], .btn[disabled]:hover { transform: none; box-shadow: none; }
+  /* the blue ones catch a little light as the mouse crosses them */
+  .btn.primary { position: relative; overflow: hidden; }
+  .btn.primary::after {
+    content: ""; position: absolute; inset: 0; pointer-events: none;
+    background: linear-gradient(112deg, transparent 32%,
+                rgba(255, 255, 255, .26) 50%, transparent 68%);
+    transform: translateX(-130%);
+    transition: transform .65s var(--ease);
+  }
+  .btn.primary:hover::after { transform: translateX(130%); }
+  .btn.primary:hover { box-shadow: 0 3px 14px rgba(20, 66, 124, .3); }
+
+  .icon {
+    transition: background-color var(--quick) var(--ease-soft),
+                color var(--quick) var(--ease-soft),
+                transform var(--tap) var(--ease-soft);
+  }
+  .icon:hover { transform: translateY(-1px); }
+  .icon:active { transform: scale(.9); transition-duration: .05s; }
+  /* Stepping back and forward keep out of the bar until there is something
+     to step to, so they arrive rather than being there: they come in from
+     the side they point, which is the side the work is going.  And each one
+     sweeps its own way when pressed, so a press that puts back something
+     off the screen still says which way it went. */
+  #undo:not([hidden]) { animation: undo-in .3s var(--ease-back) backwards; }
+  #redo:not([hidden]) { animation: redo-in .3s var(--ease-back) backwards; }
+  @keyframes undo-in { from { opacity: 0; transform: translateX(7px) scale(.86); } }
+  @keyframes redo-in { from { opacity: 0; transform: translateX(-7px) scale(.86); } }
+  #undo:active svg { animation: swept-back .3s var(--ease); }
+  #redo:active svg { animation: swept-on .3s var(--ease); }
+  @keyframes swept-back {
+    40% { transform: translateX(-3px) rotate(-12deg); }
+    100% { transform: translateX(0) rotate(0); }
+  }
+  @keyframes swept-on {
+    40% { transform: translateX(3px) rotate(12deg); }
+    100% { transform: translateX(0) rotate(0); }
+  }
+  .icon svg { transition: transform var(--move) var(--ease); }
+  #collapse:hover svg { transform: translateX(-3px); }
+  body[data-side="right"] #collapse:hover svg { transform: scaleX(-1) translateX(-3px); }
+  .switch input { transition: transform var(--tap) var(--ease-back); }
+  .switch input:active { transform: scale(.88); }
+
+  /* Where the keyboard is, said the same way everywhere.  A ring rather than
+     a line, so it reads as the page pointing at something rather than as a
+     border that was there all along. */
+  .btn:focus-visible, .icon:focus-visible, .seg-btn:focus-visible,
+  .tab:focus-visible, .preset:focus-visible, .fault:focus-visible,
+  .menu button:focus-visible, .slider-step:focus-visible {
+    outline: 0;
+    box-shadow: 0 0 0 3px var(--accent-soft), 0 0 0 1px var(--accent);
+  }
+  input[type="text"], select, textarea, .field {
+    transition: border-color var(--quick) var(--ease-soft),
+                box-shadow var(--quick) var(--ease-soft),
+                background-color var(--quick) var(--ease-soft);
+  }
+  #source input[type="text"]:focus, #source select:focus,
+  .field:focus, textarea.field:focus {
+    outline: 0; border-color: var(--accent);
+    box-shadow: 0 0 0 3px var(--accent-soft);
+  }
+
+  /* --------------------------------------------- the two-and-three-way -- */
+  /* The pale block behind the chosen side used to be painted onto whichever
+     button was on, so it jumped from one to the other.  It is one block now,
+     sitting behind them all, and it slides.  The script only says which of
+     how many is on; the arithmetic is here. */
+  .seg { position: relative; }
+  .seg::before {
+    content: ""; position: absolute; z-index: 0;
+    top: 2px; bottom: 2px; left: 2px;
+    width: calc((100% - 4px - (var(--seg-n, 2) - 1) * 2px) / var(--seg-n, 2));
+    border-radius: 7px; background: var(--panel);
+    box-shadow: 0 1px 2px rgba(16, 24, 40, .12);
+    transform: translateX(calc(var(--seg-i, 0) * (100% + 2px)));
+    transition: transform var(--move) var(--ease-back),
+                opacity var(--quick) var(--ease-soft);
+  }
+  .seg[data-seg-off]::before { opacity: 0; }
+  .seg-btn { position: relative; z-index: 1;
+             transition: color var(--quick) var(--ease-soft); }
+  .seg-btn.on { background: none; box-shadow: none; }
+  .seg-btn:hover { color: var(--ink); }
+
+  /* ------------------------------------------------------- the sheets -- */
+  /* Both of the sheets that hang off the bar come down out of the button
+     that opened them, and go back up into it.  Which point they come out of
+     is measured rather than written here: it is the middle of that button,
+     and "Download" and "Herunterladen" are not the same width.
+
+     Two states, not two runs of keyframes.  Keyframes could only ever play
+     from the beginning, so a sheet caught on its way out -- the button
+     pressed twice over, or pressed again straight after a click somewhere
+     else shut it -- had to blink back to nothing and arrive all over again,
+     and for the sixth of a second it was leaving the button that opened it
+     did nothing at all.  Between two states there is no beginning to go
+     back to: whatever is half done turns round and finishes the other way
+     from where it got to.
+
+     Visibility is in the list, with a wait on it as long as the move, so
+     that a sheet on its way out stops being something the mouse or the Tab
+     key can find at the moment it is gone rather than before it has left. */
+  .sheet-menu {
+    transform-origin: top right;
+    opacity: 0; visibility: hidden;
+    transform: translateY(-10px) scale(.96);
+    transition: opacity var(--quick) var(--ease-soft),
+                transform var(--move) var(--ease),
+                visibility 0s linear var(--move);
+  }
+  .sheet-menu.here {
+    opacity: 1; visibility: visible; transform: none;
+    transition: opacity var(--quick) var(--ease-soft),
+                transform var(--move) var(--ease),
+                visibility 0s;
+  }
+
+  /* The menu on the right button, out of the corner it was asked for.  It is
+     a plain visible menu that is told to grow, rather than an invisible one
+     that is told to appear: if the script never gets as far as saying so --
+     because the system was asked to keep still, or because anything at all
+     went wrong -- what is left is a menu, not a hole where one should be. */
+  .menu { transform-origin: top left; }
+  .menu.in { animation: menu-pop .19s var(--ease) backwards; }
+  @keyframes menu-pop { from { opacity: 0; transform: scale(.96); } }
+  .menu.out {
+    opacity: 0; transform: scale(.98); pointer-events: none;
+    transition: opacity .12s var(--ease-soft), transform .12s var(--ease-soft);
+  }
+  .menu button {
+    transition: background-color var(--quick) var(--ease-soft),
+                transform var(--tap) var(--ease-soft);
+  }
+  .menu.in button {
+    animation: row-in .24s var(--ease) backwards;
+    animation-delay: calc(min(var(--i, 0), 8) * 16ms);
+  }
+  .menu button:hover { transform: translateX(2px); }
+  /* The dot that says one of the settings behind the button has been moved
+     springs in rather than blinking on, which is the difference between a
+     change and a glitch. */
+  #more::after {
+    transition: opacity var(--quick) var(--ease-soft),
+                transform var(--move) var(--ease-back);
+  }
+  .menu .dot { transition: background-color var(--quick) var(--ease-soft); }
+  @keyframes row-in { from { opacity: 0; transform: translateY(-4px); } }
+
+  /* --------------------------------------------- the panel, going away -- */
+  /* It closes to nothing rather than vanishing, and the stage takes the room
+     as it is given up.  What is inside keeps its full width while it narrows;
+     otherwise every word in it would re-wrap on the way out, which looks like
+     the panel falling apart rather than closing. */
+  #panel {
+    transition: width var(--move) var(--ease),
+                opacity .16s var(--ease-soft),
+                border-color var(--quick) var(--ease-soft),
+                visibility 0s;
+  }
+  /* How wide the panel is depends on the screen, and is decided in two other
+     stylesheets between them; nothing here needs to know which.  The script
+     measures it as it starts to close and says so here, and the width goes
+     back to being whatever it was once it is open again. */
+  #panel > * { width: var(--panel-w, 100%); }
+  #panel.hide {
+    display: flex; width: 0; opacity: 0; visibility: hidden;
+    border-color: transparent; pointer-events: none;
+    transition: width var(--move) var(--ease),
+                opacity .16s var(--ease-soft),
+                border-color var(--quick) var(--ease-soft),
+                visibility 0s linear var(--move);
+  }
+  /* the rail that takes its place, and its buttons after it */
+  #rail:not([hidden]) { animation: rail-in var(--move) var(--ease) backwards; }
+  #rail .icon { animation: row-up .34s var(--ease) backwards; }
+  #rail .icon:nth-child(2) { animation-delay: .07s; }
+  @keyframes rail-in { from { opacity: 0; transform: translateX(-12px); } }
+  @keyframes row-up { from { opacity: 0; transform: translateY(8px); } }
+
+  /* ---------------------------------------------------- folding a card -- */
+  /* A card folds shut by losing its height, not by disappearing.  The part
+     that holds the height is a grid of a single row, and a grid row can be
+     animated from all of it to none of it -- which is the only way to do this
+     without measuring anything in the script. */
+  section.fold > .fold-body {
+    display: grid; grid-template-rows: 1fr; opacity: 1;
+    transition: grid-template-rows var(--move) var(--ease),
+                opacity var(--quick) var(--ease-soft);
+  }
+  section.fold.shut > .fold-body { display: grid; grid-template-rows: 0fr; opacity: 0; }
+  section.fold > .fold-body > .fold-inner { overflow: hidden; min-height: 0; }
+  section.card h2 { transition: color var(--quick) var(--ease-soft); }
+  section.fold h2 { transition: margin-bottom var(--move) var(--ease),
+                                color var(--quick) var(--ease-soft); }
+  section.fold h2:hover { color: var(--ink); }
+  section.fold h2::after { transition: transform var(--move) var(--ease-back); }
+
+  /* ------------------------------------------- the things in the panel -- */
+  .tab {
+    transition: background-color var(--quick) var(--ease-soft),
+                border-color var(--quick) var(--ease-soft),
+                color var(--quick) var(--ease-soft),
+                transform var(--tap) var(--ease-soft);
+  }
+  .tab:hover:not(.on) { border-color: var(--accent); transform: translateY(-1px); }
+  .tab:active { transform: scale(.98); }
+  .preset {
+    transition: transform var(--quick) var(--ease-back),
+                border-color var(--quick) var(--ease-soft),
+                box-shadow var(--quick) var(--ease-soft);
+  }
+  .preset:hover { transform: translateY(-2px); box-shadow: var(--lift); }
+  .preset:active { transform: translateY(0) scale(.98); }
+  .preset .chip { transition: transform var(--quick) var(--ease-back); }
+  .preset:hover .chip { transform: translateY(-1px) scale(1.08); }
+  .preset:hover .chip:nth-child(2) { transition-delay: .03s; }
+  .preset:hover .chip:nth-child(3) { transition-delay: .06s; }
+  .swatch {
+    transition: transform var(--quick) var(--ease-back),
+                border-color var(--quick) var(--ease-soft),
+                box-shadow var(--quick) var(--ease-soft);
+  }
+  .swatch:hover { transform: scale(1.1); border-color: var(--accent); }
+  .swatch:active { transform: scale(.96); }
+  .row { transition: background-color var(--quick) var(--ease-soft); }
+  .legendkey svg { transition: transform var(--quick) var(--ease-back); }
+  .row:hover .legendkey svg { transform: scale(1.1); }
+  /* ------------------------------------------- somewhere to start from -- */
+  /* The row of short programs folds away as the box fills and unfolds if
+     it is ever emptied again, so it is never a thing that appeared or
+     vanished -- only a thing that got out of the way.  The three arrive
+     one after another, close enough together to read as one arrival. */
+  #starts {
+    transition: grid-template-rows var(--move) var(--ease),
+                opacity var(--quick) var(--ease-soft);
+  }
+  #starts.away { grid-template-rows: 0fr; opacity: 0; }
+  #starts .starts-in > * { animation: row-in .3s var(--ease) backwards; }
+  #starts .starts-go { transition: color var(--quick) var(--ease-soft); }
+  #starts.away .starts-in > * { animation: none; }
+
+  /* what is selected, when it becomes something else */
+  #sel-card.swap #sel-body { animation: swap-in .3s var(--ease) backwards; }
+  /* and the two ways of working, as one gives way to the other */
+  #source:not([hidden]), #hand:not([hidden]) { animation: swap-in .3s var(--ease) backwards; }
+  @keyframes swap-in { from { opacity: 0; transform: translateY(6px); } }
+  /* what the check found, and what the runner said */
+  .fault {
+    animation: row-in .26s var(--ease) backwards;
+    transition: background-color var(--quick) var(--ease-soft),
+                transform var(--tap) var(--ease-soft);
+  }
+  .fault:hover { transform: translateX(2px); }
+  .tape .said { animation: line-in .22s var(--ease) backwards; }
+  #build-note { transition: color var(--quick) var(--ease-soft); }
+  #build-note.said-in { animation: line-in .3s var(--ease); }
+  @keyframes line-in { from { opacity: 0; transform: translateY(5px); } }
+  /* Pressing a button whose whole answer is already sitting there.  The
+     line is not written out again -- see talkOnce -- so the one that is
+     there is shaken instead, which says "this, still" without saying it
+     twice. */
+  .tape .said.again { animation: said-again .42s var(--ease); }
+  @keyframes said-again {
+    0%, 100% { transform: translateX(0); }
+    22% { transform: translateX(4px); }
+    58% { transform: translateX(-3px); }
+    82% { transform: translateX(1px); }
+  }
+
+  /* what the build button is doing, said in light as well as in color */
+  .btn.primary.working {
+    background-image: linear-gradient(100deg, transparent 20%,
+                      rgba(255, 255, 255, .3) 50%, transparent 80%);
+    background-size: 220% 100%;
+    animation: sweep 1.1s linear infinite;
+  }
+  .btn.primary.working::after { display: none; }
+  .btn.primary.done { animation: done-pop .42s var(--ease-back); }
+  @keyframes sweep {
+    from { background-position: 180% 0; }
+    to { background-position: -120% 0; }
+  }
+  @keyframes done-pop {
+    0% { transform: scale(1); }
+    38% { transform: scale(1.035); }
+    100% { transform: scale(1); }
+  }
+
+  /* --------------------------------------- the pseudocode, full screen -- */
+  #code-over:not([hidden]) { animation: dim-in var(--move) var(--ease-soft) backwards; }
+  #code-over:not([hidden]) .code-sheet {
+    animation: sheet-rise var(--sheet-t) var(--ease) backwards;
+  }
+  #code-over.going { animation: dim-out .19s var(--ease-soft) forwards; }
+  #code-over.going .code-sheet { animation: sheet-fall .19s var(--ease-soft) forwards; }
+  @keyframes dim-in { from { opacity: 0;
+    -webkit-backdrop-filter: blur(0); backdrop-filter: blur(0); } }
+  @keyframes dim-out { to { opacity: 0; } }
+  @keyframes sheet-rise { from { opacity: 0; transform: translateY(16px) scale(.985); } }
+  @keyframes sheet-fall { to { opacity: 0; transform: translateY(10px) scale(.99); } }
+  #code-home { transition: box-shadow var(--quick) var(--ease-soft); }
+
+  /* ------------------------------------------- the settings, over the page -- */
+  #more-over:not([hidden]), #eg-over:not([hidden]), #pz-over:not([hidden]) {
+    animation: dim-in var(--move) var(--ease-soft) backwards;
+  }
+  #more-over:not([hidden]) .code-sheet, #eg-over:not([hidden]) .code-sheet,
+  #pz-over:not([hidden]) .code-sheet {
+    animation: sheet-rise var(--sheet-t) var(--ease) backwards;
+  }
+  /* The levels and the names in them fill in the way the examples do. */
+  #pz-over:not([hidden]) .more-part {
+    animation: row-in .32s var(--ease) backwards;
+  }
+  #pz-over:not([hidden]) .more-part:nth-child(2) { animation-delay: .06s; }
+  #pz-over:not([hidden]) .more-part:nth-child(3) { animation-delay: .12s; }
+  #pz-over:not([hidden]) .eg-row .btn {
+    animation: row-in .3s var(--ease) backwards;
+    animation-delay: calc(var(--i, 0) * 30ms);
+  }
+  /* The card the puzzle is in arrives with it, and jumps once when it is
+     beaten -- which is the one moment in this whole page worth a little
+     noise. */
+  #pz-card:not([hidden]) { animation: swap-in .3s var(--ease) backwards; }
+  #pz-card.won { animation: won-pop .55s var(--ease-back); }
+  @keyframes won-pop {
+    0% { transform: scale(1); }
+    30% { transform: scale(1.022); }
+    100% { transform: scale(1); }
+  }
+  /* And the tick lands on the name in the list rather than appearing. */
+  .pz .tick { animation: tick-in .34s var(--ease-back) backwards; }
+  @keyframes tick-in { from { opacity: 0; transform: scale(.4) rotate(-18deg); } }
+  #puzzles::after {
+    transition: opacity var(--quick) var(--ease-soft),
+                transform var(--move) var(--ease-back);
+  }
+  /* Each level fills in after the one above it, and the names inside a
+     level after their own heading, so the sheet reads as being laid out
+     rather than as arriving already laid out. */
+  #eg-over:not([hidden]) .more-part {
+    animation: row-in .32s var(--ease) backwards;
+  }
+  #eg-over:not([hidden]) .more-part:nth-child(2) { animation-delay: .06s; }
+  #eg-over:not([hidden]) .more-part:nth-child(3) { animation-delay: .12s; }
+  #eg-over:not([hidden]) .eg-row .btn {
+    animation: row-in .3s var(--ease) backwards;
+    animation-delay: calc(var(--i, 0) * 30ms);
+  }
+  /* Each part of the list arrives just after the one above it, so the
+     sheet reads as filling rather than as appearing already full. */
+  #more-over:not([hidden]) .more-part {
+    animation: row-in .32s var(--ease) backwards;
+  }
+  #more-over:not([hidden]) .more-part:nth-child(2) { animation-delay: .05s; }
+  #more-over:not([hidden]) .more-part:nth-child(3) { animation-delay: .1s; }
+
+  /* ------------------------------------ the run and the code, full screen -- */
+  #tape-over:not([hidden]) { animation: dim-in var(--move) var(--ease-soft) backwards; }
+  #tape-over:not([hidden]) .code-sheet {
+    animation: sheet-rise var(--sheet-t) var(--ease) backwards;
+  }
+  #tape-over.going { animation: dim-out .19s var(--ease-soft) forwards; }
+  #tape-over.going .code-sheet { animation: sheet-fall .19s var(--ease-soft) forwards; }
+
+  /* -------------------------------------------------- the chart itself -- */
+  /* A freshly drawn chart arrives with its paper.  The script puts this on
+     only when the drawing is a new one, so nothing flickers while a shape is
+     being dragged about: that redraws the same chart many times a second, and
+     a chart that faded in each time would be unreadable.
+
+     It moves the paper, not the chart on it.  Moving the chart alone slid it
+     inside the sheet it sits on and left a strip of bare sheet showing along
+     the top and down each side -- a white line round the edge of the drawing,
+     for as long as the arriving took.  The two are one thing and move as one. */
+  /* The paper is two things wearing one color: the rectangle the drawing
+     fills, and the rounded block it is clipped to.  This selector catches
+     both -- the block takes a background, the rectangle a fill -- so a new
+     palette moves them together.  One of them changing while the other was
+     still on its way is the whole of how a pale curve appears at each
+     corner of the chart, and it only has to last a quarter of a second to
+     be seen every single time. */
+  .sheet, #chart .patch {
+    transition: box-shadow var(--move) var(--ease),
+                background-color var(--move) var(--ease-soft),
+                fill var(--move) var(--ease-soft);
+  }
+  .sheet.fresh { animation: chart-in .45s var(--ease) backwards; }
+  @keyframes chart-in { from { opacity: 0; transform: translateY(8px) scale(.99); } }
+  /* zoom, when a button asked for it rather than a drag */
+  .sheet.gliding > svg { transition: width .3s var(--ease); }
+
+  /* the shapes, as they are pointed at, chosen, and stepped through */
+  #chart .node { transition: filter var(--quick) var(--ease-soft); }
+  #chart .node > * {
+    transition: fill var(--quick) linear, stroke var(--quick) linear,
+                stroke-width var(--quick) var(--ease-soft);
+  }
+  #chart .node:not(.on):not(.now):hover {
+    filter: drop-shadow(0 1px 4px rgba(16, 24, 40, .25));
+  }
+  svg .link { transition: filter var(--quick) var(--ease-soft); }
+  svg .link .flow { transition: stroke-width var(--quick) var(--ease-soft); }
+  /* The shape the runner is standing on: it lands, and then breathes while
+     it stands there.  The landing matters most when the steps are being
+     asked for one at a time -- between two presses nothing else on the
+     screen moves, so without it there is no moment of arrival at all, only
+     a glow that was over there and is now over here.
+
+     It is a flash of light rather than a change of size.  Scaling a group
+     in an SVG scales it about the drawing's own origin unless the browser
+     is told otherwise, so a shape half way down a long chart would be
+     flung across the paper on any browser that did not understand the
+     telling.  Light cannot miss. */
+  svg .node.now {
+    animation: now-land .4s var(--ease) ,
+               now-glow 1.5s var(--ease-soft) .4s infinite;
+  }
+  @keyframes now-land {
+    0% { filter: drop-shadow(0 0 0 rgba(17, 97, 73, 0)); }
+    35% { filter: drop-shadow(0 0 17px rgba(17, 97, 73, .95)); }
+    100% { filter: drop-shadow(0 0 5px rgba(17, 97, 73, .5)); }
+  }
+  @keyframes now-glow {
+    0%, 100% { filter: drop-shadow(0 0 5px rgba(17, 97, 73, .5)); }
+    50% { filter: drop-shadow(0 0 13px rgba(17, 97, 73, .85)); }
+  }
+
+  /* --------------------------------------------- waiting to be asked on -- */
+  /* The row unfolds, and the button breathes a ring while it stands there.
+     A run stopped on purpose and a run stopped by accident look exactly
+     alike otherwise, and the whole point of stepping by hand is that the
+     stopping is on purpose. */
+  #next-row {
+    transition: grid-template-rows var(--move) var(--ease),
+                opacity var(--quick) var(--ease-soft);
+    opacity: 0;
+  }
+  #next-row.here { grid-template-rows: 1fr; opacity: 1; }
+  #next-row.here .btn { animation: step-waits 1.9s var(--ease-soft) .25s infinite; }
+  @keyframes step-waits {
+    0% { box-shadow: 0 0 0 0 var(--accent-soft); }
+    60% { box-shadow: 0 0 0 10px transparent; }
+    100% { box-shadow: 0 0 0 0 transparent; }
+  }
+  svg .spot { transition: r var(--quick) var(--ease-back); }
+  svg .knob { transition: r var(--quick) var(--ease-back),
+                          fill var(--quick) var(--ease-soft); }
+  #stage {
+    transition: outline-color var(--quick) var(--ease-soft),
+                padding-left var(--move) var(--ease);
+  }
+  #stage.taking { outline-color: var(--accent); }
+  .slider-grip { transition: background-color var(--quick) var(--ease-soft); }
+  .slider-step {
+    transition: background-color var(--quick) var(--ease-soft),
+                color var(--quick) var(--ease-soft),
+                transform var(--tap) var(--ease-soft);
+  }
+  .slider-step:active { transform: scale(.88); }
+
+  /* ----------------------------------------------- light going to dark -- */
+  /* Only while the change is happening.  The script puts this on for as long
+     as the fade lasts and takes it off again, because a page that transitions
+     every color all of the time is a page that lags behind the mouse. */
+  :root.theming *, :root.theming *::before, :root.theming *::after {
+    transition: background-color .36s var(--ease-soft),
+                border-color .36s var(--ease-soft),
+                color .36s var(--ease-soft),
+                fill .36s var(--ease-soft),
+                stroke .36s var(--ease-soft) !important;
+  }
+  /* except the block behind a switch, which is very often the thing that was
+     just pressed to make the change happen -- it goes on sliding */
+  :root.theming .seg::before {
+    transition: transform var(--move) var(--ease-back) !important;
+  }
+  /* The chart is left out of it.  Its colors are chosen in the panel and do
+     not change with the light, so fading them would be a few hundred fades of
+     one color into the same color, on the largest thing on the page. */
+  :root.theming #chart, :root.theming #chart * { transition: none !important; }
+
+  /* ----------------------------------------------------- keeping still -- */
+  /* Some people are made ill by this sort of thing and some simply do not
+     want it; every system has a switch for saying so.  Where it is set,
+     everything above still happens -- it just happens at once. */
+  @media (prefers-reduced-motion: reduce) {
+    :root { --tap: 0s; --quick: 0s; --move: 0s; --sheet-t: 0s; }
+    *, *::before, *::after {
+      animation-duration: .001ms !important;
+      animation-delay: 0s !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: .001ms !important;
+    }
+    .btn:hover, .icon:hover, .preset:hover, .tab:hover, .swatch:hover,
+    .menu button:hover, .fault:hover, .mark:hover { transform: none; }
+  }

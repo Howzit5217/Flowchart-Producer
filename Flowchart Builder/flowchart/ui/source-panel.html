@@ -1,0 +1,139 @@
+    <section class="card" id="modes">
+      <div class="tabs">
+        <button class="tab on" id="tab-code" data-w="mode_code">__W(mode_code)__</button>
+        <button class="tab" id="tab-hand" data-w="mode_hand">__W(mode_hand)__</button>
+      </div>
+    </section>
+
+    <section class="card" id="hand" hidden>
+      <h2 data-w="add_shape">__W(add_shape)__</h2>
+      <div class="adders" id="adders"></div>
+      <div id="hand-sel"></div>
+      <div id="hand-switches"></div>
+      <div class="check-row">
+        <button class="btn primary wide" id="check" data-w="check">__W(check)__</button>
+      </div>
+      <div id="report"></div>
+    </section>
+    <section class="card" id="source">
+      <h2><span data-w="pseudocode">__W(pseudocode)__</span>
+        <button class="icon small" id="code-big" data-w-title="code_big"
+                title="__W(code_big)__" aria-label="__W(code_big)__"
+                aria-expanded="false">
+          <svg viewBox="0 0 20 20"><path d="M8 2.5H2.5v5.5M12 2.5h5.5v5.5M8 17.5H2.5V12M12 17.5h5.5V12"/></svg>
+        </button>
+      </h2>
+      <div id="code-home"><textarea id="code" spellcheck="false">__CODE__</textarea></div>
+      <!-- The first minute used to be an empty box and an instruction to
+           paste something into it, with nothing anywhere on the page saying
+           what this pseudocode looks like -- the keywords are in --help and
+           in the README, neither of which is in front of the person looking
+           at the box.  Three short programs are, and they are gone the
+           moment there is anything in the box to be in the way of. -->
+      <div id="starts"><div class="starts-in"></div></div>
+      <div class="fields">
+        <div><label for="f-title" data-w="title">__W(title)__</label>
+          <input type="text" id="f-title" value="__T__"></div>
+        <div><label for="f-author" data-w="your_name">__W(your_name)__</label>
+          <input type="text" id="f-author" value="__A__"></div>
+        <!-- And the small choices that are not worth a box each live behind
+             this one.  A setting given its own labelled row in the panel
+             costs the same room as Title or Language however small it is,
+             and there is a queue of them: which two words a decision
+             answers with is only the first.  Under here they cost a button
+             between them, and the button says when one of them has been
+             moved off what it started as, so nothing is hidden by being
+             put away. -->
+        <div class="more-cell">
+          <button class="btn wide" id="more" aria-expanded="false"
+                  data-w-title="more_tip" title="__W(more_tip)__">
+            <span data-w="more">__W(more)__</span>
+          </button>
+        </div>
+        <!-- Grid and Key beside each other in the cell to the right of it,
+             rather than a row of their own: two tick boxes are shorter than
+             a field, so the row they used to have was mostly empty.  They
+             start here rather than being moved here, because the mode only
+             moves them when it changes and it does not change on opening. -->
+        <div class="switches" id="chart-switches">
+          <label class="switch"><input type="checkbox" id="f-grid" checked><span data-w="grid">__W(grid)__</span></label>
+          <label class="switch"><input type="checkbox" id="f-legend"><span data-w="key_switch">__W(key_switch)__</span></label>
+        </div>
+      </div>
+      <!-- What is being worked on, while something is.  It sits above the
+           button that draws it, because the brief and the drawing are the
+           two halves of the same thing. -->
+      <div id="pz-card" hidden>
+        <div class="pz-top">
+          <strong id="pz-name"></strong>
+          <button class="icon small" id="pz-shut" data-w-title="done"
+                  title="__W(done)__" aria-label="__W(done)__">
+            <svg viewBox="0 0 20 20"><path d="M5 5l10 10M15 5L5 15"/></svg>
+          </button>
+        </div>
+        <p id="pz-said"></p>
+        <button class="btn primary wide" id="pz-check"
+                data-w="pz_check">__W(pz_check)__</button>
+        <p class="hint" id="pz-mark"></p>
+      </div>
+      <div class="go build-row">
+        <button class="btn primary wide" id="build" data-w="build">__W(build)__</button>
+      </div>
+      <div id="build-note"></div>
+      <div id="build-faults"></div>
+    </section>
+
+    <section class="card" id="runner">
+      <h2><span data-w="r_head">__W(r_head)__</span>
+        <button class="icon small" id="run-big" data-w-title="code_big"
+                title="__W(code_big)__" aria-label="__W(code_big)__"
+                aria-expanded="false">
+          <svg viewBox="0 0 20 20"><path d="M8 2.5H2.5v5.5M12 2.5h5.5v5.5M8 17.5H2.5V12M12 17.5h5.5V12"/></svg>
+        </button>
+      </h2>
+      <div class="switches">
+        <!-- Pseudocode is the one that is not a language; the rest are
+             filled in from the table in 18-code.js, so that adding a
+             language there adds it here too. -->
+        <select class="field" id="r-lang">
+          <option value="pseudo">__W(r_pseudo)__</option>
+        </select>
+        <!-- How fast it goes is one choice with three values, not a
+             switch: straight through, a step every quarter second, or a
+             step each time you ask for one.  The last is what a class
+             actually wants -- somewhere to stop and talk about the
+             decision it is standing on -- and there was no way to ask
+             for it: Step slowly advanced on a timer and you kept up
+             with it or you did not. -->
+        <select class="field" id="r-pace" data-w-title="r_pace"
+                title="__W(r_pace)__" aria-label="__W(r_pace)__">
+          <option value="fast" data-w="r_at_once">__W(r_at_once)__</option>
+          <option value="slow" data-w="r_slowly" selected>__W(r_slowly)__</option>
+          <option value="press" data-w="r_by_step">__W(r_by_step)__</option>
+        </select>
+      </div>
+      <div class="pair-wide">
+        <button class="btn primary" id="run" data-w="r_run">__W(r_run)__</button>
+        <button class="btn" id="see-code" data-w="r_code">__W(r_code)__</button>
+      </div>
+      <!-- Only while it is standing there waiting to be asked for the next
+           one.  It unfolds rather than appears, and breathes while it waits,
+           because a run that has stopped on purpose and a run that has
+           stopped by accident look exactly alike otherwise. -->
+      <div id="next-row"><div class="next-in">
+        <button class="btn primary wide" id="next" data-w="r_next">__W(r_next)__</button>
+      </div></div>
+      <p class="hint" id="run-note"></p>
+      <div id="tape" class="tape"></div>
+    </section>
+
+    <section class="card fold shut" id="roles">
+      <h2 data-w="shapes_for">__W(shapes_for)__</h2>
+      <!-- The heading alone names six kinds of step and offers thirty
+           shapes, and says nothing about what picking one does: whether
+           it changes what the chart means, or only what it looks like.
+           The line that answers that was written in all four languages
+           and then never put on the page. -->
+      <p class="hint" data-w="shapes_for_hint">__W(shapes_for_hint)__</p>
+      <div id="role-rows"></div>
+    </section>

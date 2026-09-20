@@ -1,0 +1,282 @@
+// ---------------------------------------------------------------------------
+//  program.js -- running pseudocode through the page's own runner
+//
+//  Run by tests/run.py where node is installed.  The runner is lifted straight
+//  out of flowchart/ui/js/14-run.js and 15-sums.js -- not a copy of it -- so
+//  what is checked here is the code the studio actually runs.  Everything it
+//  reaches for that belongs to a browser is stood in for: the tape is an
+//  object that collects what was said, typing into it is a list of answers
+//  handed over in turn, and nothing is drawn at all.
+//
+//  run.py reads the pseudocode, hands over the program as data and the words
+//  in English, and says what each one ought to print.  Anything that comes
+//  out different is printed here, side by side.
+// ---------------------------------------------------------------------------
+var fs = require("fs"), path = require("path");
+
+var UI = path.join(__dirname, "..", "flowchart", "ui", "js");
+
+function part(name) {
+  return fs.readFileSync(path.join(UI, name), "utf8");
+}
+
+// ---- something to say it to --------------------------------------------
+// As much of an element as the runner ever asks for, and no more.
+function madeUp() {
+  var nothing = function () {};
+  return {
+    kids: [], className: "", textContent: "", tabIndex: 0, title: "",
+    dataset: {},
+    style: { setProperty: nothing, removeProperty: nothing },
+    classList: { add: nothing, remove: nothing, toggle: nothing,
+                 contains: function () { return false; } },
+    appendChild: function (k) { this.kids.push(k); return k; },
+    removeChild: nothing, remove: nothing, replaceWith: nothing,
+    focus: nothing, scrollTop: 0, scrollHeight: 0,
+    get lastElementChild() { return this.kids[this.kids.length - 1] || null; },
+    get innerHTML() { return ""; },
+    set innerHTML(v) { if (!v) { this.kids.length = 0; } }
+  };
+}
+
+// ---- the runner, in a room of its own ----------------------------------
+// The parts of the page's script share one scope, so these two are read into
+// one here as well.  Everything they lean on that is not in them is stood in
+// for first, and a plain eval puts the two parts in beside the stand-ins.
+function runner(WORDS) {
+  var TXT = WORDS;
+  var tape = madeUp();
+  var faults = [];
+  var chart = null;                      // eslint-disable-line no-unused-vars
+  var byHand = false;                    // eslint-disable-line no-unused-vars
+  var lineOf = {};                       // eslint-disable-line no-unused-vars
+  var document = { createElement: function () { return madeUp(); } };
+
+  function say(key, fill) {
+    var out = TXT[key] || key;
+    for (var name in (fill || {})) {
+      out = out.split("{" + name + "}").join(fill[name]);
+    }
+    return out;
+  }
+  var titled = { value: "" };            // the Title box, as far as this goes
+  var codeBox = null;                    // and the pseudocode box, while mending
+  function el(q) {
+    if (q === "#tape") { return tape; }
+    if (q === "#f-title") { return titled; }
+    if (q === "#code") { return codeBox; }
+    return null;
+  }
+  function closeMenu() {}
+  function all() { return []; }
+  function briefly() {}
+  function freshTape() {}
+  function tapeShow() {}
+  function tapeSays() {}
+  function tapeFull() {}
+  function tapeToEnd() {}
+  function keepView() {}
+  function backToView() {}
+  function followNode() {}
+  function lineSpan() { return null; }
+  function showLine() {}
+  function pickLine() {}
+  function markFault() {}
+  function sayFault(err, how) {
+    faults.push({ how: how || "bad", message: err.message || String(err),
+                  tip: err.tip || "", line: (err.at && err.at.line) || 0,
+                  fix: err.fix || null,
+                  trail: (err.trail || []).map(function (s) { return s.name; }) });
+    var line = madeUp();
+    line.className = "said blame " + (how || "bad");
+    line.textContent = err.message || String(err);
+    tape.appendChild(line);
+  }
+
+  eval(part("14-run.js"));               // eslint-disable-line no-eval
+  eval(part("15-sums.js"));              // eslint-disable-line no-eval
+  eval(part("18-ahead.js"));             // eslint-disable-line no-eval
+  eval(part("18-code.js"));              // eslint-disable-line no-eval
+  eval(part("18-write.js"));             // eslint-disable-line no-eval
+  eval(part("27-mend.js"));              // eslint-disable-line no-eval
+
+  var go = function (ast, typed) {
+    var left = (typed || []).slice();
+    AST = ast;
+    // Typed into without anybody there to type: the answers were handed over
+    // in advance and are given out in turn.
+    ask = function () {
+      return Promise.resolve(left.length ? String(left.shift()) : "");
+    };
+    tape.innerHTML = "";
+    faults.length = 0;
+    return runIt().then(function () {
+      return { said: tape.kids.map(function (k) { return k.textContent; }),
+               // only what the program itself printed: not the runner's
+               // "Finished.", and not anything it said had gone wrong
+               printed: tape.kids.filter(function (k) { return k.className === "said"; })
+                                 .map(function (k) { return k.textContent; }),
+               faults: faults.slice() };
+    });
+  };
+  // The same program written out in one of the languages the studio offers.
+  // The title is what a class-shaped language names its class after.
+  go.written = function (ast, lang, title) {
+    AST = ast;
+    titled.value = title || "";
+    return codeFor(lang);
+  };
+  go.languages = function () { return Object.keys(LANGS); };
+  // Run for what it prints and nothing else -- the way a puzzle is marked.
+  // The run above waits a quarter of a second on every step, as the studio
+  // does for somebody watching; sixty programs of that is eight minutes.
+  go.quietly = function (ast, typed) {
+    AST = ast;
+    tape.innerHTML = "";
+    faults.length = 0;
+    return runQuietly(typed || []).then(function (out) {
+      return { printed: out.said,
+               faults: out.wentWrong && !faults.length ? [{ how: "bad" }] : faults.slice() };
+    });
+  };
+  // A fix applied to a piece of pseudocode, the way pressing the button
+  // under a warning applies it.  Nothing is drawn again afterwards: what is
+  // being checked is what got written into the box.
+  go.mended = function (source, fix, line) {
+    codeBox = { value: source, focus: function () {},
+                dispatchEvent: function () {},
+                setSelectionRange: function () {} };
+    var at = putRight(fix, line);
+    var text = codeBox.value;
+    codeBox = null;
+    return { at: at, text: text };
+  };
+  // And the whole way round: run it, take the fix off the fault it stopped
+  // at, and apply that.
+  go.ranAndMended = function (source, ast, typed) {
+    return go(ast, typed).then(function (out) {
+      var fault = out.faults[0] || {};
+      if (!fault.fix) { return { fix: null, text: null }; }
+      var done = go.mended(source, fault.fix, fault.line);
+      return { fix: fault.fix, at: done.at, text: done.text };
+    });
+  };
+  return go;
+}
+
+// ---- and the checking --------------------------------------------------
+var asked = JSON.parse(fs.readFileSync(process.argv[2], "utf8"));
+var go = runner(asked.words);
+var bad = [];
+
+function fill(text, into) {
+  var out = text;
+  for (var name in (into || {})) {
+    out = out.split("{" + name + "}").join(into[name]);
+  }
+  return out;
+}
+
+function wanted(one) {                   // what run.py said it should print
+  return (one.want || []).map(function (line) {
+    return typeof line === "string" ? line
+         : fill(asked.words[line.key] || line.key, line.fill || {});
+  });
+}
+
+(async function () {
+  for (var i = 0; i < asked.cases.length; i++) {
+    var one = asked.cases[i];
+    var got;
+    try {
+      got = await go(one.ast, one.typed);
+    } catch (blew) {
+      bad.push(one.name + ": it threw -- " + (blew && blew.stack || blew));
+      continue;
+    }
+    var want = wanted(one);
+    var said = got.said;
+    if (said.length !== want.length ||
+        want.some(function (line, n) { return said[n] !== line; })) {
+      bad.push(one.name + ":\n      wanted " + JSON.stringify(want) +
+               "\n      got    " + JSON.stringify(said));
+      continue;
+    }
+    if (one.trail && JSON.stringify((got.faults[0] || {}).trail || []) !==
+                     JSON.stringify(one.trail)) {
+      bad.push(one.name + ": the trail said " +
+               JSON.stringify((got.faults[0] || {}).trail || []) +
+               ", not " + JSON.stringify(one.trail));
+    }
+  }
+  // ---- a fix applied to the pseudocode -------------------------------
+  (asked.mends || []).forEach(function (one) {
+    var got = go.mended(one.source, one.fix, one.line || 0);
+    if (got.text !== one.want) {
+      bad.push(one.name + ":\n      wanted " + JSON.stringify(one.want) +
+               "\n      got    " + JSON.stringify(got.text));
+    }
+  });
+
+  // ---- and the whole way round, from a run that stopped --------------
+  for (var m = 0; m < (asked.ran || []).length; m++) {
+    var each = asked.ran[m];
+    var end = await go.ranAndMended(each.source, each.ast, each.typed);
+    if (JSON.stringify(end.fix) !== JSON.stringify(each.fix)) {
+      bad.push(each.name + ": the fault offered " + JSON.stringify(end.fix) +
+               ", not " + JSON.stringify(each.fix));
+    } else if (end.text !== each.want) {
+      bad.push(each.name + ":\n      wanted " + JSON.stringify(each.want) +
+               "\n      got    " + JSON.stringify(end.text));
+    }
+  }
+
+  // ---- and the same programs, written out as code --------------------
+  (asked.written || []).forEach(function (one) {
+    var text;
+    try {
+      text = go.written(one.ast, one.lang).text;
+    } catch (blew) {
+      bad.push(one.name + ": writing it out threw -- " + (blew && blew.message || blew));
+      return;
+    }
+    (one.has || []).forEach(function (want) {
+      if (text.indexOf(want) < 0) {
+        bad.push(one.name + " (" + one.lang + "): nowhere in it is " +
+                 JSON.stringify(want) + "\n      it wrote:\n" + text);
+      }
+    });
+    (one.before || []).forEach(function (pair) {
+      var a = text.indexOf(pair[0]), b = text.indexOf(pair[1]);
+      if (a < 0 || b < 0 || a > b) {
+        bad.push(one.name + " (" + one.lang + "): " + JSON.stringify(pair[0]) +
+                 " does not come before " + JSON.stringify(pair[1]) +
+                 "\n      it wrote:\n" + text);
+      }
+    });
+  });
+
+  // ---- and a shelf of them, written out to be really run --------------
+  // tests/written.py does the running.  What it needs from here is what
+  // the runner printed for each program, and the program in every language
+  // there is -- handed back in a file, since it is far too much to print.
+  if (asked.shelf) {
+    var shelf = [];
+    for (var s = 0; s < asked.shelf.length; s++) {
+      var book = asked.shelf[s], ran = await go.quietly(book.ast, book.typed), code = {};
+      go.languages().forEach(function (lang) {
+        try { code[lang] = go.written(book.ast, lang, book.title); }
+        catch (blew) { code[lang] = { error: String(blew && blew.stack || blew) }; }
+      });
+      shelf.push({ said: ran.printed, faults: ran.faults, code: code });
+    }
+    fs.writeFileSync(asked.shelfOut, JSON.stringify(shelf));
+  }
+
+  bad.forEach(function (line) { console.error("  " + line); });
+  console.log(asked.cases.length + " programs run, " +
+              (asked.written || []).length + " written out, " +
+              ((asked.mends || []).length + (asked.ran || []).length) +
+              " put right: " + (bad.length ? bad.length + " wrong" : "ok"));
+  process.exit(bad.length ? 1 : 0);
+})();

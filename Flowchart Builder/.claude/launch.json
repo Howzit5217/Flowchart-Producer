@@ -1,0 +1,23 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "studio",
+      "runtimeExecutable": "python",
+      "runtimeArgs": ["-m", "flowchart", "--serve", "8768"],
+      "port": 8768
+    },
+    {
+      "name": "studio-2",
+      "runtimeExecutable": "python",
+      "runtimeArgs": ["-m", "flowchart", "--serve", "8771"],
+      "port": 8771
+    },
+    {
+      "name": "site",
+      "runtimeExecutable": "python",
+      "runtimeArgs": ["-m", "http.server", "8766"],
+      "port": 8766
+    }
+  ]
+}

@@ -1,0 +1,15 @@
+{
+  // __pycache__ is Python's own bytecode cache.  It is written whenever
+  // anything is run, it is never edited by anybody, and deleting it costs
+  // nothing but a moment's startup next time -- so it comes straight back
+  // and there is no point deleting it.  .gitignore keeps it out of the
+  // repository; this keeps it out of the Explorer, which is the only place
+  // it was ever in the way.
+  "files.exclude": {
+    "**/__pycache__": true,
+    "**/*.pyc": true
+  },
+  "search.exclude": {
+    "**/__pycache__": true
+  }
+}

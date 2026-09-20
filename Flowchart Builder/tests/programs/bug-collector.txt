@@ -1,0 +1,45 @@
+Start
+Declare Integer day
+Declare Integer bugs
+Declare Integer total
+Declare Integer most
+Declare Integer bestDay
+Declare Integer days
+Declare Real average
+Set day = 1
+Set total = 0
+Display "The bug collector"
+Display "How many days were you out collecting?"
+Input days
+While days < 1
+    Display "It has to be at least one day."
+    Input days
+End While
+While day <= days
+    Display "Bugs collected on day ", day
+    Input bugs
+    While bugs < 0
+        Display "You cannot collect fewer than none."
+        Input bugs
+    End While
+    Set total = total + bugs
+    If bugs > most Then
+        Set most = bugs
+        Set bestDay = day
+    End If
+    Set day = day + 1
+End While
+Set average = total / days
+Display "Bugs in all: ", total
+Display "A day's worth, on average: ", average
+If most > 0 Then
+    Display "The best day was day ", bestDay
+    Display "with ", most, " bugs in it."
+End If
+If average > 10 Then
+    Display "A good week."
+End If
+If total = 0 Then
+    Display "Not one bug all week."
+End If
+End

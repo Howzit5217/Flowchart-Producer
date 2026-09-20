@@ -1,0 +1,416 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>__TITLE__</title>
+<!-- The mark from the bar, in the tab as well.  A page that says
+     nothing here is given the browser's own globe, which is what
+     every page that has not been asked about it gets: on a row of
+     open tabs this one looked like somewhere nobody had been.
+     It is drawn on its own tile in the accent rather than as bare
+     strokes, because a tab bar may be light or dark and a stroke in
+     one ink cannot be seen on both. -->
+<link rel="icon" href="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%3E%3Crect%20width%3D%2224%22%20height%3D%2224%22%20rx%3D%225%22%20fill%3D%22%2314427c%22%2F%3E%3Cg%20transform%3D%22translate%282.5%202.2%29%20scale%280.79%29%22%20fill%3D%22none%22%20stroke%3D%22%23ffffff%22%20stroke-width%3D%222.1%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Crect%20x%3D%227.5%22%20y%3D%221.8%22%20width%3D%229%22%20height%3D%225.4%22%20rx%3D%221.4%22%2F%3E%3Cpath%20d%3D%22M12%207.2v3.1%22%2F%3E%3Cpath%20d%3D%22M12%2010.3l4%203.3-4%203.3-4-3.3z%22%2F%3E%3Cpath%20d%3D%22M12%2016.9v2.1H4.6v3.2M12%2019h7.4v3.2%22%2F%3E%3C%2Fg%3E%3C%2Fsvg%3E">
+<style>
+@@CSS@@</style>
+</head>
+<body>
+
+<header class="bar">
+  <span class="mark" aria-hidden="true">
+    <svg viewBox="0 0 24 24">
+      <rect x="7.5" y="1.8" width="9" height="5.4" rx="1.4"/>
+      <path d="M12 7.2v3.1"/>
+      <path d="M12 10.3l4 3.3-4 3.3-4-3.3z"/>
+      <path d="M12 16.9v2.1H4.6v3.2M12 19h7.4v3.2"/>
+    </svg>
+  </span>
+  <div class="brand">__HEADING__<small id="sub">__SUB__</small></div>
+  <!-- There is no Ctrl to hold down on a phone, and a color is lost on a
+       phone exactly as easily as anywhere else.  They keep out of the way
+       until there is something to step back to, which is the same manner
+       the faults, the tape and the print note keep: a control for a thing
+       that has not happened is one more thing to read and nothing else. -->
+  <button class="icon" id="undo" hidden data-w-title="undo" title="__W(undo)__"
+          aria-label="__W(undo)__">
+    <svg viewBox="0 0 20 20"><path d="M7.5 4.5 4 8l3.5 3.5"/>
+      <path d="M4 8h7.5a4 4 0 0 1 0 8H7"/></svg>
+  </button>
+  <button class="icon" id="redo" hidden data-w-title="redo" title="__W(redo)__"
+          aria-label="__W(redo)__">
+    <svg viewBox="0 0 20 20"><path d="M12.5 4.5 16 8l-3.5 3.5"/>
+      <path d="M16 8H8.5a4 4 0 0 0 0 8H13"/></svg>
+  </button>
+  <!-- Reading a chart and writing one are not the thing anybody is
+       marked on in the end: whether the program does what it was asked
+       to.  The puzzles are programs that do not. -->
+  <button class="btn" id="puzzles" aria-expanded="false"
+          data-w-title="puzzles" title="__W(puzzles)__">
+    <span data-w="puzzles">__W(puzzles)__</span>
+  </button>
+  <button class="btn primary" id="save-open" data-w="files"
+          aria-expanded="false">__W(files)__</button>
+  <button class="icon" id="settings" data-w-title="settings" title="__W(settings)__"
+          aria-label="__W(settings)__" aria-expanded="false">
+    <svg viewBox="0 0 20 20">
+      <path d="M2.6 5.5h5.2M11.8 5.5h5.6M2.6 10h9.2M15.8 10h1.6M2.6 14.5h2.8M9.4 14.5h8"/>
+      <circle cx="9.8" cy="5.5" r="1.9"/><circle cx="14" cy="10" r="1.9"/>
+      <circle cx="7.4" cy="14.5" r="1.9"/></svg>
+  </button>
+  <!-- One menu with two halves: what you take away from here, and
+       what you bring into it.  Named by the button that opens it,
+       which is the only thing in the bar that names the whole. -->
+  <div id="save-menu" class="sheet-menu" hidden role="dialog"
+       aria-labelledby="save-open">
+    <h3 id="save-title" data-w="download">__W(download)__</h3>
+    <a class="btn wide" id="svg-link" data-w="dl_svg"
+       download="__FILE__.svg" href="#">__W(dl_svg)__</a>
+    <div class="pick">
+      <label for="scale" data-w="dl_size">__W(dl_size)__</label>
+      <select class="btn" id="scale" data-w-title="png_tip" title="__W(png_tip)__">
+__OPTIONS__
+      </select>
+    </div>
+    <button class="btn wide" id="png" data-w="dl_png">__W(dl_png)__</button>
+    <p class="hint" id="note"></p>
+    <button class="btn wide" id="save-file" data-w="f_save">__W(f_save)__</button>
+    <h3 data-w="print_head">__W(print_head)__</h3>
+    <button class="btn wide" id="print-open" data-w="print_it">__W(print_it)__</button>
+    <h3 data-w="import_head">__W(import_head)__</h3>
+    <button class="btn wide" id="open-file" data-w="f_open">__W(f_open)__</button>
+    <p class="hint" id="file-note"></p>
+    <input type="file" id="file-in" hidden
+           accept=".json,.txt,.text,.md,.pseudo,.flowchart,application/json,text/plain">
+  </div>
+  <div id="settings-menu" class="sheet-menu" hidden role="dialog"
+       aria-labelledby="settings-title">
+    <h3 id="settings-title" data-w="appearance">__W(appearance)__</h3>
+    <button class="icon" id="theme" hidden aria-hidden="true" tabindex="-1">
+      <svg viewBox="0 0 20 20" id="theme-mark"></svg>
+    </button>
+    <div class="seg" id="theme-seg">
+      <button class="seg-btn" data-theme="auto" data-w="theme_auto">__W(theme_auto)__</button>
+      <button class="seg-btn" data-theme="light" data-w="theme_light">__W(theme_light)__</button>
+      <button class="seg-btn" data-theme="dark" data-w="theme_dark">__W(theme_dark)__</button>
+    </div>
+    <h3 data-w="panel_side">__W(panel_side)__</h3>
+    <div class="seg" id="side-seg">
+      <button class="seg-btn" data-side="left" data-w="side_left">__W(side_left)__</button>
+      <button class="seg-btn" data-side="right" data-w="side_right">__W(side_right)__</button>
+    </div>
+    <label class="switch wide" id="full-row">
+      <span data-w="full_screen">__W(full_screen)__</span>
+      <input type="checkbox" id="full-on">
+    </label>
+    <button class="icon" id="full" hidden aria-hidden="true" tabindex="-1">
+      <svg viewBox="0 0 20 20" id="full-mark"></svg>
+    </button>
+  </div>
+</header>
+
+<main>
+  <nav id="rail" hidden>
+    <button class="icon" id="rail-chart" data-w-title="side_chart" title="__W(side_chart)__">
+      <svg viewBox="0 0 20 20"><rect x="6" y="2.5" width="8" height="4.5" rx="1"/>
+        <path d="M10 7v3M10 10H5.5v3M10 10h4.5v3"/><rect x="2.5" y="13" width="6" height="4.5" rx="1"/>
+        <rect x="11.5" y="13" width="6" height="4.5" rx="1"/></svg>
+    </button>
+    <button class="icon" id="rail-colors" data-w-title="side_colors" title="__W(side_colors)__">
+      <svg viewBox="0 0 20 20"><circle cx="10" cy="10" r="7.5"/>
+        <path d="M10 2.5v15M2.5 10h15"/></svg>
+    </button>
+  </nav>
+
+  <aside id="panel">
+    <div class="panel-top">
+      <div class="seg" id="side-tabs">
+        <button class="seg-btn on" id="side-chart" data-w="side_chart">__W(side_chart)__</button>
+        <button class="seg-btn" id="side-colors" data-w="side_colors">__W(side_colors)__</button>
+      </div>
+      <button class="icon" id="collapse" data-w-title="hide_panel" title="__W(hide_panel)__"
+              aria-label="__W(hide_panel)__">
+        <svg viewBox="0 0 20 20"><path d="M12 4l-6 6 6 6"/></svg>
+      </button>
+    </div>
+
+    <div id="side-chart-panel">
+__SOURCE__
+    </div>
+
+    <div id="side-colors-panel" hidden>
+    <section class="card">
+      <h2 data-w="palette">__W(palette)__</h2>
+      <div class="presets" id="presets"></div>
+    </section>
+
+    <section class="card">
+      <h2 data-w="shapes">__W(shapes)__</h2>
+      <div id="kinds"></div>
+    </section>
+
+    <section class="card" id="sel-card">
+      <h2 data-w="selected">__W(selected)__</h2>
+      <div id="sel-body"><p class="none">__W(click_shape)__</p></div>
+    </section>
+
+    <section class="card">
+      <h2 data-w="rest">__W(rest)__</h2>
+      <div id="globals"></div>
+      <div class="row" style="border-top:1px solid var(--line-soft)">
+        <span class="name" data-w="show_grid">__W(show_grid)__</span>
+        <label class="switch"><input type="checkbox" id="grid-on" checked></label>
+      </div>
+    </section>
+
+      <section class="card">
+        <button class="btn" id="reset" data-w="reset"
+                style="width:100%; justify-content:center">__W(reset)__</button>
+      </section>
+    </div>
+  </aside>
+
+  <div id="stage">
+    <div class="wrap"><div class="sheet" id="sheet">
+__SVG__
+    </div></div>
+  </div>
+</main>
+
+<footer class="bar">
+  <span class="grow"></span>
+  <div class="seg" id="hold-seg">
+    <button class="seg-btn on" id="hold-lock" data-w-title="lock_tip"
+            title="__W(lock_tip)__">
+      <svg viewBox="0 0 20 20" aria-hidden="true">
+        <rect x="4.2" y="8.6" width="11.6" height="8.6" rx="2"/>
+        <path d="M6.9 8.6V6.3a3.1 3.1 0 0 1 6.2 0v2.3"/></svg>
+      <span data-w="hold_locked">__W(hold_locked)__</span>
+    </button>
+    <button class="seg-btn" id="hold-loose" data-w-title="loose_tip"
+            title="__W(loose_tip)__">
+      <svg viewBox="0 0 20 20" aria-hidden="true">
+        <rect x="4.2" y="8.6" width="11.6" height="8.6" rx="2"/>
+        <path d="M6.9 8.6V6.3a3.1 3.1 0 0 1 6.1-.7"/></svg>
+      <span data-w="hold_loose">__W(hold_loose)__</span>
+    </button>
+  </div>
+  <button class="btn small" id="out" data-w-title="zoom_out" title="__W(zoom_out)__">&minus;</button>
+  <span class="zoom" id="pct">100%</span>
+  <button class="btn small" id="in" data-w-title="zoom_in" title="__W(zoom_in)__">+</button>
+  <button class="btn small" id="fit" data-w="fit">__W(fit)__</button>
+  <button class="btn small" id="actual">__W(actual)__</button>
+</footer>
+
+<div id="code-over" hidden>
+  <div class="code-sheet">
+    <div class="code-bar">
+      <span class="mark small" aria-hidden="true">
+        <svg viewBox="0 0 24 24">
+          <rect x="7.5" y="1.8" width="9" height="5.4" rx="1.4"/>
+          <path d="M12 7.2v3.1"/>
+          <path d="M12 10.3l4 3.3-4 3.3-4-3.3z"/>
+          <path d="M12 16.9v2.1H4.6v3.2M12 19h7.4v3.2"/>
+        </svg>
+      </span>
+      <strong data-w="pseudocode">__W(pseudocode)__</strong>
+      <span class="code-count" id="code-count"></span>
+      <span class="code-esc" data-w="code_esc">__W(code_esc)__</span>
+      <button class="btn small primary" id="code-done" data-w="done">__W(done)__</button>
+    </div>
+    <div id="code-slot"><pre class="code-rule" id="code-rule" aria-hidden="true"></pre></div>
+  </div>
+</div>
+
+<div id="pz-over" hidden>
+  <div class="code-sheet more-sheet" role="dialog" aria-labelledby="pz-head">
+    <div class="code-bar">
+      <span class="mark small" aria-hidden="true">
+        <svg viewBox="0 0 24 24">
+          <rect x="7.5" y="1.8" width="9" height="5.4" rx="1.4"/>
+          <path d="M12 7.2v3.1"/>
+          <path d="M12 10.3l4 3.3-4 3.3-4-3.3z"/>
+          <path d="M12 16.9v2.1H4.6v3.2M12 19h7.4v3.2"/>
+        </svg>
+      </span>
+      <strong id="pz-head" data-w="pz_head">__W(pz_head)__</strong>
+      <span class="code-count" id="pz-count"></span>
+      <span class="code-esc" data-w="code_esc">__W(code_esc)__</span>
+      <button class="btn small primary" id="pz-done" data-w="done">__W(done)__</button>
+    </div>
+    <div class="more-body" id="pz-body"></div>
+  </div>
+</div>
+
+<!-- Fifteen short programs, in three levels, for anybody who has never
+     seen this pseudocode before.  Three of them sit under the box for the
+     first minute; this is where the rest of them are. -->
+<div id="eg-over" hidden>
+  <div class="code-sheet more-sheet" role="dialog" aria-labelledby="eg-head">
+    <div class="code-bar">
+      <span class="mark small" aria-hidden="true">
+        <svg viewBox="0 0 24 24">
+          <rect x="7.5" y="1.8" width="9" height="5.4" rx="1.4"/>
+          <path d="M12 7.2v3.1"/>
+          <path d="M12 10.3l4 3.3-4 3.3-4-3.3z"/>
+          <path d="M12 16.9v2.1H4.6v3.2M12 19h7.4v3.2"/>
+        </svg>
+      </span>
+      <strong id="eg-head" data-w="eg_head">__W(eg_head)__</strong>
+      <span class="code-esc" data-w="code_esc">__W(code_esc)__</span>
+      <button class="btn small primary" id="eg-done" data-w="done">__W(done)__</button>
+    </div>
+    <div class="more-body" id="eg-body"></div>
+  </div>
+</div>
+
+<!-- Everything about how the chart is drawn that is not worth a box of
+     its own in the panel.  It comes up over the page the way the
+     pseudocode does, because there are enough of them now that a popup
+     would be a list you scroll; it is a good deal shorter than that one,
+     because these are switches rather than something you write in.
+
+     Every one of them is a thing the command line could always ask for
+     and the studio could not -- the tints, how a For loop is drawn,
+     whether a run of Displays shares one symbol, the airier spacing, the
+     wrapping, the shaking.  They were all there in the drawing code the
+     whole time with no way to reach them from here. -->
+<div id="more-over" hidden>
+  <div class="code-sheet more-sheet" role="dialog" aria-labelledby="more-head">
+    <div class="code-bar">
+      <span class="mark small" aria-hidden="true">
+        <svg viewBox="0 0 24 24">
+          <rect x="7.5" y="1.8" width="9" height="5.4" rx="1.4"/>
+          <path d="M12 7.2v3.1"/>
+          <path d="M12 10.3l4 3.3-4 3.3-4-3.3z"/>
+          <path d="M12 16.9v2.1H4.6v3.2M12 19h7.4v3.2"/>
+        </svg>
+      </span>
+      <strong id="more-head" data-w="more_head">__W(more_head)__</strong>
+      <span class="code-esc" data-w="code_esc">__W(code_esc)__</span>
+      <button class="btn small primary" id="more-done" data-w="done">__W(done)__</button>
+    </div>
+    <div class="more-body">
+      <section class="more-part">
+        <h3 data-w="o_words">__W(o_words)__</h3>
+        <div class="more-pick">
+          <label for="f-lang" data-w="language">__W(language)__</label>
+          <select class="field" id="f-lang">__LANGS__</select>
+        </div>
+        <div class="more-pick">
+          <label data-w="decide">__W(decide)__</label>
+          <div class="seg" id="decide-seg">
+            <button class="seg-btn on" id="decide-tf" data-decide="tf"></button>
+            <button class="seg-btn" id="decide-yn" data-decide="yn"></button>
+          </div>
+        </div>
+      </section>
+
+      <section class="more-part">
+        <h3 data-w="o_shapes">__W(o_shapes)__</h3>
+        <label class="switch wide">
+          <span data-w="tint_switch">__W(tint_switch)__</span>
+          <input type="checkbox" id="o-tint"></label>
+        <label class="switch wide">
+          <span data-w="o_everyout">__W(o_everyout)__</span>
+          <input type="checkbox" id="o-everyout"></label>
+        <h3 data-w="o_for">__W(o_for)__</h3>
+        <div class="seg" id="for-seg">
+          <button class="seg-btn on" data-for="wide" data-w="o_for_wide">__W(o_for_wide)__</button>
+          <button class="seg-btn" data-for="hex" data-w="o_for_hex">__W(o_for_hex)__</button>
+        </div>
+      </section>
+
+      <section class="more-part">
+        <h3 data-w="o_paper">__W(o_paper)__</h3>
+        <div class="more-pick">
+          <label for="f-shape" data-w="shape">__W(shape)__</label>
+          <select class="field" id="f-shape">__SHAPES__</select>
+        </div>
+        <label class="switch wide">
+          <span data-w="o_roomy">__W(o_roomy)__</span>
+          <input type="checkbox" id="o-roomy"></label>
+        <label class="switch wide">
+          <span data-w="o_chains">__W(o_chains)__</span>
+          <input type="checkbox" id="o-chains"></label>
+        <label class="switch wide">
+          <span data-w="o_columns">__W(o_columns)__</span>
+          <input type="checkbox" id="o-columns"></label>
+        <label class="switch wide">
+          <span data-w="o_steady">__W(o_steady)__</span>
+          <input type="checkbox" id="o-steady"></label>
+      </section>
+    </div>
+  </div>
+</div>
+
+<!-- Printing, with a panel of our own in front of it.  The sheet on
+     the right is what will come out; the switches on the left say how it
+     sits on it.  It is always plain -- see .no-ink in the stylesheet. -->
+<div id="print-over" hidden>
+  <div class="code-sheet">
+    <div class="code-bar">
+      <span class="mark small" aria-hidden="true">
+        <svg viewBox="0 0 24 24">
+          <rect x="7.5" y="1.8" width="9" height="5.4" rx="1.4"/>
+          <path d="M12 7.2v3.1"/>
+          <path d="M12 10.3l4 3.3-4 3.3-4-3.3z"/>
+          <path d="M12 16.9v2.1H4.6v3.2M12 19h7.4v3.2"/>
+        </svg>
+      </span>
+      <strong data-w="print_head">__W(print_head)__</strong>
+      <span class="code-count"></span>
+      <button class="btn small primary" id="print-now" data-w="print_go">__W(print_go)__</button>
+      <span class="code-esc" data-w="code_esc">__W(code_esc)__</span>
+      <button class="btn small" id="print-done" data-w="done">__W(done)__</button>
+    </div>
+    <div id="print-body">
+      <div class="print-side">
+        <label for="print-paper" data-w="print_paper">__W(print_paper)__</label>
+        <select class="field" id="print-paper">
+          <option value="a4">A4</option>
+          <option value="letter">Letter</option>
+          <option value="legal">Legal</option>
+        </select>
+        <label class="switch"><input type="checkbox" id="print-wide">
+          <span data-w="print_wide">__W(print_wide)__</span></label>
+        <label class="switch"><input type="checkbox" id="print-fit" checked>
+          <span data-w="print_fit">__W(print_fit)__</span></label>
+        <label class="switch"><input type="checkbox" id="print-grid">
+          <span data-w="grid">__W(grid)__</span></label>
+        <p class="hint" data-w="print_note">__W(print_note)__</p>
+      </div>
+      <div id="print-paper-area"><div id="print-page" class="no-ink"></div></div>
+    </div>
+  </div>
+</div>
+<style id="print-size">@page { size: a4 portrait; margin: 12mm; }</style>
+
+<div id="tape-over" hidden>
+  <div class="code-sheet">
+    <div class="code-bar">
+      <span class="mark small" aria-hidden="true">
+        <svg viewBox="0 0 24 24">
+          <rect x="7.5" y="1.8" width="9" height="5.4" rx="1.4"/>
+          <path d="M12 7.2v3.1"/>
+          <path d="M12 10.3l4 3.3-4 3.3-4-3.3z"/>
+          <path d="M12 16.9v2.1H4.6v3.2M12 19h7.4v3.2"/>
+        </svg>
+      </span>
+      <strong id="tape-title" data-w="r_head">__W(r_head)__</strong>
+      <button class="btn small back" id="tape-back" hidden><span class="full" data-w="r_back">__W(r_back)__</span><span class="short" data-w="back">__W(back)__</span></button>
+      <span class="code-count" id="tape-count"></span>
+      <button class="btn small primary" id="tape-run" data-w="r_run">__W(r_run)__</button>
+      <button class="btn small" id="tape-code" data-w="r_code">__W(r_code)__</button>
+      <span class="code-esc" data-w="code_esc">__W(code_esc)__</span>
+      <button class="btn small" id="tape-done" data-w="done">__W(done)__</button>
+    </div>
+    <div id="tape-slot"></div>
+    <div id="code-out" hidden></div>
+  </div>
+</div>
+
+<script>
+@@JS@@</script>
+</body>
+</html>
