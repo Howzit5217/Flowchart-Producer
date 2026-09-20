@@ -259,6 +259,10 @@
     display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 12px;
   }
   .pair-wide .btn { justify-content: center; }
+  /* One button across the card, under the row of dropdowns that says how
+     it will go.  The same room above it as a pair would have taken, so
+     Run sits where the eye already expects the card's button to be. */
+  .go-wide { margin-top: 12px; }
   .switches .field { width: 100%; }
   /* Two switches in the cell one would take, for a pair where the
      second only means anything while the first is on. */

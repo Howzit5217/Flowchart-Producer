@@ -207,7 +207,6 @@ FR = {
     "pz_wrong": "Pas encore. Avec {give} il a dit {said}.",
     "pz_next": "Énigme suivante", "pz_next_level": "Niveau suivant",
     "pz_job": "Ce qu’il doit faire", "pz_now": "Ce qu’il fait",
-    "pz_reset": "Recommencer",
     "pz_broke": "Il s’est arrêté avant la fin. On lui a donné {give}.",
     "pz_none": "Il n’y a encore rien à vérifier.",
     "pz_locked": "Résous-en {n} de plus pour ouvrir ceux-ci",

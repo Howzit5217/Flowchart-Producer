@@ -544,7 +544,7 @@
   // The picker is the table above, so a language added there turns up in it
   // without anybody having to remember the list in the HTML as well.
   function listLanguages() {
-    var pick = el("#r-lang");
+    var pick = el("#see-code");
     if (pick) {
       Object.keys(LANGS).forEach(function (code) {
         for (var i = 0; i < pick.options.length; i++) {
@@ -568,7 +568,6 @@
         bar.appendChild(one);
       });
       bar.onchange = function () {
-        if (el("#r-lang")) { el("#r-lang").value = bar.value; }
         showCode(bar.value);
       };
     }
@@ -583,26 +582,30 @@
   // this, the only way to see the code was to change what the runner was set
   // to first, which is a strange thing to have to do when all you wanted was
   // the code.  Now the button always gives you it and asks if it needs to.
-  function askWhichCode(where) {
+  // The way in from the run, where there is no dropdown to pick from --
+  // it shows whatever As code is set to, and the picker in the bar over
+  // the code is there to change it without coming back out.
+  function askWhichCode() {
     if (!AST || !(AST.main || []).length) {
       tapeShow("run");                   // it is said in the tape, so show it
       talkOnce(TXT.r_nothing, "bad");
       return;
     }
-    var lang = el("#r-lang") ? el("#r-lang").value : "pseudo";
-    if (lang !== "pseudo") { showCode(lang); return; }
-    // The button is a switch for its own list: pressed while the list is up
-    // it puts it away again, rather than shutting it and opening an
-    // identical one in the same place -- which looks like nothing happened.
-    if (el(".menu:not(.out)")) { closeMenu(); return; }
-    var box = (where || el("#see-code")).getBoundingClientRect();
-    openMenu(box.left, box.bottom + 6, Object.keys(LANGS).map(function (code) {
-      return { name: LANGS[code].name, go: function () { showCode(code); } };
-    }));
+    showCode(nowLang());
+  }
+
+  // Which language the code is being written out in: what the bar over
+  // the code says if it is up, what As code was last set to otherwise,
+  // and failing both the first one the table offers.
+  function nowLang() {
+    var bar = el("#tape-lang"), pick = el("#see-code");
+    if (bar && !bar.hidden && bar.value) { return bar.value; }
+    if (pick && pick.value) { return pick.value; }
+    return Object.keys(LANGS)[0];
   }
 
   function showCode(want) {
-    var lang = want || (el("#r-lang") ? el("#r-lang").value : "pseudo");
+    var lang = want || nowLang();
     if (!AST || !(AST.main || []).length) {
       tapeShow("run");
       talkOnce(TXT.r_nothing, "bad");

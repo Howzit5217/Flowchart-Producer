@@ -207,7 +207,6 @@ ES = {
     "pz_wrong": "Todavía no. Con {give} dijo {said}.",
     "pz_next": "Siguiente reto", "pz_next_level": "Siguiente nivel",
     "pz_job": "Lo que debe hacer", "pz_now": "Lo que hace ahora",
-    "pz_reset": "Empezar de nuevo",
     "pz_broke": "Se paró antes de terminar. Le dieron {give}.",
     "pz_none": "Aún no hay nada que comprobar.",
     "pz_locked": "Resuelve {n} más para abrir estos",

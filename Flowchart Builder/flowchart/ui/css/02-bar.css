@@ -54,4 +54,7 @@
   /* a button that is a dropdown: the same box, with the words starting
      where a button's words start and the arrow given its own room */
   select.btn { display: inline-block; padding: 7px 32px 7px 12px; }
+  /* and the small one, keeping the small button's height while leaving
+     the arrow the room it needs */
+  select.btn.small { padding: 4px 28px 4px 9px; }
 

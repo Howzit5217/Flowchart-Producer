@@ -184,9 +184,16 @@
 
   if (el("#run")) {
     el("#run").onclick = runIt;
-    el("#see-code").onclick = function (ev) {
-      ev.stopPropagation();              // or the same click shuts the menu
-      askWhichCode(el("#see-code"));
+  }
+  // As code is a dropdown now rather than a button with a list of its own,
+  // so picking a language out of it is the asking.  It goes back to saying
+  // As code afterwards: left sitting on Python, choosing Python again
+  // would be choosing nothing, and the code would not come back up.
+  if (el("#see-code")) {
+    el("#see-code").onchange = function () {
+      var want = el("#see-code").value;
+      el("#see-code").value = "";
+      if (want) { showCode(want); }
     };
   }
   if (el("#save-file")) {

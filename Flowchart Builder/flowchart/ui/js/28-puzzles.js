@@ -258,8 +258,7 @@
   // and cannot get it back by typing, and there is a particular sting in
   // losing a fix you had nearly got to a reload or a closed tab.  So these
   // are kept -- one draft per puzzle, under its own key, put back when you
-  // open that puzzle again -- and Start again is there for when the thing
-  // in the box has stopped being worth keeping.
+  // open that puzzle again.
   var work = {};
 
   function keepWork() {
@@ -576,17 +575,6 @@
     };
   }
   if (el("#code")) { el("#code").addEventListener("input", noteWork); }
-  if (el("#pz-reset")) {
-    el("#pz-reset").onclick = function () {
-      if (!onPuzzle || !el("#code")) { return; }
-      delete work[onPuzzle.key];
-      keepWork();
-      el("#code").value = onPuzzle.start;
-      showStarts();
-      el("#build").click();
-      dressPuzzle();
-    };
-  }
   if (el("#pz-shut")) { el("#pz-shut").onclick = shutPuzzle; }
   window.addEventListener("keydown", function (ev) {
     if (ev.key === "Escape" && el("#pz-over") && !el("#pz-over").hidden) {

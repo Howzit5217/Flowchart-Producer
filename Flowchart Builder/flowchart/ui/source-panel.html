@@ -89,10 +89,6 @@
         <p class="hint" id="pz-mark"></p>
         <button class="btn primary wide" id="pz-next"
                 data-w="pz_next" hidden>__W(pz_next)__</button>
-        <!-- What is in the box is kept between visits, so there has to be a
-             way back to what arrived in it. -->
-        <button class="btn small wide" id="pz-reset"
-                data-w="pz_reset">__W(pz_reset)__</button>
       </div>
       <div class="go build-row">
         <button class="btn primary wide" id="build" data-w="build">__W(build)__</button>
@@ -110,11 +106,20 @@
         </button>
       </h2>
       <div class="switches">
-        <!-- Pseudocode is the one that is not a language; the rest are
-             filled in from the table in 18-code.js, so that adding a
-             language there adds it here too. -->
-        <select class="field" id="r-lang">
-          <option value="pseudo">__W(r_pseudo)__</option>
+        <!-- Seeing the code used to take two controls between them: a
+             language box whose first option was Pseudocode, which is not
+             a language and could only ever answer "pick a real one", and
+             an As code button that opened a list of its own -- a popup
+             drawn like nothing else on the page, sitting under a row of
+             proper dropdowns.  Running never read the language box at
+             all; a run runs the pseudocode.  So the two are one control,
+             and it is a dropdown like the ones beside it: pick a language
+             and the code is what you get.  The list is filled in from the
+             table in 18-code.js, so adding a language there adds it here
+             too. -->
+        <select class="field" id="see-code" data-w-title="r_lang_pick"
+                title="__W(r_lang_pick)__" aria-label="__W(r_lang_pick)__">
+          <option value="" data-w="r_code">__W(r_code)__</option>
         </select>
         <!-- How fast it goes is one choice with three values, not a
              switch: straight through, a step every quarter second, or a
@@ -130,9 +135,12 @@
           <option value="press" data-w="r_by_step">__W(r_by_step)__</option>
         </select>
       </div>
-      <div class="pair-wide">
-        <button class="btn primary" id="run" data-w="r_run">__W(r_run)__</button>
-        <button class="btn" id="see-code" data-w="r_code">__W(r_code)__</button>
+      <!-- One thing to press, the width of the panel, under the two
+           dropdowns that say how it will go.  It matches Build the chart
+           above it, which is the same kind of thing: the button the whole
+           card is for. -->
+      <div class="go-wide">
+        <button class="btn primary wide" id="run" data-w="r_run">__W(r_run)__</button>
       </div>
       <!-- Only while it is standing there waiting to be asked for the next
            one.  It unfolds rather than appears, and breathes while it waits,

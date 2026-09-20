@@ -206,7 +206,6 @@ DE = {
     "pz_wrong": "Noch nicht. Bei {give} kam {said}.",
     "pz_next": "Nächstes Rätsel", "pz_next_level": "Nächste Stufe",
     "pz_job": "Was es tun soll", "pz_now": "Was es jetzt tut",
-    "pz_reset": "Neu beginnen",
     "pz_broke": "Es brach vorher ab. Es bekam {give}.",
     "pz_none": "Es gibt noch nichts zu prüfen.",
     "pz_locked": "Löse noch {n}, um diese zu öffnen",

@@ -206,7 +206,6 @@ EN = {
     "pz_wrong": "Not there yet. Given {give} it said {said}.",
     "pz_next": "Next puzzle", "pz_next_level": "Next level",
     "pz_job": "What it must do", "pz_now": "What it does now",
-    "pz_reset": "Start again",
     "pz_broke": "It stopped before it finished. It was given {give}.",
     "pz_none": "There is nothing to check yet.",
     "pz_locked": "Solve {n} more to open these",
