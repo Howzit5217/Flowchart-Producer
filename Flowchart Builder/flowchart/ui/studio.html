@@ -402,6 +402,15 @@ __SVG__
       <span class="code-count" id="tape-count"></span>
       <button class="btn small primary" id="tape-run" data-w="r_run">__W(r_run)__</button>
       <button class="btn small" id="tape-code" data-w="r_code">__W(r_code)__</button>
+      <!-- Standing in for it while the code is what is on screen.  As code
+           is the way in from the run; pressed while you are already
+           looking at the code it had nowhere to take you, so it is put
+           away there and this is put in its place: the same list the way
+           in offers, to change what the code is written in without going
+           back out and in again. -->
+      <select class="field small" id="tape-lang" data-w-title="r_lang_pick"
+              title="__W(r_lang_pick)__" aria-label="__W(r_lang_pick)__"
+              hidden></select>
       <span class="code-esc" data-w="code_esc">__W(code_esc)__</span>
       <button class="btn small" id="tape-done" data-w="done">__W(done)__</button>
     </div>

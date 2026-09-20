@@ -68,6 +68,12 @@
     slot.hidden = code;
     out.hidden = !code;
     if (back) { back.hidden = !code; }
+    // As code is how you get here from the run, and once here it has
+    // nowhere left to go: it sat in the bar over the code it had already
+    // shown you, doing nothing when pressed.  So it stands down here and
+    // the language picker takes its place.
+    if (el("#tape-code")) { el("#tape-code").hidden = code; }
+    if (el("#tape-lang")) { el("#tape-lang").hidden = !code; }
   }
 
   // A newly built chart is a new program: neither what the last one printed

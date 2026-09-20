@@ -545,16 +545,33 @@
   // without anybody having to remember the list in the HTML as well.
   function listLanguages() {
     var pick = el("#r-lang");
-    if (!pick) { return; }
-    Object.keys(LANGS).forEach(function (code) {
-      for (var i = 0; i < pick.options.length; i++) {
-        if (pick.options[i].value === code) { return; }
-      }
-      var one = document.createElement("option");
-      one.value = code;
-      one.textContent = LANGS[code].name;
-      pick.appendChild(one);
-    });
+    if (pick) {
+      Object.keys(LANGS).forEach(function (code) {
+        for (var i = 0; i < pick.options.length; i++) {
+          if (pick.options[i].value === code) { return; }
+        }
+        var one = document.createElement("option");
+        one.value = code;
+        one.textContent = LANGS[code].name;
+        pick.appendChild(one);
+      });
+    }
+    // The one in the bar over the code.  Pseudocode is not among them:
+    // it is the thing the code was written out of, and picking it there
+    // would be asking to leave rather than to change languages.
+    var bar = el("#tape-lang");
+    if (bar && !bar.options.length) {
+      Object.keys(LANGS).forEach(function (code) {
+        var one = document.createElement("option");
+        one.value = code;
+        one.textContent = LANGS[code].name;
+        bar.appendChild(one);
+      });
+      bar.onchange = function () {
+        if (el("#r-lang")) { el("#r-lang").value = bar.value; }
+        showCode(bar.value);
+      };
+    }
   }
   listLanguages();
 
@@ -606,6 +623,9 @@
     var text = made.text;
     // Into its own box, not over the top of the run.  The tape keeps what
     // the program did; this is only what it says.
+    // The picker in the bar says what is under it, however the code was
+    // asked for -- from the run, from the panel, or by changing it here.
+    if (el("#tape-lang")) { el("#tape-lang").value = lang; }
     var out = el("#code-out");
     out.innerHTML = "";
     // Numbered down the side and ruled under each line, the way the

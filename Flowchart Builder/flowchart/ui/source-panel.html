@@ -71,7 +71,17 @@
             <svg viewBox="0 0 20 20"><path d="M5 5l10 10M15 5L5 15"/></svg>
           </button>
         </div>
+        <!-- A brief in two halves, each said under its own heading.  It
+             was one paragraph doing both jobs at once -- what the program
+             is for and what it is doing instead, run together in a
+             sentence or two -- and reading it you could not tell which
+             half you were in.  What it must do is the question; what it
+             does now is the symptom.  They are different things and they
+             are asked separately. -->
+        <h4 class="pz-head" id="pz-job-head" data-w="pz_job">__W(pz_job)__</h4>
         <p id="pz-said"></p>
+        <h4 class="pz-head" id="pz-now-head" data-w="pz_now">__W(pz_now)__</h4>
+        <p id="pz-now"></p>
         <!-- No Check button of its own.  Run is the button, and while a
              puzzle is open it says Check: the way to find out whether you
              have fixed it is to run it, which is the way to find out
@@ -79,6 +89,10 @@
         <p class="hint" id="pz-mark"></p>
         <button class="btn primary wide" id="pz-next"
                 data-w="pz_next" hidden>__W(pz_next)__</button>
+        <!-- What is in the box is kept between visits, so there has to be a
+             way back to what arrived in it. -->
+        <button class="btn small wide" id="pz-reset"
+                data-w="pz_reset">__W(pz_reset)__</button>
       </div>
       <div class="go build-row">
         <button class="btn primary wide" id="build" data-w="build">__W(build)__</button>

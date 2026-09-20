@@ -238,11 +238,43 @@
   function recallSolved() {
     try { solved = JSON.parse(localStorage.getItem("flowchart-solved")) || {}; }
     catch (e) { solved = {}; }
+    try { work = JSON.parse(localStorage.getItem("flowchart-puzzle-work")) || {}; }
+    catch (e) { work = {}; }
   }
 
   function keepSolved() {
     try { localStorage.setItem("flowchart-solved", JSON.stringify(solved)); }
     catch (e) { /* storage turned off: it just will not be there next time */ }
+  }
+
+  // ---- what has been typed at each one ----------------------------------
+  // The studio does not keep your pseudocode between visits, and says why:
+  // it opens on an empty page because opening it is nearly always the
+  // start of something, and clearing last fortnight's work before you can
+  // begin is a worse first minute than a blank box.
+  //
+  // None of that is true of a puzzle.  A puzzle you are halfway through is
+  // exactly what you were doing, you did not choose the program in the box
+  // and cannot get it back by typing, and there is a particular sting in
+  // losing a fix you had nearly got to a reload or a closed tab.  So these
+  // are kept -- one draft per puzzle, under its own key, put back when you
+  // open that puzzle again -- and Start again is there for when the thing
+  // in the box has stopped being worth keeping.
+  var work = {};
+
+  function keepWork() {
+    try { localStorage.setItem("flowchart-puzzle-work", JSON.stringify(work)); }
+    catch (e) { /* storage turned off: it lasts as long as the tab does */ }
+  }
+
+  function noteWork() {
+    if (!onPuzzle || !el("#code")) { return; }
+    var said = el("#code").value;
+    // Back to how it arrived is nothing to keep: it is what opening the
+    // puzzle puts there anyway.
+    if (said === onPuzzle.start) { delete work[onPuzzle.key]; }
+    else { work[onPuzzle.key] = said; }
+    keepWork();
   }
 
   function solvedIn(level) {
@@ -326,7 +358,8 @@
     showPuzzles(false);
     if (el("#code")) {
       setMode(false);
-      el("#code").value = one.start;
+      // Where you left it, if you left it anywhere.
+      el("#code").value = work[one.key] || one.start;
       showStarts();
       el("#build").click();
     }
@@ -387,8 +420,21 @@
     if (!card) { return; }
     if (!onPuzzle) { card.hidden = true; return; }
     card.hidden = false;
-    el("#pz-name").textContent = say("pz_one", { n: onPuzzle.no });
-    el("#pz-said").textContent = TXT[onPuzzle.key + "_b"] || "";
+    // Numbered, and named after the thing it is about -- a car park sign,
+    // a library fine.  Naming it after the fault would be handing over the
+    // answer in the title, which is why these are named after the job.
+    var named = TXT[onPuzzle.key + "_t"] || "";
+    el("#pz-name").textContent = say("pz_one", { n: onPuzzle.no }) +
+                                 (named ? " · " + named : "");
+    var job = TXT[onPuzzle.key + "_b"] || "";
+    var now = TXT[onPuzzle.key + "_s"] || "";
+    el("#pz-said").textContent = job;
+    el("#pz-now").textContent = now;
+    // Either half stands down if it has nothing to say, heading and all,
+    // rather than leaving a heading over a blank.
+    if (el("#pz-job-head")) { el("#pz-job-head").hidden = !job; }
+    if (el("#pz-now-head")) { el("#pz-now-head").hidden = !now; }
+    if (el("#pz-now")) { el("#pz-now").hidden = !now; }
     var mark = el("#pz-mark");
     mark.className = "hint";
     mark.textContent = "";
@@ -527,6 +573,18 @@
     el("#pz-next").onclick = function () {
       var after = onPuzzle && nextAfter(onPuzzle);
       if (after) { openPuzzle(after); }
+    };
+  }
+  if (el("#code")) { el("#code").addEventListener("input", noteWork); }
+  if (el("#pz-reset")) {
+    el("#pz-reset").onclick = function () {
+      if (!onPuzzle || !el("#code")) { return; }
+      delete work[onPuzzle.key];
+      keepWork();
+      el("#code").value = onPuzzle.start;
+      showStarts();
+      el("#build").click();
+      dressPuzzle();
     };
   }
   if (el("#pz-shut")) { el("#pz-shut").onclick = shutPuzzle; }
