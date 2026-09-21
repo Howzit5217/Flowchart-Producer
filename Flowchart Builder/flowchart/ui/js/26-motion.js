@@ -79,17 +79,27 @@
     return seg.className + "|" + tool;
   }
 
+  // It has to be put down before it is allowed to slide at all.  A switch
+  // made again under a press is laid out by the browser the moment it goes
+  // in -- the button that was pressed is handed the keyboard back straight
+  // away, and that means working out where everything is -- which is
+  // before this has had a chance to say anything.  Laid out then, its
+  // block was at the first button, since nobody had said otherwise, and
+  // it slid from the far left every time, whichever button it had been
+  // on.  So the stylesheet holds the block still until this has put it
+  // where it starts from, and only then lets it go.
   function tendSeg(seg) {
     if (seg.segTended) { return; }
     seg.segTended = true;
     var key = segKey(seg), was = segAt[key];
+    segSlide(seg);
     if (!STILL && was !== undefined && segPressed && segPressed.key === key &&
         Date.now() - segPressed.at < 1500) {
-      seg.style.setProperty("--seg-n", all(".seg-btn", seg).length || 1);
       seg.style.setProperty("--seg-i", was);
-      void seg.offsetWidth;              // standing where the old one was
     }
-    segSlide(seg);
+    void seg.offsetWidth;                // standing where it starts from
+    seg.setAttribute("data-seg-set", "");
+    segSlide(seg);                       // and on from there to where it is
     if (!window.MutationObserver) { return; }
     new MutationObserver(function () { segSlide(seg); })
       .observe(seg, { subtree: true, attributes: true,

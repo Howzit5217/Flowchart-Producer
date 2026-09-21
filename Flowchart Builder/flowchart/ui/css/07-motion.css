@@ -183,6 +183,9 @@
                 opacity var(--quick) var(--ease-soft);
   }
   .seg[data-seg-off]::before { opacity: 0; }
+  /* Held still until the script has put it where it starts from -- see
+     tendSeg -- or a switch built afresh slides in from the far left. */
+  .seg:not([data-seg-set])::before { transition: none; }
   .seg-btn { position: relative; z-index: 1;
              transition: color var(--quick) var(--ease-soft); }
   .seg-btn.on { background: none; box-shadow: none; }

@@ -26,6 +26,12 @@
       "port": 8783
     },
     {
+      "name": "motion-site",
+      "runtimeExecutable": "python",
+      "runtimeArgs": ["-m", "http.server", "8791", "--directory", "C:/Users/origa/Downloads/GitHub/Flowchart-Producer/Flowchart Builder"],
+      "port": 8791
+    },
+    {
       "name": "style-viewer",
       "runtimeExecutable": "python",
       "runtimeArgs": ["-m", "http.server", "8781", "--directory", "C:/Users/origa/AppData/Local/Temp/claude/C--Users-origa-Downloads-GitHub-Flowchart-Producer/1c32099b-35f0-40ba-9900-7457d97b9b16/scratchpad/viewer"],
