@@ -84,9 +84,21 @@
     var ink = (style.nodes["h" + node.id] || {}).text ||
               (style.kinds[node.kind] || {}).text || style.words || style.ink || "#000000";
     space.style.color = ink;
+    // Typed in the words it will be drawn in, so that what is typed is the
+    // size and the shape it will be when the box is let go of -- not the
+    // plain words, turning bold or twice the size the moment it is done.
+    var type = handType(node);
+    space.style.fontFamily = type.face;
+    space.style.fontSize = type.size + "px";
+    space.style.fontWeight = type.bold ? "bold" : "";
+    space.style.fontStyle = type.italic ? "italic" : "";
+    space.style.textDecoration = [type.under ? "underline" : "",
+                                  type.strike ? "line-through" : ""].join(" ").trim();
     slot.appendChild(space);
 
-    all("text", g).forEach(function (t) { t.style.display = "none"; });
+    // The words step aside for the box, and so does a highlighter across
+    // them, which would otherwise be left marking words that are not there.
+    all("text, .highlights", g).forEach(function (t) { t.style.display = "none"; });
     g.appendChild(slot);
 
     // put the cursor at the end of what is there

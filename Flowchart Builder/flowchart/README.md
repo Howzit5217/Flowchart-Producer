@@ -84,9 +84,9 @@ the `@@CSS@@` and `@@JS@@` marks in `studio.html` and hands back the page.
 | `ui/css/06-screens.css` | Fitting the screen it is on, whatever size that is |
 | `ui/css/07-motion.css` | How it moves, and how it does not |
 | `ui/js/01-start.js` | The bits everything else uses |
-| `ui/js/02-paint.js` | Painting the colors on |
+| `ui/js/02-paint.js` | Painting the colors on, and how the words and borders look |
 | `ui/js/03-shapes.js` | The shape catalog, in the browser |
-| `ui/js/04-panel.js` | The colors panel |
+| `ui/js/04-panel.js` | The Style side: palette, words, shapes, the picked shape |
 | `ui/js/05-keep.js` | Remembering what you chose |
 | `ui/js/06-chart.js` | Showing a chart, and moving about it |
 | `ui/js/07-sides.js` | The rail, the panel, collapsing it |

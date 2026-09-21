@@ -31,6 +31,98 @@
   .swatch::-moz-color-swatch { border: none; border-radius: 5px; }
   .legendkey { width: 22px; height: 16px; flex: none; }
 
+  /* ------------------------------------------------------------ the words -- */
+  /* The typeface, each button written in the face it picks: the names are
+     the same four whatever they say, so they share the width evenly and a
+     long one is allowed to be squeezed rather than to push the rest out. */
+  .face-seg { margin-bottom: 8px; }
+  .face-seg .seg-btn {
+    min-width: 0; padding: 6px 2px; font-size: 13.5px; font-weight: 400;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .type-row {
+    display: flex; align-items: center; gap: 5px; flex-wrap: wrap;
+    padding: 4px 0 6px;
+  }
+  /* B, I, U and S: small square keys drawn the way every word processor
+     draws them, lit while they are on. */
+  .tog {
+    flex: none; width: 30px; height: 28px; padding: 0; cursor: pointer;
+    display: inline-flex; align-items: center; justify-content: center;
+    border: 1px solid var(--line); border-radius: 7px;
+    background: var(--panel); color: var(--ink);
+    font: 600 14px/1 Georgia, "Times New Roman", serif;
+  }
+  .tog:not(.on):hover { background: var(--accent-soft); border-color: var(--accent); }
+  .tog.on { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .tog-italic { font-style: italic; }
+  .tog-under { text-decoration: underline; text-underline-offset: 2px; }
+  .tog-strike { text-decoration: line-through; }
+  .tog svg {
+    width: 18px; height: 18px; fill: none; stroke: currentColor;
+    stroke-width: 2; stroke-linecap: round;
+  }
+  /* Smaller, how big, bigger -- one control, pushed to the end of its row. */
+  .step {
+    flex: none; margin-left: auto; display: inline-flex; align-items: center;
+    border: 1px solid var(--line); border-radius: 7px; overflow: hidden;
+    background: var(--panel);
+  }
+  .step button {
+    width: 28px; height: 26px; border: 0; padding: 0; background: none;
+    color: var(--ink); cursor: pointer; font-size: 16px; line-height: 1;
+  }
+  .step button:not([disabled]):hover { background: var(--accent-soft); }
+  .step button[disabled] { opacity: .35; cursor: default; }
+  .step output {
+    min-width: 46px; text-align: center; font-size: 12.5px; line-height: 26px;
+    font-variant-numeric: tabular-nums; color: var(--ink);
+    border-left: 1px solid var(--line-soft); border-right: 1px solid var(--line-soft);
+  }
+  /* The highlighter pens, a way to take one off, and any other color. */
+  .pens {
+    display: flex; gap: 5px; align-items: center; flex-wrap: wrap;
+    justify-content: flex-end;
+  }
+  .pen {
+    flex: none; width: 22px; height: 22px; padding: 0; cursor: pointer;
+    border: 1px solid rgba(0, 0, 0, .18); border-radius: 6px;
+  }
+  .pen.none {
+    border-color: var(--line);
+    background: linear-gradient(to top right, transparent calc(50% - 1px),
+                var(--bad) calc(50% - 1px), var(--bad) calc(50% + 1px),
+                transparent calc(50% + 1px)), var(--panel);
+  }
+  .swatch.pen-other { width: 22px; height: 22px; border-radius: 6px; }
+  /* Until a color of its own is the one in use, it shows every color at
+     once rather than the one it would open on -- which, being the yellow
+     pen's, read as a second yellow pen. */
+  .swatch.pen-other:not(.on)::-webkit-color-swatch {
+    background: conic-gradient(#f87171, #fbbf24, #a3e635, #22d3ee, #818cf8,
+                               #e879f9, #f87171) !important;
+  }
+  .swatch.pen-other:not(.on)::-moz-color-swatch {
+    background: conic-gradient(#f87171, #fbbf24, #a3e635, #22d3ee, #818cf8,
+                               #e879f9, #f87171) !important;
+  }
+  .pen.on, .swatch.pen-other.on {
+    box-shadow: 0 0 0 2px var(--panel), 0 0 0 4px var(--accent);
+  }
+  /* How heavy a line is: three buttons, each a line that heavy. */
+  .weight-seg { flex: none; }
+  .weight-seg .seg-btn {
+    display: inline-flex; align-items: center; justify-content: center;
+    padding: 5px 7px;
+  }
+  .weight-seg svg {
+    display: block; width: 24px; height: 12px; fill: none;
+    stroke: currentColor; stroke-linecap: round;
+  }
+  .tog-dash { margin-left: 2px; }
+  #sel-body .go { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
+  #sel-body .go + .go { margin-top: 6px; }
+
   /* -------------------------------------------- shape for each kind -- */
   /* A name and a dropdown, six times down the panel.  The dropdown used
      to size itself to the longest of the thirty shape names it offers,
@@ -275,32 +367,46 @@
   .switches .stack { display: grid; gap: 7px; }
   .switch.off { opacity: .5; }
   .switch.off input { cursor: default; }
-  /* The puzzle being worked on.  It is ruled off top and bottom rather
-     than boxed, because it is part of the card it sits in rather than a
-     thing laid on top of it. */
-  #pz-card {
-    margin-top: 14px; padding: 12px 0 2px;
-    border-top: 1px solid var(--line);
-  }
+  /* The puzzle being worked on, in a card of its own at the top of the
+     panel.  A thin bar of the accent down its left edge says this card is
+     the one the rest of the panel is working for. */
+  #pz-card { box-shadow: inset 3px 0 0 var(--accent); }
   #pz-card .pz-top {
-    display: flex; align-items: center; gap: 8px; margin-bottom: 4px;
+    display: flex; align-items: center; gap: 8px; min-height: 26px;
   }
-  #pz-card .pz-top strong { flex: 1; font-size: 13.5px; }
-  #pz-card .icon.small { width: 26px; height: 26px; flex: none; }
+  #pz-card .pz-top strong {
+    flex: 1; min-width: 0; font-size: 14px; line-height: 1.3;
+  }
+  /* Solved, said beside the name: a puzzle opened again to look at says
+     so before you have read a word of it. */
+  #pz-card .pz-won {
+    flex: none; display: inline-flex; align-items: center; gap: 4px;
+    font-size: 12px; font-weight: 600; color: var(--good);
+  }
+  #pz-card .pz-won .tick { width: 14px; height: 14px; }
+  #pz-card .icon.small { width: 26px; height: 26px; flex: none; margin-right: -4px; }
   #pz-card .icon.small svg { width: 15px; height: 15px; }
-  #pz-card #pz-said {
-    margin: 0 0 10px; font-size: 12.5px; color: var(--muted); line-height: 1.45;
+  /* Labels small and quiet, the brief itself in full ink: the brief is
+     the thing to read, and the labels only say which half you are in. */
+  #pz-card .pz-head {
+    margin: 12px 0 3px; font-size: 11px; letter-spacing: .07em;
+    text-transform: uppercase; color: var(--muted); font-weight: 650;
   }
-  #pz-card #pz-mark { margin-top: 8px; }
-  #pz-card #pz-mark:empty { display: none; }
-  /* A puzzle already solved, opened again to look at.  The whole card
-     says so rather than only the line at the foot of it. */
-  #pz-card.won { border-color: var(--good); }
+  #pz-card .pz-text {
+    margin: 0; font-size: 13px; line-height: 1.5; color: var(--ink);
+  }
+  #pz-card .pz-ways { margin-top: 14px; gap: 8px; }
+  #pz-card .pz-ways .btn { width: 100%; }
+  /* What the check found, under the button that checked it. */
+  #runner #pz-mark { margin-top: 10px; line-height: 1.45; }
+  #runner #pz-mark:empty { display: none; }
+  #runner #pz-mark.good { font-weight: 600; }
+  #runner #pz-next { margin-top: 10px; }
+  #pz-card.won { box-shadow: inset 3px 0 0 var(--good); }
   /* The names in the list carry a tick once they have been beaten, and
      room for one before that so they all start in the same place. */
   .pz .tick { width: 15px; height: 15px; flex: none; color: var(--good); }
   .pz.won { border-color: var(--good); }
-  .pz-shut { margin: 0; }
   /* The button in the bar: a dot while there is something left to solve,
      and the whole thing in the good color once there is not. */
   #puzzles { position: relative; }
@@ -394,6 +500,8 @@
     background: var(--field); overflow: hidden;
   }
   #watch[hidden] { display: none !important; }
+  /* and switched off in the settings, in the panel and the full screen alike */
+  body.no-held #watch { display: none !important; }
   .watch-top {
     display: flex; align-items: baseline; justify-content: space-between;
     gap: 8px; padding: 6px 10px; border-bottom: 1px solid var(--line-soft);
@@ -522,6 +630,19 @@
   }
   .menu button:hover { background: var(--accent-soft); }
   .menu hr { border: 0; border-top: 1px solid var(--line-soft); margin: 4px 2px; }
+  /* B, I, U, S and the two sizes, side by side on one line of the menu.
+     They are menu buttons as well, so what every menu row is given has to
+     be taken back off them: a row's full width, its left-hand words, and
+     the pale wash that would put white letters on a pale key. */
+  .menu .menu-tools { display: flex; gap: 4px; padding: 3px 4px 5px; }
+  .menu .menu-tools .tog {
+    flex: 1; width: auto; min-width: 28px; height: 28px; gap: 0; padding: 0;
+    justify-content: center; font-size: 13.5px;
+    border: 1px solid var(--line); background: var(--panel);
+  }
+  .menu .menu-tools .tog.on {
+    background: var(--accent); border-color: var(--accent); color: #fff;
+  }
   svg .link { cursor: pointer; }
   svg .link.on .flow { stroke-width: 3; }
   svg .link.on { filter: drop-shadow(0 0 6px rgba(20, 66, 124, .6)); }

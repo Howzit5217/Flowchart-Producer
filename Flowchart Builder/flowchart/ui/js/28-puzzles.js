@@ -12,10 +12,12 @@
   // They are marked by running them.  Each one carries a few sets of
   // answers to type in and what should come out for each -- so a puzzle is
   // solved by the program behaving, not by the pseudocode matching some
-  // expected text.  That matters twice over: there is more than one way to
-  // put nearly all of these right, and every one of them counts; and the
-  // marking works exactly the same on a chart drawn by hand, because by
-  // then it is a program either way.
+  // expected text.  That matters because there is more than one way to put
+  // nearly all of these right, and every one of them counts.
+  //
+  // They belong to the pseudocode side.  A puzzle arrives as a program in
+  // the box and is put right there, so drawing by hand puts it down, and
+  // the button that offers them is not in the bar while you draw.
   //
   // Nothing here knows the answers.  It knows what the program should say,
   // which is a different thing and the only thing worth checking.
@@ -234,6 +236,8 @@
 
   var solved = {};                       // which have been, between visits
   var onPuzzle = null;                   // the one being worked on, if any
+  var lastPuzzle = null;                 // the one worked on last, shut or not
+  var checking = false;                  // a check is under way
 
   function recallSolved() {
     try { solved = JSON.parse(localStorage.getItem("flowchart-solved")) || {}; }
@@ -300,6 +304,13 @@
            'stroke-linejoin="round"><path d="M3 8.5 6.5 12 13 4.5"/></svg>';
   }
 
+  function lockArt() {
+    return '<svg class="lock" viewBox="0 0 16 16" fill="none" ' +
+           'stroke="currentColor" stroke-width="1.6" stroke-linecap="round" ' +
+           'stroke-linejoin="round"><rect x="3.5" y="7" width="9" height="6.5" rx="1.5"/>' +
+           '<path d="M5.5 7V5a2.5 2.5 0 0 1 5 0v2"/></svg>';
+  }
+
   function buildPuzzles() {
     var body = el("#pz-body");
     if (!body) { return; }
@@ -308,28 +319,47 @@
     var tally = el("#pz-count");
     if (tally) { tally.textContent = say("pz_done", count); }
     PUZZLES.forEach(function (level, i) {
+      var open = levelOpen(i);
       var part = document.createElement("section");
       part.className = "more-part";
-      part.innerHTML = "<h3>" + (TXT[level[0]] || level[0]) + "</h3>";
-      if (!levelOpen(i)) {
-        var shut = document.createElement("p");
-        shut.className = "hint pz-shut";
-        shut.textContent = say("pz_locked",
-                               { n: TO_OPEN - solvedIn(PUZZLES[i - 1]) });
-        part.appendChild(shut);
-        body.appendChild(part);
-        return;
-      }
+      // The name of the level and how far through it you are, on one line.
+      // A level not open yet says what opens it in the same place, and
+      // still shows its puzzles underneath, dimmed: a line of text where
+      // the puzzles should be said less about what was coming than the
+      // puzzles themselves do.
+      var top = document.createElement("div");
+      top.className = "pz-level-top";
+      var head = document.createElement("h3");
+      head.textContent = TXT[level[0]] || level[0];
+      var tally = document.createElement("span");
+      var got = solvedIn(level), of = level[1].length;
+      tally.className = "pz-tally" + (open && got === of ? " full" : "");
+      // Only the next level to open says how many it wants.  The ones past
+      // it wait on a level that is itself shut, where "solve 4 more" would
+      // be counting the wrong puzzles; they wear a lock and nothing else.
+      if (open) { tally.textContent = got + " / " + of; }
+      else if (levelOpen(i - 1)) {
+        tally.textContent = say("pz_locked",
+                                { n: TO_OPEN - solvedIn(PUZZLES[i - 1]) });
+      } else { tally.innerHTML = lockArt(); }
+      top.appendChild(head);
+      top.appendChild(tally);
+      part.appendChild(top);
       var list = document.createElement("div");
-      list.className = "pz-grid";
+      list.className = "pz-grid" + (open ? "" : " shut");
       level[1].forEach(function (one, j) {
         var b = document.createElement("button");
-        b.className = "btn small pz" + (solved[one.key] ? " won" : "");
+        b.className = "btn small pz" + (solved[one.key] ? " won" : "") +
+                      (one === lastPuzzle ? " here" : "");
         b.innerHTML = (solved[one.key] ? tickArt() : "") +
                       "<span>" + one.no + "</span>";
-        b.title = TXT[one.key + "_b"] || "";
         b.style.setProperty("--i", j);
-        b.onclick = function () { openPuzzle(one); };
+        if (open) {
+          b.title = TXT[one.key + "_b"] || "";
+          b.onclick = function () { openPuzzle(one); };
+        } else {
+          b.disabled = true;
+        }
         list.appendChild(b);
       });
       part.appendChild(list);
@@ -358,11 +388,16 @@
 
   // ------------------------------------------------ working on one of them --
   // The program goes in the box and is drawn, and the brief sits above the
-  // Build button for as long as it is being worked on.  From pseudocode or
-  // by hand: the card is the same, and so is the marking.
+  // Build button for as long as it is being worked on -- which is as long
+  // as the pseudocode side is open: drawing by hand shuts it.
   function openPuzzle(one) {
-    onPuzzle = one;
+    onPuzzle = lastPuzzle = one;
     showPuzzles(false);
+    // The brief and the Check button are both in the panel, so a puzzle
+    // opened with the panel put away was a chart and nothing saying what
+    // to do with it.  It comes out -- except on a narrow screen, where it
+    // would lie over the chart that is being drawn.
+    if (!panelIsOver()) { showPanel(true); }
     if (el("#code")) {
       setMode(false);
       // Where you left it, if you left it anywhere.
@@ -371,6 +406,31 @@
       el("#build").click();
     }
     dressPuzzle();
+    // The card is at the top of the panel; take the panel back up to it.
+    var card = el("#pz-card");
+    if (card && card.scrollIntoView) { card.scrollIntoView({ block: "nearest" }); }
+  }
+
+  // Back to the program as it arrived, with what was typed at it thrown
+  // away.  It goes in the box as typing would, so Undo can bring the
+  // attempt back if that was not what was meant.
+  function resetPuzzle() {
+    if (!onPuzzle || !el("#code")) { return; }
+    var box = el("#code");
+    box.focus();
+    box.select();
+    var put = false;
+    try { put = document.execCommand("insertText", false, onPuzzle.start); }
+    catch (e) { put = false; }
+    if (!put) {
+      box.value = onPuzzle.start;
+      box.dispatchEvent(new Event("input", { bubbles: true }));
+    }
+    delete work[onPuzzle.key];
+    keepWork();
+    el("#build").click();
+    var mark = el("#pz-mark");
+    if (mark && !solved[onPuzzle.key]) { mark.className = "hint"; mark.textContent = ""; }
   }
 
   function shutPuzzle() {
@@ -415,17 +475,30 @@
     return null;
   }
 
-  function dressPuzzle() {
-    // Run is the button that marks it, so Run is what it has to say it
-    // does.  It goes back to saying Run the moment the puzzle is shut.
+  // Run is the button that marks it, so Run is what it has to say it does.
+  // It goes back to saying Run the moment the puzzle is shut.  The runner
+  // puts its own word back on the button at the end of every run, so this
+  // is said again after each check as well as on opening.
+  function dressRunButton() {
     var run = el("#run");
-    if (run) {
+    if (run && !running) {
       run.textContent = onPuzzle ? (TXT.pz_check || "Check")
                                  : (TXT.r_run || "Run");
     }
+  }
+
+  function dressPuzzle() {
+    dressRunButton();
     var card = el("#pz-card");
+    var mark = el("#pz-mark");
+    var on = el("#pz-next");
     if (!card) { return; }
-    if (!onPuzzle) { card.hidden = true; return; }
+    if (!onPuzzle) {
+      card.hidden = true;
+      if (mark) { mark.className = "hint"; mark.textContent = ""; }
+      if (on) { on.hidden = true; }
+      return;
+    }
     card.hidden = false;
     // Numbered, and named after the thing it is about -- a car park sign,
     // a library fine.  Naming it after the fault would be handing over the
@@ -442,15 +515,18 @@
     if (el("#pz-job-head")) { el("#pz-job-head").hidden = !job; }
     if (el("#pz-now-head")) { el("#pz-now-head").hidden = !now; }
     if (el("#pz-now")) { el("#pz-now").hidden = !now; }
-    var mark = el("#pz-mark");
     mark.className = "hint";
     mark.textContent = "";
     var done = !!solved[onPuzzle.key];
+    var badge = el("#pz-won");
+    if (badge) {
+      badge.hidden = !done;
+      badge.innerHTML = done ? tickArt() + "<span>" + TXT.pz_right + "</span>" : "";
+    }
     if (done) {
       mark.className = "good";
       mark.textContent = TXT.pz_right;
     }
-    var on = el("#pz-next");
     if (on) {
       var after = done ? nextAfter(onPuzzle) : null;
       on.hidden = !after;
@@ -492,23 +568,57 @@
   }
 
   async function markPuzzle() {
-    if (!onPuzzle) { return; }
+    if (!onPuzzle || checking) { return; }
     var mark = el("#pz-mark");
-    // By hand, the design has to read as a program before it can be run at
-    // all; from pseudocode, there has to be one drawn.  Either way the
-    // runner is the thing that says so.
+    checking = true;
+    try { await markingIt(mark); }
+    finally {
+      checking = false;
+      stoppedCheck = false;
+      dressRunButton();
+    }
+  }
+
+  // Pressing Check while the check is still walking down the chart stops
+  // it, the way pressing Run while a run is going stops that.  A puzzle
+  // whose fault is a loop that never ends, watched a step at a time, would
+  // otherwise go on until the step cap -- with the button that could have
+  // stopped it switched off.
+  var stoppedCheck = false;
+
+  async function markingIt(mark) {
+    // The puzzle this check is marking.  It can be put down while the check
+    // is still going -- shut, or left for drawing by hand -- and a check
+    // whose puzzle has gone has nothing left to mark.
+    var one = onPuzzle;
+    // Checked against what is in the box, not against whatever was last
+    // drawn.  Fixing the program and pressing Check marked the chart from
+    // before the fix -- "Not there yet" for a program that was right -- so
+    // the words are drawn first whenever they have changed since.
+    if (el("#code") && el("#code").value !== builtText) {
+      await drawItNow();
+      if (onPuzzle !== one) { return; }
+      // It would not draw: what is wrong with the words is said under the
+      // Build button, and said here too, rather than marking the old chart.
+      if (el("#code").value !== builtText) {
+        mark.className = "hint bad";
+        mark.textContent = (el("#build-note") && el("#build-note").textContent) ||
+                           TXT.pz_none;
+        return;
+      }
+    }
+    // There has to be a chart drawn before there is anything to run, and
+    // the runner is the thing that says whether there is.
     if (!runnable()) {
       mark.className = "hint bad";
       mark.textContent = TXT.pz_none;
       return;
     }
-    var button = el("#run");
-    if (button) { button.disabled = true; }
     mark.className = "hint";
     mark.textContent = "";
     var beaten = true, why = null;
-    for (var i = 0; i < onPuzzle.tries.length; i++) {
-      var go = onPuzzle.tries[i];
+    for (var i = 0; i < one.tries.length; i++) {
+      var go = one.tries[i];
       // The first set of answers is run where it can be watched: down the
       // chart, a shape at a time, printing as it goes, with the answers
       // typed in for you.  The rest are run out of sight -- it is the same
@@ -516,15 +626,16 @@
       // first time round did not.
       var got = i === 0 ? await runWatched(go.give)
                         : await runQuietly(go.give);
+      // Stopped on purpose, or the puzzle put down: nothing to say.
+      if (stoppedCheck || onPuzzle !== one) { return; }
       if (got.wentWrong || !readsSame(got.said, go.want)) {
         beaten = false;
         why = { go: go, got: got };
         break;
       }
     }
-    if (button) { button.disabled = false; }
     if (beaten) {
-      solved[onPuzzle.key] = true;
+      solved[one.key] = true;
       keepSolved();
       briefly(el("#pz-card"), "won", 900);
       dressPuzzleButton();
@@ -572,6 +683,10 @@
   function dressPuzzleButton() {
     var button = el("#puzzles");
     if (!button) { return; }
+    // Not there while drawing by hand.  Opening a puzzle takes you back to
+    // the pseudocode, so from here the button was a way out dressed as
+    // something to do.
+    button.hidden = byHand;
     var count = puzzlesDone();
     // The dot was on from the first puzzle solved until all fifty were,
     // which is a progress bar wearing a notification's clothes: it looks
@@ -601,7 +716,8 @@
   if (el("#run")) {
     var runAnyway = el("#run").onclick;
     el("#run").onclick = function (ev) {
-      if (onPuzzle) { return markPuzzle(); }
+      if (onPuzzle && checking && running) { stoppedCheck = true; }
+      if (onPuzzle && !running) { return markPuzzle(); }
       return runAnyway ? runAnyway.call(this, ev) : undefined;
     };
   }
@@ -613,6 +729,8 @@
   }
   if (el("#code")) { el("#code").addEventListener("input", noteWork); }
   if (el("#pz-shut")) { el("#pz-shut").onclick = shutPuzzle; }
+  if (el("#pz-reset")) { el("#pz-reset").onclick = resetPuzzle; }
+  if (el("#pz-list")) { el("#pz-list").onclick = function () { showPuzzles(true); }; }
   window.addEventListener("keydown", function (ev) {
     if (ev.key === "Escape" && el("#pz-over") && !el("#pz-over").hidden) {
       showPuzzles(false);

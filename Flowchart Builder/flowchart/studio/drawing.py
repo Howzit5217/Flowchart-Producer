@@ -4,6 +4,7 @@ import re
 from .. import settings
 from ..make.chart import make_flowchart
 from ..make.shake import style_variety
+from ..measure import set_type
 from ..parse.data import program_json
 from ..parse.read import parse_program
 from ..shapes import DEFAULT_GEOM, SHAPES
@@ -69,6 +70,11 @@ def draw_for_studio(ask):
     # and picks it afresh for every drawing.
     if ask.get("chains"):
         settings.CHAIN_LIMIT = 0
+    # What the words are set in: how big, whether bold, the widths of the
+    # typeface when it is not Arial, and any step whose words were set
+    # apart from the rest.  The page decides all of that on its Style side;
+    # the drawing has to know it too, because a box is as big as its words.
+    set_type(ask.get("letters"))
     settings.LEGEND = bool(ask.get("legend"))
     settings.GRID = bool(ask.get("grid", True))
     settings.GEOM = dict(DEFAULT_GEOM)                  # which shape draws which kind

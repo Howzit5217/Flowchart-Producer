@@ -116,10 +116,11 @@ def builder():
 
 
 def drawn(program, **how):
-    """One chart, as SVG, with the settings put back afterwards."""
+    """One chart, as SVG, with the settings put back afterwards.  The
+    program is one of the files beside this, or given as text=."""
     fb = builder()
-    text = io.open(os.path.join(HERE, "programs", program),
-                   encoding="utf-8").read()
+    text = how.get("text") or io.open(os.path.join(HERE, "programs", program),
+                                      encoding="utf-8").read()
     keep = (fb.SHAPE, fb.VARIETY, fb.SHAKE)
     try:
         fb.SHAPE = how.get("shape", "auto")
@@ -167,6 +168,51 @@ def _():
         hits += charts.covered_tips(svg)
         tips += svg.count('class="head"')
     return hits == 0, "%d of %d tips covered" % (hits, tips)
+
+
+# Two short boxes either side of a tall diamond.  Their answers go into
+# them level with the middle of the diamond, so the branches end above its
+# point -- and for most looks the two sides came back together on the point
+# itself, a head on each, nose to nose.
+SHORT_IF = """Start
+Declare Integer n
+Input n
+If n > 10 Then
+    Display "small"
+Else
+    Display "big"
+End If
+End
+"""
+
+
+@check("no two arrowheads crowd each other")
+def _():
+    hits = tips = 0
+    first = None
+    looks = [(name, svg) for name, svg in every_chart()]
+    looks += [("short If seed %d" % seed, drawn(None, text=SHORT_IF, seed=seed))
+              for seed in range(1, 61)]
+    for name, svg in looks:
+        n = charts.crowded_heads(svg)
+        hits += n
+        tips += svg.count('class="head"')
+        if n and first is None:
+            first = name
+    return hits == 0, "%d pairs among %d heads%s" % (
+        hits, tips, " (first: %s)" % first if first else "")
+
+
+@check("a line coming back into the flow says which way")
+def _():
+    hits, first = 0, None
+    for name, svg in every_chart():
+        n = charts.bare_joins(svg)
+        hits += n
+        if n and first is None:
+            first = name
+    return hits == 0, "%d without a head%s" % (
+        hits, " (first: %s)" % first if first else "")
 
 
 @check("no route takes more than five turns")
@@ -432,6 +478,58 @@ def _():
         fb.FONT_SIZE = keep
     ok = abs(big - small * 2) < 1e-9 and again == small
     return ok, "%.1f at %d, %.1f at %d" % (small, keep, big, keep * 2)
+
+
+@check("words set bigger, bolder or in another face still fit their boxes")
+def _():
+    """The Style side can make every step's words bigger, or bold, or set
+    them in a face whose widths only the browser knows -- and can set one
+    step's words apart from the rest.  All of that has to reach the layout,
+    or the boxes are drawn for the plain words and the new ones spill out
+    over the outline.  So the drawing is asked for all of it at once, and
+    every line of every shape is measured against the room its shape gave
+    it -- and asked for nothing, it has to be the plain chart again."""
+    fb = builder()
+    text = io.open(os.path.join(HERE, "programs", PROGRAMS[0]),
+                   encoding="utf-8").read()
+    # A face a fifth wider than Arial throughout: nothing the drawing
+    # carries, so it can only be measured in it if it was handed the widths.
+    wide = {"n": [w * 1.2 for w in fb._ADV_N], "b": [w * 1.2 for w in fb._ADV_B]}
+    first = fb.parse_program(text)
+    steps = sorted({e[7] for e in fb.fit_shape(first, "auto")
+                    if e[0] == "shape" and len(e) > 7 and e[7]})
+    own = {str(steps[len(steps) // 2]): {"size": 26, "bold": False}}
+
+    def shapes(asked):
+        fb.style_variety(3)
+        fb.set_type(asked)
+        return [e for e in fb.fit_shape(fb.parse_program(text), "auto")
+                if e[0] == "shape" and e[6]]
+
+    keep = (fb.SHAPE, fb.VARIETY, fb.SHAKE)
+    try:
+        plain = shapes(None)
+        big = shapes({"size": 17, "bold": True, "widths": wide, "own": own})
+        spill = []
+        for e in big:
+            size, bold = fb.type_of(e[7] if len(e) > 7 else 0)
+            drawn = fb.SHAPES.get(fb.geom_of(e[1]), fb.SHAPES["rect"])
+            room = e[4] * 0.55 if drawn.get("wide") else e[4] - drawn["side"]
+            for line in e[6]:
+                over = fb.text_w(line, size, bold) - room
+                if over > 0.01:
+                    spill.append("%s by %.1f" % (line[:20], over))
+        again = shapes(None)
+    finally:
+        fb.set_type(None)
+        fb.SHAPE, fb.VARIETY, fb.SHAKE = keep
+    grew = sum(e[5] for e in big) > sum(e[5] for e in plain) * 1.2
+    same = [e[:7] for e in again] == [e[:7] for e in plain]
+    ok = not spill and grew and same
+    return ok, "%d shapes at 17px bold in a wider face%s%s%s" % (
+        len(big), "" if grew else " -- no taller than plain",
+        "" if same else " -- asked for nothing, not the plain chart",
+        "" if not spill else " -- spilled: " + ", ".join(spill[:3]))
 
 
 @check("the page draws off its own thread")

@@ -1,8 +1,8 @@
 """A block of chart, and a straight run of steps."""
 import math
 
-from .. import settings
-from ..measure import FONT_SIZE, LINE_H, text_w
+from .. import measure, settings
+from ..measure import line_h, text_w, type_of
 from ..parse.nodes import Node
 from ..shapes import SHAPES, geom_of
 
@@ -24,8 +24,8 @@ _WRAP_MAX = 100000
 def wrap(text, width_px, size=None, bold=False):
     """Wrap text to a pixel width, honoring explicit newlines."""
     if size is None:
-        size = FONT_SIZE
-    key = (text, round(width_px, 3), size, bold)
+        size = measure.FONT_SIZE
+    key = (text, round(width_px, 3), size, bold, measure.FACE_KEY)
     got = _WRAPS.get(key)
     if got is not None:
         return list(got)
@@ -151,6 +151,25 @@ def clear_foot(block, side):
     return True
 
 
+def join_room(runs):
+    """How much further a line has to go past a join than the `runs` it goes
+    anyway, before it reaches the shape it is going into.
+
+    A line joining another side-on carries a head pointing at the line it
+    joins, and the line it joins carries one of its own where it arrives at
+    the next shape.  Put the join one short gap above that shape and the
+    two heads touch -- the head on the join is as wide as the head below it
+    is long -- which reads as a pile-up at the shape's door rather than as
+    two arrows.  So a join stands at least a head's length and a half above
+    what the line runs into.  The extra comes in whole grid steps, because
+    everything below it has to stay on the ruling."""
+    short = settings.HEAD_LEN + settings.HEAD_WIDE * 1.5 - runs
+    if short <= 0:
+        return 0.0
+    step = settings.GRID_STEP if settings.GRID_STEP > 0 else short
+    return math.ceil(short / step - 0.001) * step
+
+
 def tail_shape(block):
     return edge_shape(block)
 
@@ -170,7 +189,12 @@ def part_of(item, shape, text):
 
 
 def node_block(node):
-    longest = max(text_w(l) for l in node.text.split("\n"))
+    # Measured in whatever its words are set in.  A step whose words have
+    # been made bigger, or bold, wants a box that fits them -- not the box
+    # the plain words would have had, with the new ones spilling out of it.
+    size, bold = type_of(getattr(node, "node_id", 0))
+    tall = line_h(size)
+    longest = max(text_w(l, size, bold) for l in node.text.split("\n"))
     drawn = SHAPES.get(geom_of(node.shape), SHAPES["rect"])
     if drawn.get("wide"):                       # a diamond: the words sit in
         w = max(settings.DIA_W, min(settings.NODE_MAX_W + 60, longest / 0.55 + 10))
@@ -180,13 +204,13 @@ def node_block(node):
         base = settings.OVAL_W if drawn.get("floor") == "oval" else settings.NODE_W
         w = max(base, min(settings.NODE_MAX_W, longest + pad))
         inner = w - pad
-    lines = wrap(node.text, inner)
+    lines = wrap(node.text, inner, size, bold)
     if drawn.get("wide"):
-        h = max(settings.DIA_MIN_H, 2.4 * len(lines) * LINE_H + 8)
+        h = max(settings.DIA_MIN_H, 2.4 * len(lines) * tall + 8)
     elif drawn.get("floor") == "oval":
-        h = max(settings.OVAL_H, len(lines) * LINE_H + 2 * settings.PAD_Y)
+        h = max(settings.OVAL_H, len(lines) * tall + 2 * settings.PAD_Y)
     else:
-        h = max(settings.NODE_MIN_H, len(lines) * LINE_H + 2 * settings.PAD_Y + drawn["top"])
+        h = max(settings.NODE_MIN_H, len(lines) * tall + 2 * settings.PAD_Y + drawn["top"])
     if drawn.get("round"):                      # a joining point is round
         h = max(h, min(w, 96), 40)
     # Up to a whole number of grid steps.  Every gap between shapes is a whole

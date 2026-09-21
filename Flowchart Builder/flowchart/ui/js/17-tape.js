@@ -119,11 +119,22 @@
       if (held) { home.insertBefore(held, going); }
       document.body.classList.remove("tape-full");
     }
+    // A box taken out of the page and put back somewhere else forgets how
+    // far down it was scrolled, and comes back at its top: opening the
+    // screen on a long run showed the first lines it printed rather than
+    // the ones it was printing, and closing it did the same to the panel.
+    tapeToEnd();
     var button = el("#run-big");
     if (button) {
       button.setAttribute("aria-expanded", want ? "true" : "false");
       button.title = want ? (TXT.code_small || "") : (TXT.code_big || "");
     }
+  }
+
+  // Whether the screen is up, and so covering the chart.
+  function tapeCovers() {
+    var over = el("#tape-over");
+    return !!over && !over.hidden;
   }
 
   if (el("#run-big")) {

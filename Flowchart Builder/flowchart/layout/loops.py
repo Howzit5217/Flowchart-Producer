@@ -2,10 +2,21 @@
 from .. import settings
 from ..layout import blocks
 from ..layout.blocks import (
-    Block, clear_foot, layout_seq, node_block, part_of, shift, tail_shape)
+    Block, clear_foot, join_room, layout_seq, node_block, part_of, shift,
+    tail_shape)
 from ..measure import text_w
 from ..parse.nodes import Loop
 from ..words.lookup import word
+
+
+def loop_up():
+    """How far above a loop the way back comes in.
+
+    It comes in side-on, with a head on it pointing at the line it joins,
+    and that line goes straight on into the top of the loop with a head of
+    its own.  One grid step is not far enough apart for the two to read as
+    two arrows, so it is further where it has to be."""
+    return settings.LOOP_UP + join_room(settings.LOOP_UP)
 
 
 def layout_pre(item):
@@ -18,6 +29,7 @@ def layout_pre(item):
     if item.hex:
         into = out = ""
 
+    up = loop_up()
     elems = shift(dia.elems, -dia.axis, 0)
     y = dia.h
     elems += [("line", 0, y, 0, y + settings.VGAP, True),
@@ -50,9 +62,9 @@ def layout_pre(item):
             turn = y + settings.VGAP / 2.0
             elems += [("line", 0, y, 0, turn, False),
                       ("line", 0, turn, back_x, turn, False)]
-        elems += [("line", back_x, turn, back_x, -settings.LOOP_UP, False),
-                  ("line", back_x, -settings.LOOP_UP, 0, -settings.LOOP_UP, False),
-                  ("line", 0, -settings.LOOP_UP, 0, 0, True)]
+        elems += [("line", back_x, turn, back_x, -up, False),
+                  ("line", back_x, -up, 0, -up, False),
+                  ("line", 0, -up, 0, 0, True)]
 
     exit_y = y + settings.VGAP
     right_x = max(half, body.w - body.axis) + max(
@@ -67,8 +79,8 @@ def layout_pre(item):
               ("line", right_x, exit_y, 0, exit_y, False)]
 
     left = -back_x
-    return Block(left + right_x, exit_y + settings.LOOP_UP, left,
-                 shift(elems, left, settings.LOOP_UP), loop=True)
+    return Block(left + right_x, exit_y + up, left,
+                 shift(elems, left, up), loop=True)
 
 
 def layout_post(item):
@@ -78,6 +90,7 @@ def layout_post(item):
     half = dia.w / 2.0
     again, done = (settings.NO, settings.YES) if item.until else (settings.YES, settings.NO)
 
+    up = loop_up()
     elems = shift(body.elems, -body.axis, 0)
     y = body.h
     if not body.terminal:
@@ -90,14 +103,14 @@ def layout_post(item):
     back_x = -(max(half, body.axis) + settings.HGAP)
     elems += [("line", -half, dia_cy, back_x, dia_cy, False),
               ("text", -half - 6, dia_cy - 6, again, "end"),
-              ("line", back_x, dia_cy, back_x, -settings.LOOP_UP, False),
-              ("line", back_x, -settings.LOOP_UP, 0, -settings.LOOP_UP, False),
-              ("line", 0, -settings.LOOP_UP, 0, 0, True),
+              ("line", back_x, dia_cy, back_x, -up, False),
+              ("line", back_x, -up, 0, -up, False),
+              ("line", 0, -up, 0, 0, True),
               ("text", 5, y + 13, done, "start")]
 
     left = -back_x
     right = max(half, body.w - body.axis)
-    return Block(left + right, y + settings.LOOP_UP, left, shift(elems, left, settings.LOOP_UP))
+    return Block(left + right, y + up, left, shift(elems, left, up))
 
 
 def layout_for(item):

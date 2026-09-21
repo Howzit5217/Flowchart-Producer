@@ -6,6 +6,30 @@
       "runtimeExecutable": "python",
       "runtimeArgs": ["-m", "http.server", "8766"],
       "port": 8766
+    },
+    {
+      "name": "site-alt",
+      "runtimeExecutable": "python",
+      "runtimeArgs": ["-m", "http.server", "8767"],
+      "port": 8767
+    },
+    {
+      "name": "style-studio",
+      "runtimeExecutable": "python",
+      "runtimeArgs": ["C:/Users/origa/AppData/Local/Temp/claude/C--Users-origa-Downloads-GitHub-Flowchart-Producer/1c32099b-35f0-40ba-9900-7457d97b9b16/scratchpad/studio_here.py", "8779"],
+      "port": 8779
+    },
+    {
+      "name": "style-site",
+      "runtimeExecutable": "python",
+      "runtimeArgs": ["-m", "http.server", "8783", "--directory", "C:/Users/origa/Downloads/GitHub/Flowchart-Producer/Flowchart Builder"],
+      "port": 8783
+    },
+    {
+      "name": "style-viewer",
+      "runtimeExecutable": "python",
+      "runtimeArgs": ["-m", "http.server", "8781", "--directory", "C:/Users/origa/AppData/Local/Temp/claude/C--Users-origa-Downloads-GitHub-Flowchart-Producer/1c32099b-35f0-40ba-9900-7457d97b9b16/scratchpad/viewer"],
+      "port": 8781
     }
   ]
 }

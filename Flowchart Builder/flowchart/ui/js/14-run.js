@@ -168,7 +168,13 @@
       g.classList.add("now");
       if (!lit) { lit = g; }
     });
-    if (lit && following()) { followNode(lit); }
+    // Not while the run fills the screen.  The chart is under the sheet
+    // then, where nobody can watch it be followed -- but they could watch
+    // it through the dimmed page on either side, zooming in on every
+    // shape and out again, so that the white of the paper came and went
+    // behind the sheet at every step.  It picks up again the moment the
+    // sheet is put away.
+    if (lit && following() && !tapeCovers()) { followNode(lit); }
   }
 
   // The line of pseudocode the shape was drawn from, marked where it is
@@ -780,16 +786,28 @@
     });
   }
 
+  // The panel's button and the one in the full screen's bar are the same
+  // button, the way Run and Stop are.  The bar's is put away between steps
+  // and so loses the keyboard each time it goes; pressed from the keyboard
+  // it is handed the keyboard back when it returns, so a class can be
+  // stepped through with the space bar without reaching for the mouse.
+  var nextHeld = false;
   function showNext(here) {
-    var row = el("#next-row");
-    if (!row) { return; }
-    if (here) { row.classList.add("here"); }
-    else { row.classList.remove("here"); }
+    var row = el("#next-row"), bar = el("#tape-next");
+    if (row) {
+      if (here) { row.classList.add("here"); }
+      else { row.classList.remove("here"); }
+    }
+    if (!bar) { return; }
+    if (!here && document.activeElement === bar) { nextHeld = true; }
+    bar.hidden = !here;
+    if (here && nextHeld && tapeCovers()) { bar.focus(); }
+    if (here || !running) { nextHeld = false; }
   }
 
-  if (el("#next")) {
-    el("#next").onclick = function () { if (stepOn) { stepOn(); } };
-  }
+  all("#next, #tape-next").forEach(function (b) {
+    b.onclick = function () { if (stepOn) { stepOn(); } };
+  });
 
   async function runIt() {
     if (running) {

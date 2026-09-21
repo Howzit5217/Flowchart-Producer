@@ -35,8 +35,15 @@ def layout_select(item):
     merge = top + tallest + (0 if all_end else settings.VGAP)
 
     elems = shift(dia.elems, center - dia.axis, 0)
-    elems += [("line", center, dia.h, center, bus_y, len(axes) > 1),
-              ("line", min(axes), bus_y, max(axes), bus_y, False)]
+    elems.append(("line", center, dia.h, center, bus_y, len(axes) > 1))
+    # The line the cases hang from spreads out from under the diamond, each
+    # way, rather than running across as one line the stem arrives at.  One
+    # line across reads as a line the stem is joining, and a line joining
+    # another gets a head -- on a stem half a step long, a head pushed up
+    # into the point of the diamond.  Nothing is joined here; it all goes out.
+    for end in sorted({min(axes), max(axes)}):
+        if abs(end - center) > 0.5:
+            elems.append(("line", center, bus_y, end, bus_y, False))
     x = 0.0
     for i, (label, b) in enumerate(branches):
         if i:

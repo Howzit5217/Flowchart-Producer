@@ -45,7 +45,9 @@
     color: var(--muted); display: inline-flex; align-items: center;
     justify-content: center;
   }
-  .icon:hover { background: var(--line-soft); color: var(--ink); }
+  .icon:not([disabled]):hover { background: var(--line-soft); color: var(--ink); }
+  /* dim and dead in the same way a switched-off .btn is */
+  .icon[disabled] { opacity: .4; cursor: default; }
   .icon svg { width: 19px; height: 19px; fill: none; stroke: currentColor;
               stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
   #rail {
@@ -96,6 +98,11 @@
     border-top: 1px solid var(--line-soft); font-size: 13px;
   }
   .switch.wide[hidden] { display: none !important; }
+  /* A switch straight under its own heading is not ruled off from it, and a
+     heading after a switch gets the air a heading gets -- without it the
+     switch above reads as the first of the group below. */
+  .sheet-menu h3 + .switch.wide { margin-top: 0; padding-top: 2px; border-top: 0; }
+  .sheet-menu .switch.wide ~ h3 { margin-top: 16px; }
 
   /* --------------------------------------------- the panel on the right -- */
   /* Flex order does the moving, so nothing in the panel has to know where

@@ -5,6 +5,39 @@
       </div>
     </section>
 
+    <!-- What is being worked on, while something is.  A card of its own at
+         the top of the panel rather than a part of the pseudocode card: it
+         sat under Title and Your name, below the program it was the brief
+         for, where it was read last.  Here it is read first.  Drawing by
+         hand puts the puzzle down, card and all: puzzles are put right in
+         the pseudocode, not drawn. -->
+    <section class="card" id="pz-card" hidden>
+      <div class="pz-top">
+        <strong id="pz-name"></strong>
+        <span class="pz-won" id="pz-won" hidden></span>
+        <button class="icon small" id="pz-shut" data-w-title="done"
+                title="__W(done)__" aria-label="__W(done)__">
+          <svg viewBox="0 0 20 20"><path d="M5 5l10 10M15 5L5 15"/></svg>
+        </button>
+      </div>
+      <!-- A brief in two halves, each said under its own heading.  What it
+           must do is the question; what it does now is the symptom.  The
+           headings are small labels and the brief is in full ink, because
+           the brief is the thing to read and the labels only say which
+           half you are in. -->
+      <h4 class="pz-head" id="pz-job-head" data-w="pz_job">__W(pz_job)__</h4>
+      <p class="pz-text" id="pz-said"></p>
+      <h4 class="pz-head" id="pz-now-head" data-w="pz_now">__W(pz_now)__</h4>
+      <p class="pz-text" id="pz-now"></p>
+      <!-- Two ways out of where you are that are not solving it: back to
+           the program as it arrived, and back to the list.  Both equal,
+           both plain -- the button that matters is Check, below. -->
+      <div class="pair-wide pz-ways">
+        <button class="btn small" id="pz-reset" data-w="pz_reset">__W(pz_reset)__</button>
+        <button class="btn small" id="pz-list" data-w="pz_all">__W(pz_all)__</button>
+      </div>
+    </section>
+
     <section class="card" id="hand" hidden>
       <h2 data-w="add_shape">__W(add_shape)__</h2>
       <div class="adders" id="adders"></div>
@@ -71,36 +104,6 @@
           <label class="switch"><input type="checkbox" id="f-legend"><span data-w="key_switch">__W(key_switch)__</span></label>
         </div>
       </div>
-      <!-- What is being worked on, while something is.  It sits above the
-           button that draws it, because the brief and the drawing are the
-           two halves of the same thing. -->
-      <div id="pz-card" hidden>
-        <div class="pz-top">
-          <strong id="pz-name"></strong>
-          <button class="icon small" id="pz-shut" data-w-title="done"
-                  title="__W(done)__" aria-label="__W(done)__">
-            <svg viewBox="0 0 20 20"><path d="M5 5l10 10M15 5L5 15"/></svg>
-          </button>
-        </div>
-        <!-- A brief in two halves, each said under its own heading.  It
-             was one paragraph doing both jobs at once -- what the program
-             is for and what it is doing instead, run together in a
-             sentence or two -- and reading it you could not tell which
-             half you were in.  What it must do is the question; what it
-             does now is the symptom.  They are different things and they
-             are asked separately. -->
-        <h4 class="pz-head" id="pz-job-head" data-w="pz_job">__W(pz_job)__</h4>
-        <p id="pz-said"></p>
-        <h4 class="pz-head" id="pz-now-head" data-w="pz_now">__W(pz_now)__</h4>
-        <p id="pz-now"></p>
-        <!-- No Check button of its own.  Run is the button, and while a
-             puzzle is open it says Check: the way to find out whether you
-             have fixed it is to run it, which is the way to find out
-             anywhere else too. -->
-        <p class="hint" id="pz-mark"></p>
-        <button class="btn primary wide" id="pz-next"
-                data-w="pz_next" hidden>__W(pz_next)__</button>
-      </div>
       <div class="go build-row">
         <button class="btn primary wide" id="build" data-w="build">__W(build)__</button>
       </div>
@@ -160,6 +163,12 @@
       <div id="next-row"><div class="next-in">
         <button class="btn primary wide" id="next" data-w="r_next">__W(r_next)__</button>
       </div></div>
+      <!-- While a puzzle is open, Run says Check, and what the check found
+           is said right under it -- where you are looking when you press
+           it -- with the way on to the next one under that. -->
+      <p class="hint" id="pz-mark"></p>
+      <button class="btn primary wide" id="pz-next"
+              data-w="pz_next" hidden>__W(pz_next)__</button>
       <p class="hint" id="run-note"></p>
       <!-- What the program is holding, while it is holding it.  The tape
            says what a program printed; it never said what it had in its

@@ -263,11 +263,15 @@
   }
 
   el("#reset").onclick = function () {
-    keepUndo();                          // it puts back the plain colors, not
-                                         // the ones that were there a moment ago
+    keepUndo();                          // it puts back the plain style, not
+                                         // the one that was there a moment ago
+    var wasType = typeSign(style);
     style = { sheet: "", ink: "", words: "", grid: "", gridOff: !el("#grid-on").checked,
-              kinds: {}, nodes: {} };
+              kinds: {}, nodes: {}, letters: {} };
     all(".preset").forEach(function (x) { x.classList.remove("on"); });
+    // Plain words may want smaller boxes than the ones on the paper, which
+    // only drawing the chart again can give them.
+    restyled(typeSign(style) !== wasType);
     paint(); buildKinds(); buildGlobals(); drawSelection();
   };
   // Two switches, one thing: the one on the chart card and the one in the

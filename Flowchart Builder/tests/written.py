@@ -797,7 +797,23 @@ def typed_into(command, typed, folder):
         lines = [l for l in (got.stderr or "").splitlines()
                  if l.strip() and not l.startswith("    at ")]
         return None, " / ".join(lines[-3:])[:300]
-    return got.stdout.splitlines(), ""
+    return unasked(got.stdout).splitlines(), ""
+
+
+def unasked(said):
+    """What a program printed, less the questions it asked out loud.
+
+    The runner asks with a box on the tape, which is not something printed;
+    the code asks in words -- "Enter bugs: " -- so that somebody running it
+    in a terminal knows it is waiting.  Typed in by hand, the Enter after the
+    answer ends that line.  Piped in, as here, nothing echoes it, and
+    whatever is printed next lands on the end of the question.  So the
+    questions go before the lines are split, not after.
+    """
+    from flowchart.words.lookup import WORDS
+    ask = re.escape(WORDS["en"]["code_ask"]).replace(re.escape("{name}"),
+                                                     r"[A-Za-z_]\w*")
+    return re.sub(ask, "", said)
 
 
 def carried_out(lang, made, typed, folder, have):

@@ -28,16 +28,17 @@
   </span>
   <div class="brand">__HEADING__<small id="sub">__SUB__</small></div>
   <!-- There is no Ctrl to hold down on a phone, and a color is lost on a
-       phone exactly as easily as anywhere else.  They keep out of the way
-       until there is something to step back to, which is the same manner
-       the faults, the tape and the print note keep: a control for a thing
-       that has not happened is one more thing to read and nothing else. -->
-  <button class="icon" id="undo" hidden data-w-title="undo" title="__W(undo)__"
+       phone exactly as easily as anywhere else.  They used to keep out of
+       the way until there was something to step back to, but a pair of
+       buttons that come and go moves everything beside them along the bar
+       and leaves nobody sure whether the page can undo at all.  So they
+       are always there, and dim and dead while their pile is empty. -->
+  <button class="icon" id="undo" disabled data-w-title="undo" title="__W(undo)__"
           aria-label="__W(undo)__">
     <svg viewBox="0 0 20 20"><path d="M7.5 4.5 4 8l3.5 3.5"/>
       <path d="M4 8h7.5a4 4 0 0 1 0 8H7"/></svg>
   </button>
-  <button class="icon" id="redo" hidden data-w-title="redo" title="__W(redo)__"
+  <button class="icon" id="redo" disabled data-w-title="redo" title="__W(redo)__"
           aria-label="__W(redo)__">
     <svg viewBox="0 0 20 20"><path d="M12.5 4.5 16 8l-3.5 3.5"/>
       <path d="M16 8H8.5a4 4 0 0 0 0 8H13"/></svg>
@@ -116,6 +117,15 @@ __OPTIONS__
     <button class="icon" id="full" hidden aria-hidden="true" tabindex="-1">
       <svg viewBox="0 0 20 20" id="full-mark"></svg>
     </button>
+    <!-- The table of names a run is holding.  Useful nearly always, but not
+         when the point of the lesson is to work the values out by hand and
+         then run it to see who was right: a table with the answers in it,
+         filling in as the program goes, gives the game away. -->
+    <h3 data-w="run_prefs">__W(run_prefs)__</h3>
+    <label class="switch wide" id="held-row">
+      <span data-w="held_switch">__W(held_switch)__</span>
+      <input type="checkbox" id="held-on" checked>
+    </label>
   </div>
 </header>
 
@@ -126,9 +136,11 @@ __OPTIONS__
         <path d="M10 7v3M10 10H5.5v3M10 10h4.5v3"/><rect x="2.5" y="13" width="6" height="4.5" rx="1"/>
         <rect x="11.5" y="13" width="6" height="4.5" rx="1"/></svg>
     </button>
+    <!-- A letter over a bar of color: the words and how they are painted,
+         which is what the side it opens is about now, not the colors alone. -->
     <button class="icon" id="rail-colors" data-w-title="side_colors" title="__W(side_colors)__">
-      <svg viewBox="0 0 20 20"><circle cx="10" cy="10" r="7.5"/>
-        <path d="M10 2.5v15M2.5 10h15"/></svg>
+      <svg viewBox="0 0 20 20"><path d="M5.2 13.2 10 2.8l4.8 10.4M7 9.4h6"/>
+        <path d="M3.5 17h13"/></svg>
     </button>
   </nav>
 
@@ -152,6 +164,14 @@ __SOURCE__
     <section class="card">
       <h2 data-w="palette">__W(palette)__</h2>
       <div class="presets" id="presets"></div>
+    </section>
+
+    <!-- The words of the whole chart: what they are set in, how big, bold,
+         slanted, underlined or struck through, and their color.  It folds
+         under a name of its own, so the cards below keep theirs. -->
+    <section class="card" data-fold="words">
+      <h2 data-w="t_head">__W(t_head)__</h2>
+      <div id="letters"></div>
     </section>
 
     <section class="card">
@@ -438,6 +458,11 @@ __SVG__
       <button class="btn small back" id="tape-back" hidden><span class="full" data-w="r_back">__W(r_back)__</span><span class="short" data-w="back">__W(back)__</span></button>
       <span class="code-count" id="tape-count"></span>
       <button class="btn small primary" id="tape-run" data-w="r_run">__W(r_run)__</button>
+      <!-- The step a run taken one at a time is waiting on.  The panel has
+           its own, but the panel is under this screen while it is up, so a
+           run stepped from here sat waiting for a press that nothing on the
+           screen could give it. -->
+      <button class="btn small primary" id="tape-next" data-w="r_next" hidden>__W(r_next)__</button>
       <button class="btn small" id="tape-code" data-w="r_code">__W(r_code)__</button>
       <!-- Standing in for it while the code is what is on screen.  As code
            is the way in from the run; pressed while you are already

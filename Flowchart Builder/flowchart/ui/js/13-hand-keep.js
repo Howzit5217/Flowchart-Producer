@@ -70,6 +70,10 @@
       // runnable and the runner says so rather than offering to run the
       // one belonging to the chart that has just been put away.
       forgetProgram();
+      // Nor is it a puzzle.  Those are put right in the pseudocode, so one
+      // left open is put down, the way its own close button would put it
+      // down, and what was typed at it is kept for when it is opened again.
+      shutPuzzle();
       drawAdders();
       drawHand();
       drawHandPanel();
@@ -77,6 +81,7 @@
     } else {
       showCodeSide();
     }
+    dressPuzzleButton();                 // offered only where they are solved
     try { localStorage.setItem("flowchart-mode", toHand ? "hand" : "code"); }
     catch (e) { /* fine */ }
   }

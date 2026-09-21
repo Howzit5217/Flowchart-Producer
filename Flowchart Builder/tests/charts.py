@@ -170,6 +170,67 @@ def covered_tips(svg):
     return hits
 
 
+def crowded_heads(svg, room=6.0):
+    """Two arrowheads closer together than `room`, which reads as a pile of
+    them rather than as two arrows.
+
+    What this was written for: the two sides of an If meeting right on the
+    point of its diamond, each with a head, nose to nose on the tip, and the
+    head of the line leaving the meeting just under them.  Before that, a
+    loop's way back coming in one short gap above the shape the line runs
+    into, its head on top of the head below."""
+    boxes = []
+    for pts in re.findall(r'<polygon[^>]*class="head"[^>]*points="([^"]+)"', svg):
+        n = [float(v) for v in re.findall(r"-?[\d.]+", pts)]
+        boxes.append((min(n[0::2]), min(n[1::2]), max(n[0::2]), max(n[1::2])))
+    hits = 0
+    for i in range(len(boxes)):
+        for j in range(i + 1, len(boxes)):
+            a, b = boxes[i], boxes[j]
+            apart = max(b[0] - a[2], a[0] - b[2], b[1] - a[3], a[1] - b[3])
+            if apart < room:
+                hits += 1
+    return hits
+
+
+def bare_joins(svg):
+    """A line that stops dead against another line, side-on, with no head.
+
+    That is a loop's way back, or a branch coming home, and without a head
+    nothing on the chart says which way it runs -- it could as well be the
+    line going out.  A line that carries straight on through the join is
+    not one of these, and neither are the two sides of an If meeting nose
+    to nose, where nothing carries on across and the line leaving the
+    meeting says where it goes.  A line with a head on it stops short, at
+    the back of the head, so it never ends on the line it points at."""
+    routes = paths(svg)
+    near = lambda p, q: abs(p[0] - q[0]) < 0.6 and abs(p[1] - q[1]) < 0.6
+    upright = lambda p, q: abs(q[1] - p[1]) > abs(q[0] - p[0])
+    legs = [(a, b) for pts in routes for a, b in zip(pts, pts[1:])
+            if abs(a[0] - b[0]) < 0.5 or abs(a[1] - b[1]) < 0.5]
+    hits = 0
+    for pts in routes:
+        a, end = pts[-2], pts[-1]
+        way = upright(a, end)
+        if any(near(p, end) and upright(p, q) == way for p, q in legs):
+            continue                            # carries straight on
+        into = away = through = False
+        for p, q in legs:
+            if upright(p, q) == way:
+                continue
+            into |= near(q, end)
+            away |= near(p, end)
+            if upright(p, q):
+                through |= abs(p[0] - end[0]) < 0.6 and \
+                    min(p[1], q[1]) + 1.5 < end[1] < max(p[1], q[1]) - 1.5
+            else:
+                through |= abs(p[1] - end[1]) < 0.6 and \
+                    min(p[0], q[0]) + 1.5 < end[0] < max(p[0], q[0]) - 1.5
+        if through or (into and away):
+            hits += 1
+    return hits
+
+
 def most_turns(svg):
     """The most corners any one route in this chart takes."""
     worst = 0

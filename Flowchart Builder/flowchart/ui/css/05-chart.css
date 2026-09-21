@@ -186,10 +186,30 @@
      thing you actually look at this list to find out. */
   .pz-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; }
   .pz-grid .btn {
-    justify-content: center; gap: 4px; padding: 8px 0;
+    justify-content: center; gap: 4px; height: 36px; padding: 0;
     font-variant-numeric: tabular-nums;
   }
   .pz-grid .btn.won { border-color: var(--good); color: var(--good); }
+  /* The one you were last working on, so coming back to the list you can
+     see where you were. */
+  .pz-grid .btn.here { box-shadow: 0 0 0 2px var(--accent); border-color: var(--accent); }
+  /* A level not open yet shows its puzzles all the same, dimmed and dead,
+     so the sheet says how much there is and what opens it -- rather than a
+     line of text where the puzzles would be. */
+  .pz-grid.shut .btn { opacity: .4; }
+  /* Each level's name with how far through it you are on the same line,
+     and the line that says what opens a shut one said there too. */
+  .pz-level-top {
+    display: flex; align-items: center; min-height: 18px; justify-content: space-between;
+    gap: 10px; margin-bottom: 8px;
+  }
+  .pz-level-top h3 { margin: 0; }
+  .pz-level-top .pz-tally {
+    font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums;
+    text-align: right;
+  }
+  .pz-level-top .pz-tally.full { color: var(--good); font-weight: 600; }
+  .pz-level-top .pz-tally .lock { width: 13px; height: 13px; display: block; }
   .more-part { padding-top: 14px; }
   .more-part h3 {
     margin: 0 0 8px; font-size: 11.5px; letter-spacing: .07em;
@@ -223,8 +243,11 @@
     margin-left: auto; font-size: 12.5px; color: var(--muted);
     font-variant-numeric: tabular-nums;
   }
+  /* The same box as the small Done button beside it, so the two stand
+     the same height in the bar instead of one a few pixels short. */
   .code-esc {
-    font-size: 12px; color: var(--muted); padding: 3px 8px;
+    display: inline-flex; align-items: center; box-sizing: border-box;
+    height: 28px; padding: 0 9px; font-size: 12.5px; color: var(--muted);
     border: 1px solid var(--line); border-radius: 7px; white-space: nowrap;
   }
 
@@ -304,8 +327,15 @@
      grows to a point and then scrolls, and which is not there at all until
      something is put in it.  Up here it is the sheet: no border, all the
      room there is, and shown even while it is empty -- a screen with a bar
-     and nothing under it looks broken. */
-  #tape-slot > .slide-frame { flex: 1; min-width: 0; display: flex; }
+     and nothing under it looks broken.
+     The frame has to be told it may be shorter than what is in it.  Left
+     to itself a box in a column is at least as tall as its contents, so
+     the frame grew to the whole length of the run, ran off the foot of
+     the sheet, and the tape inside it -- as tall as the frame -- never
+     had anything to scroll. */
+  #tape-slot > .slide-frame {
+    flex: 1; min-width: 0; min-height: 0; display: flex;
+  }
   #tape-slot .tape {
     display: block; flex: 1; margin: 0; padding: 0 4px; max-height: none;
     border: 0; border-radius: 0; background: none; overflow: auto;
@@ -377,6 +407,11 @@
   .no-ink svg .flow { stroke: #000 !important; }
   .no-ink svg .head { fill: #000 !important; stroke: #000 !important; }
   .no-ink svg text { fill: #000 !important; }
+  /* A highlighter is ink like any other, so it stays off the paper -- and
+     left on, the rule for a shape's rectangles above would have drawn each
+     one as a black box round the words.  How the words are set -- their
+     size, their face, bold or underlined -- is not ink, and prints. */
+  .no-ink svg .highlights { display: none !important; }
   .no-ink:not(.show-grid) svg .grid { display: none !important; }
   .no-ink.show-grid svg .grid { display: inline !important; stroke: #b9c0c9 !important; }
 

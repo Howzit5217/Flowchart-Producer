@@ -34,12 +34,12 @@
   }
   var wasLike = [], willBeLike = [];     // where we came from, and went back from
 
-  // The two buttons in the bar are hidden while their pile is empty, the
-  // way the faults and the tape are: a button for stepping back before
-  // anything has been done is one more thing to read and nothing else.
+  // The two buttons in the bar stay where they are and are switched off
+  // while their pile is empty.  They used to be hidden instead, which
+  // shunted the rest of the bar along every time one came or went.
   function showUndo() {
-    if (el("#undo")) { el("#undo").hidden = !wasLike.length; }
-    if (el("#redo")) { el("#redo").hidden = !willBeLike.length; }
+    if (el("#undo")) { el("#undo").disabled = !wasLike.length; }
+    if (el("#redo")) { el("#redo").disabled = !willBeLike.length; }
   }
 
   function keepUndo() {
@@ -64,6 +64,7 @@
     var now = undoable();
     if (now) { to.push(now); }
     var back = from.pop();
+    var wasType = typeSign(style);
     hand = back.hand;
     style = back.style;
     picked = chosen = null;
@@ -81,6 +82,9 @@
       showReport();
     } else {
       paint();
+      // Words put back to another size need boxes of another size, which
+      // painting cannot give them: the chart is laid out again for them.
+      if (typeSign(style) !== wasType) { reflowSoon(); }
     }
     buildKinds();
     buildGlobals();

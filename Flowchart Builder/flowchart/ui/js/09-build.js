@@ -632,12 +632,22 @@
     };
   }
   var build = el("#build");
+  // The words the chart on the paper was last drawn from, so a check can
+  // tell whether what is in the box has moved on since.
+  var builtText = null;
   // Drawing a new chart throws away the program that is on the paper, and a
   // run is a walk through that program.  Carrying on regardless left the
   // runner stepping through a chart nobody could see any more and printing
   // into the tape of a program that had been replaced -- so if something is
   // running when the button is pressed, it asks first.  See stopThenBuild.
-  function drawItNow() {
+  //
+  // Asked `again`, it is the same program drawn again because its words have
+  // changed size (see reflowSoon): shaken the same way as last time, so it
+  // comes out the same chart with room made for the words rather than a new
+  // drawing of it, and left where it was -- nothing rises in, the view does
+  // not move, the tape keeps what the run printed, and the shape that was
+  // picked is still picked.
+  function drawItNow(again) {
       var says = el("#build-note");
       // The button says what it is doing by what color it is: red while it
       // is drawing, green the moment it is done, then back to blue a second
@@ -657,16 +667,18 @@
       says.className = "";
       says.textContent = TXT.drawing;
       remember();
-      askFor(Object.assign(chartOptions(), {
-        text: el("#code").value,
+      var asked = el("#code").value;
+      return askFor(Object.assign(chartOptions(), {
+        text: asked,
         title: el("#f-title").value,
         author: el("#f-author").value,
         shape: el("#f-shape").value,
-        seed: "",                      // a fresh one each time, unasked for
+        seed: again ? lastLaid.seed : "",   // fresh each time, unless drawn again
         lang: tongue ? tongue.value : "",
         legend: el("#f-legend").checked,
         grid: el("#f-grid").checked,
-        shapes: geom
+        shapes: geom,
+        letters: lettersAsked()
       })).then(function (data) {
         afterTheRed(function () {
           build.disabled = false;
@@ -681,12 +693,13 @@
           showProblems(null);
           return;
         }
+        var keepSel = again && sel ? sel.dataset.i : null;
         el("#sheet").innerHTML = data.svg;
         // On a narrow screen the panel is lying over the chart, so it is put
         // away: you pressed the button to see a chart, not to keep looking at
         // the button.  On a wide screen it stays where it is.
-        if (panelIsOver()) { showPanel(false); }
-        setTimeout(fitIfItMustBe, 0);    // never show it with its sides cut off
+        if (!again && panelIsOver()) { showPanel(false); }
+        if (!again) { setTimeout(fitIfItMustBe, 0); }  // never with its sides cut off
         FILE = data.name || FILE;
         el("#svg-link").download = FILE + ".svg";
         document.title = data.title || FILE;
@@ -694,16 +707,24 @@
         el("#sub").textContent = TXT.flowchart + " · " + data.w + " x " +
                                  data.h + " px";
         AST = data.ast || null;
+        builtText = asked;
         dressRunner();                   // there is something to run now
         forgetLines();
         if (AST) {
           noteLines(AST.main);
           (AST.modules || []).forEach(function (mod) { noteLines(mod.body); });
         }
-        freshTape();               // a new program: nothing of the old one
+        lastLaid = { seed: String(data.seed || ""), text: asked };
+        if (!again) { freshTape(); }   // a new program: nothing of the old one
+        if (again) { opening = true; } // the same chart, not a new one rising
         bind();
+        if (keepSel) {
+          sel = el('.node[data-i="' + keepSel + '"]', chart);
+          if (sel) { sel.classList.add("on"); }
+          drawSelection();
+        }
         paint();
-        showTheStart();            // wherever this one came out, begin at it
+        if (!again) { showTheStart(); }  // wherever this one came out, begin at it
         // Nothing is said when it works.  The button goes green and the chart
         // appears, which is two ways of saying it already; a line of text
         // underneath saying it a third time is just something else to read.
@@ -721,6 +742,78 @@
   }
   if (build) {
     build.onclick = function () { stopThenBuild(drawItNow); };
+  }
+
+  // ---------------------------------------------- room for the words again --
+  // Words set bigger, or bold, or in a wider typeface want bigger boxes, and
+  // only the drawing can say how much bigger: it is the same arithmetic that
+  // sized them the first time.  So the chart is drawn again, a moment after
+  // the last press -- five presses of Bigger are one drawing, not five --
+  // from the same program and shaken the same way (see drawItNow).  Until it
+  // arrives the words are already showing at their new size, spilling out
+  // of the old boxes for as long as it takes.
+  //
+  // Not over a run: that is somebody's work, and it waits until the run is
+  // done.  Not over a drawing either, which it waits behind.  And not when
+  // what is in the box is no longer the program on the paper: then there is
+  // no "same chart" to draw, and it is drawn the ordinary way, as a new one.
+  var lastLaid = { seed: "", text: null };   // what the paper was drawn from
+  var reflowTimer = 0;
+  function reflowSoon() {
+    if (!CAN_REFLOW || byHand || !build) { return; }
+    clearTimeout(reflowTimer);
+    reflowTimer = setTimeout(function whenFree() {
+      if (byHand || !AST || !el("#code").value.trim()) { return; }
+      if (running || build.disabled) {
+        reflowTimer = setTimeout(whenFree, 400);
+        return;
+      }
+      drawItNow(el("#code").value === lastLaid.text);
+    }, 300);
+  }
+
+  // What the drawing is told about the words: the whole chart's size and
+  // whether it is bold, the typeface's widths when it is not the one the
+  // drawing knows, and every step whose words have been set apart from the
+  // rest -- by the number the drawing gave it, which is how the page and the
+  // drawing agree about which shape is which.  A shape placed by hand is
+  // numbered h1, h2 and so on, and is none of the drawing's business.
+  function lettersAsked() {
+    var L = lettersOf(), scale = L.size || 1;
+    var asked = { size: CODE_TYPE * scale, bold: !!L.bold, own: {} };
+    if (L.face && L.face !== "sans" && FACES[L.face]) {
+      asked.widths = faceWidths(L.face);
+    }
+    Object.keys(style.nodes).forEach(function (i) {
+      var mine = style.nodes[i];
+      if (!/^\d+$/.test(i) || !mine) { return; }
+      if ((!mine.size || mine.size === 1) && mine.bold === undefined) { return; }
+      asked.own[i] = { size: CODE_TYPE * scale * (mine.size || 1),
+                       bold: mine.bold !== undefined ? !!mine.bold : !!L.bold };
+    });
+    return asked;
+  }
+
+  // A typeface's widths, measured here, because this is the only place that
+  // knows which font the computer really has: the first of the list it has
+  // is the one the words will be drawn in.  The drawing carries Arial's
+  // widths and measures everything against them; handed these, it measures
+  // against the face the words will actually be shown in.  Thousandths of
+  // an em, the way the drawing keeps Arial's -- measured at a hundred pixels
+  // so that the rounding is well below anything a box would notice.
+  var widthsOf = {};
+  function faceWidths(face) {
+    if (widthsOf[face]) { return widthsOf[face]; }
+    var pen = document.createElement("canvas").getContext("2d");
+    var got = { n: [], b: [] };
+    [["n", ""], ["b", "bold "]].forEach(function (how) {
+      pen.font = how[1] + "100px " + FACES[face];
+      for (var c = 32; c < 127; c++) {
+        got[how[0]].push(Math.round(pen.measureText(String.fromCharCode(c)).width * 10));
+      }
+    });
+    widthsOf[face] = got;
+    return got;
   }
 
 

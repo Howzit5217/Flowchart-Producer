@@ -2,7 +2,8 @@
 from .. import settings
 from ..layout import blocks
 from ..layout.blocks import (
-    Block, head_shape, layout_seq, node_block, part_of, shift, tail_shape)
+    Block, head_shape, join_room, layout_seq, node_block, part_of, shift,
+    tail_shape)
 from ..measure import text_w
 
 
@@ -131,8 +132,13 @@ def layout_chain(tests, tail, thens, other):
 
     coming = backs + ([straight] if straight is not None else [])
     merge = max([foot] + coming) + settings.VGAP
+    bottom = merge
     if not done:
-        elems.append(("line", 0, foot, 0, merge, False))
+        # the way home comes in side-on here, with a head on it, so the
+        # line carries on far enough for the next head to stand clear
+        bottom += join_room(settings.VGAP)
+        elems += [("line", 0, foot, 0, merge, False),
+                  ("line", 0, merge, 0, bottom, False)]
     if backs:                               # the rail, down to the meeting
         elems += [("line", rail, min(backs), rail, merge, False),
                   ("line", rail, merge, lane if straight is not None else 0,
@@ -140,7 +146,7 @@ def layout_chain(tests, tail, thens, other):
     if straight is not None:                # and the short way home, which
         elems += [("line", lane, straight, lane, merge, False),   # the rail
                   ("line", lane, merge, 0, merge, True)]          # joins
-    return Block(left + right, merge, left, shift(elems, left, 0))
+    return Block(left + right, bottom, left, shift(elems, left, 0))
 
 
 def layout_if(item):
@@ -211,9 +217,13 @@ def layout_fork(item):
                   ("text", -e_side * 5, dia.h + settings.VGAP / 2.0 + 4, settings.YES,
                    "end" if e_side > 0 else "start")]
         elems += shift(then.elems, -then.axis, top)
-        merge = y + settings.VGAP
+        merge = bottom = y + settings.VGAP
         if not then.terminal:
-            elems.append(("line", 0, y, 0, merge, False))
+            # False comes back in side-on, with a head on it, so the line
+            # carries on far enough for the next head to stand clear
+            bottom += join_room(settings.VGAP)
+            elems += [("line", 0, y, 0, merge, False),
+                      ("line", 0, merge, 0, bottom, False)]
         out = then.w - then.axis if e_side > 0 else then.axis
         lane = e_side * (max(half, out) + e_gap)       # clear of the branch
         elems += [("line", e_side * half, mid, lane, mid, False),
@@ -224,7 +234,7 @@ def layout_fork(item):
         near = max(half, then.axis if e_side > 0 else then.w - then.axis)
         left = near if e_side > 0 else -lane
         right = lane if e_side > 0 else near
-        return Block(left + right, merge, left, shift(elems, left, 0))
+        return Block(left + right, bottom, left, shift(elems, left, 0))
 
     t_axis = lane_at(then, t_gap, t_side)
     e_axis = lane_at(other, e_gap, e_side)
@@ -250,7 +260,15 @@ def layout_fork(item):
     over = d_bot + settings.VGAP                 # a branch met over the top starts here
     for lane in lanes:
         lane[5] = cy - lane[4][2] if lane[4] else over
-    merge = max(lane[5] + lane[0].h for lane in lanes)
+    # The two sides meet below the diamond as well as below both branches.
+    # A branch set level with the middle of the diamond can be shorter than
+    # the diamond is, and the meeting was only ever measured from the
+    # branches: under a tall diamond with a short box on each side, the two
+    # came together right on its bottom point, and the line leaving the
+    # meeting set off from the tip of the diamond as though it came out of
+    # it.  Nothing leaves that point -- both answers go out at the sides --
+    # so the meeting stands a clear gap below it.
+    merge = max([d_bot] + [lane[5] + lane[0].h for lane in lanes])
     merge += 0 if both_end else settings.VGAP
 
     for side, label, ax, sign, head, b_top in lanes:

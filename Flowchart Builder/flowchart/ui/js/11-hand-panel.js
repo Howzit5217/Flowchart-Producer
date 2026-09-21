@@ -108,6 +108,7 @@
   }
 
   function drawHandPanel() {
+    drawSelection();                     // the Style side is about it as well
     var box = el("#hand-sel");
     if (!box) { return; }
     box.innerHTML = "";

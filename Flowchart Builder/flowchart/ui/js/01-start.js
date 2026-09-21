@@ -58,6 +58,31 @@
                          diamond: "#3a2e17", hex: "#3a2e17", sub: "#2b1b46" } }]
   ];
 
+  // ----------------------------------------------------------- the words --
+  // Four typefaces rather than the computer's whole font menu.  Each is a
+  // list, because a page cannot know which fonts the computer looking at it
+  // has: it gets the first one there is, and the last is the kind of thing
+  // to fall back on when there is none of them.  Plain is the face the
+  // drawing measures its words in, and every chart is set in it until
+  // somebody asks for another.
+  var FACES = {
+    sans: "Arial, Helvetica, sans-serif",
+    serif: "Georgia, 'Times New Roman', Times, serif",
+    mono: "Consolas, 'Courier New', Courier, monospace",
+    hand: "'Comic Sans MS', 'Comic Neue', 'Chalkboard SE', 'Segoe Print', cursive"
+  };
+  // How much bigger or smaller the words can be made, a press at a time.
+  var TYPE_STEPS = [0.7, 0.8, 0.9, 1, 1.1, 1.25, 1.4, 1.6, 1.8, 2];
+  // The highlighter pens, in the colors every stationer sells them in.
+  var MARKERS = [["#fff176", "m_yellow"], ["#b9f6ca", "m_green"],
+                 ["#ffc1e3", "m_pink"], ["#b3e5fc", "m_blue"],
+                 ["#ffd8a8", "m_orange"]];
+  var CODE_TYPE = 11;                    // the size the drawing sets its words
+                                         //   at: FONT_SIZE, in measure.py
+  // How heavy a line is drawn.  Normal is what the drawing itself draws
+  // with, so a chart nobody has asked about is never written on for it.
+  var WEIGHTS = { thin: 0.8, normal: 1.3, thick: 2.2 };
+
   function el(q, root) { return (root || document).querySelector(q); }
   function has(q) { return !!document.querySelector(q); }
   function all(q, root) {
@@ -197,6 +222,11 @@
   }
 
   var style = { sheet: "", ink: "", words: "", grid: "", gridOff: false,
-                kinds: {}, nodes: {} };
+                kinds: {}, nodes: {}, letters: {} };
   var chart = null, sel = null, W = 0, H = 0, zoom = 1;
+  // Whether a chart can be drawn again here.  The studio and the website can:
+  // they have the drawing behind them.  The page written beside an .svg has
+  // only the drawing it was written with, so anything that would need boxes
+  // of another size -- bigger words, a wider typeface -- is not offered on it.
+  var CAN_REFLOW = has("#build");
 

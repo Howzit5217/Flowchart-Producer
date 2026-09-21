@@ -1,5 +1,5 @@
 // ---------------------------------------------------------------------------
-//  02-paint.js -- putting the colors on
+//  02-paint.js -- putting the colors on, and setting the words
 //
 //  One part of the studio's script.  The parts run inside one function,
 //  in the order parts.py lists them, and share everything between them.
@@ -42,6 +42,113 @@
   function strokeIt(e, c) { e.style.stroke = c; }
   function bothIt(e, c) { e.style.fill = c; e.style.stroke = c; }
   function showIt(e, c) { e.style.display = c; }
+  function faceIt(e, c) { e.style.fontFamily = c; }
+  function sizeIt(e, c) { e.style.fontSize = c; }
+  function weighIt(e, c) { e.style.strokeWidth = c; }
+
+  // ------------------------------------------------------- how words look --
+  // What every step's words are set in, said once for the whole chart on the
+  // Style side: the typeface, how big, and whether bold, slanted or
+  // underlined.  An older piece of work saved before there was any such
+  // thing has none of it, and is set the way it always was.
+  function lettersOf() {
+    if (!style.letters) { style.letters = {}; }
+    return style.letters;
+  }
+  function typeBase() {                  // the size the words start from here
+    return byHand ? HAND_TYPE : CODE_TYPE;
+  }
+
+  // How one shape looks beyond its colors: its words' own size, bold,
+  // slanted, underlined or struck through, a highlighter across them, and
+  // how heavy its border is and whether it is dashed.  A shape can say any
+  // of those for itself; one that says nothing wears what the chart wears.
+  // Its size is only its own when it has one: otherwise the words take the
+  // chart's size from the group they sit in, and nothing is written on them.
+  function shapeLook(i) {
+    var L = lettersOf(), mine = style.nodes[i] || {};
+    function either(what) {
+      return mine[what] !== undefined ? !!mine[what] : !!L[what];
+    }
+    var own = CAN_REFLOW && mine.size && mine.size !== 1;
+    return { size: own ? typeBase() * (L.size || 1) * mine.size : 0,
+             bold: either("bold"), italic: either("italic"),
+             under: either("under"), strike: either("strike"),
+             mark: mine.mark || "",
+             weight: WEIGHTS[mine.weight] ? mine.weight : "",
+             dash: mine.dash ? (WEIGHTS[mine.weight] || WEIGHTS[style.weight] ||
+                                WEIGHTS.normal) : 0 };
+  }
+
+  // Whether a shape has been set in anything but the plain, and which: a few
+  // letters, so a shape already wearing exactly this is stepped over the
+  // way one already wearing its colors is.  A highlighter is measured
+  // against the words it sits behind, so a highlighted shape is redone when
+  // the chart's typeface or size moves those words.
+  function lookSaid(look) {
+    var L = lettersOf();
+    return (look.size ? look.size.toFixed(2) : "") + (look.bold ? "b" : "") +
+           (look.italic ? "i" : "") + (look.under ? "u" : "") +
+           (look.strike ? "s" : "") + (look.weight ? "w" + look.weight : "") +
+           (look.dash ? "d" + look.dash : "") +
+           (look.mark ? "@" + look.mark + (L.face || "") + (L.size || 1) : "");
+  }
+
+  function dressShape(g, look) {
+    var texts = all("text", g);
+    var lines = [look.under ? "underline" : "", look.strike ? "line-through" : ""]
+      .join(" ").trim();
+    texts.forEach(function (t) {
+      t.style.fontSize = look.size ? look.size.toFixed(2) + "px" : "";
+      t.style.fontWeight = look.bold ? "bold" : "";
+      t.style.fontStyle = look.italic ? "italic" : "";
+      t.style.textDecoration = lines;
+    });
+    // The border is said on the shape's group and taken up by its outline
+    // from there, rather than written on the outline itself: the outline of
+    // a shape that is picked, or is the one a run is on, is drawn heavier
+    // by the stylesheet, and that has to keep winning over this.
+    // The dashes are as long as the line is heavy, so that a heavy dashed
+    // border reads as dashed and not as a row of blobs.
+    g.style.strokeWidth = look.weight ? String(WEIGHTS[look.weight]) : "";
+    g.style.strokeDasharray = look.dash
+      ? (look.dash * 4.5).toFixed(1) + " " + (look.dash * 3).toFixed(1) : "";
+    markUp(g, texts, look.mark);
+    return texts.length + 1;
+  }
+
+  // A highlighter across the words, line by line, the way one goes across a
+  // page: just behind the letters and as long as each line is.  SVG words
+  // have no background of their own to color, so it is drawn -- in the
+  // shape's own group, behind its words, where it travels with the shape
+  // into a saved SVG and a PNG and is clicked as the shape.  It is measured
+  // from the words as they now are, so it comes after everything else about
+  // them has been put on.
+  function markUp(g, texts, color) {
+    var had = el(".highlights", g);
+    if (had) { had.remove(); }
+    if (!color || !texts.length) { return; }
+    var NS = "http://www.w3.org/2000/svg";
+    var pen = document.createElementNS(NS, "g");
+    pen.setAttribute("class", "highlights");
+    texts.forEach(function (t) {
+      if (!t.textContent.trim()) { return; }
+      var box;
+      try { box = t.getBBox(); } catch (e) { return; }
+      if (!box || !box.width) { return; }  // not on show: nothing to measure
+      var r = document.createElementNS(NS, "rect");
+      r.setAttribute("class", "highlight");
+      r.setAttribute("x", (box.x - 2).toFixed(1));
+      r.setAttribute("y", box.y.toFixed(1));
+      r.setAttribute("width", (box.width + 4).toFixed(1));
+      r.setAttribute("height", box.height.toFixed(1));
+      r.setAttribute("rx", "2");
+      r.setAttribute("fill", color);
+      r.setAttribute("stroke", "none");
+      pen.appendChild(r);
+    });
+    g.insertBefore(pen, texts[0]);
+  }
 
   // One color, on one element, unless it is already wearing it.  The slot
   // is where that element keeps what it was last given; no two of the
@@ -104,7 +211,8 @@
       fine: all(".grid.fine", chart),
       major: all(".grid.major", chart),
       ruled: all(".grid", chart),
-      nodes: all(".node", chart)
+      nodes: all(".node", chart),
+      words: el("g[font-family]", chart)     // the group every word is in
     };
     return chart._lists;
   }
@@ -128,20 +236,27 @@
       var fill = n.fill || k.fill || "";
       var line = n.line || k.line || style.ink || "";
       var word = n.text || k.text || style.words || style.ink || "";
+      var look = shapeLook(g.dataset.i), dress = lookSaid(look);
       // Looking inside a shape is the expensive part of this, so a shape
-      // already wearing all three of its colors is stepped over whole and
-      // never looked into at all.
-      if (g._fill === fill && g._line === line && g._word === word) { return; }
-      if (g._fill === undefined && !fill && !line && !word) {
+      // already wearing all three of its colors, and its words already set
+      // the way they are meant to be, is stepped over whole and never
+      // looked into at all.
+      if (g._fill === fill && g._line === line && g._word === word &&
+          g._dress === dress) { return; }
+      if (g._fill === undefined && !fill && !line && !word && !dress) {
         g._fill = fill; g._line = line; g._word = word;   // already exactly this
+        g._dress = dress;
         return;
       }
       if (daubed >= ATONCE) { leftOver = true; return; }
       if (g._fill !== fill || g._line !== line) {
         all("ellipse, rect, polygon, path", g).forEach(function (e) {
           // .ghost is the clear pane behind a words-only box: it is there to
-          // be clicked, never to be seen, so no color is put on it at all
-          if (e.classList.contains("ghost")) { return; }
+          // be clicked, never to be seen, so no color is put on it at all.
+          // Nor on the highlighter behind the words, which has its own.
+          if (e.classList.contains("ghost") || e.classList.contains("highlight")) {
+            return;
+          }
           if (!e.classList.contains("trim")) { e.style.fill = fill; }
           e.style.stroke = line;
           daubed += 1;
@@ -160,7 +275,31 @@
         });
         g._word = word;
       }
+      if (g._dress !== dress) {
+        daubed += dressShape(g, look);
+        g._dress = dress;
+      }
     });
+    // The chart's typeface and the size of its words go on the group every
+    // word in it sits inside, so the key, the labels on the arrows and the
+    // title change with the shapes.  The size is only a first sight of it:
+    // bigger words need bigger boxes, and the chart is laid out again for
+    // them a moment later (see reflowSoon).  The page beside an .svg cannot
+    // do that, so it is never asked to wear either.
+    var L = lettersOf();
+    if (here.words) {
+      putOn(here.words, "_face",
+            CAN_REFLOW && L.face && L.face !== "sans" && FACES[L.face]
+              ? FACES[L.face] : "", faceIt);
+      putOn(here.words, "_size",
+            CAN_REFLOW && L.size && L.size !== 1
+              ? (typeBase() * L.size).toFixed(2) + "px" : "", sizeIt);
+      // And how heavy every line is drawn, the same way: said once where
+      // every line takes it from, never on a line of its own.
+      putOn(here.words, "_weight",
+            style.weight && style.weight !== "normal" && WEIGHTS[style.weight]
+              ? String(WEIGHTS[style.weight]) : "", weighIt);
+    }
     var paper = style.sheet || "";
     here.paper.forEach(function (e) { putOn(e, "_paper", paper, fillIt); });
     // The paper is two things: the rectangle the drawing fills, and the

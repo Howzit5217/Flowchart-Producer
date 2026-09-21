@@ -279,10 +279,11 @@
       },
       test: function (code) { return code; },
       say: function (said) { return "print(" + said + ")"; },
-      ask: function (kind) {
-        return kind === "whole" ? "int(input())"
-             : kind === "real" ? "float(input())"
-             : kind === "flag" ? 'input().strip().lower() == "true"' : "input()";
+      ask: function (kind, w, question) {
+        var read = "input(" + (question || "") + ")";
+        return kind === "whole" ? "int(" + read + ")"
+             : kind === "real" ? "float(" + read + ")"
+             : kind === "flag" ? read + '.strip().lower() == "true"' : read;
       },
       declare: function (w, entry, start) { return w.spelled(entry) + " = " + start; },
       param: function (w, p) { return w.spelled(p.entry); },
@@ -384,6 +385,8 @@
       },
       lead: function (fixed) { return fixed ? "final " : ""; },
       say: function (said) { return "System.out.println(" + said + ")"; },
+      // The question, on the line the answer is typed on.
+      hint: function (question) { return "System.out.print(" + question + ")"; },
       // A line at a time, whatever is being asked for.  nextInt() reads the
       // number and leaves the Enter that followed it sitting there, and the
       // next nextLine() reads that Enter as an empty answer -- so a program
@@ -468,7 +471,11 @@
       whole: function (w) {
         classFile(w, function () {
           var top = w.needs.keys ? [[0, "import java.util.Scanner;"], [0, ""]] : [];
-          top.push([0, "public class " + w.file + " {"]);
+          // Not public: a public class only compiles in a file of exactly
+          // its own name, and code that is copied rather than saved lands
+          // in whatever file the editor made up for it -- Untitled-1, or
+          // the first line of the paste.  This one runs from any of them.
+          top.push([0, "class " + w.file + " {"]);
           if (w.needs.keys) {
             top.push([1, "static Scanner keyboard = new Scanner(System.in);"], [0, ""]);
           }
@@ -501,6 +508,7 @@
       // Main is the way in, so it cannot also be the class around it.
       named: function (name) { return name === "Main" ? "Program" : name; },
       say: function (said) { return "Console.WriteLine(" + said + ")"; },
+      hint: function (question) { return "Console.Write(" + question + ")"; },
       ask: function (kind) {
         var read = "Console.ReadLine()";
         return kind === "whole" ? "int.Parse(" + read + ")"
@@ -596,6 +604,9 @@
         }).join(" << ");
       },
       say: function (said) { return "std::cout << " + said + " << std::endl"; },
+      // No endl, so the answer is typed beside it; std::cin is tied to
+      // std::cout, and reading from one empties what is waiting in the other.
+      hint: function (question) { return "std::cout << " + question; },
       // Reading is a statement in C++ rather than something a name can be
       // set to: std::cin >> x fills a name it is given, where every other
       // language here hands a value back.  So the file opens with small
@@ -681,17 +692,35 @@
       // and the next getline reads it as an empty answer -- so a program
       // that asks for a number and then for a word appears to skip the
       // second question entirely.
+      //
+      // And each of them stops the program when there is nothing it can
+      // read, the way Python, Java and C# all stop.  A >> that fails hands
+      // back 0 and leaves std::cin refusing every read after it, so one
+      // mistyped answer -- or the end of the input -- used to be 0, then 0
+      // again, for ever: a loop waiting for -1 never ended.
       helpers: {
-        askWhole: { lines: ["static int askWhole() {", "    int v = 0;",
-                            "    std::cin >> v;",
+        askWhole: { wants: ["cstdlib"],
+                    lines: ["static int askWhole() {", "    int v = 0;",
+                            "    if (!(std::cin >> v)) {",
+                            '        std::cerr << "That was not a whole number." << std::endl;',
+                            "        std::exit(1);",
+                            "    }",
                             "    std::cin.ignore(10000, '\\n');",
                             "    return v;", "}"] },
-        askReal: { lines: ["static double askReal() {", "    double v = 0;",
-                           "    std::cin >> v;",
+        askReal: { wants: ["cstdlib"],
+                   lines: ["static double askReal() {", "    double v = 0;",
+                           "    if (!(std::cin >> v)) {",
+                           '        std::cerr << "That was not a number." << std::endl;',
+                           "        std::exit(1);",
+                           "    }",
                            "    std::cin.ignore(10000, '\\n');",
                            "    return v;", "}"] },
-        askText: { lines: ["static std::string askText() {", "    std::string v;",
-                           "    std::getline(std::cin, v);",
+        askText: { wants: ["cstdlib"],
+                   lines: ["static std::string askText() {", "    std::string v;",
+                           "    if (!std::getline(std::cin, v)) {",
+                           '        std::cerr << "There was nothing more to read." << std::endl;',
+                           "        std::exit(1);",
+                           "    }",
                            "    return v;", "}"] },
         askFlag: { lines: ["static bool askFlag() {",
                            '    return askText() == "true";', "}"] },
@@ -786,10 +815,11 @@
       head: function () { return "let "; },
       cash: function (code) { return held(code) + ".toFixed(2)"; },
       say: function (said) { return "console.log(" + said + ")"; },
-      ask: function (kind, w) {
+      ask: function (kind, w, question) {
         w.need("ask");
-        return kind === "text" ? "ask()"
-             : kind === "flag" ? 'ask() === "true"' : "Number(ask())";
+        var read = "ask(" + (question || "") + ")";
+        return kind === "text" ? read
+             : kind === "flag" ? read + ' === "true"' : "Number(" + read + ")";
       },
       into: function (a, b) { return "Math.floor(" + a + " / " + b + ")"; },
       pow: "**",
@@ -827,16 +857,23 @@
       // Code that only ran in one of them would be code that did not run
       // for half the people who pasted it somewhere, so it asks whichever
       // way is there to be asked.
+      //
+      // At the end of the input it stops, as Python's input() does.  It used
+      // to hand back "" there -- and then "" again, as fast as it was asked
+      // -- so a loop waiting for -1 went round for ever on Number(""), 0.
       helpers: {
         ask: ["// Asks for something to be typed in: a box in a browser, the keyboard in Node.",
-              "function ask() {",
-              '  if (typeof prompt === "function") { return prompt("") || ""; }',
+              'function ask(question = "") {',
+              '  if (typeof prompt === "function") { return prompt(question) || ""; }',
               '  const fs = require("fs"), one = Buffer.alloc(1), typed = [];',
+              "  let got = 0;",
+              "  process.stdout.write(question);",
               "  try {",
-              "    while (fs.readSync(0, one, 0, 1) === 1 && one[0] !== 10) {",
+              "    while ((got = fs.readSync(0, one, 0, 1)) === 1 && one[0] !== 10) {",
               "      if (one[0] !== 13) { typed.push(one[0]); }",
               "    }",
               "  } catch (nothingTyped) { /* the end of what there was to read */ }",
+              '  if (got !== 1 && !typed.length) { throw new Error("There was nothing more to read."); }',
               '  return Buffer.from(typed).toString("utf8");',
               "}"],
         stop: ["// Stops the program where it stands.",

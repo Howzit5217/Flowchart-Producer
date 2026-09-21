@@ -371,6 +371,7 @@
       block: function (items, deep, quietly) {
         var started = out.length;
         for (var i = 0; i < (items || []).length; i++) {
+          w.before = i ? items[i - 1] : null;  // what an Input may take as its question
           each(items[i], deep);
           // Whatever follows a Return can never run, and Java will not
           // compile a line that can never run.
@@ -494,8 +495,21 @@
         case "input":
           entry = R_JUST_A_NAME.test(item.var || "") ? w.entry(item.var) : null;
           if (!entry) { w.line(deep, L.note + item.text); break; }
+          // The runner puts a box on the tape to type into.  The program on
+          // its own used to ask for nothing out loud at all: run in a
+          // terminal it printed not a word and sat there waiting, which
+          // looks exactly like a program that never started.  A Display just
+          // before is already the question; without one it asks by name, as
+          // the box does.  Some languages ask inside the read itself --
+          // input("Enter n: ") -- and the rest print the question first.
+          var asking = w.before && w.before.op === "display" ? ""
+                     : quoted(say("code_ask", { name: item.var.trim() }));
+          if (asking && L.hint) {
+            w.line(deep, L.hint(asking) + L.semi);
+            asking = "";
+          }
           code = L.ask(entry.kind === "int" ? "whole" : entry.kind === "real" ? "real"
-                     : entry.kind === "bool" ? "flag" : "text", w);
+                     : entry.kind === "bool" ? "flag" : "text", w, asking);
           if (L.hoists && entry.born === item) {
             w.line(deep, L.declare(w, entry, code, false, false) + L.semi);
           } else {

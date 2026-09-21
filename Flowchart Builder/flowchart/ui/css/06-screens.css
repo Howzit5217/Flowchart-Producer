@@ -77,7 +77,9 @@
        decoration; the runner's bar carries four things besides it and was
        breaking onto a second row to fit them. */
     .code-esc, .code-bar .mark { display: none; }
-    #tape-done { margin-left: auto; }
+    /* With the count and the Esc chip gone, nothing is left to push Done
+       over to the right, so it pushes itself. */
+    #tape-done, #code-done, #pz-done, #eg-done, #more-done { margin-left: auto; }
     /* the bar has five things in it on this screen and room for four, so
        the count goes and the way back says it in one word */
     .code-bar .code-count { display: none; }
@@ -85,6 +87,13 @@
     .btn.back .short { display: inline; }
     #tape-over { padding: 0; }
     #tape-over .code-sheet { border: 0; border-radius: 0; }
+  }
+  /* The smallest phones, while a run stands waiting for its next step: the
+     bar has Next step in it as well, and Done was being pushed onto a row
+     of its own.  The name of the screen goes instead -- the buttons are
+     what anybody is looking at the bar for just then. */
+  @media (max-width: 359px) {
+    .code-bar:has(#tape-next:not([hidden])) #tape-title { display: none; }
   }
 
   /* --------------------------------------------------------- not as tall -- */

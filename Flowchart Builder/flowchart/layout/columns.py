@@ -3,7 +3,8 @@ charts side by side."""
 from .. import settings
 from ..layout.blocks import (
     edge_shape, head_shape, layout_item, shift, tail_shape, wrap)
-from ..measure import FONT_SIZE, text_w
+from .. import measure
+from ..measure import text_w
 
 
 # ----------------------------------------------------------- column packing --
@@ -223,7 +224,11 @@ def connect_columns(cols):
             elems += off + [("line", gutter, at, gutter, into, False),
                             ("line", gutter, into, side, into, True)]
             continue
-        lane = -settings.VGAP * 0.75               # clear of the top of both columns
+        # Clear of the top of both columns -- and of the head on a loop's way
+        # back, where the next column starts with a loop: that comes in
+        # side-on at the very top, just under the corner this turns down at.
+        lane = -max(settings.VGAP * 0.75,
+                    settings.CORNER_R + settings.HEAD_WIDE / 2.0 + 6)
         elems += off + [("line", gutter, at, gutter, lane, False),
                         ("line", gutter, lane, b["axis"], lane, False),
                         ("line", b["axis"], lane, b["axis"], 0, True)]
@@ -243,14 +248,14 @@ def bbox(elems):
         else:
             _, x, y, s, anchor = e
             tw = (text_w(s, 13, True) if e[0] == "htext"
-                  else text_w(s, FONT_SIZE, True) + 8)
+                  else text_w(s, measure.FONT_SIZE, True) + 8)
             if anchor == "end":
                 xs += [x - tw, x]
             elif anchor == "middle":
                 xs += [x - tw / 2.0, x + tw / 2.0]
             else:
                 xs += [x, x + tw]
-            ys += [y - 12, y + 3]
+            ys += [y - (measure.FONT_SIZE + 1), y + 3]
     if not xs:
         return 0.0, 0.0, 0.0, 0.0
     return min(xs), min(ys), max(xs), max(ys)

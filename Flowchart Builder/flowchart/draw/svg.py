@@ -1,13 +1,13 @@
 """Putting the SVG together."""
 import html
 
-from .. import settings
+from .. import measure, settings
 from ..draw.grid import grid_lines
 from ..draw.outlines import shape_art
 from ..draw.arrows import arrow_head, chain_lines, path_d
 from ..layout.blocks import shift
 from ..layout.columns import bbox
-from ..measure import FONT, FONT_SIZE, LINE_H, text_w
+from ..measure import FONT, line_h, text_w, type_of
 from ..shapes import geom_of
 from ..words.lookup import word
 
@@ -72,7 +72,7 @@ def to_svg(elems, title=None, author=None):
     ]
     out += grid_lines(width, height)
     out += [
-        f'<g font-family="{FONT}" font-size="{FONT_SIZE}" fill="none" '
+        f'<g font-family="{FONT}" font-size="{measure.FONT_SIZE:g}" fill="none" '
         f'stroke="{settings.INK}" stroke-width="1.3" stroke-linecap="round" '
         'stroke-linejoin="round">',
     ]
@@ -88,36 +88,82 @@ def to_svg(elems, title=None, author=None):
             out.append(f'<text class="author" x="{settings.MARGIN}" y="42" stroke="none" '
                        f'fill="{settings.INK}">{html.escape(author)}</text>')
 
-    # A route gets an arrowhead where it arrives at a shape.  That is the
-    # whole rule.
+    # A route gets an arrowhead where it arrives at a shape, and also where
+    # it arrives side-on at a line that carries on past the point -- a loop
+    # coming round again, or a branch rejoining the flow it left.  It points
+    # at that line, which is what it is really arriving at.  Left bare, the
+    # way back up the side of a loop is a line with nothing on it to say
+    # which way it runs.
     #
-    # It used to get one where it arrived side-on at a line that carried on
-    # past the point as well -- a branch rejoining the flow it left, aimed
-    # at the line it was rejoining.  The reasoning was sound and the result
-    # was not.  Those joins happen on the rail a few pixels above the shape
-    # the rail runs into, so the head landed on the line with another head
-    # just below it that really was arriving somewhere, and a loop going
-    # round again put a third one on the same rail from the other side.
-    # Two and three heads clustered at the foot of a diamond read as a
-    # pile-up rather than as a join.
+    # What never gets a head is a route that merely meets another one: the
+    # two sides of an If coming back together arrive nose to nose at the
+    # same point, and two heads there read as a collision rather than a
+    # join.  There the single arrow leaving the meeting says where it goes.
     #
-    # A line that joins another needs no head of its own: the line it joins
-    # is going somewhere and carries the head that says where.  Which is
-    # what the two sides of an If have always done here -- they arrive nose
-    # to nose at one point and neither carries a head, because two heads
-    # meeting there read as a collision.  The same is true of every other
-    # join; it was only ever this one that argued otherwise.
+    # Arriving at a shape means pointing into it, not ending somewhere near
+    # it.  The test was once only whether the end of a route fell inside the
+    # box a shape sits in, and a diamond's box is mostly not diamond: the
+    # two sides of an If that met right under its point were taken to be
+    # arriving at it, and got a head each, nose to nose on the tip.  So the
+    # route has to be heading into the shape as well -- a step further on
+    # from where it stops lies inside -- and one running along the foot of
+    # a box, or across the point of a diamond, is not.
+    #
+    # Whether a head has room to be read is the layout's business: a join
+    # is laid out far enough from the shape below it that the head on the
+    # join and the head going into the shape stand apart.
     nodes = 0                            # shapes get a number as they go
     boxes = [(e[2] - e[4] / 2.0, e[3] - e[5] / 2.0,
               e[2] + e[4] / 2.0, e[3] + e[5] / 2.0)
              for e in elems if e[0] == "shape"]
     segs = [e for e in elems if e[0] == "line"]
 
-    def reaches_a_shape(pt):
+    def reaches_a_shape(pts):
+        (ax, ay), (bx, by) = pts[-2], pts[-1]
+        run = max(abs(bx - ax), abs(by - ay))
+        if run < 0.01:
+            return False
+        fx, fy = bx + (bx - ax) / run * 3, by + (by - ay) / run * 3
         for a, b, c, d in boxes:
-            if a - 1.5 <= pt[0] <= c + 1.5 and b - 1.5 <= pt[1] <= d + 1.5:
+            if a - 1.5 <= bx <= c + 1.5 and b - 1.5 <= by <= d + 1.5 \
+                    and a + 0.5 < fx < c - 0.5 and b + 0.5 < fy < d - 0.5:
                 return True
         return False
+
+    upright = lambda dx, dy: abs(dy) > abs(dx)
+    at = lambda x, y: (round(x, 1), round(y, 1))
+    leaving, arriving = {}, {}           # which way lines go at each point
+    down_x, across_y = {}, {}            # verticals by x, horizontals by y
+    for _, x1, y1, x2, y2, _a in segs:
+        way = upright(x2 - x1, y2 - y1)
+        leaving.setdefault(at(x1, y1), set()).add(way)
+        arriving.setdefault(at(x2, y2), set()).add(way)
+        if abs(x1 - x2) < 0.5:
+            down_x.setdefault(round(x1, 1), []).append((min(y1, y2), max(y1, y2)))
+        elif abs(y1 - y2) < 0.5:
+            across_y.setdefault(round(y1, 1), []).append((min(x1, x2), max(x1, x2)))
+
+    def runs_through(pt):
+        """Is there a line at pt that carries on past it, rather than one
+        that stops there?  Either a single segment pt sits inside, or one
+        arriving and one leaving the same way, which is one line with a
+        join drawn in the middle of it."""
+        if leaving.get(pt, set()) & arriving.get(pt, set()):
+            return True
+        for lo, hi in down_x.get(pt[0], ()):
+            if lo + 1.5 < pt[1] < hi - 1.5:
+                return True
+        for lo, hi in across_y.get(pt[1], ()):
+            if lo + 1.5 < pt[0] < hi - 1.5:
+                return True
+        return False
+
+    def joins_a_line(pts):
+        """Does this route arrive side-on at a line that carries on past?"""
+        pt = at(*pts[-1])
+        (ax, ay), (bx, by) = pts[-2], pts[-1]
+        came = upright(bx - ax, by - ay)
+        return came not in leaving.get(pt, set()) and runs_through(pt)
 
     # Routes first, because the shapes and the labels are meant to paint over
     # them.  The tips are held back to the very end: a label carries a patch
@@ -127,7 +173,7 @@ def to_svg(elems, title=None, author=None):
     tips = []
     for pts, arrow in chain_lines(segs):
         head = None
-        if reaches_a_shape(pts[-1]):
+        if reaches_a_shape(pts) or joins_a_line(pts):
             head, pts = arrow_head(pts)
         d = path_d(pts)
         if d:
@@ -144,11 +190,12 @@ def to_svg(elems, title=None, author=None):
             _, x, y, s_, anchor = e
             if not s_:
                 continue
-            tw = text_w(s_, FONT_SIZE, True) + 8  # patch keeps the label off
-            bx = {"end": x - tw + 4,            #   whatever line runs behind it
+            tw = text_w(s_, measure.FONT_SIZE, True) + 8  # patch keeps the label
+            bx = {"end": x - tw + 4,            #   off whatever line runs behind it
                   "middle": x - tw / 2.0}.get(anchor, x - 4)
-            out.append(f'<rect class="patch" x="{bx:.1f}" y="{y - 10:.1f}" '
-                       f'width="{tw:.1f}" height="13" fill="{settings.SHEET}" '
+            out.append(f'<rect class="patch" x="{bx:.1f}" '
+                       f'y="{y - (measure.FONT_SIZE - 1):.1f}" width="{tw:.1f}" '
+                       f'height="{measure.LINE_H:g}" fill="{settings.SHEET}" '
                        'stroke="none"/>')
             out.append(f'<text class="label" x="{x:.1f}" y="{y:.1f}" '
                        f'text-anchor="{anchor}" font-weight="bold" '
@@ -184,9 +231,16 @@ def to_svg(elems, title=None, author=None):
                 ty = cy
             elif drawn == "stored":              # inside the ruled corner
                 ty = cy + min(4.0, h * 0.07)
-            y0 = ty - (len(lines) - 1) * LINE_H / 2.0 + 4
+            # Lines as far apart as the words they carry are tall, and the
+            # baseline set down by a third of that, whatever size the page
+            # asked this step's words to be.  The size itself is the page's
+            # to put on: it is a matter of how the chart looks, and the page
+            # is where that is decided and changed.
+            size, _ = type_of(said)
+            tall = line_h(size)
+            y0 = ty - (len(lines) - 1) * tall / 2.0 + 4.0 * size / measure.BASE_SIZE
             for i, line in enumerate(lines):
-                out.append(f'<text x="{tx:.1f}" y="{y0 + i*LINE_H:.1f}" '
+                out.append(f'<text x="{tx:.1f}" y="{y0 + i*tall:.1f}" '
                            f'text-anchor="middle" stroke="none" fill="{settings.INK}">'
                            f'{html.escape(line)}</text>')
             out.append("</g>")

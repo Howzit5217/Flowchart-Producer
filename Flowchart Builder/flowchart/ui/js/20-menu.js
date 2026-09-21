@@ -46,6 +46,35 @@
         menu.appendChild(said);
         return;
       }
+      // A row of small buttons side by side -- B, I, U and the like -- that
+      // leave the menu open, so that bold and bigger are two presses in one
+      // menu rather than a menu each.  One that is a switch lights while on.
+      if (item.tools) {
+        var strip = document.createElement("div");
+        strip.className = "menu-tools";
+        item.tools.forEach(function (tool) {
+          var b = document.createElement("button");
+          b.type = "button";
+          b.className = "tog" + (tool.on ? " on" : "");
+          b.textContent = tool.mark;
+          b.title = tool.name;
+          b.setAttribute("aria-label", tool.name);
+          if (tool.on !== undefined) {
+            b.setAttribute("aria-pressed", tool.on ? "true" : "false");
+          }
+          b.onclick = function (ev) {
+            ev.stopPropagation();
+            var now = tool.go();
+            if (tool.on !== undefined) {
+              b.classList.toggle("on", !!now);
+              b.setAttribute("aria-pressed", now ? "true" : "false");
+            }
+          };
+          strip.appendChild(b);
+        });
+        menu.appendChild(strip);
+        return;
+      }
       var row = document.createElement("button");
       row.type = "button";
       row.style.position = "relative";
@@ -108,13 +137,43 @@
                function (v) { set("line", v); }),
       paintRow(TXT.c_words || "Words", mine.text, fallbacks.text,
                function (v) { set("text", v); }),
-      { name: TXT.c_clear || "No color of its own", go: function () {
-          delete mine.fill; delete mine.line; delete mine.text;
+      paintRow(TXT.t_mark, mine.mark, MARKERS[0][0],
+               function (v) { set("mark", v); }),
+      wordTools(which),
+      // Everything this shape was given of its own -- colors, how its words
+      // look, its border -- taken off together, one step to step back from.
+      { name: TXT.c_clear || "No style of its own", go: function () {
+          keepUndo();
+          var was = typeSign(style);
+          Object.keys(mine).forEach(function (key) { delete mine[key]; });
           style.nodes[which] = mine;
-          paint();
-          keep();
+          restyled(typeSign(style) !== was);
+          drawSelection();
         } }
     ];
+  }
+
+  // B, I, U and S, and the words a size smaller or bigger, for one shape.
+  function wordTools(which) {
+    function flip(what) {
+      return function () {
+        var on = flipLook(which, what);
+        drawSelection();
+        return on;
+      };
+    }
+    function grow(way) {
+      return function () { growWords(which, way); drawSelection(); };
+    }
+    var tools = LOOK_KEYS.map(function (one) {
+      return { mark: one[2], on: lookOn(which, one[0]), go: flip(one[0]),
+               name: TXT[one[1]] + (one[3] ? " (" + one[3] + ")" : "") };
+    });
+    if (CAN_REFLOW) {
+      tools.push({ mark: "A−", name: TXT.t_smaller, go: grow(-1) },
+                 { mark: "A+", name: TXT.t_bigger, go: grow(1) });
+    }
+    return { tools: tools };
   }
 
   function shapeMenu(node, x, y) {
@@ -143,9 +202,13 @@
           drawHand(); drawHandPanel();
         } },
       "-"
-    ].concat(colorRows("h" + node.id, style.nodes["h" + node.id] || {},
-                        { fill: "#ffffff", line: style.ink || "#000000",
-                          text: style.words || style.ink || "#000000" }))
+    ].concat(colorRows("h" + node.id,
+                       // the shape's own, kept, so that everything this menu
+                       // does to it -- colors and words alike -- is to one
+                       // and the same record of how it looks
+                       style.nodes["h" + node.id] = style.nodes["h" + node.id] || {},
+                       { fill: "#ffffff", line: style.ink || "#000000",
+                         text: style.words || style.ink || "#000000" }))
      .concat([
       "-",
       { name: TXT.delete, go: function () {

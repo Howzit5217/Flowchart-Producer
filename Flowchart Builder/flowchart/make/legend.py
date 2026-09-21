@@ -1,8 +1,8 @@
 """The key beside the chart."""
-from .. import settings
+from .. import measure, settings
 from ..layout.blocks import shift
 from ..layout.columns import bbox
-from ..measure import FONT_SIZE, text_w
+from ..measure import text_w
 from ..shapes import SWATCH_H, SWATCH_W
 
 
@@ -24,7 +24,7 @@ def legend_row(elems):
         x += SWATCH_W + 9
         name = settings.LEGEND_NAME[kind]
         out.append(("text", x, band / 2.0 + 4, name, "start"))
-        x += text_w(name, FONT_SIZE, True) + 28
+        x += text_w(name, measure.FONT_SIZE, True) + 28
     return out, band
 
 

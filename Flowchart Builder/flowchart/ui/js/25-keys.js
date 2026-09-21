@@ -77,6 +77,29 @@
       stepBack(true);
       return;
     }
+
+    // The keys every word processor uses, for the words of the shape that
+    // is picked: bold, italic, underline, and a size bigger or smaller.
+    // Either mode can have a shape picked, so both answer them.  With none
+    // picked they are left to the browser, which has uses of its own for
+    // them, rather than being swallowed for nothing.
+    var picking = ctrl && !ev.altKey ? selectedNow() : null;
+    if (picking) {
+      var byKey = { b: "bold", i: "italic", u: "under" };
+      var look = !ev.shiftKey && byKey[String(ev.key).toLowerCase()];
+      if (look) {
+        ev.preventDefault();
+        flipLook(picking.i, look);
+        drawSelection();
+        return;
+      }
+      if (ev.shiftKey && (ev.key === ">" || ev.key === "<")) {
+        ev.preventDefault();
+        growWords(picking.i, ev.key === ">" ? 1 : -1);
+        drawSelection();
+        return;
+      }
+    }
     if (!byHand) { return; }
 
     var node = nodeById(picked), link = linkById(chosen);

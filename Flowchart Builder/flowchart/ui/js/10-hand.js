@@ -110,18 +110,37 @@
     return hand.links.filter(function (l) { return l.to === id; });
   }
 
+  // What a shape's words are set in: the chart's typeface and size, and
+  // whatever this one shape was given of its own on the Style side.  It is
+  // what the shape is measured in and what its lines are spaced by, so
+  // bigger or bolder words make a bigger box, the way longer ones do.
+  function handType(node) {
+    var L = lettersOf(), mine = style.nodes["h" + node.id] || {};
+    function either(what) {
+      return mine[what] !== undefined ? !!mine[what] : !!L[what];
+    }
+    var size = HAND_TYPE * (L.size || 1) * (mine.size || 1);
+    var face = FACES[L.face] || FACES.sans;
+    return { size: size, line: size * HAND_LINE / HAND_TYPE, face: face,
+             bold: either("bold"), italic: either("italic"),
+             under: either("under"), strike: either("strike"),
+             font: (either("italic") ? "italic " : "") +
+                   (either("bold") ? "bold " : "") + size + "px " + face };
+  }
+
   function measure(node, force) {         // how big the words make it
     if (node.own && !force) { return; }   // unless a size was set by hand
     var lines = String(node.text || " ").split("\n");
     var pen = measure.pen || (measure.pen = document.createElement("canvas")
                               .getContext("2d"));
-    pen.font = HAND_TYPE + "px Arial, Helvetica, sans-serif";
+    var type = handType(node);
+    pen.font = type.font;
     var wide = 0;
     lines.forEach(function (line) { wide = Math.max(wide, pen.measureText(line).width); });
     var room = ROOM[node.kind] || ROOM.rect;
     var STEP = HAND_GRID * 2;          // so half of it is a whole quarter
     node.w = Math.max(room[0], Math.round(wide) + (node.kind === "diamond" ? 84 : 40));
-    node.h = Math.max(room[1], lines.length * HAND_LINE +
+    node.h = Math.max(room[1], lines.length * type.line +
                                (node.kind === "diamond" ? 38 : 24));
     node.w = Math.ceil(node.w / STEP) * STEP;
     node.h = Math.ceil(node.h / STEP) * STEP;
@@ -410,7 +429,9 @@
     if (!used.length) { return { art: "", tall: 0 }; }
     var pen = measure.pen || (measure.pen = document.createElement("canvas")
                               .getContext("2d"));
-    pen.font = "bold " + HAND_TYPE + "px Arial, Helvetica, sans-serif";
+    var L = lettersOf();
+    pen.font = "bold " + HAND_TYPE * (L.size || 1) + "px " +
+               (FACES[L.face] || FACES.sans);
     var out = [], x = 0;
     used.forEach(function (kind) {
       out.push(shapeArt(kind, x + KEY_W / 2, KEY_H / 2, KEY_W, KEY_H, "#ffffff"));
@@ -476,8 +497,9 @@
              '" fill="none" stroke="#e7ebf0" stroke-width="0.7"/>');
     out.push('<path class="grid major" d="' + major.join("") +
              '" fill="none" stroke="#d8dfe8" stroke-width="1"/>');
-    out.push('<g font-family="Arial, Helvetica, sans-serif" font-size="' +
-             HAND_TYPE + '" ' +
+    var letters = lettersOf();
+    out.push('<g font-family="' + (FACES[letters.face] || FACES.sans) +
+             '" font-size="' + HAND_TYPE * (letters.size || 1) + '" ' +
              'fill="none" stroke="#000000" stroke-width="1.3" ' +
              'stroke-linecap="round" stroke-linejoin="round">');
 
@@ -518,9 +540,10 @@
         // of it and nobody ever saw it.  Which is why the False on a
         // decision could be read going one way and not the other.
         var mid = halfWay(pts);
-        out.push('<rect class="patch" x="' + (mid[0] + 4) + '" y="' + (mid[1] - 16) +
-                 '" width="' + (link.label.length * 7 + 8) + '" height="13" ' +
-                 'fill="#ffffff" stroke="none"/>');
+        var k = letters.size || 1;       // the patch grows with the words
+        out.push('<rect class="patch" x="' + (mid[0] + 4) + '" y="' +
+                 (mid[1] - 6 - 10 * k) + '" width="' + (link.label.length * 7 * k + 8) +
+                 '" height="' + 13 * k + '" fill="#ffffff" stroke="none"/>');
         out.push('<text class="label" x="' + (mid[0] + 6) + '" y="' + (mid[1] - 6) +
                  '" font-weight="bold" stroke="none" fill="#000000">' +
                  escaped(link.label) + "</text>");
@@ -541,9 +564,10 @@
       // which is what puts the body of the letters on the middle line
       // instead of hanging them off it.
       var mid = moved.y + (WORD_SHIFT[n.kind] || 0) * n.h;
-      var y0 = mid - (lines.length - 1) * HAND_LINE / 2 + HAND_TYPE * 0.35;
+      var type = handType(n);
+      var y0 = mid - (lines.length - 1) * type.line / 2 + type.size * 0.35;
       lines.forEach(function (line, k) {
-        out.push('<text x="' + moved.x + '" y="' + (y0 + k * HAND_LINE).toFixed(1) +
+        out.push('<text x="' + moved.x + '" y="' + (y0 + k * type.line).toFixed(1) +
                  '" text-anchor="middle" stroke="none" fill="#000000">' +
                  escaped(line) + "</text>");
       });

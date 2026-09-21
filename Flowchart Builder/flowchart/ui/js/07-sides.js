@@ -65,11 +65,16 @@
   var folded = {};
   try { folded = JSON.parse(localStorage.getItem("flowchart-folded")) || {}; }
   catch (e) { folded = {}; }
-  all("#side-colors-panel section.card").forEach(function (card, i) {
+  // Named by where they stand -- except a card that names itself, which is
+  // named by that and not counted.  The card for the words came after the
+  // others were already being remembered by place, and counting it would
+  // have handed every card below it the folds of the one above.
+  var cardsCounted = 0;
+  all("#side-colors-panel section.card").forEach(function (card) {
     var head = el("h2", card);
+    var name = card.dataset.fold || "s" + cardsCounted++;
     if (!head) { return; }
     card.classList.add("fold");
-    var name = "s" + i;
     if (folded[name]) { card.classList.add("shut"); }
     head.onclick = function () {
       card.classList.toggle("shut");
