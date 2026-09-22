@@ -127,6 +127,18 @@
       "port": 8851
     },
     {
+      "name": "starts-site",
+      "runtimeExecutable": "python",
+      "runtimeArgs": [
+        "-m",
+        "http.server",
+        "8861",
+        "--directory",
+        "C:/Users/origa/Downloads/GitHub/Flowchart-Producer/Flowchart Builder"
+      ],
+      "port": 8861
+    },
+    {
       "name": "saves-site",
       "runtimeExecutable": "python",
       "runtimeArgs": [

@@ -77,6 +77,7 @@
     if (!el("#code")) { fileSays(TXT.f_not_ours, true); return; }
     if (!String(text).trim()) { fileSays(TXT.f_empty, true); return; }
     el("#code").value = String(text).replace(/\r\n?/g, "\n");
+    showStarts();                        // there is pseudocode now: fold the offer away
     if (el("#f-title") && !el("#f-title").value.trim()) {
       el("#f-title").value = String(name).replace(/\.[^.]*$/, "");
     }
@@ -102,6 +103,7 @@
     if (was.geom) { geom = was.geom; drawRoles(); }
     if (was.source && el("#code")) {
       el("#code").value = was.source.code || "";
+      showStarts();
       el("#f-title").value = was.source.title || "";
       el("#f-author").value = was.source.author || "";
       if (was.source.shape && el("#f-shape")) {

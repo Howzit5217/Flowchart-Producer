@@ -1128,6 +1128,7 @@
       into.title = TXT.h_into_box_tip;
       into.onclick = function () {
         el("#code").value = text;
+        showStarts();
         tapeFull(false);
         setMode(false);
         el("#build").click();
