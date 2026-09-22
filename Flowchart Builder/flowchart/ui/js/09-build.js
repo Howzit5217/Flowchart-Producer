@@ -635,6 +635,14 @@
   // The words the chart on the paper was last drawn from, so a check can
   // tell whether what is in the box has moved on since.
   var builtText = null;
+  // The drawing goes onto the paper here and nowhere else.  Drawn `again`
+  // (see drawItNow) it is the same chart with its shapes moved over a
+  // little to make room, and 26-motion.js wraps this to carry each of them
+  // from where it was to where it now goes, rather than have the whole
+  // chart jump.
+  function putSheet(svg, again) {
+    el("#sheet").innerHTML = svg;
+  }
   // Drawing a new chart throws away the program that is on the paper, and a
   // run is a walk through that program.  Carrying on regardless left the
   // runner stepping through a chart nobody could see any more and printing
@@ -694,7 +702,7 @@
           return;
         }
         var keepSel = again && sel ? sel.dataset.i : null;
-        el("#sheet").innerHTML = data.svg;
+        putSheet(data.svg, again);
         // On a narrow screen the panel is lying over the chart, so it is put
         // away: you pressed the button to see a chart, not to keep looking at
         // the button.  On a wide screen it stays where it is.

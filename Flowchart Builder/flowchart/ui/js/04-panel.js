@@ -535,8 +535,17 @@
       }
       var kind = now.kind, i = now.i, name = now.name;
       var head = document.createElement("div");
-      head.innerHTML = '<div class="what">' + name + '</div><div class="said">' +
-                       now.said.replace(/[<>&]/g, "") + "</div>";
+      var what = document.createElement("div");
+      what.className = "what";
+      what.textContent = name;
+      // As words, not as markup: the shape's words are whatever was typed,
+      // and "mark >= 70" written into markup with its brackets taken out
+      // read as "mark = 70", which is a different test.
+      var saidIt = document.createElement("div");
+      saidIt.className = "said";
+      saidIt.textContent = now.said;
+      head.appendChild(what);
+      head.appendChild(saidIt);
       body.appendChild(head);
       var mine = style.nodes[i] = style.nodes[i] || {};
       var k = style.kinds[kind] || {};

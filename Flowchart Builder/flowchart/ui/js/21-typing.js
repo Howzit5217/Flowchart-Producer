@@ -109,15 +109,32 @@
     sel.addRange(pick);
     space.focus();
 
-    var shut;
+    var shut, closing = false;
     function done() {
-      if (!slot.parentNode) { return; }  // already put away
+      // Once, however many ways it is asked.  Putting the box away takes
+      // the keyboard off it, and the browser answers that by asking again
+      // from inside the putting away; going along with that removed the
+      // box from under the removal already under way, which then threw.
+      if (closing || !slot.parentNode) { return; }  // already put away
+      closing = true;
       if (shut) { shut(); }
       node.text = space.textContent.replace(/\s+$/, "");
       slot.remove();
       measure(node);
-      drawHand();
-      drawHandPanel();
+      // The drawing goes again a moment later, not now.  The box sits inside
+      // the chart, so anything that pours the chart afresh while it is open
+      // -- a shape added from the palette, one dragged, a design opened --
+      // takes the box away with the rest, and the browser says so by taking
+      // the keyboard off it first: this is called from inside that pouring.
+      // Pouring the chart a second time from in there left the first
+      // pouring with nothing to finish on, and it threw, halfway through
+      // whatever had asked for it.  The words are kept at once, so nothing
+      // typed is lost whichever way the box was closed; only the redrawing
+      // waits its turn.
+      setTimeout(function () {
+        drawHand();
+        drawHandPanel();
+      }, 0);
     }
     shut = closeOnOutside(space, done);
     space.onblur = done;
@@ -157,9 +174,10 @@
     stage.appendChild(pad);
     pad.focus();
     pad.select();
-    var shut;
+    var shut, closing = false;
     function done() {
-      if (!pad.parentNode) { return; }
+      if (closing || !pad.parentNode) { return; }   // once, as above
+      closing = true;
       if (shut) { shut(); }
       link.label = pad.value.trim();
       pad.remove();

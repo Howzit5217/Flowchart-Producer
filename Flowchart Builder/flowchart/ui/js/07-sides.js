@@ -53,6 +53,31 @@
     try { localStorage.setItem("flowchart-panel", shut ? "shut" : "open"); }
     catch (e) { /* fine */ }
   }
+  // Picking a shape on a chart drawn from pseudocode is somebody asking
+  // about that one shape, and everything there is to say about one shape --
+  // its three colors, a highlighter, its words, its border -- is on the
+  // Style side.  The Chart side has nothing of it at all, so a press that
+  // lit a shape up used to answer with a card nobody could see.  So the
+  // panel goes there, unfolds the card if it had been folded away, and
+  // brings it into view.
+  //
+  // Not by hand, where a shape's words, its joins and its size are on the
+  // Chart side and that is where the press is answered; and not in the
+  // middle of a run, whose tape and Stop button are on the Chart side too.
+  // A panel that was put away stays away on a screen too narrow to hold it
+  // beside the chart, where opening it would cover the very shape that was
+  // just picked.
+  function styleThePicked() {
+    if (byHand || running || !el("#modes")) { return; }
+    showSide("colors");
+    if (shut && !panelIsOver()) { showPanel(true); }
+    var card = el("#sel-card");
+    if (!card || shut) { return; }
+    var head = el("h2", card);
+    if (card.classList.contains("shut") && head) { head.click(); }
+    if (card.scrollIntoView) { card.scrollIntoView({ block: "nearest" }); }
+  }
+
   el("#side-chart").onclick = function () { showSide("chart"); };
   el("#side-colors").onclick = function () { showSide("colors"); };
   el("#collapse").onclick = function () { showPanel(false); };

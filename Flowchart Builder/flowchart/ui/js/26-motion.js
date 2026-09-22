@@ -450,7 +450,6 @@
   var drawn = null;                      // the drawing the last rise was for
   var opening = false;                   // the build nobody asked for
   bind = function () {
-    tourEnd(false);                      // a new drawing ends the tour of the last
     bindPlain();
     if (byHand) { return; }
     handSeen = null;                     // the paper is not a drawing by hand
@@ -472,8 +471,8 @@
     // one already on the paper -- which a built chart nearly always is,
     // since the styling is shaken afresh every time it is built.
     if (drawn !== null && now !== drawn) {
-      if (tooBigToSee()) { tourStart(paper); }
-      else { briefly(paper, "fresh", Math.max(520, cascade(paper))); }
+      if (tooBigToSee()) { atActualSize(); }
+      briefly(paper, "fresh", Math.max(520, cascade(paper)));
     }
     drawn = now;
   };
@@ -569,34 +568,14 @@
   // above.  One that does not -- too many shapes to follow at once, or too
   // tall to show whole at a size anybody could read -- used to rise as one
   // block, shrunk to the width of the stage, and left you to find your own
-  // way to its Start.  Most of it went together out of sight.
+  // way to its Start.
   //
-  // So it is shown at its actual size instead, and put together in the
-  // order the program reads with the view following along: each shape as it
-  // arrives, each line drawn out of the shape it leaves, and the camera
-  // keeping whatever is arriving on the screen.  When the last piece is in,
-  // the view goes back to the Start, still at actual size -- which is where
-  // anybody reading a chart that big begins.
-  //
-  // The pace quickens as it goes.  The first shapes arrive slowly enough to
-  // watch -- about as fast as the cascade above -- and the rate grows with
-  // every second, so that the length of the whole depends on how many
-  // shapes there are only by their logarithm: a chart of two hundred shapes
-  // takes a couple of seconds, and one of forty thousand under eight.  Only
-  // the first stretch moves as it arrives; past that, what is arriving is
-  // arriving too fast for a flourish to be seen, and a few thousand pieces
-  // each moving at once would be a page that stops.  They simply appear.
-  //
-  // Anybody taking hold of the chart in the meantime has it: a press, the
-  // wheel, a zoom or a run puts every piece where it belongs at once and
-  // leaves the view where it was put.  Escape does the same and goes to
-  // the Start.  Asked to keep still, there is no tour at all -- only the
-  // chart at actual size, with its Start in view.
-  var TOUR_FIRST = 18;                   // shapes a second, to begin with
-  var TOUR_GROWS = 1000;                 // ms: how quickly that pace builds
-  var TOUR_MOVES = 6;                    // ms between shapes, past which
-                                         //   they appear rather than arrive
-  var tour = null;                       // the tour in progress, if any
+  // So it is shown at its actual size instead, with its Start in view --
+  // which is where anybody reading a chart that big begins.  Nothing else:
+  // it once put itself together piece by piece under a camera that chased
+  // whatever was arriving and flew back to the Start at the end, and a
+  // view that will not hold still is not one anybody can read.  The Start
+  // is put in view by the build itself, as for any chart.
   var atFull = false;                    // this drawing stays at actual size
 
   // Too big for the cascade, or too big to show whole at a size that can
@@ -625,237 +604,11 @@
     fitPlain();
   };
 
-  // When the n-th shape arrives, in ms from the start.
-  function tourAt(n) {
-    return TOUR_GROWS * Math.log(1 + n / (TOUR_FIRST * TOUR_GROWS / 1000));
-  }
-
-  // The numbers at the start and at the end of a line's path: where it
-  // leaves from and where it gets to.  A path is written M x,y L ... and
-  // ends on the point it arrives at.
-  var FIRST_TWO = /(-?\d*\.?\d+(?:e-?\d+)?)[ ,]+(-?\d*\.?\d+(?:e-?\d+)?)/i;
-  var LAST_TWO = /(-?\d*\.?\d+(?:e-?\d+)?)[ ,]+(-?\d*\.?\d+(?:e-?\d+)?)\s*$/i;
-  function pathEnds(line) {
-    var d = line.getAttribute("d") || "", a = FIRST_TWO.exec(d), b = LAST_TWO.exec(d);
-    return a && b ? { x: +a[1], y: +a[2], ex: +b[1], ey: +b[2] } : null;
-  }
-
-  function tourStart(paper) {
+  function atActualSize() {
     atFull = true;
     glideStop();
     zoom = 1;
     show();
-    paper.classList.remove("cascade");   // none of the small chart's timings
-    if (STILL) { return; }               // the Start is shown by the build
-    var here = whoIsIn(), nodes = here.nodes;
-    if (!nodes.length) { return; }
-
-    // Where every shape is, and a coarse grid over the chart saying which
-    // stand in each square, so that "the shape nearest this point" is a
-    // look at a few squares rather than at every shape in the chart.
-    var CELL = 160, cells = {};
-    var spots = nodes.map(function (g, i) {
-      var b = null;
-      try { b = g.getBBox(); } catch (e) { b = null; }
-      if (!b) { return null; }
-      var p = { x: b.x + b.width / 2, y: b.y + b.height / 2 };
-      var key = Math.floor(p.x / CELL) + " " + Math.floor(p.y / CELL);
-      (cells[key] = cells[key] || []).push(i);
-      return p;
-    });
-    function nearest(x, y) {
-      var cx = Math.floor(x / CELL), cy = Math.floor(y / CELL);
-      for (var ring = 0; ring <= 4; ring++) {
-        var best = -1, far = Infinity;
-        for (var gx = cx - ring; gx <= cx + ring; gx++) {
-          for (var gy = cy - ring; gy <= cy + ring; gy++) {
-            if (Math.max(Math.abs(gx - cx), Math.abs(gy - cy)) !== ring) { continue; }
-            (cells[gx + " " + gy] || []).forEach(function (i) {
-              var dx = spots[i].x - x, dy = spots[i].y - y;
-              if (dx * dx + dy * dy < far) { far = dx * dx + dy * dy; best = i; }
-            });
-          }
-        }
-        if (best >= 0) { return best; }
-      }
-      return -1;
-    }
-    function gap(i) { return tourAt(i + 1) - tourAt(i); }
-
-    // Every piece, and when it arrives.  A shape in its turn; a line a
-    // little after the shape it leaves; its arrowhead as the line gets
-    // there; the True and False on it, the patch behind them and a
-    // module's name with the shape they stand beside.
-    var DRAW = 300;                      // one line, drawn out
-    var pieces = [];
-    nodes.forEach(function (g, i) {
-      pieces.push({ el: g, t: tourAt(i), moves: gap(i) >= TOUR_MOVES, node: i });
-    });
-    var landing = {};                    // where each line arrives, and when
-    var from = 0;
-    here.flows.forEach(function (line) {
-      var at = pathEnds(line);
-      var i = at ? nearest(at.x, at.y) : -1;
-      from = i >= 0 ? i : from;          // or with the line before it
-      var moves = gap(from) >= TOUR_MOVES;
-      var t = tourAt(from) + gap(from) * 0.6;
-      pieces.push({ el: line, t: t, moves: moves, flow: true });
-      if (at) {
-        landing[Math.round(at.ex) + " " + Math.round(at.ey)] =
-          { t: t + (moves ? DRAW * 0.8 : 0), moves: moves };
-      }
-    });
-    // A line with a head on it stops short at the head's broad end, so the
-    // stroke does not poke out through the point; a short one runs all the
-    // way to the point.  Either of the two is where its line arrived.
-    function landed(x, y) {
-      for (var dx = -1; dx <= 1; dx++) {
-        for (var dy = -1; dy <= 1; dy++) {
-          var got = landing[(Math.round(x) + dx) + " " + (Math.round(y) + dy)];
-          if (got) { return got; }
-        }
-      }
-      return null;
-    }
-    here.heads.forEach(function (head) {
-      var n = (head.getAttribute("points") || "").match(/-?\d*\.?\d+(?:e-?\d+)?/gi);
-      if (!n || n.length < 6) {
-        pieces.push({ el: head, t: 0, moves: false });
-        return;
-      }
-      var got = landed((+n[2] + +n[4]) / 2, (+n[3] + +n[5]) / 2) || landed(+n[0], +n[1]);
-      if (!got) {                        // no line found for it: its shape, then
-        var i = Math.max(0, nearest(+n[0], +n[1]));
-        got = { t: tourAt(i) + gap(i), moves: gap(i) >= TOUR_MOVES };
-      }
-      pieces.push({ el: head, t: got.t, moves: got.moves });
-    });
-    all(".label, .patch, .heading", el("svg", paper)).forEach(function (bit) {
-      var x = +bit.getAttribute("x") || 0, y = +bit.getAttribute("y") || 0;
-      if (bit.tagName.toLowerCase() === "rect") {
-        x += (+bit.getAttribute("width") || 0) / 2;
-        y += (+bit.getAttribute("height") || 0) / 2;
-      }
-      var i = nearest(x, y);
-      if (i < 0) { i = 0; }
-      pieces.push({ el: bit, t: tourAt(i) + gap(i), moves: gap(i) >= TOUR_MOVES });
-    });
-    pieces.sort(function (a, b) { return a.t - b.t; });
-
-    var mine = { paper: paper, svg: el("svg", paper), pieces: pieces,
-                 frame: 0, last: 0, safety: 0, drawn: [] };
-    tour = mine;
-    briefly(paper, "fresh", 520);        // the paper still rises, empty
-    paper.classList.add("laying");
-    var next = 0, front = 0, began = 0;
-    var stage = el("#stage");
-
-    // The view follows whatever is arriving, but lazily: it stays put while
-    // that is comfortably on the screen and moves only when it nears an
-    // edge, so that a branch stepping out to one side and back does not
-    // swing it about.  Anything that has got right off the screen -- which
-    // late in a big chart is most things -- is caught up with at once.
-    function watch() {
-      var p = spots[front];
-      if (!p || !stage) { return; }
-      var r = chart.getBoundingClientRect(), s = stage.getBoundingClientRect();
-      var w = stage.clientWidth, h = stage.clientHeight;
-      var fx = r.left + p.x * zoom - s.left, fy = r.top + p.y * zoom - s.top;
-      var dx = 0, dy = 0;
-      if (fy > h * 0.72) { dy = fy - h * 0.62; }
-      else if (fy < h * 0.18) { dy = fy - h * 0.3; }
-      if (fx > w * 0.8) { dx = fx - w * 0.6; }
-      else if (fx < w * 0.2) { dx = fx - w * 0.4; }
-      if (!dx && !dy) { return; }
-      var off = fx < 0 || fx > w || fy < 0 || fy > h;
-      var share = off ? 1 : 0.16;
-      if (loose) { holdBy(-dx * share, -dy * share); }
-      else { stage.scrollLeft += dx * share; stage.scrollTop += dy * share; }
-    }
-
-    function advance(stamp) {
-      if (tour !== mine) { return; }
-      // Somebody else has the view: a zoom, a camera move, a run.
-      if (zoom !== 1 || glide || running) { tourEnd(false); return; }
-      if (!began) { began = stamp; }
-      var now = stamp - began;
-      while (next < pieces.length && pieces[next].t <= now) {
-        var piece = pieces[next++];
-        if (piece.moves) {
-          if (piece.flow && piece.el.getTotalLength) {
-            piece.el.style.setProperty("--len",
-                                       (piece.el.getTotalLength() + 2).toFixed(1));
-          }
-          piece.el.classList.add("laid-in");
-          mine.drawn.push(piece.el);
-        }
-        piece.el.classList.add("laid");
-        if (piece.node !== undefined) { front = Math.max(front, piece.node); }
-      }
-      watch();
-      if (next < pieces.length) { mine.frame = requestAnimationFrame(advance); }
-      else { mine.last = setTimeout(function () { tourEnd(true); }, 460); }
-    }
-    mine.frame = requestAnimationFrame(advance);
-    // Frames are only drawn for a window somebody can see, so a build left
-    // to finish behind another window would wait there with its chart half
-    // made.  An ordinary timer finishes it whatever happens.
-    mine.safety = setTimeout(function () {
-      if (tour === mine) { tourEnd(true); }
-    }, tourAt(nodes.length) + DRAW + 1500);
-    window.addEventListener("keydown", tourKeys, true);
-    if (stage) {
-      stage.addEventListener("pointerdown", tourHands, true);
-      stage.addEventListener("wheel", tourHands, { capture: true, passive: true });
-    }
-  }
-
-  function tourHands() { tourEnd(false); }
-  function tourKeys(ev) { if (ev.key === "Escape") { tourEnd(true); } }
-
-  // Everything where it belongs, and the page as it was before the tour
-  // began.  `home`: and then the Start, at actual size.
-  function tourEnd(home) {
-    var mine = tour;
-    if (!mine) { return; }
-    tour = null;
-    cancelAnimationFrame(mine.frame);
-    clearTimeout(mine.last);
-    clearTimeout(mine.safety);
-    window.removeEventListener("keydown", tourKeys, true);
-    var stage = el("#stage");
-    if (stage) {
-      stage.removeEventListener("pointerdown", tourHands, true);
-      stage.removeEventListener("wheel", tourHands, { capture: true, passive: true });
-    }
-    mine.paper.classList.remove("laying");
-    // The marks come off again, so a saved copy of the chart carries no
-    // trace of how it arrived.  A drawing already replaced is let go as is.
-    if (mine.svg && mine.svg.isConnected) {
-      mine.pieces.forEach(function (piece) { piece.el.classList.remove("laid"); });
-      mine.drawn.forEach(function (bit) {
-        bit.classList.remove("laid-in");
-        bit.style.removeProperty("--len");
-      });
-    }
-    if (home && mine.svg && mine.svg.isConnected) { tourHome(); }
-  }
-
-  // The Start, at actual size, where showTheStart puts it.  Glided to when
-  // it is a short way off; a long way off, a glide would only be a smear
-  // across the whole chart, so the view is simply there.
-  function tourHome() {
-    var stage = el("#stage");
-    var first = el('.node[data-kind="oval"]', chart) || el(".node", chart);
-    if (!stage || !first || !first.getBBox) { return; }
-    var box;
-    try { box = first.getBBox(); } catch (e) { return; }
-    var x = box.x + box.width / 2;
-    var y = box.y + box.height / 2 + stage.clientHeight * 0.35;
-    var from = viewNow();
-    var far = !from || Math.abs(from.zoom - 1) > 0.001 ||
-              Math.hypot(from.x - x, from.y - y) > stage.clientHeight * 3;
-    glideTo(x, y, 1, far ? 0 : 520);
   }
 
   // ---------------------------------------------- drawing it by hand --
@@ -1125,3 +878,330 @@
     }).observe(line, { childList: true, characterData: true, subtree: true });
   }
   ["#build-note", "#pz-mark", "#run-note"].forEach(saysAgain);
+
+  // ------------------------------------------- the same chart, moved over --
+  // Words set in another face, or bigger, want boxes of another size, and
+  // the chart is drawn again to make room for them (see reflowSoon).  It is
+  // the same chart, shaken the same way, so every shape comes back a little
+  // to one side of where it was -- and used to simply be there, the whole
+  // drawing jumping at once.  Now each shape is put down where it was and
+  // carried to where it goes, its words with it, and every line, arrowhead
+  // and label is carried the same way, so what is seen is the chart making
+  // room.  The paper grows with it, since a wider chart is a wider paper.
+  //
+  // Nothing is worked out about the layout here.  The old drawing is
+  // measured, the new one is measured, and each piece is drawn part of the
+  // way from the one to the other for as long as the move takes.  A shape
+  // is matched by its place in the drawing, which the same program drawn
+  // the same way keeps; a drawing with a different number of shapes, or
+  // the same shapes in another order, is not the same chart and simply
+  // arrives, the way it did before.  A line is matched by the shape it
+  // leaves and the one it reaches, because bigger words move the shapes
+  // apart and a route drawn again between them may have gained a corner or
+  // lost one, or been chained with the one it used to meet: it is the same
+  // arrow all the same, and goes as one.  Whatever has no match -- a route
+  // that now leaves from somewhere else -- fades in where it now is.  Past
+  // a few hundred shapes the chart simply arrives too: hundreds of pieces
+  // rewritten sixty times a second is a stutter, not a move.
+  //
+  // A shape is a box and the words in it.  The box is scaled from the size
+  // it was to the size it is, about its own corner; the words are only
+  // moved, keeping their place in the middle of it, because words are the
+  // one thing that must not be seen stretched -- and the highlighter behind
+  // them goes with the words, since it was measured against them.
+  var putSheetPlain = putSheet;
+  var GLIDE_MOST = 400;                  // shapes, past which it simply arrives
+  var GLIDE_MS = 480;                    // how long the move takes
+  var carrying = null;                   // the move in progress, if any
+  var NUMS = /-?\d*\.?\d+(?:e-?\d+)?/gi;
+  function numsIn(s) {
+    var got = (s || "").match(NUMS);
+    return got ? got.map(Number) : [];
+  }
+  function withTheWords(e) {             // moves with the words, not the box
+    return e.tagName === "text" || e.classList.contains("highlights");
+  }
+
+  // Which shape a point is on, or near, and which side of it: a line's
+  // route may change, but where it leaves and where it arrives do not.
+  // Where it is on none of them (a line that joins another line, say) is
+  // simply that.
+  function shapeAt(x, y, boxes, reach) {
+    var best = -1, side = "", far = reach * reach;
+    boxes.forEach(function (b, i) {
+      var dx = Math.max(b.x - x, 0, x - b.x - b.w);
+      var dy = Math.max(b.y - y, 0, y - b.y - b.h);
+      var d = dx * dx + dy * dy;
+      if (d > far) { return; }
+      far = d; best = i;
+      var cx = b.x + b.w / 2, cy = b.y + b.h / 2;
+      side = Math.abs(x - cx) * (b.h || 1) > Math.abs(y - cy) * (b.w || 1)
+             ? (x < cx ? "l" : "r") : (y < cy ? "t" : "b");
+    });
+    return best < 0 ? "j" : "n" + best + side;
+  }
+
+  // Everything on the paper the move can carry, where each is now, and
+  // what tells it from the others.  A shape mid-move is where the move has
+  // got it to, not where its numbers say: a second change of face before
+  // the first has landed carries on from wherever the shapes are.
+  // Nothing, if the chart is too big for this or cannot be measured (a
+  // paper not on show has no sizes).
+  function sheetPieces() {
+    var svg = el("#sheet svg");
+    if (!svg) { return null; }
+    var box = numsIn(svg.getAttribute("viewBox"));
+    var nodes = all(".node", svg);
+    if (!nodes.length || nodes.length > GLIDE_MOST || box.length < 4) {
+      return null;
+    }
+    var got = { svg: svg, box: svg.getAttribute("viewBox"), w: box[2], h: box[3],
+                nodes: [], lines: [], heads: [], words: [], patches: [] };
+    try {
+      nodes.forEach(function (g) {
+        var at = g.glideAt, l = Infinity, t = Infinity, r = -Infinity, b = -Infinity;
+        if (!at) {
+          Array.prototype.forEach.call(g.children, function (e) {
+            if (withTheWords(e)) { return; }
+            var m = e.getBBox();
+            l = Math.min(l, m.x); t = Math.min(t, m.y);
+            r = Math.max(r, m.x + m.width); b = Math.max(b, m.y + m.height);
+          });
+          if (l === Infinity) {
+            var whole = g.getBBox();
+            l = whole.x; t = whole.y; r = l + whole.width; b = t + whole.height;
+          }
+          at = { x: l, y: t, w: r - l, h: b - t };
+        }
+        got.nodes.push({ el: g, sign: (g.dataset.kind || "") + "/" + (g.dataset.i || ""),
+                         x: at.x, y: at.y, w: at.w, h: at.h });
+      });
+    } catch (e) { return null; }
+    var boxes = got.nodes;
+    // A route leaves from right on a shape's edge and stops an arrowhead
+    // short of the one it reaches; a head's point is on the edge.
+    all(".flow", svg).forEach(function (e) {
+      var n = numsIn(e.getAttribute("d"));
+      if (n.length < 4) { return; }
+      got.lines.push({ el: e, key: shapeAt(n[0], n[1], boxes, 3) + ">" +
+                       shapeAt(n[n.length - 2], n[n.length - 1], boxes, 16) });
+    });
+    all(".head", svg).forEach(function (e) {
+      var n = numsIn(e.getAttribute("points"));
+      if (n.length < 2) { return; }
+      got.heads.push({ el: e, key: shapeAt(n[0], n[1], boxes, 3) });
+    });
+    // A True or False sits by the side of its diamond, on a patch of paper
+    // that keeps the line from running through it: the patch is put down
+    // just before the words, so it is told from the others by them.
+    var patches = all(".patch", svg), words = all(".label, .heading", svg);
+    words.forEach(function (e, i) {
+      var key = e.textContent + "@" +
+                shapeAt(+e.getAttribute("x"), +e.getAttribute("y"), boxes, 60);
+      got.words.push({ el: e, key: key });
+      if (patches.length === words.length) {
+        got.patches.push({ el: patches[i], key: key });
+      }
+    });
+    return got;
+  }
+
+  // One piece's numbers, from the old drawing's to the new one's -- the
+  // corners of a line, the points of an arrowhead, where a label sits --
+  // with the text around the numbers kept as the new drawing wrote it.
+  // Nothing when the two do not have the same numbers to go between.
+  function attrMoves(was, now, names) {
+    var attrs = [];
+    for (var k = 0; k < names.length; k++) {
+      var before = was.getAttribute(names[k]) || "";
+      var after = now.getAttribute(names[k]) || "";
+      var a = numsIn(before), b = numsIn(after);
+      if (!b.length || a.length !== b.length) { return null; }
+      attrs.push({ name: names[k], bits: after.split(NUMS), a: a, b: b, done: after });
+    }
+    return attrs;
+  }
+
+  // A route as the points along it -- its rounded corners taken as a few
+  // short straights -- each with how far along the route it lies, from 0
+  // at the start to 1 at the end.
+  function routePoints(d) {
+    var tok = (d || "").match(/[MLQ]|-?\d*\.?\d+(?:e-?\d+)?/gi) || [];
+    var pts = [], mode = "", k = 0;
+    while (k < tok.length) {
+      if (/^[MLQ]$/i.test(tok[k])) { mode = tok[k].toUpperCase(); k++; continue; }
+      if (mode === "Q" && k + 3 < tok.length && pts.length) {
+        var from = pts[pts.length - 1];
+        var cx = +tok[k], cy = +tok[k + 1], x = +tok[k + 2], y = +tok[k + 3];
+        for (var s = 1; s <= 4; s++) {
+          var t = s / 4, u = 1 - t;
+          pts.push([u * u * from[0] + 2 * u * t * cx + t * t * x,
+                    u * u * from[1] + 2 * u * t * cy + t * t * y]);
+        }
+        k += 4;
+      } else if (k + 1 < tok.length) {
+        pts.push([+tok[k], +tok[k + 1]]);
+        k += 2;
+      } else { break; }
+    }
+    var along = [0], total = 0;
+    for (var i = 1; i < pts.length; i++) {
+      total += Math.hypot(pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1]);
+      along.push(total);
+    }
+    if (pts.length < 2 || !total) { return null; }
+    return { pts: pts, at: along.map(function (a) { return a / total; }) };
+  }
+  function pointAlong(route, u) {
+    var at = route.at, pts = route.pts, i = 1;
+    while (i < at.length - 1 && at[i] < u) { i++; }
+    var span = at[i] - at[i - 1] || 1, t = Math.max(0, Math.min(1, (u - at[i - 1]) / span));
+    return [pts[i - 1][0] + (pts[i][0] - pts[i - 1][0]) * t,
+            pts[i - 1][1] + (pts[i][1] - pts[i - 1][1]) * t];
+  }
+
+  // Two routes with a different number of corners, as two lines of the
+  // same points: each is taken at every place along it where either has
+  // a corner, so that the one at the start is the old route exactly and
+  // the one at the end the new, and in between the corners slide.
+  function routeMoves(was, now) {
+    var a = routePoints(was.getAttribute("d")), b = routePoints(now.getAttribute("d"));
+    if (!a || !b) { return null; }
+    var stops = a.at.concat(b.at).sort(function (p, q) { return p - q; });
+    var from = [], to = [], bits = ["M"], last = -1;
+    stops.forEach(function (u) {
+      if (u - last < 0.002) { return; }
+      last = u;
+      var p = pointAlong(a, u), q = pointAlong(b, u);
+      from.push(p[0], p[1]); to.push(q[0], q[1]);
+      bits.push(",", " L");
+    });
+    bits[bits.length - 1] = "";
+    return [{ name: "d", bits: bits, a: from, b: to, done: now.getAttribute("d") }];
+  }
+
+  // Each new piece against the old piece that answers to the same name;
+  // two of one name are taken in the order they come.  What has no match
+  // fades in where it is.
+  function matched(olds, news, names, orRoute) {
+    var byKey = {};
+    olds.forEach(function (o) { (byKey[o.key] = byKey[o.key] || []).push(o); });
+    return news.map(function (piece) {
+      var was = (byKey[piece.key] || []).shift();
+      var attrs = was ? attrMoves(was.el, piece.el, names) : null;
+      if (!attrs && was && orRoute) { attrs = routeMoves(was.el, piece.el); }
+      return attrs ? { el: piece.el, attrs: attrs } : { el: piece.el, fade: true };
+    });
+  }
+
+  // What has to move, or nothing when the new drawing is not the old one
+  // with its shapes moved over.
+  function piecesMoved(was, now) {
+    if (!was || !now || was.nodes.length !== now.nodes.length) { return null; }
+    var moves = { svg: now.svg, box: now.box, w0: was.w, h0: was.h, w1: now.w, h1: now.h,
+                  nodes: [], pieces: [] };
+    for (var i = 0; i < now.nodes.length; i++) {
+      var a = was.nodes[i], b = now.nodes[i];
+      if (a.sign !== b.sign) { return null; }
+      moves.nodes.push({ el: b.el, x0: a.x, y0: a.y, w0: a.w, h0: a.h,
+                         x1: b.x, y1: b.y, w1: b.w, h1: b.h });
+    }
+    moves.pieces = matched(was.lines, now.lines, ["d"], true)
+      .concat(matched(was.heads, now.heads, ["points"]),
+              matched(was.words, now.words, ["x", "y"]),
+              matched(was.patches, now.patches, ["x", "y", "width", "height"]));
+    return moves;
+  }
+
+  // Everything drawn `p` of the way along, from where it was (0) to where
+  // it goes (1).  At 1 every number is the new drawing's own again and
+  // nothing of the move is left on it.
+  function drawMoves(m, p) {
+    var q = 1 - p, f = function (n) { return n.toFixed(1); };
+    var w = m.w0 * q + m.w1 * p, h = m.h0 * q + m.h1 * p;
+    m.svg.setAttribute("viewBox", p < 1 ? "0 0 " + f(w) + " " + f(h) : m.box);
+    m.svg.style.width = (w * zoom).toFixed(p < 1 ? 1 : 0) + "px";
+    m.nodes.forEach(function (n) {
+      var x = n.x0 * q + n.x1 * p, y = n.y0 * q + n.y1 * p;
+      var wd = n.w0 * q + n.w1 * p, ht = n.h0 * q + n.h1 * p;
+      var art = null, words = null;
+      if (p < 1) {
+        art = "translate(" + f(x) + " " + f(y) + ") scale(" +
+              (n.w1 ? wd / n.w1 : 1).toFixed(4) + " " +
+              (n.h1 ? ht / n.h1 : 1).toFixed(4) + ") translate(" +
+              f(-n.x1) + " " + f(-n.y1) + ")";
+        words = "translate(" + f(x + wd / 2 - n.x1 - n.w1 / 2) + " " +
+                f(y + ht / 2 - n.y1 - n.h1 / 2) + ")";
+        n.el.glideAt = { x: x, y: y, w: wd, h: ht };
+      } else {
+        delete n.el.glideAt;
+      }
+      Array.prototype.forEach.call(n.el.children, function (e) {
+        var t = withTheWords(e) ? words : art;
+        if (t) { e.setAttribute("transform", t); }
+        else { e.removeAttribute("transform"); }
+      });
+    });
+    m.pieces.forEach(function (piece) {
+      if (piece.fade) {
+        piece.el.style.opacity = p < 1 ? p.toFixed(3) : "";
+        return;
+      }
+      piece.attrs.forEach(function (at) {
+        if (p >= 1) { piece.el.setAttribute(at.name, at.done); return; }
+        var s = at.bits[0];
+        for (var k = 0; k < at.b.length; k++) {
+          s += f(at.a[k] * q + at.b[k] * p) + at.bits[k + 1];
+        }
+        piece.el.setAttribute(at.name, s);
+      });
+    });
+  }
+
+  // Whatever is still on its way lands, at once.  Before a copy of the
+  // drawing is taken, and before another drawing replaces it.
+  function settleSheet() {
+    if (!carrying) { return; }
+    var m = carrying;
+    carrying = null;
+    cancelAnimationFrame(m.frame);
+    if (m.svg.isConnected) { drawMoves(m, 1); }
+  }
+
+  function carryPieces(m) {
+    settleSheet();
+    carrying = m;
+    var began = null;
+    drawMoves(m, 0);
+    function frame(now) {
+      if (carrying !== m) { return; }
+      if (began === null) { began = now; }
+      var p = Math.min(1, (now - began) / GLIDE_MS);
+      drawMoves(m, 1 - Math.pow(1 - p, 4));
+      if (p < 1) { m.frame = requestAnimationFrame(frame); }
+      else { carrying = null; }
+    }
+    m.frame = requestAnimationFrame(frame);
+  }
+
+  putSheet = function (svg, again) {
+    var was = again && !STILL && !byHand ? sheetPieces() : null;
+    settleSheet();
+    putSheetPlain(svg, again);
+    if (!was) { return; }
+    var now = sheetPieces();
+    var moves = now ? piecesMoved(was, now) : null;
+    if (!moves) { return; }
+    // The shapes are set back where they were only once everything else
+    // about the new drawing has been done -- it has been bound, colored,
+    // and the copy behind the .svg link taken from it -- and still before
+    // the browser has drawn a frame of it.
+    Promise.resolve().then(function () {
+      if (now.svg.isConnected) { carryPieces(moves); }
+    });
+  };
+
+  // A copy of the drawing -- for the .svg link, or a PNG -- is a copy of
+  // where everything is going, not of where it has got to.
+  var plainCopy = plain;
+  plain = function (scale) { settleSheet(); return plainCopy(scale); };

@@ -21,11 +21,26 @@ from .words.lookup import NAMES, WORDS, in_full, word
 # The page carries the chart inside it rather than pointing at the .svg file,
 # so it still works if you move it, mail it, or open it from a flash drive,
 # and the download links keep working too.
-PAGE_HTML = parts.page_html()
+#
+# The pseudocode panel goes with it, which only the studio gets: the page
+# written beside an .svg has no script behind it to redraw anything.
+#
+# Both are poured once and kept, and poured again whenever a file they come
+# from has changed since.  They used to be poured once, when this module was
+# first imported, and the studio is a server that can be left running all
+# day while the page is being worked on: it went on serving the page as it
+# was that morning.  A freeze put right in the files at teatime was still
+# freezing in the studio that evening, and nothing said the page was old.
+_POURED = {"at": None, "page": "", "panel": ""}
 
-# The pseudocode panel, which only the studio gets: the page written beside
-# an .svg has no script behind it to redraw anything.
-SOURCE_PANEL = parts.read_ui("source-panel.html")
+
+def poured():
+    """The page and the pseudocode panel, as their files stand now."""
+    at = parts.changed_at()
+    if at != _POURED["at"]:
+        _POURED.update(page=parts.page_html(),
+                       panel=parts.read_ui("source-panel.html"), at=at)
+    return _POURED["page"], _POURED["panel"]
 
 PNG_SIZES = (1, 2, 3, 4, 6, 8)      # the sizes the page's PNG button offers
 PNG_FRAMES = ((1920, 1080), (1080, 1080))   # and the fixed picture sizes it
@@ -44,6 +59,7 @@ def to_page(svg, title=None, name="flowchart", source=None, seed=None,
     .svg: the chart, the colors, and the two download links, all in the one
     file, so it still works if you move it or mail it.
     """
+    page_html, source_panel = poured()
     body = svg.split("\n", 1)[1] if svg.startswith("<?xml") else svg
     box = re.search(r'viewBox="0 0 ([\d.]+) ([\d.]+)"', body)
     size = "%s x %s" % (box.group(1), box.group(2)) if box else ""
@@ -84,7 +100,7 @@ def to_page(svg, title=None, name="flowchart", source=None, seed=None,
             % (code, " selected" if code == lookup.LANGUAGE else "",
                html.escape(NAMES.get(code, code)))
             for code in sorted(WORDS))
-        panel = (SOURCE_PANEL
+        panel = (source_panel
                  .replace("__LANGS__", tongues)
                  .replace("__SHAPES__", picks)
                  .replace("__T__", html.escape(source.get("title") or "", True))
@@ -102,7 +118,7 @@ def to_page(svg, title=None, name="flowchart", source=None, seed=None,
     said = every.get(lookup.LANGUAGE) or in_full("en")
     page = re.sub(r"__W\((\w+)\)__",
                   lambda m: html.escape(word(m.group(1))),
-                  PAGE_HTML.replace("__SOURCE__", panel)
+                  page_html.replace("__SOURCE__", panel)
                            .replace("__LANGS__", tongues)
                            .replace("__SHAPES__", picks))
     return (page

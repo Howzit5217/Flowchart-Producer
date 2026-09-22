@@ -68,6 +68,13 @@ def page_html():
     return html
 
 
+def changed_at():
+    """When any of the files the page is poured from was last written."""
+    names = ["studio.html", "source-panel.html"] + CSS + JS
+    return max(os.path.getmtime(os.path.join(HERE, "ui", name))
+               for name in names)
+
+
 def clashes():
     """Two parts of the page's script naming the same thing.
 

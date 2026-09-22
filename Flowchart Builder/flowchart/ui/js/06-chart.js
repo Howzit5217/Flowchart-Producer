@@ -55,6 +55,7 @@
         return;
       }
       select(g);
+      if (g) { styleThePicked(); }     // and the side that has its styling
     };
     if (byHand) { joinDrag(chart); dragging(chart); }
     chart.oncontextmenu = function (ev) {
