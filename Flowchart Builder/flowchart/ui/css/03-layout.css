@@ -136,3 +136,48 @@
   .sheet-menu .hint:empty { display: none; }
   .sheet-menu .hint { margin-top: 10px; }
   #save-menu { width: 262px; }
+
+  /* ------------------------------------------ the two halves of Files -- */
+  #files-tabs { margin-bottom: 14px; }
+  #files-tabs[hidden] { display: none; }
+  #files-kept > .hint:first-child { margin-top: 0; margin-bottom: 2px; }
+  /* A place is a card: what it is called, how it was made and how far the
+     run had got, when it was saved, and what can be done with it.  An empty
+     one is only its outline, dashed, so the room left is seen at a glance. */
+  .kept-list {
+    list-style: none; margin: 12px 0 0; padding: 0;
+    display: flex; flex-direction: column; gap: 8px;
+  }
+  .kept {
+    border: 1px solid var(--line); border-radius: 10px;
+    padding: 9px 10px 10px; background: var(--field);
+  }
+  .kept.empty { border-style: dashed; background: none; padding: 7px 10px; }
+  .kept-top { display: flex; align-items: center; gap: 8px; min-height: 22px; }
+  .kept-no {
+    flex: none; width: 20px; height: 20px; border-radius: 50%;
+    display: inline-flex; align-items: center; justify-content: center;
+    font-size: 11px; font-weight: 650;
+    background: var(--accent-soft); color: var(--accent);
+  }
+  .kept.empty .kept-no { background: var(--line-soft); color: var(--muted); }
+  .kept-name {
+    flex: 1; min-width: 0; font-size: 13px;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .kept.empty .kept-name { color: var(--muted); font-size: 12.5px; }
+  .kept .kept-del { width: 26px; height: 26px; margin: -3px -5px -3px 0; }
+  .kept .kept-del svg { width: 15px; height: 15px; }
+  .kept-what, .kept-when {
+    margin: 3px 0 0 28px; font-size: 12px; color: var(--muted); line-height: 1.35;
+  }
+  .kept-when { margin-top: 1px; }
+  .kept-do {
+    display: flex; flex-wrap: wrap; align-items: center; gap: 6px;
+    margin: 8px 0 0 28px;
+  }
+  .kept-do .btn { flex: 1; justify-content: center; }
+  .kept-do.asking .kept-q { flex: 1 0 100%; font-size: 12.5px; }
+  .kept-do .btn.danger {
+    background-color: var(--bad); border-color: var(--bad); color: var(--panel);
+  }

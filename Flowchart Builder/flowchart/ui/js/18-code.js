@@ -246,6 +246,29 @@
     return "range(" + parts.join(", ") + ")";
   }
 
+  // How long a Wait waits, in the units the language's own sleep asks for.
+  // A plain number is turned here and now -- sleep(0.5) rather than
+  // sleep(500 / 1000) -- and anything the program works out for itself is
+  // scaled where it stands.
+  function napFor(w, item, want) {
+    var code = w.code(item.expr || "0");
+    if ((item.unit === "ms" ? "ms" : "s") === want) { return code; }
+    var n = parseFloat(code), by = want === "ms" ? 1000 : 0.001;
+    if (String(n) === String(code).trim()) {
+      return String(Math.round(n * by * 1e6) / 1e6);
+    }
+    return want === "ms" ? "(" + code + ") * 1000" : "(" + code + ") / 1000.0";
+  }
+
+  // Sleeping is told how long in whole milliseconds in some of these, and a
+  // wait worked out rather than written down can be neither whole nor small.
+  function longOf(code) {
+    return /^\d+$/.test(code) ? code : "(long) (" + code + ")";
+  }
+  function intOf(code) {
+    return /^\d+$/.test(code) ? code : "(int) (" + code + ")";
+  }
+
   var LANGS = {
     python: {
       name: "Python", ext: "py",
@@ -261,7 +284,7 @@
       kept: "False None True and as assert async await break class continue " +
             "def del elif else except finally for from global if import in " +
             "is lambda nonlocal not or pass raise return try while with yield " +
-            "print input int float str format range math random",
+            "print input int float str format range math random time",
       // Kept only if the program uses the built-in of that name: `max` is
       // what half of all pseudocode calls its largest-so-far, and it is a
       // perfectly good Python variable until somebody calls max().
@@ -299,6 +322,10 @@
         return targets.map(function (t) { return t || "_"; }).join(", ");
       },
       quit: function () { return "raise SystemExit"; },
+      pause: function (w, item, deep) {
+        w.need("time");
+        w.line(deep, "time.sleep(" + napFor(w, item, "s") + ")");
+      },
       into: function (a, b) { return a + " // " + b; },
       pow: "**",
       worded: function (code) { return "str(" + code + ")"; },
@@ -360,10 +387,93 @@
           w.inside(null, 0);
         });
         w.line(0, this.note + w.title);
-        ["math", "random"].forEach(function (lib) {
+        ["math", "random", "time"].forEach(function (lib) {
           if (w.needs[lib]) { w.line(0, "import " + lib); }
         });
         w.pour(inside);
+      },
+
+      // ---- and the same program in a file each --------------------------
+      // A module is already a chart of its own here, so a file each is the
+      // cut the program had drawn for itself.  What the program shares goes
+      // into a file of its own, and every other file says where it is
+      // reading those from -- shared.total, set as well as read, which is
+      // what `global` was for while there was one file.
+      //
+      // A module that calls another brings in the whole file rather than
+      // picking the name out of it: `import receipt`, not `from receipt
+      // import receipt`.  Two modules that call one another would each be
+      // waiting on a name the other has not finished writing down; brought
+      // in whole, the name is looked for when it is called rather than when
+      // the file is read, and by then it is there.
+      sharedName: "shared",
+      reachMod: function (w, one) { return w.fileOf(one) + "."; },
+      apart: function (w) {
+        var L = this, files = [];
+        // The head of a file, and whether it turned out to bring anything
+        // in: the blank line under it belongs to whoever is writing the
+        // file, because a def wants one above it whether or not there were
+        // imports and a row of assignments does not.
+        function top(what, brings) {
+          w.line(0, L.note + w.title + (what ? " -- " + what : ""));
+          var before = w.count();
+          ["math", "random", "time"].forEach(function (lib) {
+            if (w.needs[lib]) { w.line(0, "import " + lib); }
+          });
+          brings.forEach(function (name) { w.line(0, "import " + name); });
+          return w.count() > before;
+        }
+        function brought(scope, items, mine) {
+          var names = w.touching(scope, items) ? [w.sharedFile] : [];
+          return names.concat(w.leaning(items, mine).map(function (one) {
+            return w.fileOf(one);
+          }));
+        }
+
+        // What the program shares, in a file of its own -- where there is
+        // anything shared to put in it.  A program whose charts keep
+        // themselves to themselves gets no such file, rather than an empty
+        // one and a row of imports of nothing.
+        w.reach = "";
+        w.alone();
+        var holds = w.sharing();
+        if (holds.length) {
+          // Written before its own top is, like every other file here: a
+          // Constant worked out with a square root wants math imported
+          // above it, and only writing it says so.
+          var said = w.aside(function () {
+            holds.forEach(function (one) {
+              w.line(0, L.declare(w, one.entry, one.code, one.fixed, one.plain));
+            });
+          });
+          files.push({ name: w.sharedFile, lines: w.aside(function () {
+            if (top(TXT.code_shares, [])) { w.line(0, ""); }
+            w.pour(said);
+          }) });
+        }
+
+        w.reach = w.sharedFile + ".";
+        var mine = w.mains();
+        var body = w.aside(function () { w.alone(); w.inside(null, 0, mine); });
+        files.unshift({ name: w.file, lines: w.aside(function () {
+          top("", brought(w.prog.main, mine, null));
+          w.line(0, "");
+          w.pour(body);
+        }) });
+
+        w.mods.forEach(function (one) {
+          var said = w.aside(function () {
+            w.alone();
+            w.line(0, "def " + w.called(one) + "(" + w.signature(one) + "):");
+            w.inside(one, 1);
+          });
+          files.push({ name: w.fileOf(one), lines: w.aside(function () {
+            top(one.name, brought(one.scope, one.body, one));
+            w.line(0, "");
+            w.pour(said);
+          }) });
+        });
+        return files;
       }
     },
 
@@ -377,7 +487,7 @@
             "native new package private protected public return short static " +
             "strictfp super switch synchronized this throw throws transient " +
             "try void volatile while true false null keyboard Math String " +
-            "System Scanner Integer Double Boolean",
+            "System Scanner Integer Double Boolean Thread InterruptedException",
       cash: function (code, kind) {
         // %.2f given a whole number is not a rounding, it is a crash.
         return 'String.format("%.2f", ' +
@@ -393,7 +503,9 @@
       // that asks for an age and then a name appears to skip the name.
       ask: function (kind, w) {
         w.need("keys");
-        var typed = "keyboard.nextLine()";
+        // Wherever the Scanner is: beside this line in the one file, and
+        // in the shared class where the program is written in several.
+        var typed = w.reach + "keyboard.nextLine()";
         return kind === "whole" ? "Integer.parseInt(" + typed + ".trim())"
              : kind === "real" ? "Double.parseDouble(" + typed + ".trim())"
              : kind === "flag" ? "Boolean.parseBoolean(" + typed + ".trim())" : typed;
@@ -416,6 +528,14 @@
         return plain && (kind === "int" || kind === "text");
       },
       quit: function (w, inMain) { return inMain ? "return" : "System.exit(0)"; },
+      // Thread.sleep is a checked one: a method that lets it out has to say
+      // so, and so does everything that calls that method, all the way up
+      // to main.  Caught where it stands, it is one line and it goes
+      // anywhere -- inside a module, inside a loop, inside main.
+      pause: function (w, item, deep) {
+        w.line(deep, "try { Thread.sleep(" + longOf(napFor(w, item, "ms")) +
+                     "); } catch (InterruptedException e) { }");
+      },
       // Java hands everything over by value and has no way to say
       // otherwise.  One thing to hand back is handed back the ordinary way,
       // by returning it.  More than one goes in and out in a one-slot
@@ -442,7 +562,8 @@
           }
           return box;
         });
-        w.line(deep + 1, w.called(one) + "(" + args.join(", ") + ");");
+        w.line(deep + 1, w.reachMod(one) + w.called(one) +
+               "(" + args.join(", ") + ");");
         after.forEach(function (line) { w.line(deep + 1, line); });
         w.line(deep, "}");
       },
@@ -481,6 +602,93 @@
           }
           return top;
         }, "public static void main(String[] args) {");
+      },
+
+      // ---- and the same program in a file each --------------------------
+      // Java is laid out this way already -- a class to a file, named after
+      // the class -- so a chart each is a class each: one for main, one for
+      // every module, and one called Shared for what the whole program
+      // shares.  A name that used to be a field beside everything that read
+      // it is now reached through the class holding it: Shared.total, and
+      // Receipt.receipt(n) for a module.  The one Scanner goes in there
+      // too, because two Scanners over one keyboard read half an answer
+      // each.
+      sharedName: "Shared",
+      fileName: function (name) {
+        return name.charAt(0).toUpperCase() + name.slice(1);
+      },
+      reachMod: function (w, one) { return w.fileOf(one) + "."; },
+      apart: function (w) {
+        var L = this, files = [], wants = {};
+        // Every chart is written before any file is, because what the
+        // shared one has to hold is only known once all of them have been
+        // asked -- one of them wanting to be typed into is what puts the
+        // Scanner there.
+        function body(write) {
+          w.alone();
+          var lines = w.aside(write);
+          Object.keys(w.needs).forEach(function (what) { wants[what] = true; });
+          return lines;
+        }
+
+        w.reach = w.sharedFile + ".";
+        var mine = w.mains();
+        var main = body(function () { w.inside(null, 2, mine); });
+        var each = w.mods.map(function (one) {
+          return body(function () {
+            w.line(1, "static " + w.returns(one) + " " + w.called(one) +
+                      "(" + w.signature(one) + ") {");
+            w.inside(one, 2);
+            w.line(1, L.shut);
+          });
+        });
+
+        files.push({ name: w.file, lines: w.aside(function () {
+          w.line(0, L.note + w.title);
+          w.line(0, "class " + w.file + " {");
+          w.line(1, "public static void main(String[] args) {");
+          w.pour(main);
+          w.line(1, L.shut);
+          w.line(0, L.shut);
+        }) });
+
+        // The shared class, where there is anything to put in it: what
+        // the charts share, and the one Scanner if any of them is typed
+        // into.  Where there is neither, there is no such file rather than
+        // an empty class beside the others.
+        w.reach = "";
+        w.alone();
+        var holds = w.sharing();
+        if (holds.length || wants.keys) {
+          files.push({ name: w.sharedFile, lines: w.aside(function () {
+            var held = w.aside(function () {
+              holds.forEach(function (one) {
+                w.infront = L.field(one.fixed, one.plain);
+                w.line(1, L.declare(w, one.entry, one.code, one.fixed, one.plain) + L.semi);
+                w.infront = "";
+              });
+              if (wants.keys) {
+                w.line(1, "static Scanner keyboard = new Scanner(System.in);");
+              }
+            });
+            w.line(0, L.note + w.title + " -- " + TXT.code_shares);
+            if (wants.keys) { w.line(0, "import java.util.Scanner;"); w.line(0, ""); }
+            w.line(0, "class " + w.sharedFile + " {");
+            w.pour(held);
+            w.line(0, L.shut);
+          }) });
+        }
+
+        w.reach = w.sharedFile + ".";
+        w.mods.forEach(function (one, at) {
+          files.push({ name: w.fileOf(one), lines: w.aside(function () {
+            w.line(0, L.note + w.title + " -- " + one.name);
+            w.line(0, "class " + w.fileOf(one) + " {");
+            w.pour(each[at]);
+            w.line(0, L.shut);
+          }) });
+        });
+        return files;
       }
     },
 
@@ -530,6 +738,12 @@
         return plain && (kind === "int" || kind === "text" || kind === "bool");
       },
       quit: function (w, inMain) { return inMain ? "return" : "Environment.Exit(0)"; },
+      // Said from the root rather than through a using, so the top of the
+      // file is the same whether the program waits or not.
+      pause: function (w, item, deep) {
+        w.line(deep, "System.Threading.Thread.Sleep(" +
+                     intOf(napFor(w, item, "ms")) + ");");
+      },
       // C# says it outright, at both ends: `ref` where the module is
       // written and `ref` again where it is called.
       refs: "own",
@@ -550,8 +764,9 @@
         tolower: function (a) { return held(a[0]) + ".ToLower()"; },
         random: function (a, k, w) {
           w.need("dice");
-          return !a.length ? "rng.NextDouble()"
-               : "rng.Next(" + a[0] + ", " + held(a[1]) + " + 1)";
+          var dice = w.reach + "rng";   // beside this line, or in Shared
+          return !a.length ? dice + ".NextDouble()"
+               : dice + ".Next(" + a[0] + ", " + held(a[1]) + " + 1)";
         },
         pow: function (a, k) {
           return (k[0] === "int" && k[1] === "int" ? "(int)" : "") +
@@ -566,6 +781,92 @@
           if (w.needs.dice) { top.push([1, "static Random rng = new Random();"], [0, ""]); }
           return top;
         }, "static void Main() {");
+      },
+
+      // ---- and the same program in a file each --------------------------
+      // The same shape as Java's, and for the same reason: a class each,
+      // in a file each, with what the whole program shares in a static
+      // class of its own that everything else reaches through -- and the
+      // one Random in there with them, so that a program which rolls dice
+      // in two modules is rolling one set of dice.
+      sharedName: "Shared",
+      fileName: function (name) {
+        return name.charAt(0).toUpperCase() + name.slice(1);
+      },
+      reachMod: function (w, one) { return w.fileOf(one) + "."; },
+      apart: function (w) {
+        var L = this, files = [], wants = {};
+        function body(write) {
+          w.alone();
+          var lines = w.aside(write);
+          Object.keys(w.needs).forEach(function (what) { wants[what] = true; });
+          return lines;
+        }
+        function file(name, what, write) {
+          files.push({ name: name, lines: w.aside(function () {
+            w.line(0, L.note + w.title + (what ? " -- " + what : ""));
+            w.line(0, "using System;");
+            w.line(0, "");
+            write();
+          }) });
+        }
+
+        w.reach = w.sharedFile + ".";
+        var mine = w.mains();
+        var main = body(function () { w.inside(null, 2, mine); });
+        // Everything a class holds here is its own unless it is said to
+        // be everybody's, and split into classes these are read from
+        // outside the one that holds them.  In the single file they were
+        // all in the one class, where static was the whole of it.
+        var each = w.mods.map(function (one) {
+          return body(function () {
+            w.line(1, "public static " + w.returns(one) + " " + w.called(one) +
+                      "(" + w.signature(one) + ") {");
+            w.inside(one, 2);
+            w.line(1, L.shut);
+          });
+        });
+
+        file(w.file, "", function () {
+          w.line(0, "class " + w.file + " {");
+          w.line(1, "static void Main() {");
+          w.pour(main);
+          w.line(1, L.shut);
+          w.line(0, L.shut);
+        });
+
+        // The same, and the one Random with them: a program that rolls
+        // dice in two charts is rolling one set of dice.
+        w.reach = "";
+        w.alone();
+        var holds = w.sharing();
+        var held = w.aside(function () {
+          holds.forEach(function (one) {
+            w.infront = "public " + L.field(one.fixed, one.plain);
+            w.line(1, L.declare(w, one.entry, one.code, one.fixed, one.plain) + L.semi);
+            w.infront = "";
+          });
+          if (wants.dice) {
+            w.line(1, "public static Random rng = new Random();");
+          }
+        });
+        if (holds.length || wants.dice) {
+          file(w.sharedFile, TXT.code_shares, function () {
+            w.line(0, "static class " + w.sharedFile + " {");
+            w.pour(held);
+            w.line(0, L.shut);
+          });
+        }
+
+        w.reach = w.sharedFile + ".";
+        w.mods.forEach(function (one, at) {
+          file(w.fileOf(one), one.name, function () {
+            w.line(0, "class " + w.fileOf(one) + " {");
+            w.pour(each[at]);
+            w.line(0, L.shut);
+          });
+        });
+        return files;
       }
     },
 
@@ -584,6 +885,7 @@
             "thread_local throw true try typedef typeid typename union " +
             "unsigned using virtual void volatile wchar_t while xor xor_eq " +
             "main std askWhole askReal askText askFlag money toUpper toLower " +
+            "nap " +
             // and what the C library has already put in every file's way
             "time rand srand abs round floor ceil sqrt pow exit fmod div log " +
             "exp sin cos tan index remove rename signal",
@@ -643,6 +945,10 @@
         if (inMain) { return "return 0"; }
         w.need("cstdlib");
         return "std::exit(0)";
+      },
+      pause: function (w, item, deep) {
+        w.need("nap");
+        w.line(deep, "nap(" + napFor(w, item, "s") + ");");
       },
       refs: "own",
       byRef: function (type, name) { return type + "&" + name; },
@@ -739,7 +1045,16 @@
                            "    for (size_t i = 0; i < s.length(); i++) {",
                            "        s[i] = (char)std::tolower((unsigned char)s[i]);",
                            "    }", "    return s;", "}"] },
-        dice: { wants: ["cstdlib", "ctime"], lines: [] }
+        dice: { wants: ["cstdlib", "ctime"], lines: [] },
+        // Seconds, and a fraction of one if that is what was asked for:
+        // sleep_for is told a duration rather than a number, and the
+        // duration is the one that keeps "Wait 0.5 seconds" at half a
+        // second instead of rounding it away to none.
+        nap: { wants: ["chrono", "thread"],
+               lines: ["static void nap(double seconds) {",
+                       "    std::this_thread::sleep_for(" +
+                       "std::chrono::duration<double>(seconds));",
+                       "}"] }
       },
       whole: function (w) {
         var L = this;
@@ -797,6 +1112,127 @@
           L.helpers[name].lines.forEach(function (row) { w.line(0, row); });
         });
         w.pour(inside);
+      },
+
+      // ---- and the same program in a file each --------------------------
+      // C++ is two files to a chart rather than one: a header saying what
+      // is there, and the file that is it.  Anything wanting to call a
+      // module includes that module's header, which is how C++ is told a
+      // name exists before the line that uses it -- and it settles by
+      // itself the thing the single file had to be careful about, which is
+      // that a name has to be written above everything that calls it.
+      //
+      // What the whole program shares is announced `extern` in the shared
+      // header and written down once in the file beside it.  The small
+      // readers and printers are static, so a file that wants one has its
+      // own copy and no two of them collide.
+      sharedName: "shared",
+      apart: function (w) {
+        var L = this, files = [];
+        function part(name, ext, write) {
+          files.push({ name: name, ext: ext, lines: w.aside(write) });
+        }
+        // The top of a file that is a file rather than a header: its own
+        // header, the headers of whatever it calls, and then the libraries
+        // it and the helpers it wanted turned out to need.
+        function brings(own, mods, uses) {
+          if (own) { w.line(0, '#include "' + own + '.h"'); }
+          if (uses) { w.line(0, '#include "' + w.sharedFile + '.h"'); }
+          mods.forEach(function (one) {
+            w.line(0, '#include "' + w.fileOf(one) + '.h"');
+          });
+          var wants = { iostream: true, string: true };
+          ["cmath", "cstdlib", "algorithm"].forEach(function (lib) {
+            if (w.needs[lib]) { wants[lib] = true; }
+          });
+          var helpers = Object.keys(L.helpers).filter(function (name) {
+            return w.needs[name];
+          });
+          helpers.forEach(function (name) {
+            (L.helpers[name].wants || []).forEach(function (lib) { wants[lib] = true; });
+          });
+          Object.keys(wants).sort().forEach(function (lib) {
+            w.line(0, "#include <" + lib + ">");
+          });
+          helpers.forEach(function (name) {
+            if (!L.helpers[name].lines.length) { return; }
+            w.line(0, "");
+            L.helpers[name].lines.forEach(function (row) { w.line(0, row); });
+          });
+        }
+        function header(name, write) {
+          part(name, "h", function () {
+            w.line(0, "#pragma once");
+            w.line(0, "#include <string>");
+            w.line(0, "");
+            write();
+          });
+        }
+
+        // Main.  Its body is written first, so that what goes above it is
+        // what this file turned out to want rather than what some other
+        // one did -- and so that a program which rolls dice in main is
+        // seeded, which reading needs.dice before writing main never was.
+        var mine = w.mains();
+        w.alone();
+        var main = w.aside(function () { w.inside(null, 1, mine); });
+        var seeds = w.needs.dice;
+        part(w.file, "cpp", function () {
+          w.line(0, L.note + w.title);
+          brings("", w.leaning(mine, null), w.touching(w.prog.main, mine));
+          w.line(0, "");
+          w.line(0, "int main()" + L.open);
+          if (seeds) { w.line(1, "std::srand((unsigned)std::time(0));"); }
+          w.pour(main);
+          w.line(1, "return 0;");
+          w.line(0, L.shut);
+        });
+
+        // What the charts share, announced in a header and written down
+        // once in the file beside it -- where there is anything shared to
+        // announce.
+        w.alone();
+        var holds = w.sharing();
+        if (holds.length) {
+          header(w.sharedFile, function () {
+            holds.forEach(function (one) {
+              w.line(0, "extern " + (one.fixed ? "const " : "") +
+                     L.kinds[one.entry.kind] + " " + one.name + ";");
+            });
+          });
+          part(w.sharedFile, "cpp", function () {
+            w.line(0, L.note + w.title + " -- " + TXT.code_shares);
+            brings(w.sharedFile, [], false);
+            w.line(0, "");
+            holds.forEach(function (one) {
+              // A const at the top of a file is that file's own unless it
+              // is told to be everybody's, and the header has said it is.
+              w.line(0, (one.fixed ? "extern const " : "") +
+                     L.kinds[one.entry.kind] + " " + one.name + " = " + one.code + ";");
+            });
+          });
+        }
+
+        w.mods.forEach(function (one) {
+          w.alone();
+          var said = w.aside(function () {
+            w.line(0, w.returns(one) + " " + w.called(one) +
+                   "(" + w.signature(one) + ")" + L.open);
+            w.inside(one, 1);
+            w.line(0, L.shut);
+          });
+          var head = w.returns(one) + " " + w.called(one) +
+                     "(" + w.signature(one) + ");";
+          header(w.fileOf(one), function () { w.line(0, head); });
+          part(w.fileOf(one), "cpp", function () {
+            w.line(0, L.note + w.title + " -- " + one.name);
+            brings(w.fileOf(one), w.leaning(one.body, one),
+                   w.touching(one.scope, one.body));
+            w.line(0, "");
+            w.pour(said);
+          });
+        });
+        return files;
       }
     },
 
@@ -810,7 +1246,12 @@
             "implements import in instanceof interface let new null package " +
             "private protected public return static super switch this throw " +
             "true try typeof var void while with yield await async console " +
-            "Math Number String Buffer ask stop prompt require process",
+            "Math Number String Buffer ask stop wait prompt require process " +
+            // What a file run by node is handed and would rather keep: a
+            // program written out in several is read as a module, and a
+            // variable called exports standing where the exports are is
+            // the file handing back nothing at all.
+            "module exports Date",
       lead: function (fixed) { return fixed ? "const " : "let "; },
       head: function () { return "let "; },
       cash: function (code) { return held(code) + ".toFixed(2)"; },
@@ -825,6 +1266,10 @@
       pow: "**",
       switches: function () { return true; },
       quit: function (w) { w.need("stop"); return "stop()"; },
+      pause: function (w, item, deep) {
+        w.need("wait");
+        w.line(deep, "wait(" + napFor(w, item, "ms") + ");");
+      },
       refs: "back",
       handBack: function (names) {
         return names.length === 1 ? names[0] : "[" + names.join(", ") + "]";
@@ -876,6 +1321,14 @@
               '  if (got !== 1 && !typed.length) { throw new Error("There was nothing more to read."); }',
               '  return Buffer.from(typed).toString("utf8");',
               "}"],
+        wait: ["// Waits where it stands, the way the chart does.  The rest of",
+               "// this program is written straight down the page, and the only",
+               "// waiting a program written that way can do is to hold on to",
+               "// the thread until the time it was given is up.",
+               "function wait(ms) {",
+               "  const until = Date.now() + ms;",
+               "  while (Date.now() < until) { /* nothing to do but wait */ }",
+               "}"],
         stop: ["// Stops the program where it stands.",
                "function stop() {",
                '  if (typeof process !== "undefined" && process.exit) { process.exit(0); }',
@@ -902,6 +1355,81 @@
           L.helpers[name].forEach(function (row) { w.line(0, row); });
         });
         w.pour(inside);
+      },
+
+      // ---- and the same program in a file each --------------------------
+      // A file each, brought in with require -- which is what `node
+      // main.js` understands with nothing else set up around it, where
+      // import needs a package.json or a different ending on every file.
+      //
+      // What the whole program shares is one object that every file is
+      // handed, so that setting shared.total anywhere sets the one there
+      // is.  Exported names are put on the object a file was given rather
+      // than in place of it: two modules that call one another are each
+      // handed the other's exports half-written, and a name added to that
+      // object is on it by the time anything calls it.
+      sharedName: "shared",
+      reachMod: function (w, one) { return w.fileOf(one) + "."; },
+      apart: function (w) {
+        var L = this, files = [];
+        function top(what, mods, uses) {
+          w.line(0, L.note + w.title + (what ? " -- " + what : ""));
+          if (uses) {
+            w.line(0, "const " + w.sharedFile + ' = require("./' +
+                   w.sharedFile + '.js");');
+          }
+          mods.forEach(function (one) {
+            w.line(0, "const " + w.fileOf(one) + ' = require("./' +
+                   w.fileOf(one) + '.js");');
+          });
+          Object.keys(L.helpers).forEach(function (name) {
+            if (!w.needs[name]) { return; }
+            w.line(0, "");
+            L.helpers[name].forEach(function (row) { w.line(0, row); });
+          });
+          w.line(0, "");
+        }
+
+        w.reach = w.sharedFile + ".";
+        var mine = w.mains();
+        w.alone();
+        var main = w.aside(function () { w.inside(null, 0, mine); });
+        files.push({ name: w.file, lines: w.aside(function () {
+          top("", w.leaning(mine, null), w.touching(w.prog.main, mine));
+          w.pour(main);
+        }) });
+
+        // And what they share, in a file of its own, where there is
+        // anything shared to put in it.
+        w.alone();
+        var holds = w.sharing();
+        if (holds.length) {
+          files.push({ name: w.sharedFile, lines: w.aside(function () {
+            w.line(0, L.note + w.title + " -- " + TXT.code_shares);
+            w.line(0, "const " + w.sharedFile + " = {};");
+            holds.forEach(function (one) {
+              w.line(0, w.sharedFile + "." + one.name + " = " + one.code + ";");
+            });
+            w.line(0, "");
+            w.line(0, "module.exports = " + w.sharedFile + ";");
+          }) });
+        }
+
+        w.mods.forEach(function (one) {
+          w.alone();
+          var said = w.aside(function () {
+            w.line(0, "function " + w.called(one) + "(" + w.signature(one) + ") {");
+            w.inside(one, 1);
+            w.line(0, "}");
+          });
+          files.push({ name: w.fileOf(one), lines: w.aside(function () {
+            top(one.name, w.leaning(one.body, one), w.touching(one.scope, one.body));
+            w.pour(said);
+            w.line(0, "");
+            w.line(0, "exports." + w.called(one) + " = " + w.called(one) + ";");
+          }) });
+        });
+        return files;
       }
     }
   };

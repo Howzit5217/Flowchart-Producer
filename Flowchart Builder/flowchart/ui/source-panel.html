@@ -119,34 +119,23 @@
           <svg viewBox="0 0 20 20"><path d="M8 2.5H2.5v5.5M12 2.5h5.5v5.5M8 17.5H2.5V12M12 17.5h5.5V12"/></svg>
         </button>
       </h2>
-      <div class="switches">
-        <!-- Seeing the code used to take two controls between them: a
-             language box whose first option was Pseudocode, which is not
-             a language and could only ever answer "pick a real one", and
-             an As code button that opened a list of its own -- a popup
-             drawn like nothing else on the page, sitting under a row of
-             proper dropdowns.  Running never read the language box at
-             all; a run runs the pseudocode.  So the two are one control,
-             and it is a dropdown like the ones beside it: pick a language
-             and the code is what you get.  The list is filled in from the
-             table in 18-code.js, so adding a language there adds it here
-             too. -->
-        <select class="field" id="see-code" data-w-title="r_lang_pick"
-                title="__W(r_lang_pick)__" aria-label="__W(r_lang_pick)__">
-          <option value="" data-w="r_code">__W(r_code)__</option>
-        </select>
-        <!-- How fast it goes is one choice with three values, not a
-             switch: straight through, a step every quarter second, or a
-             step each time you ask for one.  The last is what a class
-             actually wants -- somewhere to stop and talk about the
+      <div class="switches one">
+        <!-- How fast it goes is one choice, not a switch: straight
+             through, a step every quarter second, a step each time you ask
+             for one, or the program's own timing.  The third is what a
+             class actually wants -- somewhere to stop and talk about the
              decision it is standing on -- and there was no way to ask
              for it: Step slowly advanced on a timer and you kept up
-             with it or you did not. -->
+             with it or you did not.  The fourth is for a program that
+             says how long its own steps take: "Wait 2 seconds", or "Wait
+             random(1, 5) seconds", where a pace of our own would be
+             talking over it. -->
         <select class="field" id="r-pace" data-w-title="r_pace"
                 title="__W(r_pace)__" aria-label="__W(r_pace)__">
           <option value="fast" data-w="r_at_once">__W(r_at_once)__</option>
           <option value="slow" data-w="r_slowly" selected>__W(r_slowly)__</option>
           <option value="press" data-w="r_by_step">__W(r_by_step)__</option>
+          <option value="timed" data-w="r_timed">__W(r_timed)__</option>
         </select>
       </div>
       <!-- One thing to press, the width of the panel, under the two
@@ -195,6 +184,41 @@
         </div></div>
       </div>
       <div id="tape" class="tape"></div>
+    </section>
+
+    <!-- Getting the code out, which is a different errand from running it
+         and now has a card of its own for it.  It used to be a dropdown
+         inside Run it, where picking a language was both the choosing and
+         the asking -- so there was no way to say "Java, in a file each"
+         without first being shown the Java, and no room to say it in.
+         Here: which language, whether it comes out as one file or as a
+         file for each chart, and a button.  Directly under the card it
+         came out of, because reading the program and running it are the
+         two things you do with a chart once it is drawn. -->
+    <section class="card" id="coder">
+      <h2><span data-w="c_head">__W(c_head)__</span></h2>
+      <div class="switches">
+        <!-- The list is filled in from the table in 18-code.js, so adding
+             a language there adds it here too. -->
+        <select class="field" id="see-code" data-w-title="r_lang_pick"
+                title="__W(r_lang_pick)__" aria-label="__W(r_lang_pick)__"></select>
+        <!-- One file or several.  A program of any size used to come out
+             as one block of code however many charts it was drawn as,
+             which is not how anybody would have written it and is not
+             much use to read either.  A chart is already cut into charts
+             -- main, and a drawing for each module -- so that is the cut:
+             a file for each one, and the files say where they are reading
+             what the program shares from. -->
+        <select class="field" id="code-apart" data-w-title="c_files_tip"
+                title="__W(c_files_tip)__" aria-label="__W(c_files_tip)__">
+          <option value="" data-w="c_one">__W(c_one)__</option>
+          <option value="apart" data-w="c_apart">__W(c_apart)__</option>
+        </select>
+      </div>
+      <div class="go-wide">
+        <button class="btn primary wide" id="code-write" data-w="c_write">__W(c_write)__</button>
+      </div>
+      <p class="hint" id="code-note"></p>
     </section>
 
     <section class="card fold shut" id="roles">

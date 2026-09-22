@@ -129,7 +129,8 @@
 
   function sumsOf(item) {                // every expression written on this line
     switch (item.op) {
-      case "declare": case "return": return item.expr ? [item.expr] : [];
+      case "declare": case "return": case "wait":
+        return item.expr ? [item.expr] : [];
       case "set": return [item.expr];
       case "display": return pieces(item.parts || "");
       case "call": return pieces(item.args || "");

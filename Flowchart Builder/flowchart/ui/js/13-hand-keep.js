@@ -50,6 +50,7 @@
     restoreProgram();
   }
   function setMode(toHand) {
+    var wasHand = byHand;
     if (toHand && !byHand) { keepCodeSide(); }
     byHand = toHand;
     el("#tab-code").classList.toggle("on", !toHand);
@@ -78,7 +79,11 @@
       drawHand();
       drawHandPanel();
       showReport();
-    } else {
+    } else if (wasHand) {
+      // Only coming back from the other side.  Already here, the paper put
+      // away is older than the one showing -- it was put away the last time
+      // the page went to drawing by hand, or when it opened -- so taking it
+      // out swapped the chart for a stale one and the program for none.
       showCodeSide();
     }
     dressPuzzleButton();                 // offered only where they are solved

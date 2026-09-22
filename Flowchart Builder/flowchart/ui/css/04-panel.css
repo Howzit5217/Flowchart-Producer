@@ -381,6 +381,10 @@
      Run sits where the eye already expects the card's button to be. */
   .go-wide { margin-top: 12px; }
   .switches .field { width: 100%; }
+  /* One dropdown where there were two.  How fast a run goes is all that is
+     left in Run it, now that which language the code comes out in has a
+     card of its own under it. */
+  .switches.one { grid-template-columns: 1fr; }
   /* Two switches in the cell one would take, for a pair where the
      second only means anything while the first is on. */
   .switches .stack { display: grid; gap: 7px; }

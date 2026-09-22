@@ -161,6 +161,35 @@ EN = {
               "links short, and a link cut short opens nothing — send the "
               "file instead.",
     "l_bad": "That link does not carry a chart this page can read.",
+    # ---- saved progress: a few places the page keeps your work in itself
+    "sv_tab": "Saved progress",
+    "sv_about": "Keeps the chart, the run and the place it had got to, here "
+                "in this browser. There is room for {n}.",
+    "sv_save": "Save progress",
+    "sv_saved": "Saved.",
+    "sv_full": "All {n} are in use. Save over one, or delete one to make "
+               "room.",
+    "sv_nothing": "There is nothing on the page to save yet.",
+    "sv_no_room": "The browser would not keep it: its storage is full or "
+                  "turned off.",
+    "sv_empty": "Empty",
+    "sv_load": "Load",
+    "sv_over": "Save over",
+    "sv_over_ask": "Put what is on the page now in place of this one?",
+    "sv_over_yes": "Save over it",
+    "sv_del_ask": "Delete this save for good?",
+    "sv_today": "Today",
+    "sv_st_none": "Not run yet",
+    "sv_st_ask": "Waiting for an answer",
+    "sv_st_next": "Waiting on the next step",
+    "sv_st_going": "Part way through a run",
+    "sv_st_over": "Run finished",
+    "sv_back": "Picked up where you left off.",
+    "sv_no_draw": "The chart did not draw, so the run could not be picked "
+                  "up again.",
+    "sv_stop_said": "Loading a save replaces the program that is running. "
+                    "The run will be stopped.",
+    "sv_stop_yes": "Stop it and load",
     "held_head": "What it is holding",
     "held_in": "in {name}",
     "held_shared": "Declared outside every module, so every chart can see it",
@@ -380,6 +409,7 @@ EN = {
     "eg_decision": "A decision", "eg_loop": "A loop", "eg_module": "A module",
     "r_pace": "How it runs", "r_at_once": "All at once",
     "r_by_step": "One at a time", "r_next": "Next step",
+    "r_timed": "As the program times it",
     "chart_desc": "Flowchart with {n} shapes: {kinds}.",
     "yes_plain": "Yes", "no_plain": "No",
     "more_head": "Chart options",
@@ -406,6 +436,14 @@ EN = {
     "code_esc": "Esc to close", "code_lines": "{n} lines",
     # what written-out code says when it waits for something to be typed
     "code_ask": "Enter {name}: ",
+    "code_shares": "what the program shares",
+    # ---- the code a chart is written out as, and the files it comes in
+    "c_head": "Code", "c_write": "Write the code",
+    "c_one": "In one file", "c_apart": "A file for each chart",
+    "c_files_tip": "Whether it comes out as one file or as a file for each chart",
+    "c_one_chart": "This program is one chart, so it comes out as one file.",
+    "c_files": "{n} files", "c_save_all": "Save them all",
+    "c_zipped": "{n} files, as one .zip",
     "shape": "Shape",
     "language": "Language", "key_switch": "Key", "tint_switch": "Tints",
     "build": "Build the chart", "drawing": "Drawing…",

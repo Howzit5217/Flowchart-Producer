@@ -255,16 +255,20 @@
   if (el("#run")) {
     el("#run").onclick = runIt;
   }
-  // As code is a dropdown now rather than a button with a list of its own,
-  // so picking a language out of it is the asking.  It goes back to saying
-  // As code afterwards: left sitting on Python, choosing Python again
-  // would be choosing nothing, and the code would not come back up.
-  if (el("#see-code")) {
-    el("#see-code").onchange = function () {
-      var want = el("#see-code").value;
-      el("#see-code").value = "";
-      if (want) { showCode(want); }
+  // The Code card.  Picking a language used to be the asking as well as
+  // the choosing, because the dropdown was the only control there was --
+  // which meant there was no way to say "Java, in a file each" without
+  // first being handed the Java, and no way at all to ask again for the
+  // language you were already on.  Two dropdowns and a button now: what it
+  // is written in, whether it is one file or a file for each chart, and
+  // the asking.
+  if (el("#code-write")) {
+    el("#code-write").onclick = function () {
+      showCode(el("#see-code") ? el("#see-code").value : "");
     };
+  }
+  if (el("#code-apart")) {
+    el("#code-apart").onchange = codeNote;
   }
   if (el("#save-file")) {
     el("#save-file").onclick = saveProject;

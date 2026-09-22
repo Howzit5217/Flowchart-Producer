@@ -510,10 +510,13 @@
   // left, and the line leaving it is drawn on to the next shape, where its
   // arrowhead lands -- in the order the program reads, one after another.
   //
-  // At one speed.  A long line takes longer to draw than a short one and a
-  // big chart longer than a small one, because that is what drawing is;
-  // nothing is squeezed into a length of time decided beforehand.  The
+  // At one speed: a long line takes longer to draw than a short one, and the
   // speed is on the screen, so a chart shown smaller is not drawn slower.
+  // A big chart is not drawn for minutes on end for it, though.  What gives
+  // is how long the pen waits before beginning the next piece, not how any
+  // one piece is drawn -- a wave of drawing passing down a big chart, a
+  // single point crawling along a small one, each stroke of both the same
+  // (how long the whole thing takes, below).
   //
   // Only what can be seen is drawn.  A chart too big for the screen is
   // shown at actual size with its Start in view, and a pen that carried on
@@ -537,8 +540,30 @@
   var PEN = 1500;                        // px a second a line is drawn at
   var WRITE = 520;                       // and words written at
   var WASH = 320;                        // ms a shape's color takes to wash in
+  var POP = 160;                         // and an arrowhead to land
+
+  // How long the whole drawing takes.  At the pen's own speed, one piece
+  // finished before the next is begun, a chart of a dozen shapes took four
+  // seconds and one of a hundred half a minute -- and nobody waits half a
+  // minute to be shown a chart they have already been told is ready.
+  //
+  // So a big drawing is not slowed to a crawl; it is drawn by more of the
+  // pen at once.  Each piece is still drawn exactly as it was -- the same
+  // outline, the same wash behind it, the same words written in from the
+  // left -- but the next one is begun before the last is finished, so the
+  // drawing arrives as a wave passing down the chart rather than a single
+  // point crawling along it.  Past what even that can bring in, the pen
+  // quickens too, up to a limit: fast enough to keep the whole thing inside
+  // a few seconds, never so fast that the drawing turns into a flash.
+  //
+  // A small chart is not touched at all.  Under EASY the wave is a single
+  // pen going round one thing at a time, which is what it always was.
+  var EASY = 1800;                       // ms a drawing may take before it is hurried
+  var CAP = 2600;                        // and about the longest any of them takes
+  var AT_ONCE = 6;                       // pieces under the pen together before it quickens
+  var QUICKEST = 2.2;                    // times its own speed, at the very most
   var ink = null;                        // the drawing going on, if any
-  var INK_VARS = ["--len", "--dur", "--d", "--late"];
+  var INK_VARS = ["--len", "--dur", "--d", "--late", "--wash", "--pop"];
 
   function inkStart(paper) {
     var svg = el("svg", paper);
@@ -717,77 +742,131 @@
       heading.push(one);
     });
 
-    function put(bit, t, cls, vars, kids) {
-      bit.classList.add("ink-wait");
-      var p = { el: bit, t: t, cls: cls, vars: vars || {}, kids: kids || [], lasts: 0 };
-      pieces.push(p);
-      return p;
-    }
-    function write(one, t) {
-      put(one.el, t, "ink-write", { "--dur": ms(one.dur) }).lasts = one.dur;
-      if (one.patch) { put(one.patch, t, null); }
-      return t + one.dur;
-    }
-    function drawLine(line, t) {
-      put(line.el, t, "ink-line", { "--len": (line.len + 2).toFixed(1),
-                                   "--dur": ms(line.dur) }).lasts = line.dur;
-      line.heads.forEach(function (head) {
-        put(head, t + line.dur, "ink-pop").lasts = 160;
-      });
-      line.labels.forEach(function (one) { write(one, t + line.dur * one.share); });
-      return t + line.dur;
-    }
-
-    var t = 0;
-    heading.forEach(function (one) { t = write(one, t); });
-    var after = t;
-    loose.forEach(function (line) { after = Math.max(after, drawLine(line, t)); });
-    t = after;
+    // Every shape measured once: how long the pen takes round each stroke
+    // of its outline, and how wide each line of its words is.  Measuring is
+    // the dear half of all this -- each stroke asks the browser how long it
+    // is and each word how wide -- so it is done here, once, and the
+    // timetable below, which is arithmetic and nothing else, is free to be
+    // worked out twice.
     shapes.forEach(function (one) {
-      var ready = t;
-      one.coming.forEach(function (line) { ready = Math.max(ready, drawLine(line, t)); });
-      t = ready;
-      // Round the outline, every stroke of it at once; the color washes in
-      // behind each once it is closed; the words are written as the pen
-      // comes round to finish, one line of them after another.
-      var kids = [], outline = 0, texts = [];
+      var strokes = [], fills = [], words = [];
       Array.prototype.forEach.call(one.el.children, function (bit) {
         var tag = bit.tagName.toLowerCase();
-        if (tag === "text") { texts.push(bit); return; }
+        if (tag === "text") {
+          var b = boxOf(bit);
+          words.push({ el: bit, wide: b ? b.w : 0 });
+          return;
+        }
         if (bit.classList.contains("ghost")) { return; }
         var len = 0;
         if (tag !== "g" && bit.getTotalLength) {
           try { len = bit.getTotalLength(); } catch (e) { len = 0; }
         }
-        if (len > 0) {
-          var d = drawMs(len);
-          outline = Math.max(outline, d);
-          kids.push({ el: bit, cls: "ink-line", vars: { "--len": (len + 2).toFixed(1),
-                                                        "--dur": ms(d) } });
-        } else {
-          kids.push({ el: bit, cls: "ink-wash", vars: {} });
-        }
+        if (len > 0) { strokes.push({ el: bit, len: len }); }
+        else { fills.push(bit); }
       });
-      kids.forEach(function (kid) {
-        if (kid.cls === "ink-wash") { kid.vars["--d"] = ms(outline); }
-      });
-      var at = outline * 0.7;
-      texts.forEach(function (words) {
-        var b = boxOf(words), d = b ? writeMs(b.w) : 0;
-        kids.push({ el: words, cls: "ink-write", vars: { "--d": ms(at), "--dur": ms(d) } });
-        at += d;
-      });
-      put(one.el, t, null, {}, kids).lasts = Math.max(outline + WASH, at);
-      one.said.forEach(function (words) { write(words, t); });
-      t += Math.max(outline, at);
-      var gone = t;
-      one.leaving.forEach(function (line) { gone = Math.max(gone, drawLine(line, t)); });
-      t = gone;
+      one.art = { strokes: strokes, fills: fills, words: words };
     });
-    strayHeads.forEach(function (head) { put(head, t, "ink-pop").lasts = 160; });
+
+    // The timetable: what is drawn when, and how long each of it takes.
+    // rate is how much faster than its own speed the pen is going; squeeze
+    // is how much of the wait between one piece and the next is kept.  At
+    // one and one this is the plain thing -- a single pen, one piece at a
+    // time -- and every piece keeps its own shape at any other pair, since
+    // rate is the only thing that touches how long a piece takes.  The turns
+    // are counted at the pen's own speed throughout and squeezed as each
+    // piece is written down, so that what is worked out here does not
+    // depend on how hurried the answer turns out to be.
+    function layOut(rate, squeeze, pieces, mark) {
+      var wash = Math.max(140, WASH / rate);
+      var pop = Math.max(90, POP / rate);
+      var hurry = rate > 1;              // the washes and the arrowheads too
+      function put(bit, at, cls, vars, kids) {
+        if (mark) { bit.classList.add("ink-wait"); }
+        var p = { el: bit, t: at * squeeze, cls: cls, vars: vars || {},
+                  kids: kids || [], lasts: 0 };
+        pieces.push(p);
+        return p;
+      }
+      function write(one, at) {
+        put(one.el, at, "ink-write", { "--dur": ms(one.dur / rate) }).lasts = one.dur / rate;
+        if (one.patch) { put(one.patch, at, null); }
+        return at + one.dur;
+      }
+      function drawLine(line, at) {
+        put(line.el, at, "ink-line", { "--len": (line.len + 2).toFixed(1),
+                                       "--dur": ms(line.dur / rate) }).lasts = line.dur / rate;
+        line.heads.forEach(function (head) {
+          put(head, at + line.dur, "ink-pop", hurry ? { "--pop": ms(pop) } : null).lasts = pop;
+        });
+        line.labels.forEach(function (one) { write(one, at + line.dur * one.share); });
+        return at + line.dur;
+      }
+
+      var t = 0;
+      heading.forEach(function (one) { t = write(one, t); });
+      var after = t;
+      loose.forEach(function (line) { after = Math.max(after, drawLine(line, t)); });
+      t = after;
+      shapes.forEach(function (one) {
+        var ready = t;
+        one.coming.forEach(function (line) { ready = Math.max(ready, drawLine(line, t)); });
+        t = ready;
+        // Round the outline, every stroke of it at once; the color washes in
+        // behind each once it is closed; the words are written as the pen
+        // comes round to finish, one line of them after another.
+        var kids = [], outline = 0;
+        one.art.strokes.forEach(function (stroke) {
+          var d = drawMs(stroke.len);
+          outline = Math.max(outline, d);
+          kids.push({ el: stroke.el, cls: "ink-line",
+                      vars: { "--len": (stroke.len + 2).toFixed(1), "--dur": ms(d / rate) } });
+        });
+        one.art.fills.forEach(function (bit) {
+          kids.push({ el: bit, cls: "ink-wash", vars: { "--d": ms(outline / rate) } });
+        });
+        var held = outline * 0.7, run = 0;
+        one.art.words.forEach(function (words) {
+          var d = writeMs(words.wide);
+          kids.push({ el: words.el, cls: "ink-write",
+                      vars: { "--d": ms((held + run) / rate), "--dur": ms(d / rate) } });
+          run += d;
+        });
+        var said = held + run;           // when the last word is written
+        // The wash is told to the shape rather than to each piece of it: it
+        // is the same for all of them, and it is inherited, so one word on
+        // the group is one style to put on and one to take off instead of
+        // four or five.
+        put(one.el, t, null, hurry ? { "--wash": ms(wash) } : {}, kids)
+          .lasts = Math.max(outline / rate + wash, said / rate);
+        one.said.forEach(function (words) { write(words, t); });
+        t += Math.max(outline, said);
+        var gone = t;
+        one.leaving.forEach(function (line) { gone = Math.max(gone, drawLine(line, t)); });
+        t = gone;
+      });
+      strayHeads.forEach(function (head) {
+        put(head, t, "ink-pop", hurry ? { "--pop": ms(pop) } : null).lasts = pop;
+      });
+      var total = 0;
+      pieces.forEach(function (p) { total = Math.max(total, p.t + p.lasts); });
+      return total;
+    }
+
+    // Laid out once at the pen's own speed, to see how long that would be,
+    // and once for real.  What is wanted is the whole of a short drawing and
+    // no more than about CAP of a long one, approached rather than reached,
+    // so that a chart twice the size of another still takes a little longer
+    // than it rather than exactly as long.  Bringing the turns that much
+    // closer together is what makes the wave; the pen is only asked to
+    // quicken once the wave would otherwise have more than AT_ONCE pieces
+    // going at the same time.
+    var natural = layOut(1, 1, [], false);
+    var want = natural <= EASY ? natural : EASY + (CAP - EASY) * (1 - EASY / natural);
+    var squeeze = natural > 0 ? want / natural : 1;
+    var rate = Math.min(QUICKEST, Math.max(1, 1 / (squeeze * AT_ONCE)));
+    mine.total = layOut(rate, squeeze, pieces, true);
     pieces.sort(function (a, b) { return a.t - b.t; });
-    mine.total = 0;
-    pieces.forEach(function (p) { mine.total = Math.max(mine.total, p.t + p.lasts); });
   }
 
   function inkGo(mine) {

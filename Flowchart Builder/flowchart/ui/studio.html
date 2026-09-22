@@ -64,6 +64,16 @@
        which is the only thing in the bar that names the whole. -->
   <div id="save-menu" class="sheet-menu" hidden role="dialog"
        aria-labelledby="save-open">
+    <!-- Two halves.  Files are how work leaves this page and comes back
+         to it; saved progress is the page keeping it itself, in a few
+         places, run and all, so that Load puts you back where you were. -->
+    <div class="seg" id="files-tabs" role="tablist">
+      <button class="seg-btn on" id="files-tab-out" role="tab" aria-selected="true"
+              aria-controls="files-out" data-w="files">__W(files)__</button>
+      <button class="seg-btn" id="files-tab-kept" role="tab" aria-selected="false"
+              aria-controls="files-kept" data-w="sv_tab">__W(sv_tab)__</button>
+    </div>
+    <div id="files-out" role="tabpanel" aria-labelledby="files-tab-out">
     <h3 id="save-title" data-w="download">__W(download)__</h3>
     <a class="btn wide" id="svg-link" data-w="dl_svg"
        download="__FILE__.svg" href="#">__W(dl_svg)__</a>
@@ -93,6 +103,13 @@ __OPTIONS__
     <p class="hint" id="file-note"></p>
     <input type="file" id="file-in" hidden
            accept=".json,.txt,.text,.md,.pseudo,.flowchart,application/json,text/plain">
+    </div>
+    <div id="files-kept" role="tabpanel" aria-labelledby="files-tab-kept" hidden>
+      <p class="hint" id="kept-about"></p>
+      <button class="btn primary wide" id="kept-save" data-w="sv_save">__W(sv_save)__</button>
+      <p class="hint" id="kept-note"></p>
+      <ol class="kept-list" id="kept-list"></ol>
+    </div>
   </div>
   <div id="settings-menu" class="sheet-menu" hidden role="dialog"
        aria-labelledby="settings-title">
@@ -467,6 +484,12 @@ __SVG__
       <span class="code-esc" data-w="code_esc">__W(code_esc)__</span>
       <button class="btn small" id="tape-done" data-w="done">__W(done)__</button>
     </div>
+    <!-- Which file of the program is on the screen, when there is more
+         than one of them.  It stands above the code rather than in it:
+         what is in the code scrolls, and a strip that scrolled away at
+         the second screenful would be a strip nobody could get back to
+         without going to the top of the file first. -->
+    <div id="code-files" hidden></div>
     <div id="tape-slot"></div>
     <div id="code-out" hidden></div>
   </div>

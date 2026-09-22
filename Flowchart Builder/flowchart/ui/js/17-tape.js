@@ -74,6 +74,11 @@
     // the language picker takes its place.
     if (el("#tape-code")) { el("#tape-code").hidden = code; }
     if (el("#tape-lang")) { el("#tape-lang").hidden = !code; }
+    // The strip saying which file of the program is showing goes with the
+    // code it belongs to -- and is not there at all for a program that
+    // came out as one file, which has no file to choose between.
+    var strip = el("#code-files");
+    if (strip) { strip.hidden = !code || !strip.firstChild; }
   }
 
   // A newly built chart is a new program: neither what the last one printed

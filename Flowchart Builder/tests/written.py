@@ -731,6 +731,113 @@ Display "Total ", total
 Display "Average ", total / howMany
 End
 """, ["3", "10", "20", "31"]),
+
+    # Waits, really waited.  The chart can be run at the program's own
+    # timing, so the code has to wait too -- and a wait is the one statement
+    # here that some of these languages will not simply let you write:
+    # Java's sleep throws something a method has to answer for, and C++
+    # needs two headers it would not otherwise have.  Both of those are
+    # compiler errors rather than wrong answers, which is exactly what
+    # nobody notices by reading.  A hundredth of a second each, because what
+    # is being checked is that it compiles and waits, not how long for.
+    ("a program that waits", """
+Start
+Declare Integer n
+Display "before"
+Wait 10 ms
+Set n = 2
+Pause 0.01 seconds
+Wait n ms
+Display "after"
+End
+""", []),
+    # ---- and what only happens once the program is cut into files -------
+    # Written out as a file for each chart, the files have to say where
+    # they are reading one another from -- and what they say has to be
+    # something the program is not already using for something else.
+    #
+    # `shared` is the file the split keeps what the program shares in, and
+    # `exports` is where a JavaScript file puts what the rest may call: a
+    # program with names of its own spelled like those has a variable
+    # standing exactly where the file needs to put something.
+    ("names spelled like the files a split makes", """
+Declare Integer shared
+Declare Integer exports
+
+Module main()
+    Set shared = 2
+    Set exports = 3
+    Call show()
+    Display "now ", shared, " and ", exports
+End Module
+
+Module show()
+    Set shared = shared + 1
+    Set exports = exports + 1
+    Display "show sees ", shared, " and ", exports
+End Module
+""", []),
+
+    # And a module spelled like one of them, which wants a file of its own
+    # and cannot have the name it would have asked for.
+    ("a module named after the shared file", """
+Module main()
+    Call shared(2)
+    Call shared(7)
+End Module
+
+Module shared(Integer n)
+    Display "shared got ", n
+End Module
+""", []),
+
+    # Two modules that call one another.  In one file this is nothing at
+    # all -- they are written one above the other and both are there by
+    # the time either runs.  In a file each it is the thing that decides
+    # how a file brings another in: asked for by name at the top, each
+    # would be waiting on a name the other has not written down yet.
+    ("two modules that call each other", """
+Module main()
+    Call even(4)
+    Call odd(3)
+End Module
+
+Module even(Integer n)
+    If n = 0 Then
+        Display "even"
+    Else
+        Call odd(n - 1)
+    End If
+End Module
+
+Module odd(Integer n)
+    If n = 0 Then
+        Display "odd"
+    Else
+        Call even(n - 1)
+    End If
+End Module
+""", []),
+
+    # A Constant worked out rather than written down, in a program of
+    # several charts.  Split up, it lands in the shared file -- which is
+    # the one file whose top nothing else writes, so it is the one that
+    # quietly went out without the import its own first line needed.
+    ("a shared constant that has to be worked out", """
+Constant Real ROOT = sqrt(16)
+Declare Integer n
+
+Module main()
+    Set n = 1
+    Call show()
+    Display "root ", ROOT
+End Module
+
+Module show()
+    Set n = n + 1
+    Display "show ", n, " ", ROOT
+End Module
+""", []),
 ]
 
 
@@ -888,6 +995,78 @@ def carried_out(lang, made, typed, folder, have):
     return "skip", ""
 
 
+def spread_out(lang, files, typed, folder, have):
+    """The same program cut into a file for each chart, really run.
+
+    The one big file has been run just above; this runs the other way of
+    writing it out, where every chart is a file of its own and the files
+    reach one another by name -- shared.total in Python, Shared.total in
+    Java, an include in C++.  That is the half of the split a reading
+    cannot check: whether what the files say about each other is true.
+
+    Same answers back as carried_out.  The first file is the one to start:
+    it holds main.
+    """
+    paths = []
+    for one in files:
+        path = os.path.join(folder, one["file"] + "." + one["ext"])
+        with io.open(path, "w", encoding="utf-8") as f:
+            f.write(one["text"])
+        paths.append(path)
+    ending = lambda what: [p for p in paths if p.endswith(what)]
+
+    if lang == "python":
+        return typed_into([have["python"], paths[0]], typed, folder)
+    if lang == "javascript":
+        if not have["javascript"]:
+            return "skip", ""
+        return typed_into([have["javascript"], paths[0]], typed, folder)
+    if lang == "java":
+        if not have["javac"]:
+            return "skip", ""
+        built = subprocess.run([have["javac"], "-nowarn", "-d", folder] + paths,
+                               capture_output=True, text=True, cwd=folder)
+        if built.returncode:
+            return None, "does not compile: " + first_error(built.stdout + built.stderr)
+        return typed_into([have["java"], "-cp", folder, files[0]["file"]], typed, folder)
+    if lang == "csharp":
+        if not have["csc"]:
+            return "skip", ""
+        # Compiled and not started on Windows, for the reason carried_out
+        # gives: a program built a moment ago is one nobody has signed.
+        if os.name == "nt":
+            built = subprocess.run([have["csc"], "-nologo", "-target:library",
+                                    "-out:" + os.path.join(folder, "program.dll")]
+                                   + ending(".cs"),
+                                   capture_output=True, text=True, cwd=folder)
+            if built.returncode:
+                return None, "does not compile: " + first_error(built.stdout + built.stderr)
+            return "built", ""
+        exe = os.path.join(folder, "program.exe")
+        built = subprocess.run([have["csc"], "-nologo", "-out:" + exe] + ending(".cs"),
+                               capture_output=True, text=True, cwd=folder)
+        if built.returncode:
+            return None, "does not compile: " + first_error(built.stdout + built.stderr)
+        return typed_into([have["mono"], exe], typed, folder) if have["mono"]             else ("built", "")
+    if lang == "cpp":
+        if not have["cpp"]:
+            return "skip", ""
+        if os.name == "nt":                          # read, and not built
+            built = subprocess.run([have["cpp"], "-std=c++11", "-fsyntax-only"]
+                                   + ending(".cpp"),
+                                   capture_output=True, text=True, cwd=folder)
+            if built.returncode:
+                return None, "does not compile: " + first_error(built.stderr)
+            return "built", ""
+        exe = os.path.join(folder, "program-cpp")
+        built = subprocess.run([have["cpp"], "-std=c++11", "-o", exe] + ending(".cpp"),
+                               capture_output=True, text=True, cwd=folder)
+        if built.returncode:
+            return None, "does not compile: " + first_error(built.stderr)
+        return typed_into([exe], typed, folder)
+    return "skip", ""
+
+
 def java_all_at_once(cases, results, folder, have):
     """Every Java file compiled in one go.  Where they are, or "".
 
@@ -929,10 +1108,35 @@ def marked(cases, results, folder):
     have = compilers()
     have["java built"] = java_all_at_once(cases, results, folder, have)
     wrong, tally = [], {}
+
+    def judged(case, lang, how, lines, trouble, result, count):
+        """What one run of one program in one language came to."""
+        name = case["name"] + (", in a file each" if how else "")
+        if lines == "skip":
+            count["skip"] += 1
+        elif lines == "built":
+            count["built"] += 1
+        elif result["faults"]:
+            # The runner stopped at a fault, so there is nothing to
+            # compare with: it only has to be a program.
+            if trouble.startswith("does not compile") and not any(
+                    bit in case["name"] for bit in NOT_MEANT_TO_BUILD):
+                wrong.append("%s, as %s: %s" % (name, lang, trouble))
+            else:
+                count["right"] += 1
+        elif lines is None:
+            wrong.append("%s, as %s: %s" % (name, lang, trouble))
+        elif [said_alike(l) for l in lines] != [said_alike(l) for l in result["said"]]:
+            wrong.append("%s, as %s:\n      the runner %r\n      the code   %r"
+                         % (name, lang, result["said"], lines))
+        else:
+            count["right"] += 1
+
     for number, (case, result) in enumerate(zip(cases, results)):
         for lang in sorted(result["code"]):
             made = result["code"][lang]
-            count = tally.setdefault(lang, {"right": 0, "built": 0, "skip": 0})
+            count = tally.setdefault(lang, {"right": 0, "built": 0, "skip": 0,
+                                            "apart": 0})
             if "error" in made:
                 wrong.append("%s, as %s: the writer threw %s"
                              % (case["name"], lang, made["error"][:160]))
@@ -940,23 +1144,23 @@ def marked(cases, results, folder):
             where = os.path.join(folder, "%02d-%s" % (number, lang))
             os.makedirs(where)
             lines, trouble = carried_out(lang, made, case["typed"], where, have)
-            if lines == "skip":
-                count["skip"] += 1
-            elif lines == "built":
-                count["built"] += 1
-            elif result["faults"]:
-                # The runner stopped at a fault, so there is nothing to
-                # compare with: it only has to be a program.
-                if trouble.startswith("does not compile") and not any(
-                        bit in case["name"] for bit in NOT_MEANT_TO_BUILD):
-                    wrong.append("%s, as %s: %s" % (case["name"], lang, trouble))
-                else:
-                    count["right"] += 1
-            elif lines is None:
-                wrong.append("%s, as %s: %s" % (case["name"], lang, trouble))
-            elif [said_alike(l) for l in lines] != [said_alike(l) for l in result["said"]]:
-                wrong.append("%s, as %s:\n      the runner %r\n      the code   %r"
-                             % (case["name"], lang, result["said"], lines))
-            else:
-                count["right"] += 1
+            judged(case, lang, "", lines, trouble, result, count)
+
+            # And the same program cut into a file for each of its charts.
+            # One chart comes back as the one file that has just been run,
+            # so there is nothing more to do with that one.
+            spread = (result.get("apart") or {}).get(lang)
+            if isinstance(spread, dict):
+                wrong.append("%s, as %s in a file each: the writer threw %s"
+                             % (case["name"], lang, spread.get("error", "")[:160]))
+                continue
+            if not spread or len(spread) < 2:
+                continue
+            apart = os.path.join(folder, "%02d-%s-apart" % (number, lang))
+            os.makedirs(apart)
+            lines, trouble = spread_out(lang, spread, case["typed"], apart, have)
+            many = {"right": 0, "built": 0, "skip": 0}
+            judged(case, lang, "apart", lines, trouble, result, many)
+            if many["right"] or many["built"]:
+                count["apart"] += 1
     return wrong, tally

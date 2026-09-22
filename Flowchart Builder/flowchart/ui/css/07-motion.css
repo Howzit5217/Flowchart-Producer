@@ -450,6 +450,12 @@
     0% { color: var(--accent); font-weight: 700; }
     100% { color: var(--ink); font-weight: 400; }
   }
+  /* The place just saved into, lit for a moment so you can see which one
+     it went to. */
+  .kept.just { animation: kept-just .9s var(--ease-soft); }
+  @keyframes kept-just {
+    0%, 35% { background: var(--accent-soft); border-color: var(--accent); }
+  }
   /* The table itself comes up into its place the first time there is
      anything in it, and a name declared part way through a run slides in
      where it goes -- a row simply turning up in the middle of a list
@@ -569,6 +575,16 @@
      arriving comes up into it; the buttons that trade places in the bar
      with them spring in rather than appearing. */
   #code-out.swap, #tape-slot.swap { animation: swap-in .3s var(--ease) backwards; }
+  /* The code itself is written in a slice at a time rather than dropped on
+     the screen whole -- 18-write.js says why, and it is the page staying
+     alive that it is for rather than the look of it.  What it looks like is
+     a program being written, and each slice coming up out of nothing is the
+     half of that the stylesheet can do.  Only the ink fades: a slice is an
+     inline span, so that the newlines in it are the program's own, and a
+     transform on one of those is a thing the browser is right to ignore.
+     Told to keep still, they simply are there, as everything else here is. */
+  #code-out .code-part { animation: wrote-in .22s var(--ease-soft) backwards; }
+  @keyframes wrote-in { from { opacity: 0; } }
   .code-bar .popped { animation: pop-in .26s var(--ease-back) backwards; }
   @keyframes pop-in { from { opacity: 0; transform: scale(.85); } }
 
@@ -642,17 +658,18 @@
   svg .ink-line {
     stroke-dasharray: var(--len) var(--len);
     animation: ink-line var(--dur) linear var(--late, 0ms) backwards,
-               ink-wash .32s var(--ease-soft) calc(var(--dur) + var(--late, 0ms)) backwards;
+               ink-wash var(--wash, .32s) var(--ease-soft)
+                        calc(var(--dur) + var(--late, 0ms)) backwards;
   }
   svg .flow.ink-line { animation: ink-line var(--dur) linear var(--late, 0ms) backwards; }
   svg .ink-wash {
-    animation: ink-wash .32s var(--ease-soft)
+    animation: ink-wash var(--wash, .32s) var(--ease-soft)
                calc(var(--d, 0ms) + var(--late, 0ms)) backwards;
   }
   svg .ink-write {
     animation: ink-write var(--dur) linear calc(var(--d, 0ms) + var(--late, 0ms)) backwards;
   }
-  svg .ink-pop { animation: fade-in .16s var(--ease-soft) var(--late, 0ms) backwards; }
+  svg .ink-pop { animation: fade-in var(--pop, .16s) var(--ease-soft) var(--late, 0ms) backwards; }
   @keyframes ink-line { from { stroke-dashoffset: var(--len); } }
   @keyframes ink-wash { from { fill-opacity: 0; } }
   @keyframes ink-write {

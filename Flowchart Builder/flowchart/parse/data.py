@@ -2,7 +2,9 @@
 and for writing it as code."""
 import re
 
-from ..parse.keywords import R_DECL, R_END, R_IN, R_OUT, R_RETURN, R_START
+from ..parse.keywords import (
+    R_DECL, R_END, R_IN, R_NOT_A_WAIT, R_OUT, R_RETURN, R_START, R_WAIT,
+    R_WAIT_UNIT)
 from ..parse.trouble import PROBLEMS
 from ..words.lookup import word
 
@@ -54,6 +56,10 @@ def statement_json(text, node_id, line, shape="", scope=""):
         rest = text.split(None, 1)[1] if " " in text else ""
         out.update(op="input", var=rest.strip().strip(",").strip())
         return out
+    m = R_WAIT.match(text)
+    if m and not R_NOT_A_WAIT.match(m.group(1).strip()):
+        out.update(**how_long(m.group(1)))
+        return out
     m = R_CALL_NAME.match(text)
     if m:
         out.update(op="call", name=m.group(1), args=m.group(2))
@@ -77,6 +83,37 @@ def statement_json(text, node_id, line, shape="", scope=""):
         return out
     out.update(op="other")
     return out
+
+
+def unbracket(text):
+    """"(2 seconds)" -> "2 seconds", where the brackets wrap the whole of it."""
+    while len(text) > 1 and text[0] == "(" and text[-1] == ")":
+        deep = 0
+        for i, c in enumerate(text):
+            deep += (c == "(") - (c == ")")
+            if deep == 0 and i < len(text) - 1:
+                return text             # "(a) + (b)": they are not one pair
+        text = text[1:-1].strip()
+    return text
+
+
+def how_long(rest):
+    """The time in "Wait 2 seconds" -- how much, and of what.
+
+    The how much is an expression and nothing narrower, so "Wait random(1, 3)
+    seconds" is as good a wait as "Wait 2 seconds": what the program decides
+    as it goes is what the run waits.  Milliseconds are kept as milliseconds
+    rather than turned into a fraction of a second here, because the code
+    written from this reads better in whichever unit was typed.
+    """
+    rest = re.sub(r"^for\s+", "", rest.strip(), flags=re.I)
+    rest = unbracket(rest)              # Wait(2 seconds) says the same thing
+    unit = "s"
+    m = R_WAIT_UNIT.match(rest)
+    if m and m.group(1).strip():
+        rest = m.group(1).strip()
+        unit = "ms" if m.group(2).lower().startswith(("ms", "mil")) else "s"
+    return {"op": "wait", "expr": rest, "unit": unit}
 
 
 def items_json(items):

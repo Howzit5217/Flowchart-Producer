@@ -396,6 +396,30 @@
   }
   #code-out .go { flex: none; }
 
+  /* Which file of the program is on the screen, where it came out as
+     several.  A row of tabs above the code, scrolling sideways on its own
+     so that a program of forty files does not stretch the sheet -- and
+     with its own bar put away, because a strip two lines tall is mostly
+     bar. */
+  #code-files {
+    flex: none; display: flex; gap: 6px; align-items: center;
+    padding: 10px 16px 0; overflow-x: auto;
+    scrollbar-width: none; -ms-overflow-style: none;
+  }
+  #code-files::-webkit-scrollbar { display: none; }
+  #code-files[hidden] { display: none !important; }
+  .code-file {
+    flex: none; border: 1px solid var(--line-soft); background: none;
+    color: var(--muted); border-radius: 7px; padding: 5px 10px;
+    font: 12.5px/1.2 "Cascadia Mono", Consolas, "SF Mono", Menlo, monospace;
+    cursor: pointer; white-space: nowrap;
+  }
+  .code-file:hover { color: var(--ink); border-color: var(--line); }
+  .code-file.on {
+    color: var(--ink); border-color: var(--accent);
+    box-shadow: inset 0 -2px 0 var(--accent);
+  }
+
   /* ------------------------------------------------------------ printing -- */
   /* Plain, always.  A chart printed the way the screen shows it costs a
      cartridge and reads worse than the plain one: pale fills on paper are

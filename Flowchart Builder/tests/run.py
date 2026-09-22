@@ -39,6 +39,7 @@ import io
 import json
 import os
 import re
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -530,6 +531,34 @@ def _():
     return got == want, "%s" % (got if got != want else "lines 2 to 6")
 
 
+@check("a wait is read as a length of time, and only when it is one")
+def _():
+    want = [
+        ("Wait 2 seconds", "wait", "2", "s"),
+        ("Pause 500 ms", "wait", "500", "ms"),
+        ("Delay random(1, 3) seconds", "wait", "random(1, 3)", "s"),
+        ("Wait for 1.5 s", "wait", "1.5", "s"),
+        ("sleep(250 ms)", "wait", "250", "ms"),
+        ("Wait n", "wait", "n", "s"),
+        # Not one of them: there is no length of time anywhere in it.
+        ("Wait until done", "other", None, None),
+        # Nor these: a name that merely begins with one of the words.
+        ("Set waiter = 3", "set", None, None),
+        ("Display waits", "display", None, None),
+    ]
+    fb = builder()
+    bad = []
+    for text, op, expr, unit in want:
+        got = fb.statement_json(text, 1, 1)
+        if got.get("op") != op:
+            bad.append("%r read as %s, not %s" % (text, got.get("op"), op))
+        elif op == "wait" and (got.get("expr"), got.get("unit")) != (expr, unit):
+            bad.append("%r waits %r %s, not %r %s"
+                       % (text, got.get("expr"), got.get("unit"), expr, unit))
+    return not bad, "%d lines%s" % (len(want),
+                                    "" if not bad else " -- " + "; ".join(bad[:3]))
+
+
 @check("a block left open is reported, with its line")
 def _():
     fb = builder()
@@ -937,6 +966,18 @@ Module report(Integer n)
 End Module
 """, ["5"], ["Factorial: 120", "That is a big one.", {"key": "r_done"}], None),
 
+    ("a wait is walked over, and what it waits is worked out", """
+Start
+Declare Integer pause
+Set pause = 2
+Display "before"
+Wait pause seconds
+Wait random(1, 3) seconds
+Pause 500 ms
+Display "after"
+End
+""", [], ["before", "after", {"key": "r_done"}], None),
+
     ("a While inside a module goes round", """
 Module main()
     Call countTo(3)
@@ -1079,6 +1120,32 @@ WRITES = [
 ]
 
 
+# A program that says how long its own steps take.  The chart can be run at
+# that timing rather than at a pace of its own, so the code written from it
+# has to wait as well: what you read is what you just watched, and a program
+# that printed both its lines at once would not be it.
+WAITING = """
+Start
+Display "before"
+Wait 2 seconds
+Pause 500 ms
+Display "after"
+End
+"""
+
+WAIT_WRITES = [
+    ("python", ["time.sleep(2)", "time.sleep(0.5)", "import time"], []),
+    ("java", ["Thread.sleep(2000)", "Thread.sleep(500)",
+              "catch (InterruptedException e)"], []),
+    ("csharp", ["System.Threading.Thread.Sleep(2000)",
+                "System.Threading.Thread.Sleep(500)"], []),
+    ("cpp", ["nap(2)", "nap(0.5)", "#include <thread>",
+             "std::this_thread::sleep_for"], [["static void nap", "int main()"]]),
+    ("javascript", ["wait(2000)", "wait(500)", "function wait(ms)"],
+     [["function wait(ms)", "console.log"]]),
+]
+
+
 # ---------------------------------------------- and putting it right again --
 # A warning that says what is wrong and stops there leaves the typing to
 # somebody who has just been told they cannot type.  Each of these is a fix
@@ -1180,6 +1247,10 @@ def _():
                 "ast": read_as_data(WRITTEN.strip("\n")),
                 "has": has, "before": before}
                for lang, has, before in WRITES]
+    written += [{"name": "a program that waits, waits in the code too",
+                 "lang": lang, "ast": read_as_data(WAITING.strip(chr(10))),
+                 "has": has, "before": before}
+                for lang, has, before in WAIT_WRITES]
     mends = [{"name": name, "source": source, "fix": fix, "line": line,
               "want": want}
              for name, source, fix, line, want in MENDS]
@@ -1239,13 +1310,18 @@ def _():
         wrong, tally = written.marked(cases, results, folder)
     finally:
         shutil.rmtree(folder, ignore_errors=True)
-    said = []
+    said, apart = [], 0
     for lang in sorted(tally):
         count = tally[lang]
+        apart += count.get("apart", 0)
         said.append("%s %s" % (lang, "not here" if count["skip"] and not count["right"]
                                else "%d" % count["right"] if not count["built"]
                                else "%d (and %d only built)" % (count["right"], count["built"])))
     note = "%d programs: %s" % (len(cases), ", ".join(said))
+    # The ones with more than one chart in them are written out a second
+    # time, a file for each chart, and that way round is run as well.
+    if apart:
+        note += "; %d also in a file each" % apart
     if wrong:
         note += "\n       " + "\n       ".join(wrong[:6])
     return not wrong, note
@@ -1277,6 +1353,75 @@ def _():
     return got.returncode == 0, ("%d parts, %d KB" % (len(fb.JS), len(whole) // 1024)
                                  if got.returncode == 0
                                  else got.stderr.strip().split("\n")[-1][:120])
+
+
+FILES_JS = os.path.join(HERE, "..", "flowchart", "ui", "js", "19-files.js")
+
+
+@check("the several files it hands over really are a zip")
+def _():
+    """The zip the page writes, opened by something that is not the page.
+
+    A program written out as a file for each chart leaves here as one zip,
+    written by hand in 19-files.js because the page fetches nothing from
+    anywhere.  A zip written by hand is a few hundred bytes of lengths and
+    offsets pointing at one another, and every one of them is wrong in a
+    way that looks fine from the inside: a reader of our own would agree
+    with a writer of our own about the same mistake.
+
+    So it is opened by Python's, which checks the checksums and refuses
+    anything it does not like the shape of -- and by whatever is on the
+    machine after that, which is the same reader every unzipper is.
+    """
+    if not node_there():
+        return None, "node is not installed -- skipped"
+    src = io.open(FILES_JS, encoding="utf-8").read()
+    from_at = src.index("  var CRC = null;")
+    to_at = src.index("  // ------------------------------------------------------- the work, in a link --")
+    lift = (src[from_at:to_at] +
+            "\nvar files = [{ name: 'a.txt', text: 'hello\\nthere\\n' },"
+            "             { name: 'Shared.java', text: 'class Shared {}\\n' },"
+            "             { name: 'Grüße.py', text: '# grüß dich\\nprint(\"hé\")\\n' },"
+            "             { name: 'big.txt', text: 'x'.repeat(200000) }];"
+            "return files.map(function (f) { return f.text; })"
+            "            .concat([zipOf(files)]);")
+    out = tempfile.mkdtemp(prefix="_out-zip-")
+    try:
+        where = os.path.join(out, "made.zip")
+        run = ("var fs = require('fs');"
+               "var got = new Function(" + json.dumps(lift) + ")();"
+               "var blob = got.pop();"
+               "blob.arrayBuffer().then(function (bits) {"
+               "  fs.writeFileSync(process.argv[1], Buffer.from(bits));"
+               "  process.stdout.write(JSON.stringify(got));"
+               "});")
+        # Told what the words coming back are in.  A file name with an
+        # umlaut in it is exactly the thing this is checking, and read in
+        # whatever the machine's own spelling happens to be it comes back
+        # a different length than it went in -- which would look like the
+        # zip having lost three bytes.
+        made = subprocess.run(["node", "-e", run, where], capture_output=True,
+                              text=True, encoding="utf-8")
+        if made.returncode:
+            return False, "node would not write one: " + made.stderr.strip()[-200:]
+        want = json.loads(made.stdout)
+        import zipfile
+        with zipfile.ZipFile(where) as zipped:
+            broken = zipped.testzip()
+            if broken:
+                return False, "%s does not match its own checksum" % broken
+            names = zipped.namelist()
+            if len(names) != len(want):
+                return False, "%d files went in and %d came out" % (len(want), len(names))
+            for name, text in zip(names, want):
+                got = zipped.read(name).decode("utf-8")
+                if got != text:
+                    return False, "%s came out as %d bytes, not %d" % (
+                        name, len(got), len(text))
+        return True, "%d files, %d bytes, opened and checked" % (
+            len(want), os.path.getsize(where))
+    finally:
+        shutil.rmtree(out, ignore_errors=True)
 
 
 # ------------------------------------------------ the part that runs in node --

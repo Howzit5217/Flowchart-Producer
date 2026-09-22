@@ -77,9 +77,11 @@
 
   function dressRunner() {
     var ready = runnable();
-    all("#run, #see-code, #tape-run, #tape-code").forEach(function (b) {
-      b.disabled = !ready;
-    });
+    all("#run, #see-code, #code-apart, #code-write, #tape-run, #tape-code")
+      .forEach(function (b) { b.disabled = !ready; });
+    // And whether asking for a file each would come to anything, which
+    // depends on the program that has just been built.
+    codeNote();
     var says = el("#run-note");
     if (says) {
       says.textContent = ready ? ""
@@ -685,7 +687,7 @@
       // what is being followed, so the shape is what is waited on.
       var inside = i > 0 && item.id && item.id === items[i - 1].id;
       if (item.id && !inside) { lightUp(item); }
-      if (slow() && !inside) { await hold(); }
+      if (following() && !inside) { await hold(); }
       if (stopping) { throw new Stop(); }
       await doStep(item, where);
       watchNow(where);                   // and what it is holding now
@@ -726,6 +728,10 @@
           putIn(where, item.var, isNum ? asNum : typed,
                 item.scope === "global");
           break;
+        case "wait":
+          await naps(await value(item.expr || "0", where), item.unit);
+          if (stopping) { throw new Stop(); }
+          break;
         case "call":
           await value(item.text.replace(/^call\s+/i, ""), where);
           break;
@@ -741,7 +747,7 @@
           while (truthy(await value(item.cond, where)) !== !!item.until) {
             await tick();
             lightUp(item);
-            if (slow()) { await hold(); }
+            if (following()) { await hold(); }
             await runSteps(item.body, where);
           }
           break;
@@ -750,7 +756,7 @@
             await tick();
             await runSteps(item.body, where);
             lightUp(item);
-            if (slow()) { await hold(); }
+            if (following()) { await hold(); }
           } while (truthy(await value(item.cond, where)) !== !!item.until);
           break;
         case "for":
@@ -804,20 +810,31 @@
     return out;
   }
 
-  // How fast it goes: straight through, a step every quarter second, or a
-  // step each time it is asked for one.  It used to be a switch, so there
-  // were only the first two, and the one a class actually wants -- stop on
-  // this decision, talk about it, carry on -- could not be asked for at all.
+  // How fast it goes: straight through, a step every quarter second, a step
+  // each time it is asked for one, or the one the program times itself.  It
+  // used to be a switch, so there were only the first two, and the one a
+  // class actually wants -- stop on this decision, talk about it, carry on
+  // -- could not be asked for at all.
+  //
+  // The last of the four keeps no time of its own at all.  The other three
+  // pace the run from outside it: whatever the program is doing, a step is
+  // a step and takes as long as the setting says.  That is the wrong answer
+  // for a program that says how long its own steps take -- "Wait 2
+  // seconds", or "Wait random(1, 5) seconds", where the whole point is that
+  // nobody knows beforehand.  On this one the chart listens to the program:
+  // it waits exactly as long as the program asked to wait, for however long
+  // the program worked out, and between waits it goes as fast as the chart
+  // can be drawn.
   function pace() {
     var pick = el("#r-pace");
     return pick ? pick.value : "slow";
   }
-  function slow() { return pace() !== "fast"; }
   function byStep() { return pace() === "press"; }
-  // Only while it is stepping slowly.  At full speed the chart would be a
-  // blur of shapes flying past, which is worse to watch than not moving at
-  // all -- so a run at full speed simply does not follow, and one that is
-  // being stepped through always does.
+  function timed() { return pace() === "timed"; }
+  // On every pace but full speed.  At full speed the chart would be a blur
+  // of shapes flying past, which is worse to watch than not moving at all
+  // -- so a run at full speed simply does not follow, and one that is being
+  // watched, however it is paced, always does.
   //
   // It used to be a switch of its own, sitting beside the pace with the
   // pace deciding whether it was allowed to be on.  Nobody turns it off:
@@ -825,7 +842,7 @@
   // switch that is on every time it is able to be on is a switch that only
   // ever had one answer.  So it is not asked any more.
   function following() {
-    return !quiet && slow();
+    return !quiet && pace() !== "fast";
   }
   if (el("#r-pace")) {
     el("#r-pace").onchange = function () {
@@ -833,25 +850,74 @@
       // asked for the next step: let it go, or it would sit there for good
       // with nothing left on the page to release it.
       if (stepOn) { stepOn(); }
+      // Or out of the pace that listens to the program while it was sitting
+      // out one of that program's waits: the wait belonged to a pace nobody
+      // has chosen any more, so it is over.  Only a wait on the clock is
+      // let go of here -- an Input box somebody is still typing into is a
+      // question that has not been answered yet.
+      if (napOff) { napOff(); }
       // Gone to full speed: the band on the line it was on is stale the
       // moment it stops being followed.
-      if (!slow()) { markLine(null); }
+      if (!following()) { markLine(null); }
       try { localStorage.setItem("flowchart-pace", pace()); }
       catch (e) { /* storage turned off: it starts on Step slowly */ }
     };
   }
-  // A quarter of a second, or however long it takes somebody to press the
-  // button -- which is the same promise either way, so nothing that steps
-  // through the program has to know which of the two it is waiting on.
+  // Time passing, in a way that Stop can cut short.  Every other wait in a
+  // run is something a person is doing -- typing an answer, reaching for
+  // Next -- and Stop lets go of those through `waiting`; a wait on the
+  // clock is let go of the same way, or a run stopped in the middle of
+  // "Wait 30 seconds" would sit there saying Stop for half a minute after
+  // it had been pressed.
+  var napOff = null;                     // set while it is sitting on a clock
+  function sleep(ms) {
+    return new Promise(function (go) {
+      function done() { clearTimeout(timer); waiting = napOff = null; go(); }
+      var timer = setTimeout(done, ms);
+      waiting = napOff = done;
+    });
+  }
+
+  var FRAME = 16;                        // one turn of the screen
+
+  // A quarter of a second, one turn of the screen, or however long it takes
+  // somebody to press the button -- which is the same promise whichever it
+  // is, so nothing that steps through the program has to know which of the
+  // three it is waiting on.
   function hold() {
     if (quiet) { return Promise.resolve(); }
-    if (!byStep()) {
-      return new Promise(function (go) { setTimeout(go, 260); });
-    }
+    // Listening to the program: a step the program put no time on is over
+    // as soon as it can be seen to have happened.  What paces this run is
+    // the waits written into it, and nothing else.
+    if (timed()) { return sleep(FRAME); }
+    if (!byStep()) { return sleep(260); }
     return new Promise(function (go) {
       stepOn = function () { stepOn = null; showNext(false); go(); };
       showNext(true);
     });
+  }
+
+  // How long a Wait waits.  Only the pace that listens to the program waits
+  // at all: on the other three the chart keeps its own time, and a Wait is
+  // one more shape to walk over -- a run being stepped through by hand
+  // should not sit out somebody's "Wait 10 seconds" before it will take the
+  // next step, and a run at full speed is not meant to take any time.
+  //
+  // How long is whatever the program worked out, so "Wait random(1, 5)
+  // seconds" waits a different length every time round the loop.  The sum
+  // is worked out on every pace, not only this one: it is part of the
+  // program, and a random number drawn on one setting and not on another is
+  // two different programs.  What it came to is only listened to here.
+  //
+  // Something that is not a length of time at all -- a word, or a count
+  // that came out negative -- waits no time rather than stopping the run.
+  var WAIT_CAP = 60000;                  // a minute of watching nothing is
+                                         //   already longer than anyone meant
+  function naps(many, unit) {
+    if (quiet || !timed()) { return Promise.resolve(); }
+    var ms = Number(many) * (unit === "ms" ? 1 : 1000);
+    if (!(ms > 0)) { return Promise.resolve(); }
+    return sleep(Math.min(ms, WAIT_CAP));
   }
 
   // The panel's button and the one in the full screen's bar are the same

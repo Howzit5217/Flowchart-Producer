@@ -85,6 +85,18 @@
       "port": 8811
     },
     {
+      "name": "wait-site",
+      "runtimeExecutable": "python",
+      "runtimeArgs": [
+        "-m",
+        "http.server",
+        "8823",
+        "--directory",
+        "C:/Users/origa/Downloads/GitHub/Flowchart-Producer/Flowchart Builder"
+      ],
+      "port": 8823
+    },
+    {
       "name": "big-site",
       "runtimeExecutable": "python",
       "runtimeArgs": [
@@ -92,6 +104,39 @@
         "8799"
       ],
       "port": 8799
+    },
+    {
+      "name": "code-site",
+      "runtimeExecutable": "python",
+      "runtimeArgs": [
+        "-m",
+        "http.server",
+        "8831",
+        "--directory",
+        "C:/Users/origa/Downloads/GitHub/Flowchart-Producer/Flowchart Builder"
+      ],
+      "port": 8831
+    },
+    {
+      "name": "saves-studio",
+      "runtimeExecutable": "python",
+      "runtimeArgs": [
+        "C:/Users/origa/AppData/Local/Temp/claude/C--Users-origa-Downloads-GitHub-Flowchart-Producer/dab89e26-49c1-4a9e-b4b4-81c30c43dfa3/scratchpad/saves_studio.py",
+        "8851"
+      ],
+      "port": 8851
+    },
+    {
+      "name": "saves-site",
+      "runtimeExecutable": "python",
+      "runtimeArgs": [
+        "-m",
+        "http.server",
+        "8853",
+        "--directory",
+        "C:/Users/origa/Downloads/GitHub/Flowchart-Producer/Flowchart Builder"
+      ],
+      "port": 8853
     }
   ]
 }

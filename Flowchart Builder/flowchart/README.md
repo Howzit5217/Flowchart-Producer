@@ -102,7 +102,7 @@ the `@@CSS@@` and `@@JS@@` marks in `studio.html` and hands back the page.
 | `ui/js/17-tape.js` | The tape at the foot of the panel, and the screen it fills |
 | `ui/js/18-ahead.js` | Reading the program through before writing it: what kind of thing every name holds, and where it has to be declared |
 | `ui/js/18-code.js` | What Python, Java, C#, C++ and JavaScript each do differently — a block each |
-| `ui/js/18-write.js` | The writer, which knows no language by name, and the panel the code is shown in |
+| `ui/js/18-write.js` | The writer, which knows no language by name, and the screen the code is written in on |
 | `ui/js/19-files.js` | Saving a design to a file, and opening it again |
 | `ui/js/20-menu.js` | The right button |
 | `ui/js/21-typing.js` | Double-click to type in a shape |
@@ -112,6 +112,7 @@ the `@@CSS@@` and `@@JS@@` marks in `studio.html` and hands back the page.
 | `ui/js/25-keys.js` | The keys people already know |
 | `ui/js/26-motion.js` | What moves, and what holds still |
 | `ui/js/27-mend.js` | Putting right what a warning already worked out |
+| `ui/js/29-saves.js` | A few places to keep your progress, and picking a run up again where it stood |
 | `ui/js/99-go.js` | Starting it all up |
 
 ## Four things worth knowing
@@ -195,9 +196,17 @@ printing, how it asks to be typed into, how it declares a variable, what it
 calls each built-in (`calls`), what it does about two whole numbers divided
 (`over`), how it compares two pieces of text (`alike`, `ordered`), which
 words it keeps for itself (`kept`), how it hands something over by reference
-(`refs`) and what it wraps a whole program in. Say `like: CURLY` to start
-from what the brace-and-semicolon languages share. The picker, the file
-extension and the name the Save button uses all follow from the block.
+(`refs`) and what it wraps a whole program in (`whole`), and — if it has an
+answer for it — what the same program looks like cut into a file for each
+chart (`apart`). Say `like: CURLY` to start from what the brace-and-
+semicolon languages share. The picker, the file extension and the name the
+Save button uses all follow from the block.
+
+A block with no `apart` is not broken; that language simply offers one file
+however big the program is. A block that has one answers three questions the
+single file never had to: which file each chart goes in (`fileName`), how a
+file reaches a name the whole program shares (`sharedName`, and `w.reach` in
+front of it), and how it reaches a module in another file (`reachMod`).
 
 The writer itself knows no language by name. It used to: thirty-one tests of
 the form `lang === "python"` through six functions, and the ones somebody
@@ -215,7 +224,11 @@ declared, and the writer asks it. `tests/written.py` keeps that honest: it
 writes some sixty programs out in every language, really runs the Python,
 the JavaScript and (where there is a JDK) the Java with the same answers
 typed in, compiles the C# and the C++ where there is a compiler, and
-compares what each prints with what the runner printed.
+compares what each prints with what the runner printed. Every program with
+more than one chart in it is then written out a second time, a file for each
+chart, and that way round is compiled and run as well — which is the half of
+a split nothing can check by reading: whether what the files say about one
+another is true.
 
 ## Checking it
 

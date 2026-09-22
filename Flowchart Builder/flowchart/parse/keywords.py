@@ -27,6 +27,21 @@ R_CALL = re.compile(r"^call\b", re.I)
 R_OUT = re.compile(r"^(display|print|output|write|echo|println|printf|puts|writeline)\b", re.I)
 R_IN = re.compile(r"^(input|read|get|enter|scan|prompt|accept|readline)\b", re.I)
 R_DECL = re.compile(r"^(declare|constant|const)\b", re.I)
+# Something that takes time: "Wait 2 seconds", "Pause 500 ms", "Delay
+# random(1, 3) seconds".  How long is an expression like any other, so the
+# program can decide it as it goes -- and the runner has a pace that listens
+# to what it decided rather than keeping a constant time of its own.
+#
+# "Wait until the queue is empty" is not one of these.  It reads like a wait
+# and there is no length of time anywhere in it, so it is left to be read as
+# whatever else it turns out to be.
+R_WAIT = re.compile(r"^(?:wait|sleep|pause|delay)\b(?:\s+|\s*(?=\())(.+)$", re.I)
+R_NOT_A_WAIT = re.compile(r"^(?:until|while|till|for\s+(?:each|every))\b", re.I)
+# The unit written on the end of it, where one is: seconds unless it says
+# otherwise.  It has to be a word of its own or sit against the number --
+# "2 s", "500ms" -- or a name ending in s would be read as a wait in seconds.
+R_WAIT_UNIT = re.compile(
+    r"^(.*?)(?:\s+|(?<=[\d)]))(ms|millisecs?|milliseconds?|s|secs?|seconds?)$", re.I)
 R_START = re.compile(r"^((start|begin)(\s+program)?|main)$", re.I)
 R_END = re.compile(r"^(end|stop|halt|end\s+program|exit\s+program)$", re.I)
 R_CLOSER = re.compile(r"^(end[ -]?\w*|endif|endwhile|endfor|endselect|fi|wend|loop\b.*|"

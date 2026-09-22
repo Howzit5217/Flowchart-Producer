@@ -127,6 +127,15 @@ function runner(WORDS) {
     titled.value = title || "";
     return codeFor(lang);
   };
+  // And the same program cut into a file for each of its charts.  Where
+  // there is only one chart there is only one file, and what comes back is
+  // the one above -- which is how written.py knows there is nothing extra
+  // to run for that one.
+  go.apart = function (ast, lang, title) {
+    AST = ast;
+    titled.value = title || "";
+    return filesFor(lang);
+  };
   go.languages = function () { return Object.keys(LANGS); };
   // Run for what it prints and nothing else -- the way a puzzle is marked.
   // The run above waits a quarter of a second on every step, as the studio
@@ -315,12 +324,16 @@ function wanted(one) {                   // what run.py said it should print
   if (asked.shelf) {
     var shelf = [];
     for (var s = 0; s < asked.shelf.length; s++) {
-      var book = asked.shelf[s], ran = await go.quietly(book.ast, book.typed), code = {};
+      var book = asked.shelf[s], ran = await go.quietly(book.ast, book.typed);
+      var code = {}, apart = {};
       go.languages().forEach(function (lang) {
         try { code[lang] = go.written(book.ast, lang, book.title); }
         catch (blew) { code[lang] = { error: String(blew && blew.stack || blew) }; }
+        try { apart[lang] = go.apart(book.ast, lang, book.title); }
+        catch (blew) { apart[lang] = { error: String(blew && blew.stack || blew) }; }
       });
-      shelf.push({ said: ran.printed, faults: ran.faults, code: code });
+      shelf.push({ said: ran.printed, faults: ran.faults,
+                   code: code, apart: apart });
     }
     fs.writeFileSync(asked.shelfOut, JSON.stringify(shelf));
   }

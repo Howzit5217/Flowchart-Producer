@@ -128,6 +128,109 @@
     paint();
   }
 
+  // ------------------------------------------- several files, in one file --
+  // A program written out as a file for each chart is a folder of small
+  // files, and a browser will not hand a folder over.  It will hand over
+  // one file, so they go into a zip -- written here rather than fetched
+  // from anywhere, because a page that loads nothing from anywhere goes on
+  // working when the network does not, which is the whole of what this
+  // page is.
+  //
+  // Nothing in it is squeezed.  The format calls that "stored", every
+  // unzipper on every machine has understood it since 1989, and a program
+  // is a few kilobytes of text that squeezing would save nothing worth
+  // having on.
+  var CRC = null;
+  function crcOf(bytes) {
+    if (!CRC) {
+      CRC = new Uint32Array(256);
+      for (var n = 0; n < 256; n++) {
+        var c = n;
+        for (var k = 0; k < 8; k++) {
+          c = (c & 1) ? (0xEDB88320 ^ (c >>> 1)) : (c >>> 1);
+        }
+        CRC[n] = c >>> 0;
+      }
+    }
+    var crc = 0xFFFFFFFF;
+    for (var i = 0; i < bytes.length; i++) {
+      crc = CRC[(crc ^ bytes[i]) & 0xFF] ^ (crc >>> 8);
+    }
+    return (crc ^ 0xFFFFFFFF) >>> 0;
+  }
+
+  // The day and the time, in the two sixteen-bit words a zip keeps them in.
+  // Seconds go in two at a time, and the year counts from 1980, because
+  // that is how much room there was for them.
+  function zipWhen() {
+    var now = new Date();
+    return {
+      time: (now.getHours() << 11) | (now.getMinutes() << 5) |
+            (now.getSeconds() >> 1),
+      date: ((now.getFullYear() - 1980) << 9) | ((now.getMonth() + 1) << 5) |
+            now.getDate()
+    };
+  }
+
+  // [{ name, text }] -> a Blob that unzips to those files.
+  function zipOf(files) {
+    var encode = new TextEncoder(), when = zipWhen();
+    var pieces = [], listed = [], at = 0;
+    function block(size) {
+      var bytes = new Uint8Array(size);
+      var view = new DataView(bytes.buffer);
+      return { bytes: bytes, view: view };
+    }
+    files.forEach(function (one) {
+      var name = encode.encode(one.name);
+      var data = encode.encode(one.text);
+      var crc = crcOf(data);
+      var head = block(30);
+      head.view.setUint32(0, 0x04034b50, true);
+      head.view.setUint16(4, 20, true);        // what it takes to read this
+      head.view.setUint16(6, 0x0800, true);    // the names are in UTF-8
+      head.view.setUint16(8, 0, true);         // stored, not squeezed
+      head.view.setUint16(10, when.time, true);
+      head.view.setUint16(12, when.date, true);
+      head.view.setUint32(14, crc, true);
+      head.view.setUint32(18, data.length, true);
+      head.view.setUint32(22, data.length, true);
+      head.view.setUint16(26, name.length, true);
+      listed.push({ name: name, crc: crc, size: data.length, at: at });
+      pieces.push(head.bytes, name, data);
+      at += 30 + name.length + data.length;
+    });
+    // And then the list of them at the end, which is what an unzipper
+    // reads first: it says the same things over again, and where each
+    // file began.
+    var start = at;
+    listed.forEach(function (one) {
+      var row = block(46);
+      row.view.setUint32(0, 0x02014b50, true);
+      row.view.setUint16(4, 20, true);
+      row.view.setUint16(6, 20, true);
+      row.view.setUint16(8, 0x0800, true);
+      row.view.setUint16(10, 0, true);
+      row.view.setUint16(12, when.time, true);
+      row.view.setUint16(14, when.date, true);
+      row.view.setUint32(16, one.crc, true);
+      row.view.setUint32(20, one.size, true);
+      row.view.setUint32(24, one.size, true);
+      row.view.setUint16(28, one.name.length, true);
+      row.view.setUint32(42, one.at, true);
+      pieces.push(row.bytes, one.name);
+      at += 46 + one.name.length;
+    });
+    var end = block(22);
+    end.view.setUint32(0, 0x06054b50, true);
+    end.view.setUint16(8, listed.length, true);
+    end.view.setUint16(10, listed.length, true);
+    end.view.setUint32(12, at - start, true);
+    end.view.setUint32(16, start, true);
+    pieces.push(end.bytes);
+    return new Blob(pieces, { type: "application/zip" });
+  }
+
   // ------------------------------------------------------- the work, in a link --
   // There is no server behind this page -- it is a folder of files that
   // runs entirely in whoever's browser is looking at it -- so a link

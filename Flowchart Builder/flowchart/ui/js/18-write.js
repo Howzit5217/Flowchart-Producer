@@ -109,7 +109,12 @@
   // The names that would shadow something a class-shaped file is built on.
   var R_TAKEN_FILE = /^(Math|String|System|Scanner|Console|Random|Object|Integer|Double|Boolean|Environment)$/;
 
-  function codeFor(lang) {
+  // The same program, in one file or in several.  `apart` asks for several,
+  // and gets them where the language knows how and the program has anything
+  // to split -- a chart with no modules in it is one chart and one file.
+  // What comes back is always a list, because one file is a list of one and
+  // everything downstream would rather not be asked which it has.
+  function written(lang, apart) {
     var L = LANGS[lang], out = [];
     var prog = studied(AST);
     var name = (el("#f-title").value || "").replace(/[^A-Za-z0-9]/g, "") || "Program";
@@ -133,9 +138,24 @@
       });
     });
 
-    function safe(said) {                // a name this language will accept
+    // Where the program is written out in several files, the names of
+    // those files are names too: `import shared` puts `shared` into the
+    // file, and a variable of the program spelled shared would be standing
+    // exactly where the file has to be.  Filled in below, once the files
+    // have been named, and left empty for one file and for the languages
+    // whose files do not bring a name in with them.
+    //
+    // A module is the one thing a file cannot be in the way of -- the file
+    // is named after the module, and nothing imports itself.  The file
+    // holding what the program shares is another matter: a module called
+    // shared would be a `def shared` in a file that has just said `import
+    // shared`.  So that one is marked apart from the rest.
+    var homes = Object.create(null);
+
+    function safe(said, mine) {          // a name this language will accept
       var soft = L.soft && holds(L.soft, said) && used[L.soft[said]];
-      return (L.kept[said] || soft) ? said + "_" : said;
+      var home = mine ? homes[said] === "shared" : !!homes[said];
+      return (L.kept[said] || soft || home) ? said + "_" : said;
     }
 
     var w = {
@@ -153,6 +173,19 @@
       // are fields of the class rather than statements inside a method,
       // without the writer itself having to know what a field is.
       infront: "",
+
+      // ---- which file this is, where there is more than one --------------
+      // Written out in several files, a name the whole program shares is
+      // written down in one of them and read from the rest, so the rest
+      // have to say where they are reading it from: shared.total,
+      // Shared.total.  `reach` is that much, put in front of a shared name
+      // while a file that does not hold it is being written, and nothing at
+      // all the rest of the time -- which is why one file goes on coming
+      // out exactly as it always did.
+      apart: false,                      // several files, not one
+      reach: "",                         //   and how this one reaches them
+      files: null,                       //   and what each module's is called
+      sharedFile: "",                    //   and what the one holding them is
       need: function (what) { w.needs[what] = true; },
       line: function (deep, text) {
         out.push(text === "" ? "" : L.tab.repeat(deep) + w.infront + text);
@@ -178,9 +211,102 @@
         var entry = lookUp(w.scope, who);
         if (!entry) { return safe(who); }
         var boxed = entry.param && w.boxes[lowered(entry.name)];
-        return safe(entry.name) + (boxed ? "[0]" : "");
+        return (entry.shared ? w.reach : "") + safe(entry.name) +
+               (boxed ? "[0]" : "");
       },
-      called: function (one) { return safe(one.name); },
+      called: function (one) { return safe(one.name, true); },
+      // What goes in front of a module's name where it is *called*.  In one
+      // file, nothing: it is written a few lines further up.  In several,
+      // it is wherever its own file puts it, which each language answers
+      // for itself -- Java reaches it through the class, Python and
+      // JavaScript through the module they imported it as, C++ not at all
+      // because the include has already brought the name itself in.
+      //
+      // A module calling itself is calling something written a few lines
+      // above it in its own file, so it is named the way it always was.
+      // Reached through the file it lives in instead, `fact` inside fact.py
+      // would be the module rather than the def, and Python would say so.
+      reachMod: function (one) {
+        if (!w.apart || !L.reachMod || one === w.where) { return ""; }
+        return L.reachMod(w, one);
+      },
+      // What this module's file is called, without the ending.
+      fileOf: function (one) {
+        return (w.files && w.files[lowered(one.name)]) || safe(one.name, true);
+      },
+
+      // Everything the whole program shares, and what it starts off as: the
+      // Constants and Declares written above the charts, in the order they
+      // were written, and then the names nobody declared anywhere that more
+      // than one chart uses.  A file of its own is made out of these, so
+      // each language asks for the list rather than walking main itself
+      // looking for the lines that are not main's.
+      sharing: function () {
+        var seen = Object.create(null), list = [];
+        prog.main.items.forEach(function (item) {
+          if (item.scope !== "global" || item.op !== "declare") { return; }
+          var entry = lookUp(prog.shared, bareName(item.var));
+          if (!entry || seen[lowered(entry.name)]) { return; }
+          seen[lowered(entry.name)] = true;
+          list.push({ entry: entry, name: safe(entry.name), fixed: !!item.const,
+                      plain: isLiteral(tree(item.expr || "0")),
+                      code: item.expr ? w.fitted(item.expr, entry.kind)
+                                      : w.zero(entry.kind) });
+        });
+        Object.keys(prog.shared.names).forEach(function (low) {
+          var entry = prog.shared.names[low];
+          if (seen[low] || entry.param) { return; }
+          list.push({ entry: entry, name: safe(entry.name), fixed: false,
+                      plain: true, code: w.zero(entry.kind) });
+        });
+        return list;
+      },
+      // Main's own statements: what happens inside main, as against the
+      // Constants and Declares written above every chart, which belong to
+      // the program rather than to main and go in the shared file.
+      mains: function () {
+        return prog.main.items.filter(function (item) {
+          return !(item.scope === "global" && item.op === "declare");
+        });
+      },
+      // Does this chart touch a name the whole program shares?  A file that
+      // does has to bring in the file that holds them.
+      touching: function (scope, items) {
+        var found = false;
+        eachStep(items || [], function (item) {
+          if (found) { return; }
+          wordsOf(item, prog).forEach(function (low) {
+            var entry = lookUp(scope, low);
+            if (entry && entry.shared) { found = true; }
+          });
+        });
+        return found;
+      },
+      // A file of its own starts with nothing brought into it: what goes at
+      // the top of one is what the rest of that one turned out to want, not
+      // what some other file wanted.
+      alone: function () { w.needs = {}; },
+      // Which modules these statements call, each named once and in the
+      // order they are first called.  It is what a file of its own has to
+      // say it is bringing in.  `mine` is the module being written, which
+      // is in the file already and so is never brought into it.
+      leaning: function (items, mine) {
+        var list = [], seen = Object.create(null);
+        function look(node) {
+          if (!node) { return; }
+          eachCall(node, function (call) {
+            var who = prog.byName[lowered(call.call)];
+            if (!who || who === mine || seen[lowered(who.name)]) { return; }
+            seen[lowered(who.name)] = true;
+            list.push(who);
+          });
+        }
+        eachStep(items || [], function (item) {
+          sumsOf(item).forEach(function (src) { look(tree(src)); });
+          if (item.op === "call") { look(callOf(item)); }
+        });
+        return list;
+      },
       kind: function (node) { return kindIn(node, w.scope, prog); },
       // The same question the runner asks: does this work out to money?
       // Declared Currency, or named in something that was.
@@ -248,9 +374,10 @@
       calling: function (node) {         // a call in the middle of a sum
         var low = lowered(node.call), one = prog.byName[low];
         if (one) {
-          return w.called(one) + "(" + node.args.map(function (arg, i) {
-            return w.handed(one, i, arg);
-          }).join(", ") + ")";
+          return w.reachMod(one) + w.called(one) + "(" +
+                 node.args.map(function (arg, i) {
+                   return w.handed(one, i, arg);
+                 }).join(", ") + ")";
         }
         var codes = node.args.map(function (arg) { return asCode(arg, w); });
         var kinds = node.args.map(function (arg) { return w.kind(arg); });
@@ -314,7 +441,11 @@
                  ": handed over by value here -- " + L.name +
                  " cannot give it back as well as an answer");
         }
-        if (one && L.shares) {
+        // Python's `global`, where a module writes to a name the whole
+        // program shares.  Split into files there is no such name here to
+        // say it about: what is shared is an attribute of the file that
+        // holds it, and setting one of those never made a local anyway.
+        if (one && L.shares && !w.apart) {
           var mine = [];
           eachStep(items, function (item) {
             targetsOf(item, prog).forEach(function (who) {
@@ -516,6 +647,13 @@
             w.line(deep, w.named(item.var.trim()) + " = " + code + L.semi);
           }
           break;
+        case "wait":
+          // The chart can be run at the program's own timing, so the code
+          // written from it waits too -- the promise everywhere else here
+          // is that what you read is what you just watched.
+          if (L.pause) { L.pause(w, item, deep); }
+          else { w.line(deep, L.note + item.text); }
+          break;
         case "call": call(item, deep); break;
         case "return":
           // Main has nothing to return to: leaving it is ending the program.
@@ -551,9 +689,61 @@
       }
     }
 
+    // Several files, where there is more than one chart to put in them and
+    // this language has an answer for what that looks like.  Each one comes
+    // back as its own run of lines, written in w.aside so that none of them
+    // lands in `out` -- which is the one file's, and is still there to fall
+    // back on if the split turns out to be a split into one.
+    if (apart && L.apart && prog.mods.length) {
+      // What each file is called: the module's own name, spelled the way
+      // this language spells the file that holds one -- and never the same
+      // as another, because two names that differ only in their capitals
+      // are one file on most disks, and because the main file and the
+      // shared one are already called something.
+      var taken = Object.create(null);
+      w.sharedFile = L.fileName ? L.fileName(L.sharedName) : L.sharedName;
+      taken[lowered(name)] = taken[lowered(w.sharedFile)] = true;
+      w.files = Object.create(null);
+      prog.mods.forEach(function (one) {
+        var base = L.fileName ? L.fileName(safe(one.name)) : safe(one.name);
+        var file = base, n = 2;
+        while (taken[lowered(file)] || L.kept[file] || L.kept[lowered(file)] ||
+               R_TAKEN_FILE.test(file)) {
+          file = base + n++;
+        }
+        taken[lowered(file)] = true;
+        w.files[lowered(one.name)] = file;
+      });
+      // And now that they have names, those names are taken.  Only where
+      // the file's name is a name inside the program -- Python's import,
+      // JavaScript's require, the class Java and C# reach through.  C++
+      // includes a file without learning its name, so nothing there is in
+      // anybody's way.
+      if (L.reachMod) {
+        homes[w.sharedFile] = "shared";
+        Object.keys(w.files).forEach(function (low) {
+          if (!homes[w.files[low]]) { homes[w.files[low]] = true; }
+        });
+      }
+      w.apart = true;
+      var many = L.apart(w);
+      if (many.length > 1) {
+        return many.map(function (one) {
+          return { text: one.lines.join("\n"), file: one.name,
+                   ext: one.ext || L.ext, head: one.head || "" };
+        });
+      }
+      w.apart = false;
+    }
     L.whole(w);
-    return { text: out.join("\n"), file: name, ext: L.ext };
+    return [{ text: out.join("\n"), file: name, ext: L.ext }];
   }
+
+  // One file, which is what everything that only ever wanted one asks for --
+  // the screen with a program on it, and tests/written.py, which runs what
+  // this writes in every language it can find a compiler for.
+  function codeFor(lang) { return written(lang, false)[0]; }
+  function filesFor(lang) { return written(lang, true); }
 
   // The picker is the table above, so a language added there turns up in it
   // without anybody having to remember the list in the HTML as well.
@@ -592,13 +782,28 @@
     return (LANGS[lang] || {}).name || lang;
   }
 
-  // Ask which language, unless the runner is already set to one.  Before
-  // this, the only way to see the code was to change what the runner was set
-  // to first, which is a strange thing to have to do when all you wanted was
-  // the code.  Now the button always gives you it and asks if it needs to.
-  // The way in from the run, where there is no dropdown to pick from --
-  // it shows whatever As code is set to, and the picker in the bar over
-  // the code is there to change it without coming back out.
+  // Whether the program is being asked for as one file or as a file for
+  // each chart.  The card in the panel is where that is said, and it is
+  // said once: changing the language in the bar over the code, or coming
+  // in from the run, keeps whichever was asked for.
+  function wantsApart() {
+    var pick = el("#code-apart");
+    return !!(pick && pick.value === "apart");
+  }
+
+  // A program of one chart has nothing to cut up, and says so under the
+  // card rather than quietly handing the one file back as though what was
+  // asked for had happened.
+  function codeNote() {
+    var says = el("#code-note");
+    if (!says) { return; }
+    says.textContent = wantsApart() && AST && !(AST.modules || []).length
+                     ? TXT.c_one_chart : "";
+  }
+
+  // The way in from the run, where there is no card to read: it shows
+  // whatever the card was left set to, and the picker in the bar over the
+  // code changes the language without going back out to it.
   function askWhichCode() {
     if (!AST || !(AST.main || []).length) {
       tapeShow("run");                   // it is said in the tape, so show it
@@ -609,8 +814,8 @@
   }
 
   // Which language the code is being written out in: what the bar over
-  // the code says if it is up, what As code was last set to otherwise,
-  // and failing both the first one the table offers.
+  // the code says if it is up, what the card in the panel is set to
+  // otherwise, and failing both the first one the table offers.
   function nowLang() {
     var bar = el("#tape-lang"), pick = el("#see-code");
     if (bar && !bar.hidden && bar.value) { return bar.value; }
@@ -673,42 +878,196 @@
     return down;
   }
 
+  // ------------------------------------------- a program, written in --
+  // Putting one on the screen used to be a single statement: the whole
+  // program into one element, laid out and painted in one frame.  For the
+  // thirty lines a lesson is usually about, that is nothing at all.  For
+  // the program a chart of ten thousand shapes writes out to, it is the
+  // best part of a second in which the page answers nothing -- the scroll
+  // will not move, a button pressed is not seen, the bar above it does not
+  // so much as blink -- and what the person is waiting to read is the first
+  // twenty lines of it.
+  //
+  // So it is written in instead, a slice to a frame: steadily while it is
+  // still filling the part of the box somebody is reading, and then in
+  // bigger armfuls once it has run off the bottom where nobody is looking.
+  // No one frame does much, so the page stays alive the whole way through,
+  // and the top of a long program can be read while the rest of it is still
+  // arriving.  What it looks like is a program being written out, which is
+  // what it is; 07-motion.css fades each slice in as it lands.
+  //
+  // The numbers and the lines are cut into the same slices, so the two
+  // columns cannot drift apart however far down it goes.  A slice is a
+  // plain span inside the `pre` the code was always in, carrying the
+  // newline that joins it to the next: what is in the box is the program,
+  // in one piece, cut up only in the order it was put there.  Nothing else
+  // has to know it arrived in slices -- reading it back gives the program,
+  // so does dragging over it and copying, and the sideways slider that
+  // 24-scroll.js hangs on pre.code still finds the pre it hangs on.
+  var WRITE_RATE = 110;                  // lines a second, while it is in view
+  var WRITE_MOST = 400;                  // lines in one frame, once it is not
+  var writing = null;                    // the one going on, if one is
+
+  function stopWriting() {
+    if (writing) { cancelAnimationFrame(writing.frame); }
+    writing = null;
+  }
+
+  function slice(text) {
+    var part = document.createElement("span");
+    part.className = "code-part";
+    part.textContent = text;
+    return part;
+  }
+
+  // One slice into both columns.  Every slice but the last carries the
+  // newline that joins it to the one after it.
+  function writeOn(job, many) {
+    var to = Math.min(job.lines.length, job.at + many);
+    var numbers = [];
+    for (var n = job.at; n < to; n++) { numbers.push(n + 1); }
+    var tail = to < job.lines.length ? "\n" : "";
+    job.nums.appendChild(slice(numbers.join("\n") + tail));
+    job.code.appendChild(slice(job.lines.slice(job.at, to).join("\n") + tail));
+    job.at = to;
+  }
+
+  function writeIn(nums, code, lines, room) {
+    stopWriting();
+    // How many lines the box can show at once, and so how much of this is
+    // being read rather than poured into the dark below.  A line is as tall
+    // as the stylesheet says; asked for once here rather than once a frame.
+    // A box with no height to report -- one being measured before the
+    // screen it is on has been laid out, in a window nobody is looking at
+    // -- would say nothing is in view and pour the lot in at once.  A
+    // screenful is never fewer lines than this.
+    var high = parseFloat(getComputedStyle(code).lineHeight) || 22;
+    var job = { nums: nums, code: code, lines: lines, at: 0, frame: 0,
+                shown: Math.max(24, Math.ceil((room || 0) / high) + 2),
+                took: 0, last: 0 };
+    writing = job;
+    function step(now) {
+      if (writing !== job) { return; }
+      // Written over, thrown away by a fresh build, or left behind by going
+      // back to the run: whatever is being written into is not on the screen
+      // any more, and the next program asked for is written out afresh.
+      if (!code.isConnected || (el("#code-out") || {}).hidden) {
+        writing = null;
+        return;
+      }
+      var gap = job.last ? Math.min(0.1, (now - job.last) / 1000) : 0;
+      job.last = now;
+      // Told to keep still, there is nothing to watch and no reason to go
+      // slowly -- but it is still cut into slices, because the point of the
+      // slicing is a page that answers while it happens, not the look of it.
+      var many = (STILL || job.at >= job.shown)
+               ? Math.min(WRITE_MOST, Math.max(24, job.took * 2))
+               : Math.max(1, Math.round(WRITE_RATE * gap));
+      writeOn(job, many);
+      job.took = many;
+      if (job.at < lines.length) { job.frame = requestAnimationFrame(step); }
+      else { writing = null; }
+    }
+    job.frame = requestAnimationFrame(step);
+  }
+
   // Numbered down the side and ruled under each line, the way the
   // pseudocode box is.  The numbers are a column of their own, so a long
   // line takes the program sideways and leaves them where they are.
-  function codePage(text, name, more) {
+  function codePage(text, name, more, files) {
     var out = el("#code-out");
     if (!out) { return; }
+    stopWriting();
     out.innerHTML = "";
+    // The strip saying which file is showing is built again by whoever
+    // wants one, so it starts empty however this page was asked for.
+    var strip = el("#code-files");
+    if (strip) { strip.innerHTML = ""; strip.hidden = true; }
     var page = document.createElement("div");
     page.className = "code-page";
-    var rows = text.split("\n").length;
-    var numbers = [];
-    for (var n = 1; n <= rows; n++) { numbers.push(n); }
     var nums = document.createElement("pre");
     nums.className = "code-nums";
     nums.setAttribute("aria-hidden", "true");
-    nums.textContent = numbers.join("\n");
     var pre = document.createElement("pre");
     pre.className = "code";
-    pre.textContent = text;
     page.appendChild(nums);
     page.appendChild(pre);
     out.appendChild(page);
     var row = document.createElement("div");
     row.className = "go";
     row.style.cssText = "display:flex; gap:8px; margin-top:8px";
+    // Copying and saving are handed the text, not the page, so they are
+    // the whole program from the first frame -- there is nothing to wait
+    // for and nothing half-written to be given.
     row.appendChild(copyButton(text));
     (more || []).forEach(function (one) { row.appendChild(one); });
     out.appendChild(row);
     tapeFull(true);
     tapeShow("code");
-    tapeSays("", name, say("code_lines", { n: rows }));
+    var lines = text.split("\n");
+    tapeSays("", name, say("code_lines", { n: lines.length }) +
+             (files > 1 ? " · " + say("c_files", { n: files }) : ""));
+    // The screen is up and the box has its size before the writing starts,
+    // so how much of it is in view is known rather than guessed.
+    writeIn(nums, pre, lines, out.clientHeight);
   }
 
   function chartFileName() {
     return ((el("#f-title") && el("#f-title").value) || "flowchart")
            .replace(/[^A-Za-z0-9 _-]/g, "");
+  }
+
+  // Every file of a program, in one file, because a browser will hand over
+  // a file and not a folder.  19-files.js writes the zip.
+  function saveAllButton(files) {
+    var down = document.createElement("button");
+    down.className = "btn small";
+    down.textContent = TXT.c_save_all;
+    down.onclick = function () {
+      save(zipOf(files.map(function (one) {
+        return { name: one.file + "." + one.ext, text: one.text };
+      })), (chartFileName() || "flowchart") + ".zip");
+    };
+    return down;
+  }
+
+  // One program and the files it came out as, with one of them on the
+  // screen.  All of them were written out together, so the strip above the
+  // code only changes which is being read -- nothing is written again, and
+  // Save them all has every one of them whichever is showing.
+  //
+  // One file is the same thing with the strip put away, which is what a
+  // program of a single chart always gets.
+  function showFiles(files, name, lang, at) {
+    var one = files[at || 0], many = files.length > 1;
+    // Java and C# want a file named after the class inside it; the others
+    // take the chart's name -- except where the program came out as
+    // several, and every one of them is named after the chart it holds.
+    var more = [saveButton(one.text,
+                           (many || LANGS[lang].kinds) ? one.file : chartFileName(),
+                           one.ext)];
+    if (many) { more.push(saveAllButton(files)); }
+    codePage(one.text, name, more, many ? files.length : 0);
+
+    var strip = el("#code-files");
+    if (!strip) { return; }
+    strip.hidden = !many;
+    if (!many) { return; }
+    files.forEach(function (each, n) {
+      var tab = document.createElement("button");
+      tab.type = "button";
+      tab.className = "code-file" + (n === (at || 0) ? " on" : "");
+      tab.textContent = each.file + "." + each.ext;
+      tab.onclick = function () { showFiles(files, name, lang, n); };
+      strip.appendChild(tab);
+    });
+    // The one being read, brought into view: a program of forty files has
+    // a strip wider than the screen, and picking the last of them used to
+    // leave the lit tab off the end of it.
+    var lit = el(".code-file.on", strip);
+    if (lit && lit.scrollIntoView) {
+      lit.scrollIntoView({ block: "nearest", inline: "nearest" });
+    }
   }
 
   function showCode(want) {
@@ -724,7 +1083,7 @@
       return;
     }
     var made;
-    try { made = codeFor(lang); }
+    try { made = wantsApart() ? filesFor(lang) : [codeFor(lang)]; }
     catch (thrown) {
       tapeShow("run");
       talkOnce(thrown.message || String(thrown), "bad");
@@ -736,12 +1095,7 @@
     // asked for -- from the run, from the panel, or by changing it here.
     if (el("#tape-lang")) { el("#tape-lang").hidden = false; }
     if (el("#tape-lang")) { el("#tape-lang").value = lang; }
-    // Java and C# want the file named after the class inside it; the
-    // others take the chart's name.
-    codePage(made.text, langName(lang),
-             [saveButton(made.text,
-                         LANGS[lang].kinds ? made.file : chartFileName(),
-                         made.ext)]);
+    showFiles(made, langName(lang), lang, 0);
   }
 
   // And the drawing, written out as the pseudocode it amounts to.
