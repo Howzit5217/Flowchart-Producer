@@ -93,17 +93,20 @@ def fit_shape(charts, spec):
         # layouts built only to be thrown away.  Nothing here draws on the
         # shake, so which order they are built in changes no chart.
         #
-        # A program of thousands of shapes is kept as it stands, whatever
-        # shape was asked for.  No frame shows a chart that big whole, so
-        # there is no outline worth fitting it to -- and the one that came
-        # nearest was every chain forked into lanes: a program of forty-three
-        # thousand lines came out a million and a half pixels wide, took six
-        # times as long to draw under auto and twenty times as long asked to
-        # be square, and was neither: it could only be read by scrolling
-        # sideways across a mile of empty lanes.
+        # A program of thousands of shapes is not fitted the way a small one
+        # is.  Under auto it is kept as it stands: no frame shows a chart
+        # that big whole.  Asked for a shape by name, it gets that shape by
+        # forking the chains that are worth forking (fork_to_fit), rather
+        # than by trying every layout below -- which took a minute on a
+        # program of forty-three thousand lines and came back with every
+        # chain forked into lanes, a million and a half pixels wide and no
+        # shape that had been asked for.
         natural = build(0, keep[0], keep[1])
         if sum(1 for e in natural[0] if e[0] == "shape") > settings.FIT_MOST:
-            return natural[0]
+            if str(spec).strip().lower() == "auto":
+                return natural[0]
+            return fork_to_fit(lambda rate: by_rate(build, rate, keep),
+                               natural, target)
         if str(spec).strip().lower() == "auto" \
                 and settings.AUTO_KEEP[0] <= natural[1] / natural[2] <= settings.AUTO_KEEP[1]:
             return natural[0]                      # already a sensible shape
@@ -165,5 +168,54 @@ def fit_shape(charts, spec):
         return best
     finally:
         settings.CHAIN_LIMIT, settings.MAX_ROW_W = keep
+        settings.FORK_RATE = None
         forget_layouts()
+
+
+def by_rate(build, rate, keep):
+    """The chart laid out with its chains forking by what they save."""
+    settings.FORK_RATE = rate
+    try:
+        return build(0, keep[0], keep[1])
+    finally:
+        settings.FORK_RATE = None
+
+
+def fork_to_fit(lay, natural, target):
+    """A big chart, given the shape asked for by how many of its chains fork.
+
+    The fewer a chain has to save before it forks, the more of them do, and
+    the wider and shorter the chart comes out -- so the rate is halved and
+    doubled towards the shape asked for, a handful of times, and the best of
+    what came out is kept.  Best is nearest the shape, with a charge for how
+    much bigger than the plain chart it has grown: forking lanes of unlike
+    heights leaves paper empty under the shorter ones, and a shape bought
+    with a sheet mostly blank is not worth what it cost.  The plain chart is
+    in the running too, so it can never come out worse than that.
+
+    Four tries, because each is a whole layout, and on a program of forty
+    thousand lines in a browser that is seconds apiece.  More or fewer
+    chains fork in steps rather than smoothly, so a few tries land about as
+    near as a great many would."""
+    area = natural[1] * natural[2]
+
+    def score(one):
+        _, w, h = one
+        if not (w > 0 and h > 0):
+            return float("inf")
+        return (abs(math.log((w / h) / target))
+                + settings.WASTE_COST * math.log(max(1.0, w * h / area)))
+
+    best, best_score = natural, score(natural)
+    lo, hi = math.log(0.05), math.log(50.0)       # the rates, as logarithms
+    for _ in range(4):
+        mid = (lo + hi) / 2.0
+        one = lay(math.exp(mid))
+        if score(one) < best_score:
+            best, best_score = one, score(one)
+        if one[2] and one[1] / one[2] < target:
+            hi = mid                               # still too tall: fork more
+        else:
+            lo = mid                               # too wide: fork fewer
+    return best[0]
 

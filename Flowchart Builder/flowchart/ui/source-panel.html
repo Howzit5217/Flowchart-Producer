@@ -175,13 +175,24 @@
            hands, and what it has in its hands is the thing a class spends
            the lesson arguing about -- the total that comes out one too
            many, the counter that never moves, the name that is still
-           empty because the Input went into a different box. -->
+           empty because the Input went into a different box.
+           Its heading is a tick box, like Grid and Key, because it is not
+           always wanted: when the point of the lesson is to work the values
+           out by hand and then run it to see who was right, a table with
+           the answers in it gives the game away.  Unticked, the table folds
+           up under its heading here and is left out of the full screen. -->
       <div id="watch" hidden>
         <div class="watch-top">
-          <span data-w="held_head">__W(held_head)__</span>
+          <label class="switch watch-switch" data-w-title="held_switch"
+                 title="__W(held_switch)__">
+            <input type="checkbox" id="held-on" checked>
+            <span data-w="held_head">__W(held_head)__</span>
+          </label>
           <span class="watch-where" id="watch-where"></span>
         </div>
-        <div class="watch-rows" id="watch-rows"></div>
+        <div class="watch-body"><div class="watch-in">
+          <div class="watch-rows" id="watch-rows"></div>
+        </div></div>
       </div>
       <div id="tape" class="tape"></div>
     </section>

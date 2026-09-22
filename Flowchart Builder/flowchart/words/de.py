@@ -165,7 +165,7 @@ DE = {
     "held_in": "in {name}",
     "held_shared": "Außerhalb aller Module deklariert, also für jedes Diagramm sichtbar",
     "held_none": "noch nichts",
-    "run_prefs": "Ausführen", "held_switch": "Zeigen, was es gerade hält",
+    "held_switch": "Zeigen, was es gerade hält",
     "h_tidy": "Aufräumen",
     "h_tidy_tip": "Jede Form dorthin stellen, wo diese Seite sie zeichnen "
                   "würde — Wörter, Farben und Pfeile bleiben",

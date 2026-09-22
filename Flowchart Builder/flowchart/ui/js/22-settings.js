@@ -36,26 +36,6 @@
     if (SIDES.indexOf(keptSide) >= 0) { panelSide = keptSide; }
   } catch (e) { /* no storage: left it is */ }
 
-  // ------------------------------------------------- what a run is holding --
-  // Shown unless somebody has said otherwise, and remembered once they have:
-  // it is a way of teaching with the page, not a thing that changes from
-  // one run to the next.  Put away, it is only put out of sight -- the run
-  // goes on keeping it up to date, so turning it back on in the middle of a
-  // run shows what is being held now rather than an empty table.
-  var showHeld = true;
-
-  function wearHeld() {
-    document.body.classList.toggle("no-held", !showHeld);
-    var tick = el("#held-on");
-    if (tick) { tick.checked = showHeld; }
-    try { localStorage.setItem("flowchart-held", showHeld ? "on" : "off"); }
-    catch (e) { /* fine */ }
-  }
-
-  try {
-    if (localStorage.getItem("flowchart-held") === "off") { showHeld = false; }
-  } catch (e) { /* no storage: shown it is */ }
-
   // ------------------------------------------------------- filling the screen --
   // Browsers only grant this from something the person actually pressed, so
   // it is never asked for on the way in and never remembered: it is a thing
@@ -168,12 +148,6 @@
       el("#full-on").onchange = function () { setFull(el("#full-on").checked); };
     }
     if (!canFull() && el("#full-row")) { el("#full-row").hidden = true; }
-    if (el("#held-on")) {
-      el("#held-on").onchange = function () {
-        showHeld = el("#held-on").checked;
-        wearHeld();
-      };
-    }
   }
 
   if (el("#full")) {
@@ -194,4 +168,3 @@
 
   wearSide();
   wearFull();
-  wearHeld();

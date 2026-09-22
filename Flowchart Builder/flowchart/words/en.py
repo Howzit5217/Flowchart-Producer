@@ -165,8 +165,8 @@ EN = {
     "held_in": "in {name}",
     "held_shared": "Declared outside every module, so every chart can see it",
     "held_none": "nothing yet",
-    # the settings sheet's switch for it, under a heading of its own
-    "run_prefs": "Running", "held_switch": "Show what it is holding",
+    # said over the tick box on its heading, which folds it away
+    "held_switch": "Show what it is holding",
     "h_tidy": "Tidy up",
     "h_tidy_tip": "Stand every shape where this page would draw it, "
                   "keeping the words, the colors and the arrows",

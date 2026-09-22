@@ -160,12 +160,59 @@ def layout_chain(tests, tail, thens, other):
 # number used again by some later If is never taken for this one.
 _FORKS = {}
 
+# The branches of a chain as they were laid out to measure it, kept for the
+# fork that follows.  The fork lays each branch out for itself, so a chain
+# that forked had every branch laid out twice -- and a chain inside one of
+# those branches four times, and one inside that eight: on a program of
+# forty-three thousand lines that forks its big chains, three quarters of
+# the time spent laying it out.  A block is never changed once made, so the
+# one already measured is the one the fork would have made.
+_MEASURED = {}
+
+
+def branch(items):
+    """The block for a branch: the one already measured, or a new one."""
+    got = _MEASURED.pop(id(items), None)
+    if got and got[0] is items:
+        return got[1]
+    return layout_seq(items)
+
+
+def fork_height(tests, thens, other):
+    """How tall a chain comes out forked, worked out from its branches
+    rather than by laying it out: each test sits in the False lane of the
+    one before, so it is added up from the last test back to the first,
+    the way layout_fork puts them together."""
+    h = other.h
+    for (cond, _, owner), then in reversed(list(zip(tests, thens))):
+        dia = node_block(part_of(owner, "diamond", cond))
+        mid = dia.h / 2.0
+        head = head_shape(then) if then.h else None
+        sink = max(0.0, (head[2] - mid) if head else 0.0)
+        d_bot = sink + dia.h
+        t_top = (sink + mid - head[2]) if head else d_bot + settings.VGAP
+        h = max(d_bot, t_top + then.h, d_bot + settings.VGAP + h) + settings.VGAP
+    return h
+
 
 def layout_if(item):
     """A chain of tests goes down the page when laying it out side by
-    side would come out wider than settings.CHAIN_LIMIT; anything else forks."""
+    side would come out wider than settings.CHAIN_LIMIT; anything else forks.
+
+    Asked for a shape a big chart cannot reach any other way, it goes by
+    settings.FORK_RATE instead: a chain forks when doing so takes at least
+    that much off its height for every pixel it adds to its width.  Which
+    chains that is says a great deal about how the chart comes out.  The
+    width limit forks the narrow ones, a lane apiece for the handful of
+    small branches of an If deep inside the program; asked to be wide, that
+    made a chart of forty-three thousand lines a million and a half pixels
+    across, nearly all of it empty lanes.  By what they save, the chains that
+    fork are the ones whose branches are tall and alike -- the screens of a
+    game, the areas of its map -- which is the shape of the program itself,
+    laid out across the page, and everything small stays in a column."""
+    rule = (settings.CHAIN_LIMIT, settings.FORK_RATE)
     known = _FORKS.pop(id(item), None)
-    if known and known[0] is item and known[1] == settings.CHAIN_LIMIT:
+    if known and known[0] is item and known[1] == rule:
         return layout_fork(item)
     tests, tail = chain_parts(item)
     if len(tests) > 1:
@@ -179,10 +226,18 @@ def layout_if(item):
         span = other.w + sum(node_block(part_of(owner, "diamond", cond)).w
                              + b.w + gaps
                              for (cond, _, owner), b in zip(tests, thens))
-        if span > settings.CHAIN_LIMIT:
-            return layout_chain(tests, tail, thens, other)
+        if settings.FORK_RATE is None:
+            if span > settings.CHAIN_LIMIT:
+                return layout_chain(tests, tail, thens, other)
+        else:
+            queued = layout_chain(tests, tail, thens, other)
+            saved = queued.h - fork_height(tests, thens, other)
+            if saved < settings.FORK_RATE * max(1.0, span - queued.w):
+                return queued
         for _cond, _then, owner in tests[1:]:
-            _FORKS[id(owner)] = (owner, settings.CHAIN_LIMIT)
+            _FORKS[id(owner)] = (owner, rule)
+        for (_cond, then, _owner), laid in zip(tests, thens):
+            _MEASURED[id(then)] = (then, laid)
     return layout_fork(item)
 
 
@@ -209,7 +264,7 @@ def layout_fork(item):
     top, the old way.
     """
     dia = node_block(part_of(item, "diamond", item.cond))
-    then = layout_seq(item.then)
+    then = branch(item.then)
     other = layout_seq(item.orelse)
     half, mid = dia.w / 2.0, dia.h / 2.0
     elems = shift(dia.elems, -dia.axis, 0)

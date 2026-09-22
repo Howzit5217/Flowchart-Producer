@@ -122,6 +122,16 @@ CHAIN_LIMIT = 900                   # an If / Else If / Else chain forks
                                     #   into a lane per branch while that
                                     #   stays under this wide; past it the
                                     #   tests queue up down the page instead
+FORK_RATE = None                    # or, when set, a chain forks if that
+                                    #   takes this much off its height for
+                                    #   every pixel of width it adds: how a
+                                    #   chart past FIT_MOST is given the
+                                    #   shape it was asked for
+WASTE_COST = 0.3                    # how much a shape fitted that way is
+                                    #   marked down for every time over it
+                                    #   comes out bigger than the chart laid
+                                    #   out plain: lanes left empty below
+                                    #   their shorter neighbors
 FORK_LIMIT = 320                    # an If with no Else forks both ways like
                                     #   any other decision, unless sending
                                     #   its true branch out to a lane of its

@@ -140,7 +140,7 @@ def laid_out(items):
     """The blocks for these items, made once while the remembering is on."""
     if _LAID is None:
         return [layout_item(it) for it in items]
-    key = (id(items), settings.CHAIN_LIMIT)
+    key = (id(items), settings.CHAIN_LIMIT, settings.FORK_RATE)
     got = _LAID.get(key)
     if got is None:
         got = _LAID[key] = [layout_item(it) for it in items]

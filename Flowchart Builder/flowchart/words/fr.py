@@ -166,7 +166,7 @@ FR = {
     "held_in": "dans {name}",
     "held_shared": "Déclaré hors de tout module, donc visible par chaque schéma",
     "held_none": "rien encore",
-    "run_prefs": "Exécution", "held_switch": "Montrer ce qu’il retient",
+    "held_switch": "Montrer ce qu’il retient",
     "h_tidy": "Ranger",
     "h_tidy_tip": "Placer chaque forme là où cette page la dessinerait, en "
                   "gardant les mots, les couleurs et les flèches",

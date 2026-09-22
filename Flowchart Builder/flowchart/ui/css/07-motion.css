@@ -456,6 +456,14 @@
      pushes everything under it down with no warning. */
   #watch:not([hidden]) { animation: swap-in .28s var(--ease) backwards; }
   .watch-row.arrived { animation: row-in .3s var(--ease) backwards; }
+  /* Unticked, it folds up under its heading the way a card folds shut, by
+     losing its height a row at a time rather than vanishing. */
+  .watch-body {
+    transition: grid-template-rows var(--move) var(--ease),
+                opacity var(--quick) var(--ease-soft);
+  }
+  #watch.shut .watch-body { opacity: 0; }
+  .watch-top { transition: border-bottom-color var(--move) var(--ease-soft); }
 
   /* A puzzle put right: the word beside its name lands with a small
      spring, and the way on to the next one comes up after it. */

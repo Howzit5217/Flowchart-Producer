@@ -166,7 +166,7 @@ ES = {
     "held_in": "en {name}",
     "held_shared": "Declarado fuera de todo módulo, así que lo ve cada diagrama",
     "held_none": "nada todavía",
-    "run_prefs": "Ejecución", "held_switch": "Mostrar lo que tiene guardado",
+    "held_switch": "Mostrar lo que tiene guardado",
     "h_tidy": "Ordenar",
     "h_tidy_tip": "Colocar cada figura donde esta página la dibujaría, "
                   "conservando las palabras, los colores y las flechas",

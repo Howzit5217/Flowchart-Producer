@@ -315,7 +315,12 @@
     flex: none; margin: 0 0 12px; max-height: 40%;
     display: flex; flex-direction: column; min-height: 0;
   }
-  #tape-slot > #watch > .slide-frame { flex: 1; min-height: 0; display: flex; }
+  #tape-slot > #watch > .watch-body,
+  #tape-slot > #watch .watch-in,
+  #tape-slot > #watch .watch-in > .slide-frame { flex: 1; min-height: 0; display: flex; }
+  /* Folded away in the panel, it is not brought up here at all: the whole
+     screen goes to the tape.  Ticked again in the panel, it comes back. */
+  #tape-slot > #watch.shut { display: none; }
   #tape-slot > #watch .watch-rows {
     max-height: none; min-height: 0; flex: 1; min-width: 0;
     display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));

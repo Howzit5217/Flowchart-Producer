@@ -330,6 +330,33 @@
     });
   }
 
+  // Ticked unless somebody has said otherwise, and remembered once they
+  // have: it is a way of teaching with the page, not a thing that changes
+  // from one run to the next.  Unticked, the table folds up under its
+  // heading in the panel and is left out of the full screen -- but the run
+  // goes on keeping it up to date, so ticking it again in the middle of a
+  // run shows what is being held now rather than an empty table.
+  var showHeld = true;
+  try {
+    if (localStorage.getItem("flowchart-held") === "off") { showHeld = false; }
+  } catch (e) { /* no storage: shown it is */ }
+
+  function wearHeld() {
+    if (el("#watch")) { el("#watch").classList.toggle("shut", !showHeld); }
+    var tick = el("#held-on");
+    if (tick) { tick.checked = showHeld; }
+    try { localStorage.setItem("flowchart-held", showHeld ? "on" : "off"); }
+    catch (e) { /* fine */ }
+  }
+
+  if (el("#held-on")) {
+    el("#held-on").onchange = function () {
+      showHeld = el("#held-on").checked;
+      wearHeld();
+    };
+  }
+  wearHeld();
+
   // ---- the run itself ---------------------------------------------------
   function ask(prompt) {                 // what a person has to type in
     if (stopping) { return Promise.resolve(""); }

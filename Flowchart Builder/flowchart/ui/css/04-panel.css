@@ -519,14 +519,23 @@
     background: var(--field); overflow: hidden;
   }
   #watch[hidden] { display: none !important; }
-  /* and switched off in the settings, in the panel and the full screen alike */
-  body.no-held #watch { display: none !important; }
   .watch-top {
-    display: flex; align-items: baseline; justify-content: space-between;
+    display: flex; align-items: center; justify-content: space-between;
     gap: 8px; padding: 6px 10px; border-bottom: 1px solid var(--line-soft);
     font-size: 11px; letter-spacing: .07em; text-transform: uppercase;
     color: var(--muted); font-weight: 650;
   }
+  /* The heading is its own switch, a tick box like Grid and Key.  It keeps
+     the heading's small capitals rather than taking a switch's own size,
+     and the whole of it can be pressed, not only the box. */
+  .watch-top .watch-switch { font-size: inherit; gap: 7px; cursor: pointer; }
+  .watch-top .watch-switch input { margin: 0; flex: none; cursor: pointer; }
+  /* Unticked, the table folds up under its heading rather than going: the
+     heading is where it is ticked again, so the heading has to stay. */
+  .watch-body { display: grid; grid-template-rows: 1fr; }
+  .watch-in { min-height: 0; min-width: 0; overflow: hidden; }
+  #watch.shut .watch-body { grid-template-rows: 0fr; }
+  #watch.shut .watch-top { border-bottom-color: transparent; }
   /* Which chart the run is standing in, when it is not the main one.  A
      module's names are its own, and a list of names with no word about
      whose they are is a list that looks wrong from inside a module. */
@@ -541,7 +550,7 @@
   /* A long program holds more names than there is room for, so the list
      scrolls -- on the page's own slider bar, inside the box's border,
      like everything else here that scrolls. */
-  #watch > .slide-frame { min-width: 0; }
+  .watch-in > .slide-frame { min-width: 0; }
   .watch-row {
     display: flex; gap: 10px; align-items: baseline;
     padding: 4px 10px; border-top: 1px solid var(--line-soft);
