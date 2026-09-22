@@ -1120,6 +1120,112 @@ WRITES = [
 ]
 
 
+# A single flow long enough to be cut into parts, and what the cut has to
+# come out as.  Running it proves it still does what the chart did -- that
+# is tests/written.py's job -- but not that the cut was any good, and a cut
+# that is no good is the whole risk here.  `i` shared between two parts
+# because they both count with it runs perfectly well and is not what
+# anybody would have written; nor is `score` in the shared file when only
+# one part has ever heard of it.
+CUT = """
+Start
+Declare Integer count
+Declare Integer i
+Declare Real score
+Declare Real total
+Declare Real average
+Declare Real biggest
+Declare Real smallest
+Declare Integer passes
+Declare Integer fails
+Declare Integer stars
+Declare Integer band
+
+Display "The marks report"
+Display "How many marks are there?"
+Input count
+Set total = 0
+Set biggest = 0
+Set smallest = 1000
+Set passes = 0
+Set fails = 0
+
+For i = 1 To count
+    Display "Mark ", i
+    Input score
+    While score < 0 OR score > 100
+        Display "A mark is between 0 and 100."
+        Input score
+    End While
+    Set total = total + score
+    If score > biggest Then
+        Set biggest = score
+    End If
+    If score < smallest Then
+        Set smallest = score
+    End If
+    If score >= 40 Then
+        Set passes = passes + 1
+    Else
+        Set fails = fails + 1
+    End If
+End For
+
+Set average = total / count
+
+For band = 0 To 20 Step 10
+    Display "Band ", band
+    Set stars = 0
+    For i = 1 To count
+        Set stars = stars + 1
+    End For
+    While stars > 0
+        Display "*"
+        Set stars = stars - 1
+    End While
+End For
+
+Display "Marks: ", count
+Display "Total: ", total
+Display "Average: ", average
+Display "Highest: ", biggest
+Display "Lowest: ", smallest
+Display "Passed: ", passes
+Display "Failed: ", fails
+End
+"""
+
+# (language, what has to be in it, what must not be, what must come first)
+CUT_WRITES = [
+    ("python",
+     ["def part1():", "def part2():", "import shared", "for i in range(",
+      "shared.total = shared.total + score", "---- shared.py"],
+     ["shared.i", "shared.score", "shared.band", "shared.stars"],
+     []),
+    ("java",
+     ["class Part1 {", "class Part2 {", "class Shared {",
+      "Part1.part1();", "for (int i = 1;", "Shared.total = Shared.total + score;"],
+     ["Shared.i", "Shared.score", "Shared.band", "Shared.stars"],
+     []),
+    ("csharp",
+     ["static class Shared {", "class Part1 {", "Part1.part1();",
+      "public static void part1()"],
+     ["Shared.i", "Shared.score", "Shared.band"],
+     []),
+    ("javascript",
+     ['require("./shared.js")', "exports.part1 = part1;", "function part2() {",
+      "part1.part1();"],
+     ["shared.i", "shared.score", "shared.band"],
+     []),
+    ("cpp",
+     ['#include "part1.h"', '#include "shared.h"', "void part1();",
+      "extern int count;", "---- part1.h"],
+     [],
+     # the header saying what is there has to come before the file that is it
+     [["---- part1.h", "---- part1.cpp"]]),
+]
+
+
 # A program that says how long its own steps take.  The chart can be run at
 # that timing rather than at a pace of its own, so the code written from it
 # has to wait as well: what you read is what you just watched, and a program
@@ -1251,6 +1357,10 @@ def _():
                  "lang": lang, "ast": read_as_data(WAITING.strip(chr(10))),
                  "has": has, "before": before}
                 for lang, has, before in WAIT_WRITES]
+    written += [{"name": "a single flow cut into files", "lang": lang,
+                 "ast": read_as_data(CUT.strip(chr(10))), "apart": True,
+                 "has": has, "lacks": lacks, "before": before}
+                for lang, has, lacks, before in CUT_WRITES]
     mends = [{"name": name, "source": source, "fix": fix, "line": line,
               "want": want}
              for name, source, fix, line, want in MENDS]

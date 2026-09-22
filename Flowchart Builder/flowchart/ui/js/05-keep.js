@@ -18,6 +18,10 @@
   // overwritten by the next empty page, out of sight and out of reach, and
   // look like a safety net while being none.
   //
+  // A reload is the exception, because it is not the start of anything:
+  // the page puts back what it was doing through one of those, from the
+  // tab's own storage, which a new tab does not have (29-saves.js).
+  //
   // How the studio is set up is still remembered -- your name, the shape to
   // aim at, whether the key and the grid are on, which shape stands for
   // which kind of step.  Those are how you like it rather than what you

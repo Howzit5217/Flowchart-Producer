@@ -468,7 +468,7 @@
             w.inside(one, 1);
           });
           files.push({ name: w.fileOf(one), lines: w.aside(function () {
-            top(one.name, brought(one.scope, one.body, one));
+            top(w.about(one), brought(one.scope, one.body, one));
             w.line(0, "");
             w.pour(said);
           }) });
@@ -682,7 +682,7 @@
         w.reach = w.sharedFile + ".";
         w.mods.forEach(function (one, at) {
           files.push({ name: w.fileOf(one), lines: w.aside(function () {
-            w.line(0, L.note + w.title + " -- " + one.name);
+            w.line(0, L.note + w.title + " -- " + w.about(one));
             w.line(0, "class " + w.fileOf(one) + " {");
             w.pour(each[at]);
             w.line(0, L.shut);
@@ -860,7 +860,7 @@
 
         w.reach = w.sharedFile + ".";
         w.mods.forEach(function (one, at) {
-          file(w.fileOf(one), one.name, function () {
+          file(w.fileOf(one), w.about(one), function () {
             w.line(0, "class " + w.fileOf(one) + " {");
             w.pour(each[at]);
             w.line(0, L.shut);
@@ -1225,7 +1225,7 @@
                      "(" + w.signature(one) + ");";
           header(w.fileOf(one), function () { w.line(0, head); });
           part(w.fileOf(one), "cpp", function () {
-            w.line(0, L.note + w.title + " -- " + one.name);
+            w.line(0, L.note + w.title + " -- " + w.about(one));
             brings(w.fileOf(one), w.leaning(one.body, one),
                    w.touching(one.scope, one.body));
             w.line(0, "");
@@ -1423,7 +1423,8 @@
             w.line(0, "}");
           });
           files.push({ name: w.fileOf(one), lines: w.aside(function () {
-            top(one.name, w.leaning(one.body, one), w.touching(one.scope, one.body));
+            top(w.about(one), w.leaning(one.body, one),
+                w.touching(one.scope, one.body));
             w.pour(said);
             w.line(0, "");
             w.line(0, "exports." + w.called(one) + " = " + w.called(one) + ";");

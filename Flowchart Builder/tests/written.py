@@ -38,6 +38,12 @@ TYPED = {
 # -- and so cannot be expected to compile anywhere that counts them.
 NOT_MEANT_TO_BUILD = ("wrong number",)
 
+# Programs that have to come out as more than one file when they are asked
+# for as a file each.  Without this a cut that quietly stopped happening
+# would not fail anything: the split is skipped wherever it comes to one
+# file, so the checking would simply stop running and say nothing.
+MUST_COME_APART = ("cut into parts", "cut part that can end")
+
 # (what it is about, the pseudocode, what gets typed into it)
 SHELF = [
     ("undeclared names", """
@@ -838,6 +844,162 @@ Module show()
     Display "show ", n, " ", ROOT
 End Module
 """, []),
+    # ---- and a single flow, long enough to be cut into parts ------------
+    # A program with no modules in it has no charts to make files out of,
+    # so the writer makes some: each top-level loop or decision with real
+    # work in it becomes a part of its own, and what two parts both use
+    # becomes what the program shares.  That is a rewriting rather than a
+    # spelling, and the only thing that says it is the same program is
+    # running it -- both ways, and comparing.
+    #
+    # This one has two parts worth lifting and a third block too small to
+    # bother with, names that belong to one part alone (score, band,
+    # stars), names two charts share (count, total, biggest), and two For
+    # counters that look shared and are not: each part counts with its own.
+    ("a single flow cut into parts", """
+Start
+Declare Integer count
+Declare Integer i
+Declare Real score
+Declare Real total
+Declare Real average
+Declare Real biggest
+Declare Real smallest
+Declare Integer passes
+Declare Integer fails
+Declare Integer stars
+Declare Integer band
+Declare String who
+
+Display "The marks report"
+Display "How many marks are there?"
+Input count
+Set total = 0
+Set biggest = 0
+Set smallest = 1000
+Set passes = 0
+Set fails = 0
+
+For i = 1 To count
+    Display "Mark ", i
+    Input score
+    While score < 0 OR score > 100
+        Display "A mark is between 0 and 100."
+        Input score
+    End While
+    Set total = total + score
+    If score > biggest Then
+        Set biggest = score
+    End If
+    If score < smallest Then
+        Set smallest = score
+    End If
+    If score >= 40 Then
+        Set passes = passes + 1
+    Else
+        Set fails = fails + 1
+    End If
+End For
+
+Set average = total / count
+
+For band = 0 To 20 Step 10
+    Display "Band ", band
+    Set stars = 0
+    For i = 1 To count
+        Set stars = stars + 1
+    End For
+    While stars > 0
+        Display "*"
+        Set stars = stars - 1
+    End While
+End For
+
+Display "Marks: ", count
+Display "Total: ", total
+Display "Average: ", average
+Display "Highest: ", biggest
+Display "Lowest: ", smallest
+
+If passes > fails Then
+    Display "More passed than failed."
+Else If fails > passes Then
+    Display "More failed than passed."
+Else
+    Display "An even split."
+End If
+
+Display "Who is this report for?"
+Input who
+Display "Prepared for ", who
+End
+""", ["3", "50", "-4", "30", "95", "Ann"]),
+
+    # The same again, with the things a lifted part can carry that main
+    # could: an End, which ends the program from inside a routine rather
+    # than only leaving it; a Constant two parts read; and a name declared
+    # with a value halfway down, whose value has to go on being set where
+    # it stood rather than at the top of a file nothing runs in order.
+    ("a cut part that can end the program", """
+Start
+Constant Real RATE = 1.5
+Declare Integer n
+Declare Integer i
+Declare Integer total
+Declare Integer limit
+Declare String word
+
+Display "The counter"
+Set total = 0
+Declare Integer limit = 60
+Input n
+
+While n > 0
+    Set total = total + n
+    If total > limit Then
+        Display "Over the limit at ", total
+        Display "Stopping there."
+        End
+    End If
+    Display "Running total ", total
+    Display "Scaled ", total * RATE
+    Input n
+End While
+
+For i = 1 To 3
+    Display "Line ", i
+    Display "still going"
+    Display "and again"
+    Select Case i
+        Case 1
+            Display "the first"
+        Case 2
+            Display "halfway"
+        Default
+            Display "the last"
+    End Select
+    Display "end of line ", i
+End For
+
+Display "Total ", total
+Display "Scaled ", total * RATE
+Display "Limit was ", limit
+
+Do
+    Set total = total - 1
+    Display "counting down ", total
+    If total = 2 Then
+        Display "nearly there"
+    End If
+    Display "still ", total * RATE
+Until total <= 1
+
+Display "Word?"
+Input word
+Display "Got ", word
+Display "Goodbye"
+End
+""", ["2", "3", "0", "hello"]),
 ]
 
 
@@ -1155,6 +1317,9 @@ def marked(cases, results, folder):
                              % (case["name"], lang, spread.get("error", "")[:160]))
                 continue
             if not spread or len(spread) < 2:
+                if any(bit in case["name"] for bit in MUST_COME_APART):
+                    wrong.append("%s, as %s: asked for a file each and came "
+                                 "out as one" % (case["name"], lang))
                 continue
             apart = os.path.join(folder, "%02d-%s-apart" % (number, lang))
             os.makedirs(apart)

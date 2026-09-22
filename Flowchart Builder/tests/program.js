@@ -296,7 +296,15 @@ function wanted(one) {                   // what run.py said it should print
   (asked.written || []).forEach(function (one) {
     var text;
     try {
-      text = go.written(one.ast, one.lang).text;
+      // `apart` asks for it as a file each, and then all of them are read
+      // as one, each under the name of the file it is in: what is being
+      // checked is how the files were written, not which of them a line
+      // landed in.
+      text = one.apart
+           ? go.apart(one.ast, one.lang).map(function (file) {
+               return "---- " + file.file + "." + file.ext + "\n" + file.text;
+             }).join("\n")
+           : go.written(one.ast, one.lang).text;
     } catch (blew) {
       bad.push(one.name + ": writing it out threw -- " + (blew && blew.message || blew));
       return;
@@ -305,6 +313,16 @@ function wanted(one) {                   // what run.py said it should print
       if (text.indexOf(want) < 0) {
         bad.push(one.name + " (" + one.lang + "): nowhere in it is " +
                  JSON.stringify(want) + "\n      it wrote:\n" + text);
+      }
+    });
+    // And what must not be anywhere in it.  Some of what the writer is
+    // asked for cannot be checked by running the program: code that shares
+    // a For's counter between two files runs perfectly well and is simply
+    // not what anybody would have written.
+    (one.lacks || []).forEach(function (no) {
+      if (text.indexOf(no) >= 0) {
+        bad.push(one.name + " (" + one.lang + "): " + JSON.stringify(no) +
+                 " is in it, and should not be\n      it wrote:\n" + text);
       }
     });
     (one.before || []).forEach(function (pair) {

@@ -32,6 +32,13 @@
       if (howFast) { el("#r-pace").value = howFast; }
     } catch (e) { /* storage turned off: it starts on Step slowly */ }
   }
+  // A link carrying a program is asked about first, and wins: somebody who
+  // has just followed one is here to see what is in it, not what was in
+  // the box before they clicked -- nor on the paper by hand, which used to
+  // be looked at first and kept the link from being opened at all.
+  if (el("#code") && openLink()) { return; }    // it brought its own program
+  // Then a reload, which is this page coming back to what it was doing.
+  if (backFromReload()) { return; }
   if (el("#tab-hand")) {
     var lastMode = "code";
     try { lastMode = localStorage.getItem("flowchart-mode") || "code"; }
@@ -45,13 +52,8 @@
   // the box opens empty and stays empty until somebody writes in it -- but
   // a program handed to --serve on the command line arrives already in it,
   // and that was asked for, so it is drawn without being asked for twice.
-  //
-  // A link carrying a program is asked about first, and wins: somebody who
-  // has just followed one is here to see what is in it, not what was in
-  // the box before they clicked.
   if (el("#code")) {
-    if (openLink()) { /* the link brought its own program, and drew it */ }
-    else if (el("#code").value.trim()) {
+    if (el("#code").value.trim()) {
       opening = true;                    // drawn on opening, not asked for
       el("#build").click();
     }

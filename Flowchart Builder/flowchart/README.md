@@ -208,6 +208,19 @@ single file never had to: which file each chart goes in (`fileName`), how a
 file reaches a name the whole program shares (`sharedName`, and `w.reach` in
 front of it), and how it reaches a module in another file (`reachMod`).
 
+A program drawn as a single flow has no charts to make files out of, so
+`cutUp` in `ui/js/18-write.js` makes some: each top-level loop or decision
+with real work in it becomes a part of its own, main keeps the statements
+between them with a call where each part stood, and a name two of them use
+becomes a name the program shares. That is a rewriting rather than a
+spelling, so it is fenced about: nothing is cut where the program is short,
+where no block is big enough to carry a file, where a part would carry a
+`Return`, or where a shared name is declared inside a block and could not be
+moved out without changing when it is set. What comes out is a program with
+modules in it, which is a program the `apart` blocks already know how to
+write — and `tests/written.py` runs both ways round and compares, because
+nothing else can say a rewriting left the program alone.
+
 The writer itself knows no language by name. It used to: thirty-one tests of
 the form `lang === "python"` through six functions, and the ones somebody
 missed when adding a language did not fail — they quietly wrote Python in

@@ -439,9 +439,10 @@ EN = {
     "code_shares": "what the program shares",
     # ---- the code a chart is written out as, and the files it comes in
     "c_head": "Code", "c_write": "Write the code",
-    "c_one": "In one file", "c_apart": "A file for each chart",
-    "c_files_tip": "Whether it comes out as one file or as a file for each chart",
-    "c_one_chart": "This program is one chart, so it comes out as one file.",
+    "c_one": "In one file", "c_apart": "Several files",
+    "c_files_tip": "One file, or a file for each chart -- and a chart drawn as a single flow is cut into parts where there is enough of it to be worth it",
+    "c_one_chart": "Too short to be worth cutting up: it comes out as one file.",
+    "c_cut_into": "No modules, so it is cut into {n} parts and what they share.",
     "c_files": "{n} files", "c_save_all": "Save them all",
     "c_zipped": "{n} files, as one .zip",
     "shape": "Shape",

@@ -279,6 +279,26 @@
     return TXT.untitled;
   }
 
+  // What goes into a place: the page as it stands, and the run on it.
+  function progressNow() {
+    var box = el("#code") ? el("#code").value : "";
+    return {
+      at: Date.now(),
+      name: titleNow(),
+      project: projectData(),
+      // The words the chart was drawn from, if the box has moved on
+      // since: the chart put back is the one that was on the paper, and
+      // the box gets what was being written.
+      built: !byHand && typeof builtText === "string" && builtText !== box
+             ? builtText : null,
+      seed: String(lastLaid.seed || ""),
+      run: runNow(),
+      pace: pace(),
+      big: tapeCovers(),
+      puzzle: onPuzzle ? onPuzzle.key : ""
+    };
+  }
+
   // Into place `at`, or the first empty one.
   function saveProgress(at) {
     var list = savesNow();
@@ -286,22 +306,7 @@
     if (at < 0 || !aughtToSave()) { drawSaves(); return; }
     var one;
     try {
-      var box = el("#code") ? el("#code").value : "";
-      one = JSON.parse(JSON.stringify({
-        at: Date.now(),
-        name: titleNow(),
-        project: projectData(),
-        // The words the chart was drawn from, if the box has moved on
-        // since: the chart put back is the one that was on the paper, and
-        // the box gets what was being written.
-        built: !byHand && typeof builtText === "string" && builtText !== box
-               ? builtText : null,
-        seed: String(lastLaid.seed || ""),
-        run: runNow(),
-        pace: pace(),
-        big: tapeCovers(),
-        puzzle: onPuzzle ? onPuzzle.key : ""
-      }));
+      one = JSON.parse(JSON.stringify(progressNow()));
     } catch (e) { savedSays(TXT.sv_no_room, true); return; }
     list[at] = one;
     if (!keepSaves(list)) { savedSays(TXT.sv_no_room, true); return; }
@@ -357,7 +362,17 @@
     dressPuzzle();
   }
 
+  // A place that is still on its way back.  Until its chart has landed the
+  // page is only half of it -- the box holds the words the chart is being
+  // drawn from, and the run has not been started -- so the place itself is
+  // the truth about where things stand.
+  var puttingBack = null;
+  function putBackDone(one) {
+    if (puttingBack === one) { puttingBack = null; }
+  }
+
   function putBack(one) {
+    puttingBack = one;
     var was = JSON.parse(JSON.stringify(one.project));
     var toHand = was.mode === "hand";
     var box = was.source ? String(was.source.code || "") : "";
@@ -374,6 +389,9 @@
     // from a link is, rather than drawn in while the run is picked up.
     if (drawing && !toHand) { opening = true; }
     function thenRun(data) {
+      // A drawing by hand with a run on it is not back until the program
+      // has been read out of it, which is further on.
+      if (!(toHand && one.run)) { putBackDone(one); }
       // A drawing that did not come out never reached the paper, so the
       // next one somebody asks for is still owed its entrance.
       if (drawing && !(data && data.ok)) { opening = false; }
@@ -390,8 +408,9 @@
         // A drawing by hand is run from the program read out of it, which
         // is read afresh, the way Check reads it.
         var reading = drawnAfter("", readyHandProgram);
-        if (!reading) { talk(TXT.sv_no_draw, "bad"); return; }
+        if (!reading) { putBackDone(one); talk(TXT.sv_no_draw, "bad"); return; }
         reading.then(function () {
+          putBackDone(one);
           if (runnable()) { resumeRun(run); }
           else { talk(TXT.sv_no_draw, "bad"); }
         });
@@ -403,6 +422,57 @@
     if (drawing) { drawing.then(thenRun); }
     else { thenRun(null); }
   }
+
+  // ---- through a reload ---------------------------------------------------
+  // A reload is not a new visit.  It is the same person in the middle of
+  // the same thing -- it is what anybody presses when a page looks stuck
+  // -- and it used to hand them an empty page and nothing else.  So the
+  // tab keeps one more place of its own, filled as the page goes and put
+  // back as it comes again: the program, the chart, the colors, the run.
+  //
+  // It is kept in the tab's own storage, which a reload keeps and a new
+  // tab never has, so a page that is opened rather than reloaded still
+  // opens on an empty box, for the reasons 05-keep.js gives.  And it is
+  // kept against the address it was written at: other pages here run this
+  // same script, and a place from one is nothing to put back on another.
+  var RELOAD_KEY = "flowchart-reload";
+
+  function keepForReload() {
+    try {
+      var one = puttingBack || (aughtToSave() ? progressNow() : null);
+      if (!one) { sessionStorage.removeItem(RELOAD_KEY); return; }
+      sessionStorage.setItem(RELOAD_KEY, JSON.stringify(
+        { where: location.pathname, place: one }));
+    } catch (e) { /* storage turned off, or full: the reload starts afresh */ }
+  }
+
+  // Whether there was a place to go back to, and it was put back.
+  function backFromReload() {
+    if (!el("#code")) { return false; }
+    var kept = null;
+    try { kept = JSON.parse(sessionStorage.getItem(RELOAD_KEY)); }
+    catch (e) { kept = null; }
+    var one = kept && kept.where === location.pathname ? kept.place : null;
+    if (!one || !one.project || one.project.what !== "flowchart-builder") {
+      return false;
+    }
+    try { putBack(one); }
+    catch (e) {
+      // Unreadable: the page opens as usual, and the next going writes down
+      // what is on it rather than this again.
+      puttingBack = null;
+      return false;
+    }
+    return true;
+  }
+
+  // Going: a reload, a closed tab, or another page in this one.  Hidden is
+  // said as well, because a phone that has put the browser away may end it
+  // without saying anything more.
+  window.addEventListener("pagehide", keepForReload);
+  document.addEventListener("visibilitychange", function () {
+    if (document.hidden) { keepForReload(); }
+  });
 
   // ---- the tab they are kept in -------------------------------------------
   function savedSays(what, bad) {

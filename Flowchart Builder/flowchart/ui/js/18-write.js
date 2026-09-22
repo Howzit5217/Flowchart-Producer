@@ -109,6 +109,239 @@
   // The names that would shadow something a class-shaped file is built on.
   var R_TAKEN_FILE = /^(Math|String|System|Scanner|Console|Random|Object|Integer|Double|Boolean|Environment)$/;
 
+  // ---------------------------------------- one chart, cut into parts --
+  // A program drawn as a single flow has no modules to make files out of,
+  // and a long single flow is exactly where a file each would help most.
+  // What it does have is shape: a top-level loop or decision with real
+  // work inside it is a piece of the program you could give a name to, and
+  // giving it one is the first thing anybody is told to do with a program
+  // that has got too long to read.
+  //
+  // So those are lifted -- each into a chart of its own, in the order they
+  // were written -- and main is left as the statements between them with a
+  // call where each one stood.
+  //
+  // Which leaves the names.  A name two charts use has to be somewhere
+  // both can reach, so it becomes one the program shares and is read as
+  // shared.total from everywhere; that is the cost of the cut, and it is
+  // why a name is only made shared when it really is.  Declaring a name is
+  // not using it -- the declarations all sit at the top of a program
+  // whether or not the line below uses them -- so a name declared up there
+  // and then used by one part alone is that part's, declaration and all,
+  // and travels into the file with it.
+  //
+  // It is not always worth doing, and where it is not it is not done: a
+  // short program reads worse cut up than whole, and a part holding two
+  // lines is a file holding two lines.  Nothing is cut where the program
+  // is small, where no part is big enough to carry a file of its own, or
+  // where a part would carry a Return -- a Return in main ends the
+  // program, and the same line inside a routine only ends the routine.
+  var CUT_WHOLE = 40;                    // statements before cutting at all
+  var CUT_PART = 6;                      // statements in a part worth a file
+  var R_BLOCK = /^(if|while|dowhile|for|select)$/;
+
+  function deepCount(items) {
+    var n = 0;
+    eachStep(items || [], function () { n++; });
+    return n;
+  }
+
+  function anyReturn(items) {
+    var found = false;
+    eachStep(items || [], function (item) {
+      if (item.op === "return") { found = true; }
+    });
+    return found;
+  }
+
+  // Every name these statements use, lowered, against how it was first
+  // spelled.  Names only: `sqrt` in two of them is not something the
+  // program shares, it is arithmetic.  And a Declare is not a use -- it is
+  // where the name is kept, which is the thing being worked out here.
+  function wordsIn(items) {
+    var got = Object.create(null);
+    function mark(said) {
+      var low = lowered(bareName(said));
+      if (low && !got[low]) { got[low] = bareName(said); }
+    }
+    function look(node) {
+      if (!node) { return; }
+      if (node.name) { mark(node.name); }
+      look(node.group); look(node.of); look(node.left); look(node.right);
+      (node.args || []).forEach(look);
+    }
+    eachStep(items || [], function (item) {
+      sumsOf(item).forEach(function (src) { look(tree(src)); });
+      targetsOf(item, null).forEach(mark);
+    });
+    return got;
+  }
+
+  // Worked out once for each program built, because it is asked for twice
+  // over -- by the note under the card, which says what a file each would
+  // come to before you ask for it, and then by the asking.  Reading a long
+  // program through to see which of its names two charts share is not
+  // something to do twice for the same answer.
+  var cutKeep = { ast: null, got: null };
+
+  function cutUp(ast) {
+    if (cutKeep.ast !== ast) { cutKeep = { ast: ast, got: cutInto(ast) }; }
+    return cutKeep.got;
+  }
+
+  // How often each name is mentioned in a run of statements, and how many
+  // of those mentions are inside a For that counts with it.  A name whose
+  // two counts are equal is only ever a counter there.
+  function tally(items) {
+    var all = Object.create(null), loops = Object.create(null);
+    eachStep(items || [], function (item) {
+      wordsOf(item, null).forEach(function (low) {
+        all[low] = (all[low] || 0) + 1;
+      });
+    });
+    // A For is walked for its own counter and then walked into, because
+    // the For inside it counts with a name of its own and that one has to
+    // be found as well.  `done` is the counters already accounted for on
+    // the way down, so that a For nested in another counting with the same
+    // name is not counted twice over.
+    (function counted(list, done) {
+      (list || []).forEach(function (item) {
+        var low = item.op === "for"
+                ? lowered(statementOf(item.init || "").var) : "";
+        var inner = done;
+        if (low && !done[low]) {
+          eachStep([item], function (one) {
+            wordsOf(one, null).forEach(function (word) {
+              if (word === low) { loops[low] = (loops[low] || 0) + 1; }
+            });
+          });
+          inner = Object.create(done);
+          inner[low] = true;
+        }
+        blocksOf(item).forEach(function (block) { counted(block, inner); });
+      });
+    })(items || [], Object.create(null));
+    return { all: all, loops: loops };
+  }
+
+  function cutInto(ast) {
+    var main = ast.main || [];
+    if ((ast.modules || []).length || deepCount(main) < CUT_WHOLE) { return null; }
+
+    // The cut: every top-level block with enough in it to be worth a file.
+    var parts = [], items = [], n = 0;
+    main.forEach(function (item) {
+      if (!R_BLOCK.test(item.op || "") || deepCount([item]) < CUT_PART ||
+          anyReturn([item])) {
+        items.push(item);
+        return;
+      }
+      var name = "part" + (++n);
+      parts.push({ name: name, params: "", returns: "", body: [item],
+                   said: String(item.text || "").trim() });
+      items.push({ op: "call", name: name, args: "", id: item.id,
+                   line: item.line, text: "Call " + name + "()" });
+    });
+    if (!parts.length) { return null; }
+
+    // Which charts use each name.  Main is the first of them; the parts
+    // follow in the order they were lifted.
+    var bodies = [items].concat(parts.map(function (one) { return one.body; }));
+    var whose = Object.create(null), spelt = Object.create(null);
+    bodies.forEach(function (body, at) {
+      var words = wordsIn(body);
+      Object.keys(words).forEach(function (low) {
+        spelt[low] = spelt[low] || words[low];
+        if (!whose[low]) { whose[low] = []; }
+        if (whose[low].indexOf(at) < 0) { whose[low].push(at); }
+      });
+    });
+
+    // Except that a For's counter is the For's own business.  Two parts
+    // that each count with `i` are not sharing anything -- they are each
+    // counting -- and a name like that belongs to neither of them: each
+    // chart declares its own where it counts, and the Declare at the top
+    // of the program that used to serve them all has nothing left to do.
+    //
+    // Which names those are is worked out in one pass over each chart
+    // rather than one pass for each name.  Asked the second way, a program
+    // cut into three hundred parts reads every one of them through again
+    // for every name that turns up in two of them, and the reading is the
+    // whole of the work.
+    var tallies = bodies.map(tally);
+    var loose = Object.create(null);
+    Object.keys(whose).forEach(function (low) {
+      if (whose[low].length < 2) { return; }
+      var counting = whose[low].every(function (at) {
+        return (tallies[at].all[low] || 0) === (tallies[at].loops[low] || 0);
+      });
+      if (counting) { delete whose[low]; loose[low] = true; }
+    });
+
+    // Where each one is declared, if it is declared at all.  A declaration
+    // inside a block -- an If, a loop, anywhere inside a part -- cannot be
+    // moved without changing when it is set, so a program that has one
+    // there is left whole rather than written out as something that does
+    // not do the same thing.
+    function shares(low) { return !!whose[low] && whose[low].length > 1; }
+
+    var spots = Object.create(null), nested = false;
+    eachStep(items, function (item, deep) {
+      if (item.op !== "declare") { return; }
+      var low = lowered(bareName(item.var));
+      if (deep) { nested = nested || shares(low); }
+      else { spots[low] = item; }
+    });
+    parts.forEach(function (one) {
+      eachStep(one.body, function (item) {
+        if (item.op !== "declare") { return; }
+        nested = nested || shares(lowered(bareName(item.var)));
+      });
+    });
+    if (nested) { return null; }
+
+    // A name one part alone uses goes into that part, declaration and all.
+    // A name two charts use is the program's, and its declaration moves
+    // out to where every file can see it -- but what it started its name
+    // off as stays where it stood, as the setting it always was, so that a
+    // program which gives a name its value halfway down goes on doing it
+    // there.  A Constant travels with its value: it is the value.
+    var mine = Object.create(null), sends = Object.create(null);
+    Object.keys(whose).forEach(function (low) {
+      if (shares(low)) { mine[low] = true; }
+      else if (whose[low][0] > 0) { sends[low] = whose[low][0] - 1; }
+    });
+
+    var out = [], top = [];
+    items.forEach(function (item) {
+      var low = item.op === "declare" ? lowered(bareName(item.var)) : "";
+      if (!low) { out.push(item); return; }
+      if (loose[low]) { return; }         // nobody's: every chart counts its own
+      if (sends[low] !== undefined) {     // it is one part's, and goes with it
+        parts[sends[low]].body.unshift(item);
+        return;
+      }
+      if (!mine[low]) { out.push(item); return; }
+      top.push({ op: "declare", scope: "global", const: !!item.const,
+                 type: item.type, var: item.var,
+                 expr: item.const ? item.expr : "",
+                 id: item.id, line: item.line, text: item.text });
+      if (!item.const && item.expr) {
+        out.push({ op: "set", var: item.var, expr: item.expr,
+                   id: item.id, line: item.line, text: item.text });
+      }
+    });
+    // And a shared name nobody declared anywhere is given a declaration,
+    // because a file cannot read what is written down nowhere.
+    Object.keys(mine).forEach(function (low) {
+      if (spots[low]) { return; }
+      top.push({ op: "declare", scope: "global", const: false, type: "",
+                 var: spelt[low], expr: "", id: 0, line: 0,
+                 text: "Declare " + spelt[low] });
+    });
+    return { main: top.concat(out), modules: parts, problems: ast.problems };
+  }
+
   // The same program, in one file or in several.  `apart` asks for several,
   // and gets them where the language knows how and the program has anything
   // to split -- a chart with no modules in it is one chart and one file.
@@ -116,7 +349,13 @@
   // everything downstream would rather not be asked which it has.
   function written(lang, apart) {
     var L = LANGS[lang], out = [];
-    var prog = studied(AST);
+    // Asked for several files from a program that is one chart, the charts
+    // are made first: cutUp lifts the parts out and hands back a program
+    // with modules in it, which is a program this already knows how to
+    // write out as a file each.  It hands back nothing where the cut would
+    // not be an improvement, and then the one file is what there is.
+    var cut = apart ? cutUp(AST) : null;
+    var prog = studied(cut || AST);
     var name = (el("#f-title").value || "").replace(/[^A-Za-z0-9]/g, "") || "Program";
     // A class cannot be called 2ndTry, or for, or Math.
     if (/^[0-9]/.test(name) || L.kept[name] || L.kept[name.toLowerCase()]) {
@@ -229,6 +468,15 @@
       reachMod: function (one) {
         if (!w.apart || !L.reachMod || one === w.where) { return ""; }
         return L.reachMod(w, one);
+      },
+      // What a file holding this chart is about, for the line at the top
+      // of it.  Its name, which for a real module is what somebody called
+      // it -- and, for a part lifted out of a single flow, which is only
+      // called part2 because it came second, the statement it was lifted
+      // from as well, so the file says what it is before anybody opens it.
+      about: function (one) {
+        var said = one.mod && one.mod.said;
+        return one.name + (said ? ": " + said : "");
       },
       // What this module's file is called, without the ending.
       fileOf: function (one) {
@@ -791,14 +1039,23 @@
     return !!(pick && pick.value === "apart");
   }
 
-  // A program of one chart has nothing to cut up, and says so under the
-  // card rather than quietly handing the one file back as though what was
-  // asked for had happened.
+  // What asking for a file each would get you, said under the card before
+  // you ask.  A program drawn as modules is a file for each of them and
+  // needs no saying.  One drawn as a single flow is cut into parts where
+  // there is enough of it to be worth cutting, and comes out as the one
+  // file where there is not -- and either way it says which, rather than
+  // handing back one file as though what was asked for had happened.
   function codeNote() {
     var says = el("#code-note");
     if (!says) { return; }
-    says.textContent = wantsApart() && AST && !(AST.modules || []).length
-                     ? TXT.c_one_chart : "";
+    if (!wantsApart() || !AST || (AST.modules || []).length) {
+      says.textContent = "";
+      return;
+    }
+    var cut = null;
+    try { cut = cutUp(AST); } catch (thrown) { cut = null; }
+    says.textContent = cut ? say("c_cut_into", { n: cut.modules.length })
+                           : TXT.c_one_chart;
   }
 
   // The way in from the run, where there is no card to read: it shows
