@@ -29,6 +29,14 @@
     el("#svg-link").href = svgUrl;
   }
   el("#svg-link").addEventListener("click", linkSvg);   // always the latest
+  // Nothing made yet: the press above makes the copy, before the browser
+  // follows the link.  What is let go is the copy of the last chart, which
+  // is a whole drawing held for nothing.
+  function linkLater() {
+    if (svgUrl) { URL.revokeObjectURL(svgUrl); }
+    svgUrl = null;
+    el("#svg-link").href = "#";
+  }
 
   function save(blob, filename) {
     var url = URL.createObjectURL(blob);

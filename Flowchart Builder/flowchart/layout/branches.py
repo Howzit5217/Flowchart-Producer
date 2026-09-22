@@ -149,9 +149,23 @@ def layout_chain(tests, tail, thens, other):
     return Block(left + right, bottom, left, shift(elems, left, 0))
 
 
+# The Else Ifs of a chain already measured and found narrow enough to fork,
+# each kept with the limit it was measured against, until it is laid out.
+# Each is that chain with a test or more fewer, so it is no wider than the
+# chain, which fitted -- and it forks too.  Measured again one level down
+# at a time, the whole of the rest of the chain was laid out afresh at
+# every level: a chain of a thousand Else Ifs laid half a million branches
+# out to draw one chart.  The If itself is kept beside its number, so a
+# number used again by some later If is never taken for this one.
+_FORKS = {}
+
+
 def layout_if(item):
     """A chain of tests goes down the page when laying it out side by
     side would come out wider than settings.CHAIN_LIMIT; anything else forks."""
+    known = _FORKS.pop(id(item), None)
+    if known and known[0] is item and known[1] == settings.CHAIN_LIMIT:
+        return layout_fork(item)
     tests, tail = chain_parts(item)
     if len(tests) > 1:
         thens = [layout_seq(t) for _, t, _owner in tests]
@@ -166,6 +180,8 @@ def layout_if(item):
                              for (cond, _, owner), b in zip(tests, thens))
         if span > settings.CHAIN_LIMIT:
             return layout_chain(tests, tail, thens, other)
+        for _cond, _then, owner in tests[1:]:
+            _FORKS[id(owner)] = (owner, settings.CHAIN_LIMIT)
     return layout_fork(item)
 
 

@@ -26,6 +26,7 @@ EN = {
     "t_normal": "Normal", "t_thick": "Thick",
     "t_border": "Border", "t_dashed": "Dashed border",
     "t_copy_look": "Copy style", "t_paste_look": "Paste style",
+    "t_size_list": "Choose a size",
     "selected": "Selected shape", "rest": "Lines and paper",
     "fill": "Fill", "outline": "Outline", "text": "Words",
     "paper": "Paper", "grid": "Grid", "show_grid": "Show the grid",

@@ -1,5 +1,6 @@
 """The whole program, read into blocks: branches, loops and all."""
 import re
+import sys
 
 from .. import settings
 from ..parse.clean import join_lines, tidy, unwrap
@@ -15,8 +16,28 @@ from ..parse.trouble import OPEN_TROUBLE, PROBLEMS, trouble
 from ..words.lookup import word
 
 
+def room_to_nest():
+    """Enough room for whatever reads a program next to go as deep as the
+    program does.
+
+    Everything after the reading -- laying it out, writing it out as data --
+    goes into an If by going into its Else, and an Else If is an If inside
+    the Else of the one before.  A menu of two hundred and fifty choices
+    written as one chain of Else Ifs went a thousand calls deep and stopped
+    there, which is Python's own limit: no chart at all, only an error.
+
+    From Python 3.11 a call from Python to Python takes nothing from the
+    stack the computer gives a program -- the limit is only a count -- so
+    it can safely be set far higher, and is.  Older Pythons are left as
+    they are, because there the count is all that stands between a deep
+    program and a crash."""
+    if sys.version_info >= (3, 11) and sys.getrecursionlimit() < 60000:
+        sys.setrecursionlimit(60000)
+
+
 def parse_program(text):
     """Pseudocode text -> [Chart, ...] with the main chart first."""
+    room_to_nest()
     del PROBLEMS[:]
     lines = join_lines(text.splitlines())
     top, modules, declares, outs = [], [], [], []

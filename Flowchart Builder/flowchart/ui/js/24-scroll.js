@@ -363,16 +363,28 @@
   // The numbers down the side, and the count in the bar.  They are drawn from
   // the text itself and scrolled with it, so a long line that wraps does not
   // put them out of step -- each number sits against the line it belongs to.
+  //
+  // This runs on every key pressed.  On a program of forty-five thousand
+  // lines, writing out every number again each time was a quarter of a
+  // megabyte of text laid out afresh for a letter typed in the middle of a
+  // line -- so the lines are counted without cutting the text up, and a
+  // rule's numbers are only written again when it holds a different count.
   function countLines() {
     var box = el("#code");
     if (!box) { return; }
-    var rows = box.value.split("\n").length;
-    var out = [];
-    for (var i = 1; i <= rows; i++) { out.push(i); }
-    var numbers = out.join("\n");
-    // whichever of the two boxes is on screen, and the count in the big
-    // one's bar -- the numbers are the same numbers either way
-    all(".code-rule").forEach(function (rule) { rule.textContent = numbers; });
+    var text = box.value, rows = 1;
+    for (var at = text.indexOf("\n"); at >= 0; at = text.indexOf("\n", at + 1)) {
+      rows += 1;
+    }
+    var rules = all(".code-rule").filter(function (rule) { return rule._rows !== rows; });
+    if (rules.length) {
+      var out = [];
+      for (var i = 1; i <= rows; i++) { out.push(i); }
+      var numbers = out.join("\n");
+      // whichever of the two boxes is on screen, and the count in the big
+      // one's bar -- the numbers are the same numbers either way
+      rules.forEach(function (rule) { rule.textContent = numbers; rule._rows = rows; });
+    }
     var says = el("#code-count");
     if (says) { says.textContent = say("code_lines", { n: rows }); }
   }

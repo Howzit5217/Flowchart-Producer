@@ -495,10 +495,13 @@ def _():
     # A face a fifth wider than Arial throughout: nothing the drawing
     # carries, so it can only be measured in it if it was handed the widths.
     wide = {"n": [w * 1.2 for w in fb._ADV_N], "b": [w * 1.2 for w in fb._ADV_B]}
-    first = fb.parse_program(text)
-    steps = sorted({e[7] for e in fb.fit_shape(first, "auto")
-                    if e[0] == "shape" and len(e) > 7 and e[7]})
-    own = {str(steps[len(steps) // 2]): {"size": 26, "bold": False}}
+    # And the step with the longest word in it, set at 72 points -- the top
+    # of the list the page offers, 66 pixels -- where that word is wider on
+    # its own than any box is allowed to be at the plain size.
+    first = [e for e in fb.fit_shape(fb.parse_program(text), "auto")
+             if e[0] == "shape" and len(e) > 7 and e[7] and e[6]]
+    longest = max(first, key=lambda e: max(len(w) for w in " ".join(e[6]).split()))
+    own = {str(longest[7]): {"size": 66, "bold": False}}
 
     def shapes(asked):
         fb.style_variety(3)
@@ -523,13 +526,21 @@ def _():
     finally:
         fb.set_type(None)
         fb.SHAPE, fb.VARIETY, fb.SHAKE = keep
-    grew = sum(e[5] for e in big) > sum(e[5] for e in plain) * 1.2
+    # Wrapped, never cut: every step says the same words, whole, at any size.
+    words = lambda es: dict((e[7], " ".join(e[6]).split())
+                            for e in reversed(es) if len(e) > 7)
+    was, now = words(plain), words(big)
+    cut = [" ".join(now[k])[:24] for k in was if k in now and now[k] != was[k]]
+    # Bigger words take more room -- wider boxes as well as taller ones, now
+    # that a box widens for them -- so it is the room that is compared.
+    grew = sum(e[4] * e[5] for e in big) > sum(e[4] * e[5] for e in plain) * 1.2
     same = [e[:7] for e in again] == [e[:7] for e in plain]
-    ok = not spill and grew and same
-    return ok, "%d shapes at 17px bold in a wider face%s%s%s" % (
-        len(big), "" if grew else " -- no taller than plain",
+    ok = not spill and not cut and grew and same
+    return ok, "%d shapes at 17px bold in a wider face, one at 66px%s%s%s%s" % (
+        len(big), "" if grew else " -- no bigger than plain",
         "" if same else " -- asked for nothing, not the plain chart",
-        "" if not spill else " -- spilled: " + ", ".join(spill[:3]))
+        "" if not spill else " -- spilled: " + ", ".join(spill[:3]),
+        "" if not cut else " -- words cut: " + ", ".join(cut[:3]))
 
 
 @check("the page draws off its own thread")

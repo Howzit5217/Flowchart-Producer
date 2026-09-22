@@ -69,6 +69,7 @@ function runner(WORDS) {
   }
   function closeMenu() {}
   function all() { return []; }
+  function shapesNumbered() { return []; }
   function briefly() {}
   function freshTape() {}
   function tapeShow() {}

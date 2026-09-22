@@ -62,7 +62,7 @@
   function recall() {
     try {
       var was = JSON.parse(localStorage.getItem("flowchart-colors:" + FILE));
-      if (was && was.kinds) { style = was; }
+      if (was && was.kinds) { style = inPoints(was); }   // sizes kept in points
     } catch (e) { /* nothing kept, or unreadable */ }
   }
 

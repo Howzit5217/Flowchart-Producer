@@ -650,6 +650,23 @@
   @keyframes node-in { from { opacity: 0; transform: translateY(7px); } }
   @keyframes flow-draw { from { stroke-dashoffset: var(--len); } }
   @keyframes fade-out { to { opacity: 0; } }
+  /* A chart too big to see whole is put together under a camera that
+     follows it (see tourStart).  Every piece is out of sight until the
+     script says it has arrived; the first stretch of them arrives the way
+     the cascade's do, and the rest, too quick for that, simply appear.
+     Hidden, not faded: a piece that is not there yet costs nothing to
+     paint, and there are tens of thousands of them. */
+  #sheet.laying svg :is(.node, .flow, .head, .label, .patch, .heading):not(.laid) {
+    visibility: hidden;
+  }
+  #sheet.laying svg .node.laid-in { animation: node-in .42s var(--ease) backwards; }
+  #sheet.laying svg .flow.laid-in {
+    stroke-dasharray: var(--len) var(--len);
+    animation: flow-draw .3s var(--ease-soft) backwards;
+  }
+  #sheet.laying svg :is(.head, .label, .patch, .heading).laid-in {
+    animation: fade-in .2s var(--ease-soft) backwards;
+  }
 
   /* Drawing by hand: a shape just placed springs in, a line just joined
      draws itself and its head lands after it, and whatever was just

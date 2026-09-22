@@ -62,22 +62,41 @@
     width: 18px; height: 18px; fill: none; stroke: currentColor;
     stroke-width: 2; stroke-linecap: round;
   }
-  /* Smaller, how big, bigger -- one control, pushed to the end of its row. */
+  /* Smaller, the size in points, the list of sizes, bigger -- one control,
+     the way a word processor lays it out, pushed to the end of its row. */
   .step {
     flex: none; margin-left: auto; display: inline-flex; align-items: center;
     border: 1px solid var(--line); border-radius: 7px; overflow: hidden;
     background: var(--panel);
   }
   .step button {
-    width: 28px; height: 26px; border: 0; padding: 0; background: none;
+    width: 26px; height: 26px; border: 0; padding: 0; background: none;
     color: var(--ink); cursor: pointer; font-size: 16px; line-height: 1;
   }
   .step button:not([disabled]):hover { background: var(--accent-soft); }
   .step button[disabled] { opacity: .35; cursor: default; }
-  .step output {
-    min-width: 46px; text-align: center; font-size: 12.5px; line-height: 26px;
-    font-variant-numeric: tabular-nums; color: var(--ink);
-    border-left: 1px solid var(--line-soft); border-right: 1px solid var(--line-soft);
+  .step .pt {
+    width: 36px; height: 26px; margin: 0; padding: 0 2px; border: 0;
+    border-left: 1px solid var(--line-soft); border-radius: 0;
+    background: var(--field); color: var(--ink); text-align: center;
+    font: inherit; font-size: 12.5px; font-variant-numeric: tabular-nums;
+  }
+  .step .pt:focus { outline: 2px solid var(--accent); outline-offset: -2px; }
+  .step .pt-list {
+    width: 16px; display: inline-flex; align-items: center; justify-content: center;
+    background: var(--field); border-right: 1px solid var(--line-soft);
+  }
+  .step .pt-list svg {
+    width: 10px; height: 10px; fill: none; stroke: currentColor;
+    stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round;
+  }
+  /* The sizes themselves: seventeen short rows, so a narrow menu that
+     scrolls rather than one that runs off the bottom of the screen. */
+  .menu.sizes {
+    min-width: 0; width: 86px; max-height: min(60vh, 420px); overflow-y: auto;
+  }
+  .menu.sizes button {
+    gap: 6px; padding: 5px 8px; font-variant-numeric: tabular-nums;
   }
   /* The highlighter pens, a way to take one off, and any other color. */
   .pens {

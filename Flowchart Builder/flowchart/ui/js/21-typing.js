@@ -333,18 +333,28 @@
 
   // The other direction: the shape a line was drawn into, marked on the
   // paper.  Quietly -- it is a place-marker, not a selection and not a run.
+  // Asked on every frame the cursor moves, so neither half of it searches
+  // the chart: what was marked is remembered (this is the only place that
+  // marks one), and the shape to mark is looked up by its number.
+  var spotted = [];
   function spotShape(at) {
     if (!chart) { return; }
-    all(".node.here", chart).forEach(function (g) { g.classList.remove("here"); });
+    spotted.forEach(function (g) { g.classList.remove("here"); });
+    spotted = [];
     var id = at ? shapeOf[at] : 0;
     if (!id || byHand) { return; }
-    all('.node[data-i="' + id + '"]', chart).forEach(function (g) {
-      g.classList.add("here");
-    });
+    spotted = shapesNumbered(id);
+    spotted.forEach(function (g) { g.classList.add("here"); });
   }
 
+  // Counted, not cut up: splitting everything above the cursor into lines
+  // was a fresh array of every one of them on every frame the cursor moved.
   function caretLine(code) {
-    return code.value.slice(0, code.selectionStart).split("\n").length;
+    var text = code.value, upTo = code.selectionStart, n = 1;
+    for (var at = text.indexOf("\n"); at >= 0 && at < upTo; at = text.indexOf("\n", at + 1)) {
+      n += 1;
+    }
+    return n;
   }
 
   // Once a frame, however many times it is asked for: a cursor held down on

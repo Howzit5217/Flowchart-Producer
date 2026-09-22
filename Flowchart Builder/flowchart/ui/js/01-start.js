@@ -71,8 +71,13 @@
     mono: "Consolas, 'Courier New', Courier, monospace",
     hand: "'Comic Sans MS', 'Comic Neue', 'Chalkboard SE', 'Segoe Print', cursive"
   };
-  // How much bigger or smaller the words can be made, a press at a time.
-  var TYPE_STEPS = [0.7, 0.8, 0.9, 1, 1.1, 1.25, 1.4, 1.6, 1.8, 2];
+  // How big the words are, said in points the way a word processor says it:
+  // the plain words are 12, and these are the sizes on offer, the same list
+  // Word offers and the same steps its Grow and Shrink buttons take.  Any
+  // other size can be typed, between the two ends of the list.
+  var PLAIN_PT = 12;
+  var TYPE_POINTS = [8, 9, 10, 10.5, 11, 12, 14, 16, 18, 20, 22, 24, 26, 28,
+                     36, 48, 72];
   // The highlighter pens, in the colors every stationer sells them in.
   var MARKERS = [["#fff176", "m_yellow"], ["#b9f6ca", "m_green"],
                  ["#ffc1e3", "m_pink"], ["#b3e5fc", "m_blue"],

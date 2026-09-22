@@ -778,17 +778,20 @@
   // rest -- by the number the drawing gave it, which is how the page and the
   // drawing agree about which shape is which.  A shape placed by hand is
   // numbered h1, h2 and so on, and is none of the drawing's business.
+  // Sizes go as the pixels the drawing sets its words in, not as points:
+  // the drawing knows nothing of points, only that its plain words are
+  // CODE_TYPE pixels, which is what 12 points means here.
   function lettersAsked() {
-    var L = lettersOf(), scale = L.size || 1;
-    var asked = { size: CODE_TYPE * scale, bold: !!L.bold, own: {} };
+    var L = lettersOf();
+    var asked = { size: CODE_TYPE * chartPt() / PLAIN_PT, bold: !!L.bold, own: {} };
     if (L.face && L.face !== "sans" && FACES[L.face]) {
       asked.widths = faceWidths(L.face);
     }
     Object.keys(style.nodes).forEach(function (i) {
       var mine = style.nodes[i];
       if (!/^\d+$/.test(i) || !mine) { return; }
-      if ((!mine.size || mine.size === 1) && mine.bold === undefined) { return; }
-      asked.own[i] = { size: CODE_TYPE * scale * (mine.size || 1),
+      if (!mine.pt && mine.bold === undefined) { return; }
+      asked.own[i] = { size: CODE_TYPE * shapePt(i) / PLAIN_PT,
                        bold: mine.bold !== undefined ? !!mine.bold : !!L.bold };
     });
     return asked;

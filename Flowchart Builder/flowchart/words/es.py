@@ -24,6 +24,7 @@ ES = {
     "t_normal": "Normal", "t_thick": "Gruesa",
     "t_border": "Borde", "t_dashed": "Borde discontinuo",
     "t_copy_look": "Copiar estilo", "t_paste_look": "Pegar estilo",
+    "t_size_list": "Elegir un tamaño",
     "selected": "Forma seleccionada", "rest": "Líneas y papel",
     "fill": "Relleno", "outline": "Contorno", "text": "Texto",
     "paper": "Papel", "grid": "Cuadrícula",

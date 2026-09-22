@@ -158,14 +158,20 @@
   // The statement being done, not just the shape it is drawn in: a run of
   // Displays shares one shape between them, so the shape says which box and
   // only the statement says which of its lines.
+  // The shapes lit last, so that putting them out is not a search of the
+  // whole chart at every step of a run.  This is the only place that lights
+  // one, so the list is the whole of what is lit.
+  var litNow = [];
   function lightUp(item) {
     var id = item ? item.id : 0;
-    all(".node.now", chart).forEach(function (g) { g.classList.remove("now"); });
+    litNow.forEach(function (g) { g.classList.remove("now"); });
+    litNow = [];
     markLine(id, item ? item.line : 0);
     if (!id) { return; }
     var lit = null;
-    all('.node[data-i="' + id + '"]', chart).forEach(function (g) {
+    shapesNumbered(id).forEach(function (g) {
       g.classList.add("now");
+      litNow.push(g);
       if (!lit) { lit = g; }
     });
     // Not while the run fills the screen.  The chart is under the sheet

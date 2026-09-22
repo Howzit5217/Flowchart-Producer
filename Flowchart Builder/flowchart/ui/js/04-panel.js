@@ -37,14 +37,20 @@
   function buildKinds() {
     var box = el("#kinds");
     box.innerHTML = "";
+    // Counted in one walk of the chart rather than one search of it per
+    // kind: ten searches of a chart of forty thousand shapes, on every build.
+    var many = {};
+    all(".node[data-kind]", chart).forEach(function (g) {
+      many[g.dataset.kind] = (many[g.dataset.kind] || 0) + 1;
+    });
     kinds().forEach(function (pair) {
       var kind = pair[0], name = pair[1];
-      var found = all('.node[data-kind="' + kind + '"]', chart);
-      if (!found.length) { return; }
+      var found = many[kind] || 0;
+      if (!found) { return; }
       var row = document.createElement("div");
       row.className = "row";
       row.innerHTML = keyMark(kind) + '<span class="name">' + name +
-                      '</span><span class="count">' + found.length + '</span>';
+                      '</span><span class="count">' + found + '</span>';
       var k = style.kinds[kind] = style.kinds[kind] || {};
       row.appendChild(swatch(k.fill, "#ffffff", function (v) {
         k.fill = v; paintSoon();
@@ -141,11 +147,12 @@
         drawSelection();                 // what "like the rest" means has moved
       }).forEach(function (b) { tools.appendChild(b); });
       if (CAN_REFLOW) {
-        tools.appendChild(sizeStepper("size", L.size || 1, function (to) {
+        tools.appendChild(sizeBox("size", chartPt(), function (to) {
           keepUndo();
-          if (to === 1) { delete L.size; } else { L.size = to; }
+          if (to === PLAIN_PT) { delete L.pt; } else { L.pt = to; }
           restyled(true);
           buildLetters();
+          drawSelection();               // a shape with no size of its own shows this
         }));
       }
       box.appendChild(tools);
@@ -206,37 +213,113 @@
     });
   }
 
-  // Smaller, how big, bigger.  In steps rather than a box to type a number
-  // into, because a size is a thing you nudge until it looks right.
-  function sizeStepper(tool, now, go) {
+  // How big, in points, the way a word processor has it: a box the size can
+  // be typed into, the list of sizes under the arrow beside it, and a step
+  // down that list and a step up it either side.  `keys` names the keys
+  // that take the same steps, where there are any.
+  function sizeBox(tool, now, go, keys) {
     var box = document.createElement("div");
     box.className = "step";
     box.setAttribute("role", "group");
     box.setAttribute("aria-label", TXT.t_size);
-    box.title = TXT.t_size;
-    [[-1, "−", TXT.t_smaller], [0], [1, "+", TXT.t_bigger]].forEach(function (one) {
-      if (!one[0]) {
-        var shown = document.createElement("output");
-        shown.textContent = Math.round(now * 100) + "%";
-        box.appendChild(shown);
-        return;
-      }
-      var to = nextSize(now, one[0]);
+    function stepper(way, mark, word) {
+      var to = nextSize(now, way);
       var b = document.createElement("button");
       b.type = "button";
-      b.dataset.tool = tool + (one[0] > 0 ? "-up" : "-down");
-      b.textContent = one[1];
-      b.title = one[2];
-      b.setAttribute("aria-label", one[2]);
+      b.dataset.tool = tool + (way > 0 ? "-up" : "-down");
+      b.textContent = mark;
+      b.title = word + (keys ? " (" + keys[way > 0 ? 1 : 0] + ")" : "");
+      b.setAttribute("aria-label", word);
       b.disabled = to === now;
       b.onclick = function () { go(to); };
-      box.appendChild(b);
-    });
+      return b;
+    }
+    var field = document.createElement("input");
+    field.type = "text";
+    field.className = "pt";
+    field.inputMode = "decimal";
+    field.autocomplete = "off";
+    field.spellcheck = false;
+    field.dataset.tool = tool + "-pt";
+    field.value = ptSaid(now);
+    field.title = TXT.t_size;
+    field.setAttribute("aria-label", TXT.t_size);
+    field.onfocus = function () { field.select(); };
+    // A typed size is taken when it is finished with -- Enter, or going
+    // elsewhere -- and not at every key: the 1 on the way to 16 is not a
+    // size anybody asked for, and would be a drawing nobody wanted.
+    function taken() {
+      var want = ptFrom(field.value);
+      if (want === null || want === now) { field.value = ptSaid(now); return; }
+      go(want);
+    }
+    field.onchange = taken;
+    field.onkeydown = function (ev) {
+      if (ev.key === "Enter") { ev.preventDefault(); taken(); }
+      else if (ev.key === "Escape") { field.value = ptSaid(now); field.select(); }
+      else if (ev.key === "ArrowDown" && ev.altKey) { ev.preventDefault(); pointsList(field, now, go); }
+      else if (ev.key === "ArrowUp" || ev.key === "ArrowDown") {
+        ev.preventDefault();
+        var to = nextSize(now, ev.key === "ArrowUp" ? 1 : -1);
+        if (to !== now) { go(to); }
+      }
+    };
+    var drop = document.createElement("button");
+    drop.type = "button";
+    drop.className = "pt-list";
+    drop.dataset.tool = tool + "-list";
+    drop.innerHTML = '<svg viewBox="0 0 10 10" aria-hidden="true">' +
+                     '<path d="M2.2 3.8 5 6.6l2.8-2.8"/></svg>';
+    drop.title = TXT.t_size_list;
+    drop.setAttribute("aria-label", TXT.t_size_list);
+    drop.setAttribute("aria-haspopup", "menu");
+    drop.onclick = function (ev) {
+      ev.stopPropagation();              // or the click that opened it shuts it
+      pointsList(field, now, go);
+    };
+    box.appendChild(stepper(-1, "−", TXT.t_smaller));
+    box.appendChild(field);
+    box.appendChild(drop);
+    box.appendChild(stepper(1, "+", TXT.t_bigger));
     return box;
   }
 
+  // The sizes on offer, dropped down under the box, the one in use ticked
+  // and scrolled to so that it is where the eye already is.
+  function pointsList(under, now, go) {
+    var at = 0;
+    var room = under.getBoundingClientRect();
+    openMenu(room.left, room.bottom + 4, TYPE_POINTS.map(function (pt, n) {
+      if (pt === now) { at = n; }
+      return { name: ptSaid(pt),
+               mark: pt === now ? tickArt() : '<span class="tick"></span>',
+               go: function () { if (pt !== now) { go(pt); } } };
+    }), "sizes");
+    var menu = el(".menu.sizes");
+    var row = menu && menu.querySelectorAll("button")[at];
+    if (row) {
+      menu.scrollTop = row.offsetTop - (menu.clientHeight - row.offsetHeight) / 2;
+      row.focus();
+    }
+  }
+
+  // A size as it is written in the page's own language -- 10.5 here, 10,5
+  // in German -- and a size read back from whatever was typed, either way
+  // round, with or without "pt" after it.  Nonsense is nobody's size; a
+  // size past either end of the list is taken as that end.
+  function ptSaid(pt) {
+    try { return pt.toLocaleString(LANG); }
+    catch (e) { return String(pt); }
+  }
+  function ptFrom(typed) {
+    var n = parseFloat(String(typed).replace(",", ".").replace(/[^\d.]/g, ""));
+    if (!(n > 0)) { return null; }
+    var least = 6, most = TYPE_POINTS[TYPE_POINTS.length - 1];
+    return roundPt(Math.max(least, Math.min(most, n)));
+  }
+
   function nextSize(now, way) {          // the next step along, either way
-    var steps = way > 0 ? TYPE_STEPS : TYPE_STEPS.slice().reverse();
+    var steps = way > 0 ? TYPE_POINTS : TYPE_POINTS.slice().reverse();
     for (var i = 0; i < steps.length; i++) {
       if (way > 0 ? steps[i] > now + 1e-6 : steps[i] < now - 1e-6) {
         return steps[i];
@@ -303,17 +386,18 @@
     restyled(what === "bold");
     return to;
   }
-  // Its words bigger or smaller than the rest of the chart's, in the same
-  // steps; the whole chart's size is the hundred per cent it is measured by.
+  // Its words a size of their own, in points like the rest of the chart's.
+  // Set back to the chart's size, it has no size of its own again, and goes
+  // along with the chart's words when they are made bigger or smaller.
   function ownSize(i, to) {
     var mine = style.nodes[i] = style.nodes[i] || {};
-    if (!CAN_REFLOW || to === (mine.size || 1)) { return; }
+    if (!CAN_REFLOW || to === shapePt(i)) { return; }
     keepUndo();
-    if (to === 1) { delete mine.size; } else { mine.size = to; }
+    if (to === chartPt()) { delete mine.pt; } else { mine.pt = to; }
     restyled(true);
   }
   function growWords(i, way) {
-    ownSize(i, nextSize((style.nodes[i] || {}).size || 1, way));
+    ownSize(i, nextSize(shapePt(i), way));
   }
 
   // What about the words decides how big the boxes are -- and so whether a
@@ -322,11 +406,9 @@
     var L = (st && st.letters) || {}, own = {};
     Object.keys((st && st.nodes) || {}).forEach(function (i) {
       var n = st.nodes[i];
-      if (n && ((n.size && n.size !== 1) || n.bold !== undefined)) {
-        own[i] = [n.size || 1, n.bold];
-      }
+      if (n && (n.pt || n.bold !== undefined)) { own[i] = [n.pt || 0, n.bold]; }
     });
-    return JSON.stringify([L.face || "", L.size || 1, !!L.bold, own]);
+    return JSON.stringify([L.face || "", L.pt || PLAIN_PT, !!L.bold, own]);
   }
 
   // After anything about the words has changed.  How they look is painted
@@ -434,7 +516,7 @@
   // Everything about how a shape looks besides the three colors a kind can
   // hold -- which is what has to be carried over shape by shape when one
   // shape's look is spread to others.
-  var WORD_LOOKS = ["mark", "size", "bold", "italic", "under", "strike",
+  var WORD_LOOKS = ["mark", "pt", "bold", "italic", "under", "strike",
                     "weight", "dash"];
   var heldLook = null;                   // one shape's look, copied to paste
 
@@ -486,10 +568,10 @@
         drawSelection();
       }).forEach(function (b) { tools.appendChild(b); });
       if (CAN_REFLOW) {
-        tools.appendChild(sizeStepper("own-size", mine.size || 1, function (to) {
+        tools.appendChild(sizeBox("own-size", shapePt(i), function (to) {
           ownSize(i, to);
           drawSelection();
-        }));
+        }, ["Ctrl+Shift+<", "Ctrl+Shift+>"]));
       }
       body.appendChild(tools);
       body.appendChild(borderRow(i));

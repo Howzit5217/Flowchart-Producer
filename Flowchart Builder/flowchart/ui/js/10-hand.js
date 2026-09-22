@@ -119,7 +119,7 @@
     function either(what) {
       return mine[what] !== undefined ? !!mine[what] : !!L[what];
     }
-    var size = HAND_TYPE * (L.size || 1) * (mine.size || 1);
+    var size = HAND_TYPE * shapePt("h" + node.id) / PLAIN_PT;
     var face = FACES[L.face] || FACES.sans;
     return { size: size, line: size * HAND_LINE / HAND_TYPE, face: face,
              bold: either("bold"), italic: either("italic"),
@@ -430,7 +430,7 @@
     var pen = measure.pen || (measure.pen = document.createElement("canvas")
                               .getContext("2d"));
     var L = lettersOf();
-    pen.font = "bold " + HAND_TYPE * (L.size || 1) + "px " +
+    pen.font = "bold " + HAND_TYPE * chartPt() / PLAIN_PT + "px " +
                (FACES[L.face] || FACES.sans);
     var out = [], x = 0;
     used.forEach(function (kind) {
@@ -499,7 +499,7 @@
              '" fill="none" stroke="#d8dfe8" stroke-width="1"/>');
     var letters = lettersOf();
     out.push('<g font-family="' + (FACES[letters.face] || FACES.sans) +
-             '" font-size="' + HAND_TYPE * (letters.size || 1) + '" ' +
+             '" font-size="' + HAND_TYPE * chartPt() / PLAIN_PT + '" ' +
              'fill="none" stroke="#000000" stroke-width="1.3" ' +
              'stroke-linecap="round" stroke-linejoin="round">');
 
@@ -540,7 +540,7 @@
         // of it and nobody ever saw it.  Which is why the False on a
         // decision could be read going one way and not the other.
         var mid = halfWay(pts);
-        var k = letters.size || 1;       // the patch grows with the words
+        var k = chartPt() / PLAIN_PT;   // the patch grows with the words
         out.push('<rect class="patch" x="' + (mid[0] + 4) + '" y="' +
                  (mid[1] - 6 - 10 * k) + '" width="' + (link.label.length * 7 * k + 8) +
                  '" height="' + 13 * k + '" fill="#ffffff" stroke="none"/>');

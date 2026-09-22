@@ -9,9 +9,16 @@ from ..layout.columns import arrange, layout_chart
 from ..parse.read import parse_program
 
 
-def make_flowchart(text, title=None, author=None, max_h=settings.COLUMN_H):
-    """Whole program -> one SVG string (every module side by side)."""
-    charts = parse_program(text)
+def make_flowchart(text, title=None, author=None, max_h=settings.COLUMN_H,
+                   charts=None):
+    """Whole program -> one SVG string (every module side by side).
+
+    Handed `charts`, the program already read, it draws those rather than
+    reading the text over again: laying a chart out leaves what was read
+    exactly as it found it, so the studio reads a program once and both
+    draws it and hands it to the runner from that one reading."""
+    if charts is None:
+        charts = parse_program(text)
     if settings.SHAPE and not max_h:                 # let the shape pick the layout
         return to_svg(fit_shape(charts, settings.SHAPE), title, author)
     layouts = [layout_chart(c, max_h, heading=len(charts) > 1) for c in charts]

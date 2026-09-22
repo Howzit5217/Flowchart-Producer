@@ -36,6 +36,12 @@
       "runtimeExecutable": "python",
       "runtimeArgs": ["-m", "http.server", "8781", "--directory", "C:/Users/origa/AppData/Local/Temp/claude/C--Users-origa-Downloads-GitHub-Flowchart-Producer/1c32099b-35f0-40ba-9900-7457d97b9b16/scratchpad/viewer"],
       "port": 8781
+    },
+    {
+      "name": "big-studio",
+      "runtimeExecutable": "python",
+      "runtimeArgs": ["C:/Users/origa/AppData/Local/Temp/claude/C--Users-origa-Downloads-GitHub-Flowchart-Producer/af55efa8-38ca-4345-887a-67934f89fd7d/scratchpad/quiet_serve.py", "8797"],
+      "port": 8797
     }
   ]
 }

@@ -195,14 +195,20 @@ def node_block(node):
     size, bold = type_of(getattr(node, "node_id", 0))
     tall = line_h(size)
     longest = max(text_w(l, size, bold) for l in node.text.split("\n"))
+    # And as much wider before its words wrap as they are bigger, so that a
+    # line holds as many words at 24 points as it does at 12.  Held to the
+    # plain width, big words wrapped a word to a line, and the biggest were
+    # cut into pieces because not one of them fitted across.
+    grow = size / float(measure.BASE_SIZE) if size > measure.BASE_SIZE else 1
     drawn = SHAPES.get(geom_of(node.shape), SHAPES["rect"])
     if drawn.get("wide"):                       # a diamond: the words sit in
-        w = max(settings.DIA_W, min(settings.NODE_MAX_W + 60, longest / 0.55 + 10))
+        w = max(settings.DIA_W,
+                min((settings.NODE_MAX_W + 60) * grow, longest / 0.55 + 10))
         inner = w * 0.55                        #   the middle band of it
     else:
         pad = drawn["side"]
         base = settings.OVAL_W if drawn.get("floor") == "oval" else settings.NODE_W
-        w = max(base, min(settings.NODE_MAX_W, longest + pad))
+        w = max(base, min(settings.NODE_MAX_W * grow, longest + pad))
         inner = w - pad
     lines = wrap(node.text, inner, size, bold)
     if drawn.get("wide"):

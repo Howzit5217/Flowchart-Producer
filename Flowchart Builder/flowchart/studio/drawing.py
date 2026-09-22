@@ -88,9 +88,15 @@ def draw_for_studio(ask):
     # The height to wrap at is handed over rather than left to the default,
     # which is read once when the module is first imported and would hold
     # whatever it held then for the life of the process.
-    svg = make_flowchart(text, title, author, max_h=settings.COLUMN_H)
+    #
+    # Read once, and that one reading both drawn and handed to the runner.
+    # It was read twice -- once to draw, once more for the runner -- which
+    # on a program of tens of thousands of lines is a quarter of the wait.
+    charts = parse_program(text)
+    svg = make_flowchart(text, title, author, max_h=settings.COLUMN_H,
+                         charts=charts)
     box = re.search(r'viewBox="0 0 ([\d.]+) ([\d.]+)"', svg)
-    ast = program_json(parse_program(text))
+    ast = program_json(charts)
     return {"ok": True, "svg": svg.split("\n", 1)[1], "seed": seed,
             "w": box.group(1) if box else "", "h": box.group(2) if box else "",
             "title": title or "Flowchart", "name": file_name(title),

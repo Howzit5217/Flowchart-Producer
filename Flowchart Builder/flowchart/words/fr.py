@@ -24,6 +24,7 @@ FR = {
     "t_normal": "Normal", "t_thick": "Épais",
     "t_border": "Bordure", "t_dashed": "Bordure en tirets",
     "t_copy_look": "Copier le style", "t_paste_look": "Coller le style",
+    "t_size_list": "Choisir une taille",
     "selected": "Forme sélectionnée", "rest": "Lignes et papier",
     "fill": "Remplissage", "outline": "Contour", "text": "Texte",
     "paper": "Papier", "grid": "Grille", "show_grid": "Afficher la grille",

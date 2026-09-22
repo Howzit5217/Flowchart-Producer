@@ -24,6 +24,7 @@ DE = {
     "t_normal": "Normal", "t_thick": "Dick",
     "t_border": "Rahmen", "t_dashed": "Gestrichelter Rahmen",
     "t_copy_look": "Stil kopieren", "t_paste_look": "Stil einfügen",
+    "t_size_list": "Größe wählen",
     "selected": "Ausgewählte Form", "rest": "Linien und Papier",
     "fill": "Füllung", "outline": "Umriss", "text": "Text",
     "paper": "Papier", "grid": "Raster", "show_grid": "Raster anzeigen",

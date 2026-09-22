@@ -59,6 +59,38 @@
     return byHand ? HAND_TYPE : CODE_TYPE;
   }
 
+  // How big the words are, in points: the whole chart's, and one shape's --
+  // its own if it has one, the chart's if not.  Twelve is the plain size,
+  // whatever that comes to in pixels in the chart being drawn, so a chart
+  // at 12 is exactly the chart there was before anybody asked for a size.
+  // A shape's own size is its own the way a word processor's is: it stays
+  // put when the rest of the chart's words are made bigger or smaller.
+  function chartPt() { return lettersOf().pt || PLAIN_PT; }
+  function shapePt(i) { return (style.nodes[i] || {}).pt || chartPt(); }
+  function ptPx(pt) { return typeBase() * pt / PLAIN_PT; }
+  function roundPt(pt) { return Math.round(pt * 2) / 2; }  // to a half point
+
+  // Sizes were first kept as a share of the plain size -- 1.25 for a
+  // quarter bigger -- and a shape's as a share of the chart's.  They are
+  // points now, and anything kept the old way is put into points as it
+  // arrives (see recall and openProject), so nothing else has to know that
+  // there was ever another way of keeping them.
+  function inPoints(st) {
+    var L = (st && st.letters) || {};
+    var scale = L.size || 1;
+    if (L.size !== undefined) {
+      if (!L.pt && scale !== 1) { L.pt = roundPt(PLAIN_PT * scale); }
+      delete L.size;
+    }
+    Object.keys((st && st.nodes) || {}).forEach(function (i) {
+      var n = st.nodes[i];
+      if (!n || n.size === undefined) { return; }
+      if (!n.pt && n.size !== 1) { n.pt = roundPt(PLAIN_PT * scale * n.size); }
+      delete n.size;
+    });
+    return st;
+  }
+
   // How one shape looks beyond its colors: its words' own size, bold,
   // slanted, underlined or struck through, a highlighter across them, and
   // how heavy its border is and whether it is dashed.  A shape can say any
@@ -70,8 +102,8 @@
     function either(what) {
       return mine[what] !== undefined ? !!mine[what] : !!L[what];
     }
-    var own = CAN_REFLOW && mine.size && mine.size !== 1;
-    return { size: own ? typeBase() * (L.size || 1) * mine.size : 0,
+    var own = CAN_REFLOW && mine.pt && mine.pt !== chartPt();
+    return { size: own ? ptPx(mine.pt) : 0,
              bold: either("bold"), italic: either("italic"),
              under: either("under"), strike: either("strike"),
              mark: mine.mark || "",
@@ -91,7 +123,7 @@
            (look.italic ? "i" : "") + (look.under ? "u" : "") +
            (look.strike ? "s" : "") + (look.weight ? "w" + look.weight : "") +
            (look.dash ? "d" + look.dash : "") +
-           (look.mark ? "@" + look.mark + (L.face || "") + (L.size || 1) : "");
+           (look.mark ? "@" + look.mark + (L.face || "") + chartPt() : "");
   }
 
   function dressShape(g, look) {
@@ -292,8 +324,8 @@
             CAN_REFLOW && L.face && L.face !== "sans" && FACES[L.face]
               ? FACES[L.face] : "", faceIt);
       putOn(here.words, "_size",
-            CAN_REFLOW && L.size && L.size !== 1
-              ? (typeBase() * L.size).toFixed(2) + "px" : "", sizeIt);
+            CAN_REFLOW && chartPt() !== PLAIN_PT
+              ? ptPx(chartPt()).toFixed(2) + "px" : "", sizeIt);
       // And how heavy every line is drawn, the same way: said once where
       // every line takes it from, never on a line of its own.
       putOn(here.words, "_weight",

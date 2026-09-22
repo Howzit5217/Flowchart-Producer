@@ -95,7 +95,7 @@
     // stopped the opening halfway with the note underneath still saying it
     // had worked.
     if (was.style) {
-      style = was.style;
+      style = inPoints(was.style);     // sizes saved as shares, read as points
       style.kinds = style.kinds || {};
       style.nodes = style.nodes || {};
     }

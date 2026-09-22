@@ -1,5 +1,6 @@
 """Putting the SVG together."""
 import html
+from bisect import bisect_left
 
 from .. import measure, settings
 from ..draw.grid import grid_lines
@@ -118,30 +119,73 @@ def to_svg(elems, title=None, author=None):
              for e in elems if e[0] == "shape"]
     segs = [e for e in elems if e[0] == "line"]
 
+    # Which shapes stand on each square of a coarse grid laid over the
+    # chart, so that asking whether a route points into a shape looks only
+    # at the few shapes standing where it points.  Asking every shape of
+    # the chart, for every route in it, is shapes times routes: nothing at
+    # forty shapes, and seven seconds of a ten-second drawing at fifteen
+    # thousand lines of pseudocode, growing with the square of the program.
+    # The point a step past the end of the route lies inside any shape
+    # that counts, so the square that point is on holds every shape that
+    # could.
+    CELL = 128.0
+    standing = {}
+    for box in boxes:
+        a, b, c, d = box
+        for gx in range(int(a // CELL), int(c // CELL) + 1):
+            for gy in range(int(b // CELL), int(d // CELL) + 1):
+                standing.setdefault((gx, gy), []).append(box)
+
     def reaches_a_shape(pts):
         (ax, ay), (bx, by) = pts[-2], pts[-1]
         run = max(abs(bx - ax), abs(by - ay))
         if run < 0.01:
             return False
         fx, fy = bx + (bx - ax) / run * 3, by + (by - ay) / run * 3
-        for a, b, c, d in boxes:
+        for a, b, c, d in standing.get((int(fx // CELL), int(fy // CELL)), ()):
             if a - 1.5 <= bx <= c + 1.5 and b - 1.5 <= by <= d + 1.5 \
                     and a + 0.5 < fx < c - 0.5 and b + 0.5 < fy < d - 0.5:
                 return True
         return False
 
     upright = lambda dx, dy: abs(dy) > abs(dx)
+    facing = lambda dx, dy: ((dx > 0.01) - (dx < -0.01), (dy > 0.01) - (dy < -0.01))
     at = lambda x, y: (round(x, 1), round(y, 1))
     leaving, arriving = {}, {}           # which way lines go at each point
+    heading = {}                         # and which way round they arrive
     down_x, across_y = {}, {}            # verticals by x, horizontals by y
     for _, x1, y1, x2, y2, _a in segs:
         way = upright(x2 - x1, y2 - y1)
         leaving.setdefault(at(x1, y1), set()).add(way)
         arriving.setdefault(at(x2, y2), set()).add(way)
+        heading.setdefault(at(x2, y2), set()).add(facing(x2 - x1, y2 - y1))
         if abs(x1 - x2) < 0.5:
             down_x.setdefault(round(x1, 1), []).append((min(y1, y2), max(y1, y2)))
         elif abs(y1 - y2) < 0.5:
             across_y.setdefault(round(y1, 1), []).append((min(x1, x2), max(x1, x2)))
+
+    # The main line of a long program is thousands of segments at one x,
+    # and going down all of them for every route that ends on that x is the
+    # same squaring as above.  So each x (and each y) keeps its segments in
+    # order of where they start, beside the furthest any of them has reached
+    # so far: the ones starting before a point are found by halving, and
+    # whether any of those carries on past it is one look.
+    def in_order(spans):
+        spans.sort()
+        starts, reach, most = [], [], float("-inf")
+        for lo, hi in spans:
+            starts.append(lo + 1.5)
+            most = max(most, hi - 1.5)
+            reach.append(most)
+        return starts, reach
+
+    down_x = {x: in_order(spans) for x, spans in down_x.items()}
+    across_y = {y: in_order(spans) for y, spans in across_y.items()}
+
+    def carries_past(lines, key, along):
+        starts, reach = lines.get(key, ((), ()))
+        before = bisect_left(starts, along)      # those with lo + 1.5 < along
+        return before > 0 and reach[before - 1] > along
 
     def runs_through(pt):
         """Is there a line at pt that carries on past it, rather than one
@@ -150,19 +194,20 @@ def to_svg(elems, title=None, author=None):
         join drawn in the middle of it."""
         if leaving.get(pt, set()) & arriving.get(pt, set()):
             return True
-        for lo, hi in down_x.get(pt[0], ()):
-            if lo + 1.5 < pt[1] < hi - 1.5:
-                return True
-        for lo, hi in across_y.get(pt[1], ()):
-            if lo + 1.5 < pt[0] < hi - 1.5:
-                return True
-        return False
+        return carries_past(down_x, pt[0], pt[1]) or \
+            carries_past(across_y, pt[1], pt[0])
 
     def joins_a_line(pts):
         """Does this route arrive side-on at a line that carries on past?"""
         pt = at(*pts[-1])
         (ax, ay), (bx, by) = pts[-2], pts[-1]
         came = upright(bx - ax, by - ay)
+        # Met head-on by another route arriving from the other side, it is
+        # the meeting above, whatever runs through the point: the outside
+        # cases of a Select coming home either side of the middle one.
+        fx, fy = facing(bx - ax, by - ay)
+        if (-fx, -fy) in heading.get(pt, ()):
+            return False
         return came not in leaving.get(pt, set()) and runs_through(pt)
 
     # Routes first, because the shapes and the labels are meant to paint over

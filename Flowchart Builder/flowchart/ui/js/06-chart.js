@@ -91,8 +91,33 @@
     show();
     buildKinds();
     drawSelection();
-    linkSvg();
+    // The saved .svg is a copy of the whole drawing, written out.  Made on
+    // every build, a chart of some thousands of shapes stopped the page for
+    // a second or more each time -- every color finished at once, the lot
+    // copied, the copy written out -- for a file most builds never save.
+    // The link makes its copy on the press in any case, so a heavy chart is
+    // left to that.
+    if (heavy) { linkLater(); } else { linkSvg(); }
     sizeNote();
+  }
+
+  // Every shape on the paper by its number, found once per drawing rather
+  // than once per ask.  A run lights a shape at every step, and the cursor
+  // in the pseudocode marks one on every frame it moves; each of those used
+  // to search the whole chart for it, which on a chart of forty thousand
+  // shapes is a quarter of a million elements searched, over and over.  A
+  // drawing is never changed in place -- a new one is a new element with
+  // nothing remembered on it -- so the list is kept on the chart itself.
+  function shapesNumbered(id) {
+    if (!chart || !id) { return []; }
+    var seen = chart._numbered;
+    if (!seen) {
+      seen = chart._numbered = {};
+      all(".node[data-i]", chart).forEach(function (g) {
+        (seen[g.dataset.i] = seen[g.dataset.i] || []).push(g);
+      });
+    }
+    return (seen[id] || []).filter(function (g) { return g.isConnected; });
   }
 
   // Carrying something towards the edge takes the view with it.  Without

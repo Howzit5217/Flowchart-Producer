@@ -29,10 +29,14 @@
     if (ev.key === "Escape") { closeMenu(); }
   });
 
-  function openMenu(x, y, items) {
+  // `kind` is a class of its own for a menu that is not the usual list --
+  // the sizes, which are many and short, and scroll rather than run off
+  // the screen.  It is on before the menu is measured, so the menu is
+  // placed at the size it will really be.
+  function openMenu(x, y, items, kind) {
     closeMenu();
     var menu = document.createElement("div");
-    menu.className = "menu";
+    menu.className = "menu" + (kind ? " " + kind : "");
     items.forEach(function (item) {
       if (item === "-") {
         menu.appendChild(document.createElement("hr"));
@@ -170,8 +174,8 @@
                name: TXT[one[1]] + (one[3] ? " (" + one[3] + ")" : "") };
     });
     if (CAN_REFLOW) {
-      tools.push({ mark: "A−", name: TXT.t_smaller, go: grow(-1) },
-                 { mark: "A+", name: TXT.t_bigger, go: grow(1) });
+      tools.push({ mark: "A−", name: TXT.t_smaller + " (Ctrl+Shift+<)", go: grow(-1) },
+                 { mark: "A+", name: TXT.t_bigger + " (Ctrl+Shift+>)", go: grow(1) });
     }
     return { tools: tools };
   }
