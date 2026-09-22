@@ -193,10 +193,13 @@ def fork_to_fit(lay, natural, target):
     with a sheet mostly blank is not worth what it cost.  The plain chart is
     in the running too, so it can never come out worse than that.
 
-    Four tries, because each is a whole layout, and on a program of forty
+    Five tries, because each is a whole layout, and on a program of forty
     thousand lines in a browser that is seconds apiece.  More or fewer
-    chains fork in steps rather than smoothly, so a few tries land about as
-    near as a great many would."""
+    chains fork in steps rather than smoothly -- one more chain forking can
+    take the chart from a square to three times as wide as it is tall -- so
+    the halving has to get close before it lands; four tries on a program of
+    forty-three thousand lines stepped straight over the rate that makes it
+    16:9 and came back square."""
     area = natural[1] * natural[2]
 
     def score(one):
@@ -207,8 +210,8 @@ def fork_to_fit(lay, natural, target):
                 + settings.WASTE_COST * math.log(max(1.0, w * h / area)))
 
     best, best_score = natural, score(natural)
-    lo, hi = math.log(0.05), math.log(50.0)       # the rates, as logarithms
-    for _ in range(4):
+    lo, hi = math.log(0.1), math.log(10.0)        # the rates, as logarithms
+    for _ in range(5):
         mid = (lo + hi) / 2.0
         one = lay(math.exp(mid))
         if score(one) < best_score:

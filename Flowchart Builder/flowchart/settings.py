@@ -60,6 +60,12 @@ NODE_MAX_W = 186                    # boxes may grow this wide before the words
                                     #   wrap onto another line, so a long
                                     #   Display never runs out in one long line
 NODE_MIN_H = 32
+TABLE_ROWS = 30                     # a box of statements run together that
+                                    #   would be taller than this many lines
+                                    #   is set in columns side by side, like
+TABLE_W = 2 * NODE_MAX_W            #   a table, each column this wide at
+TABLE_GAP = 24                      #   most, this far apart, so no statement
+                                    #   is broken in the middle to fit
 OVAL_W = 96
 OVAL_H = 36
 DIA_W = 132                         # decision diamond

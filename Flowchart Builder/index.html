@@ -157,7 +157,8 @@
   .slider.x .slider-grip { top: 3px; bottom: 3px; left: 0; }
   .slider.y .slider-grip { left: 3px; right: 3px; top: 0; }
   .slider-track:hover .slider-grip { background: var(--muted); }
-  body.sliding .slider-grip { background: var(--accent); }
+  /* only the grip being dragged, and over the hover above it */
+  .slider-track > .slider-grip.held { background: var(--accent); }
   body.sliding { -webkit-user-select: none; user-select: none; }
 
   /* the little buttons at each end */
@@ -5694,6 +5695,27 @@
   // what there is to learn from watching a chart run.
   var SHARE_X = 0.40, SHARE_Y = 0.32;    // of the stage, across and down
   var CLOSEST = 2.4, FURTHEST = 0.35;
+  // Near enough is near enough.  The share gives every shape a distance of
+  // its own, so a Display a little wider than the Set before it had the
+  // camera step back a few percent, and the next one in again: a zoom on
+  // nearly every step, 82% to 62% to 71% to 87%, none of it telling anybody
+  // anything.  And a zoom is the dearest thing the chart does -- every word
+  // in sight is laid out again at the new size and the whole stage painted
+  // afresh -- where going across to the next shape is only a scroll.  So
+  // the distance it is at is kept while it is within this much of the one
+  // wanted and the shape fits in the stage at it; a real change of size,
+  // one tall box of declarations after a Start oval, still moves it.
+  //
+  // A chart too big to glide over is cut to instead (see glideTo), and on
+  // one of those the camera holds its distance for as long as the shape
+  // fits.  A program's small steps and big ones take turns -- a one-line
+  // Set, a box of forty declarations, a one-line Set -- and following
+  // that meant 240% and 44% in turn, every quarter second, each one the
+  // whole stage laid out and painted over again, which on a chart of five
+  // thousand shapes was half of all a step of the run cost.  So it only
+  // steps back for a shape that would not fit, and comes in no closer than
+  // actual size, which is where a chart opens and where its words read.
+  var LEEWAY = 1.5;
 
   function followNode(node) {
     var stage = el("#stage"), box = null;
@@ -5705,8 +5727,13 @@
     if (across < 40 || down < 40) { return; }
     var want = Math.min(across * SHARE_X / box.width,
                         down * SHARE_Y / box.height);
-    glideTo(box.x + box.width / 2, box.y + box.height / 2,
-            Math.max(FURTHEST, Math.min(CLOSEST, want)), 240);
+    want = Math.max(FURTHEST, Math.min(CLOSEST, want));
+    var fits = box.width * zoom <= across && box.height * zoom <= down;
+    var near = heavy ? Math.min(want, 1) : want;
+    var far = heavy ? Infinity : want * LEEWAY;
+    if (fits && zoom * LEEWAY >= near && zoom <= far) { want = zoom; }
+    else if (heavy) { want = Math.min(want, 1); }
+    glideTo(box.x + box.width / 2, box.y + box.height / 2, want, 240);
   }
 
   // Where it was before the program took the wheel, so it can be given back
@@ -9565,14 +9592,19 @@
     var id = item ? item.id : 0;
     litNow.forEach(function (g) { g.classList.remove("now"); });
     litNow = [];
-    markLine(id, item ? item.line : 0);
-    if (!id) { return; }
     var lit = null;
     shapesNumbered(id).forEach(function (g) {
       g.classList.add("now");
       litNow.push(g);
       if (!lit) { lit = g; }
     });
+    // The line is marked after the shapes are lit, not between putting the
+    // last one out and lighting the next.  Marking it measures the page,
+    // and a page measured halfway through a change is laid out for the
+    // half, then laid out again for the rest the moment the camera asks
+    // where the shape is -- twice a step, beside a chart of thousands.
+    markLine(id, item ? item.line : 0);
+    if (!id) { return; }
     // Not while the run fills the screen.  The chart is under the sheet
     // then, where nobody can watch it be followed -- but they could watch
     // it through the dimmed page on either side, zooming in on every
@@ -9627,12 +9659,16 @@
   var watchAt = null;                    // the chart whose names are shown
   var watchDue = false;
   var watchCell = {};                    // name -> the box its value is in
+  var watchRow = {};                     // name, and whose it is -> its row
   var watchList = "";                    // the names, as they were last built
+  var watchFor = null;                   // the chart they were built for
 
   function watchClear() {
     watchAt = null;
     watchList = "";
+    watchFor = null;
     watchCell = {};
+    watchRow = {};
     if (el("#watch")) { el("#watch").hidden = true; }
     if (el("#watch-rows")) { el("#watch-rows").textContent = ""; }
     if (el("#watch-where")) { el("#watch-where").textContent = ""; }
@@ -9693,30 +9729,56 @@
       says.textContent = (watchAt.name && watchAt.name !== "main")
         ? say("held_in", { name: watchAt.name + "()" }) : "";
     }
-    // The rows are built again only when the names change -- a name is
-    // declared, or the run walks into another chart.  A value arriving in
-    // a name that is already there is written into the box it is already
-    // in, so that the row can be marked as having just changed rather than
-    // being thrown away and made afresh, which marks nothing.
+    // The rows change only when the names change -- a name is declared, or
+    // the run walks into another chart.  A value arriving in a name that is
+    // already there is written into the box it is already in, so that the
+    // row can be marked as having just changed rather than being thrown
+    // away and made afresh, which marks nothing.
+    //
+    // A name declared is one row more, not a new table.  A program that
+    // keeps every item, clue and lock in a name of its own declares five
+    // hundred of them, and making every row over again for each one was a
+    // hundred thousand rows made before the game had even begun.  So the
+    // rows already there stay, values and all, and only the new one is made
+    // and put in its place.  Another chart is another set of names
+    // altogether, and is made afresh.
     var now = names.join("|");
     if (now !== watchList) {
+      if (watchFor !== watchAt) {
+        watchRow = {};
+        rows.textContent = "";
+      }
+      var had = watchRow, at = rows.firstChild;
       watchList = now;
+      watchFor = watchAt;
       watchCell = {};
-      rows.textContent = "";
+      watchRow = {};
       names.forEach(function (name) {
-        var row = document.createElement("div");
-        row.className = "watch-row" + (shared[name] ? " shared" : "");
-        var who = document.createElement("span");
-        who.className = "watch-name";
-        who.textContent = name;
-        if (shared[name]) { who.title = TXT.held_shared; }
-        var val = document.createElement("span");
-        val.className = "watch-val";
-        row.appendChild(who);
-        row.appendChild(val);
-        rows.appendChild(row);
-        watchCell[name] = val;
+        var key = (shared[name] ? "shared " : "own ") + name;
+        var row = had[key];
+        if (!row) {
+          row = document.createElement("div");
+          row.className = "watch-row" + (shared[name] ? " shared" : "");
+          var who = document.createElement("span");
+          who.className = "watch-name";
+          who.textContent = name;
+          if (shared[name]) { who.title = TXT.held_shared; }
+          var val = document.createElement("span");
+          val.className = "watch-val";
+          row.appendChild(who);
+          row.appendChild(val);
+        }
+        // Where it goes in the list: already there, or put there.
+        if (row === at) { at = at.nextSibling; }
+        else { rows.insertBefore(row, at); }
+        watchRow[key] = row;
+        watchCell[name] = row.lastChild;
       });
+      while (at) {                       // names no longer to be seen
+        var gone = at;
+        at = at.nextSibling;
+        rows.removeChild(gone);
+      }
     }
     names.forEach(function (name) {
       var cell = watchCell[name];
@@ -14657,12 +14719,17 @@
       ev.stopPropagation();
       var edge = grip.getBoundingClientRect();
       var hold = across ? ev.clientX - edge.left : ev.clientY - edge.top;
+      // The page is told a bar is being dragged, so nothing on it gets
+      // selected along the way; the grip being dragged is told that it is
+      // the one.  Lit from the page alone, every bar on it lit up at once.
       document.body.classList.add("sliding");
+      grip.classList.add("held");
       function move(e) { slideTo(across ? e.clientX : e.clientY, hold); }
       function drop() {
         window.removeEventListener("pointermove", move);
         window.removeEventListener("pointerup", drop);
         document.body.classList.remove("sliding");
+        grip.classList.remove("held");
       }
       window.addEventListener("pointermove", move);
       window.addEventListener("pointerup", drop);
@@ -15122,13 +15189,23 @@
   catch (e) { STILL = false; }
 
   // A word on something for as long as the move it names takes, and then off
-  // again, so the same move can be made to happen twice in a row.  Asking for
-  // the width back in the middle is what makes the browser start the run over
-  // rather than carry on with the one already going.
+  // again, so the same move can be made to happen twice in a row.  The
+  // browser has to see it off in between, or it carries on with the move
+  // already going rather than start it over.
+  //
+  // Seeing it off used to mean asking for the width, which lays the whole
+  // page out there and then -- the chart included.  Beside a chart of five
+  // thousand shapes that was four milliseconds a time, and a run that
+  // declares a hundred names in one box flashes a hundred new rows in the
+  // table of what it is holding: the page stopped for a third of a second.
+  // A word that is not on needs no seeing off at all, and one that is only
+  // needs its styling worked out again, which does not lay anything out.
   function briefly(node, name, ms) {
     if (!node || STILL) { return; }
-    node.classList.remove(name);
-    void node.offsetWidth;
+    if (node.classList.contains(name)) {
+      node.classList.remove(name);
+      void getComputedStyle(node).animationName;
+    }
     node.classList.add(name);
     clearTimeout(node.motionTimer);
     node.motionTimer = setTimeout(function () {

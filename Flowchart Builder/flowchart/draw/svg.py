@@ -6,11 +6,37 @@ from .. import measure, settings
 from ..draw.grid import grid_lines
 from ..draw.outlines import shape_art
 from ..draw.arrows import arrow_head, chain_lines, path_d
-from ..layout.blocks import label_drop, shift
+from ..layout.blocks import TABLE_BREAK, label_drop, shift
 from ..layout.columns import bbox
 from ..measure import FONT, line_h, text_w, type_of
-from ..shapes import geom_of
+from ..shapes import SHAPES, geom_of
 from ..words.lookup import word
+
+
+def table_words(lines, drawn, left, w, ty, size, tall):
+    """The words of a box set as a table, a column at a time: each column
+    ranged left, the way a table is read, and every one starting on the
+    same line, so the rows of the columns line up across the box."""
+    columns, col = [], []
+    for line in lines:
+        if line == TABLE_BREAK:
+            columns.append(col)
+            col = []
+        else:
+            col.append(line)
+    columns.append(col)
+    pad = SHAPES.get(drawn, SHAPES["rect"])["side"]
+    across = (w - pad - (len(columns) - 1) * settings.TABLE_GAP) / len(columns)
+    rows = max(len(c) for c in columns)
+    y0 = ty - (rows - 1) * tall / 2.0 + 4.0 * size / measure.BASE_SIZE
+    out = []
+    for n, col in enumerate(columns):
+        x = left + pad / 2.0 + n * (across + settings.TABLE_GAP)
+        for i, line in enumerate(col):
+            out.append(f'<text x="{x:.1f}" y="{y0 + i*tall:.1f}" '
+                       f'text-anchor="start" stroke="none" fill="{settings.INK}">'
+                       f'{html.escape(line)}</text>')
+    return out
 
 
 def described(elems):
@@ -324,11 +350,14 @@ def to_svg(elems, title=None, author=None):
             # is where that is decided and changed.
             size, _ = type_of(said)
             tall = line_h(size)
-            y0 = ty - (len(lines) - 1) * tall / 2.0 + 4.0 * size / measure.BASE_SIZE
-            for i, line in enumerate(lines):
-                piece.append(f'<text x="{tx:.1f}" y="{y0 + i*tall:.1f}" '
-                             f'text-anchor="middle" stroke="none" fill="{settings.INK}">'
-                             f'{html.escape(line)}</text>')
+            if TABLE_BREAK in lines:             # set as a table: see as_table
+                piece += table_words(lines, drawn, l, w, ty, size, tall)
+            else:
+                y0 = ty - (len(lines) - 1) * tall / 2.0 + 4.0 * size / measure.BASE_SIZE
+                for i, line in enumerate(lines):
+                    piece.append(f'<text x="{tx:.1f}" y="{y0 + i*tall:.1f}" '
+                                 f'text-anchor="middle" stroke="none" fill="{settings.INK}">'
+                                 f'{html.escape(line)}</text>')
             piece.append("</g>")
             put(1, t - 4, b + 4, "\n".join(piece))
     if banded is None:

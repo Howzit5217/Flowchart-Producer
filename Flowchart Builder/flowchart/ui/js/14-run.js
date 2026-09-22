@@ -166,14 +166,19 @@
     var id = item ? item.id : 0;
     litNow.forEach(function (g) { g.classList.remove("now"); });
     litNow = [];
-    markLine(id, item ? item.line : 0);
-    if (!id) { return; }
     var lit = null;
     shapesNumbered(id).forEach(function (g) {
       g.classList.add("now");
       litNow.push(g);
       if (!lit) { lit = g; }
     });
+    // The line is marked after the shapes are lit, not between putting the
+    // last one out and lighting the next.  Marking it measures the page,
+    // and a page measured halfway through a change is laid out for the
+    // half, then laid out again for the rest the moment the camera asks
+    // where the shape is -- twice a step, beside a chart of thousands.
+    markLine(id, item ? item.line : 0);
+    if (!id) { return; }
     // Not while the run fills the screen.  The chart is under the sheet
     // then, where nobody can watch it be followed -- but they could watch
     // it through the dimmed page on either side, zooming in on every
@@ -228,12 +233,16 @@
   var watchAt = null;                    // the chart whose names are shown
   var watchDue = false;
   var watchCell = {};                    // name -> the box its value is in
+  var watchRow = {};                     // name, and whose it is -> its row
   var watchList = "";                    // the names, as they were last built
+  var watchFor = null;                   // the chart they were built for
 
   function watchClear() {
     watchAt = null;
     watchList = "";
+    watchFor = null;
     watchCell = {};
+    watchRow = {};
     if (el("#watch")) { el("#watch").hidden = true; }
     if (el("#watch-rows")) { el("#watch-rows").textContent = ""; }
     if (el("#watch-where")) { el("#watch-where").textContent = ""; }
@@ -294,30 +303,56 @@
       says.textContent = (watchAt.name && watchAt.name !== "main")
         ? say("held_in", { name: watchAt.name + "()" }) : "";
     }
-    // The rows are built again only when the names change -- a name is
-    // declared, or the run walks into another chart.  A value arriving in
-    // a name that is already there is written into the box it is already
-    // in, so that the row can be marked as having just changed rather than
-    // being thrown away and made afresh, which marks nothing.
+    // The rows change only when the names change -- a name is declared, or
+    // the run walks into another chart.  A value arriving in a name that is
+    // already there is written into the box it is already in, so that the
+    // row can be marked as having just changed rather than being thrown
+    // away and made afresh, which marks nothing.
+    //
+    // A name declared is one row more, not a new table.  A program that
+    // keeps every item, clue and lock in a name of its own declares five
+    // hundred of them, and making every row over again for each one was a
+    // hundred thousand rows made before the game had even begun.  So the
+    // rows already there stay, values and all, and only the new one is made
+    // and put in its place.  Another chart is another set of names
+    // altogether, and is made afresh.
     var now = names.join("|");
     if (now !== watchList) {
+      if (watchFor !== watchAt) {
+        watchRow = {};
+        rows.textContent = "";
+      }
+      var had = watchRow, at = rows.firstChild;
       watchList = now;
+      watchFor = watchAt;
       watchCell = {};
-      rows.textContent = "";
+      watchRow = {};
       names.forEach(function (name) {
-        var row = document.createElement("div");
-        row.className = "watch-row" + (shared[name] ? " shared" : "");
-        var who = document.createElement("span");
-        who.className = "watch-name";
-        who.textContent = name;
-        if (shared[name]) { who.title = TXT.held_shared; }
-        var val = document.createElement("span");
-        val.className = "watch-val";
-        row.appendChild(who);
-        row.appendChild(val);
-        rows.appendChild(row);
-        watchCell[name] = val;
+        var key = (shared[name] ? "shared " : "own ") + name;
+        var row = had[key];
+        if (!row) {
+          row = document.createElement("div");
+          row.className = "watch-row" + (shared[name] ? " shared" : "");
+          var who = document.createElement("span");
+          who.className = "watch-name";
+          who.textContent = name;
+          if (shared[name]) { who.title = TXT.held_shared; }
+          var val = document.createElement("span");
+          val.className = "watch-val";
+          row.appendChild(who);
+          row.appendChild(val);
+        }
+        // Where it goes in the list: already there, or put there.
+        if (row === at) { at = at.nextSibling; }
+        else { rows.insertBefore(row, at); }
+        watchRow[key] = row;
+        watchCell[name] = row.lastChild;
       });
+      while (at) {                       // names no longer to be seen
+        var gone = at;
+        at = at.nextSibling;
+        rows.removeChild(gone);
+      }
     }
     names.forEach(function (name) {
       var cell = watchCell[name];

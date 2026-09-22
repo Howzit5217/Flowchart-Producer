@@ -145,7 +145,8 @@
   .slider.x .slider-grip { top: 3px; bottom: 3px; left: 0; }
   .slider.y .slider-grip { left: 3px; right: 3px; top: 0; }
   .slider-track:hover .slider-grip { background: var(--muted); }
-  body.sliding .slider-grip { background: var(--accent); }
+  /* only the grip being dragged, and over the hover above it */
+  .slider-track > .slider-grip.held { background: var(--accent); }
   body.sliding { -webkit-user-select: none; user-select: none; }
 
   /* the little buttons at each end */

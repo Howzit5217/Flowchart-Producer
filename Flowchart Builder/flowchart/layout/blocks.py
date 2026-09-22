@@ -264,6 +264,54 @@ def part_of(item, shape, text):
     return node
 
 
+# Where one column of a table ends and the next begins, among a box's lines.
+# It is a character no line of pseudocode can hold -- the reading splits
+# the text into lines on every kind of line break -- so it is never mistaken
+# for words; whatever draws the box starts a new column when it meets one.
+TABLE_BREAK = "\f"
+
+
+def as_table(text, size, bold, pad):
+    """A box of statements too tall to read down, set in columns.
+
+    A program that declares everything it uses up front -- hundreds of
+    constants, one to a line -- came out as a single box thousands of
+    pixels tall, and narrow: every line longer than the box was broken in
+    the middle, "Constant Integer S_WORLD =" on one line and "1" under it.
+    Set in columns, left to right in the order they were written, the same
+    statements read like the table they are, a statement to a line and none
+    of them broken, in a box about as wide as it is tall.
+
+    Returns the box's width, how many lines its tallest column holds, and
+    its lines with a TABLE_BREAK between one column and the next."""
+    said = text.split("\n")
+    across = min(settings.TABLE_W - pad,
+                 max(text_w(s, size, bold) for s in said))
+    parts = [wrap(s, across, size, bold) for s in said]
+    rows = sum(len(p) for p in parts)
+    # As many columns as it takes to bring the box down to TABLE_ROWS, and
+    # then as few as that: no fewer columns can do it, so the box is as
+    # narrow as it can be while no taller than asked.
+    cols = max(1, int(math.ceil(rows / float(settings.TABLE_ROWS))))
+    per = int(math.ceil(rows / float(cols)))
+    columns, here = [[]], 0
+    for part in parts:                    # a statement is never split
+        if here and here + len(part) > per:
+            columns.append([])
+            here = 0
+        columns[-1] += part
+        here += len(part)
+    tallest = max(len(c) for c in columns)
+    width = (len(columns) * across + (len(columns) - 1) * settings.TABLE_GAP
+             + pad)
+    lines = []
+    for i, col in enumerate(columns):
+        if i:
+            lines.append(TABLE_BREAK)
+        lines += col
+    return width, tallest, lines
+
+
 def node_block(node):
     # Measured in whatever its words are set in.  A step whose words have
     # been made bigger, or bold, wants a box that fits them -- not the box
@@ -287,12 +335,17 @@ def node_block(node):
         w = max(base, min(settings.NODE_MAX_W * grow, longest + pad))
         inner = w - pad
     lines = wrap(node.text, inner, size, bold)
+    rows = len(lines)
+    if (len(lines) > settings.TABLE_ROWS > 0 and "\n" in node.text
+            and not drawn.get("wide") and not drawn.get("round")
+            and drawn.get("floor") != "oval"):
+        w, rows, lines = as_table(node.text, size, bold, drawn["side"])
     if drawn.get("wide"):
         h = max(settings.DIA_MIN_H, 2.4 * len(lines) * tall + 8)
     elif drawn.get("floor") == "oval":
         h = max(settings.OVAL_H, len(lines) * tall + 2 * settings.PAD_Y)
     else:
-        h = max(settings.NODE_MIN_H, len(lines) * tall + 2 * settings.PAD_Y + drawn["top"])
+        h = max(settings.NODE_MIN_H, rows * tall + 2 * settings.PAD_Y + drawn["top"])
     if drawn.get("round"):                      # a joining point is round
         h = max(h, min(w, 96), 40)
     # Up to a whole number of grid steps.  Every gap between shapes is a whole

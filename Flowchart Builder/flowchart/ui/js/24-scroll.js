@@ -179,12 +179,17 @@
       ev.stopPropagation();
       var edge = grip.getBoundingClientRect();
       var hold = across ? ev.clientX - edge.left : ev.clientY - edge.top;
+      // The page is told a bar is being dragged, so nothing on it gets
+      // selected along the way; the grip being dragged is told that it is
+      // the one.  Lit from the page alone, every bar on it lit up at once.
       document.body.classList.add("sliding");
+      grip.classList.add("held");
       function move(e) { slideTo(across ? e.clientX : e.clientY, hold); }
       function drop() {
         window.removeEventListener("pointermove", move);
         window.removeEventListener("pointerup", drop);
         document.body.classList.remove("sliding");
+        grip.classList.remove("held");
       }
       window.addEventListener("pointermove", move);
       window.addEventListener("pointerup", drop);

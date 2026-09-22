@@ -698,6 +698,27 @@
   // what there is to learn from watching a chart run.
   var SHARE_X = 0.40, SHARE_Y = 0.32;    // of the stage, across and down
   var CLOSEST = 2.4, FURTHEST = 0.35;
+  // Near enough is near enough.  The share gives every shape a distance of
+  // its own, so a Display a little wider than the Set before it had the
+  // camera step back a few percent, and the next one in again: a zoom on
+  // nearly every step, 82% to 62% to 71% to 87%, none of it telling anybody
+  // anything.  And a zoom is the dearest thing the chart does -- every word
+  // in sight is laid out again at the new size and the whole stage painted
+  // afresh -- where going across to the next shape is only a scroll.  So
+  // the distance it is at is kept while it is within this much of the one
+  // wanted and the shape fits in the stage at it; a real change of size,
+  // one tall box of declarations after a Start oval, still moves it.
+  //
+  // A chart too big to glide over is cut to instead (see glideTo), and on
+  // one of those the camera holds its distance for as long as the shape
+  // fits.  A program's small steps and big ones take turns -- a one-line
+  // Set, a box of forty declarations, a one-line Set -- and following
+  // that meant 240% and 44% in turn, every quarter second, each one the
+  // whole stage laid out and painted over again, which on a chart of five
+  // thousand shapes was half of all a step of the run cost.  So it only
+  // steps back for a shape that would not fit, and comes in no closer than
+  // actual size, which is where a chart opens and where its words read.
+  var LEEWAY = 1.5;
 
   function followNode(node) {
     var stage = el("#stage"), box = null;
@@ -709,8 +730,13 @@
     if (across < 40 || down < 40) { return; }
     var want = Math.min(across * SHARE_X / box.width,
                         down * SHARE_Y / box.height);
-    glideTo(box.x + box.width / 2, box.y + box.height / 2,
-            Math.max(FURTHEST, Math.min(CLOSEST, want)), 240);
+    want = Math.max(FURTHEST, Math.min(CLOSEST, want));
+    var fits = box.width * zoom <= across && box.height * zoom <= down;
+    var near = heavy ? Math.min(want, 1) : want;
+    var far = heavy ? Infinity : want * LEEWAY;
+    if (fits && zoom * LEEWAY >= near && zoom <= far) { want = zoom; }
+    else if (heavy) { want = Math.min(want, 1); }
+    glideTo(box.x + box.width / 2, box.y + box.height / 2, want, 240);
   }
 
   // Where it was before the program took the wheel, so it can be given back

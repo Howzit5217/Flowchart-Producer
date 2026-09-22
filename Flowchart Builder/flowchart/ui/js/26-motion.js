@@ -23,13 +23,23 @@
   catch (e) { STILL = false; }
 
   // A word on something for as long as the move it names takes, and then off
-  // again, so the same move can be made to happen twice in a row.  Asking for
-  // the width back in the middle is what makes the browser start the run over
-  // rather than carry on with the one already going.
+  // again, so the same move can be made to happen twice in a row.  The
+  // browser has to see it off in between, or it carries on with the move
+  // already going rather than start it over.
+  //
+  // Seeing it off used to mean asking for the width, which lays the whole
+  // page out there and then -- the chart included.  Beside a chart of five
+  // thousand shapes that was four milliseconds a time, and a run that
+  // declares a hundred names in one box flashes a hundred new rows in the
+  // table of what it is holding: the page stopped for a third of a second.
+  // A word that is not on needs no seeing off at all, and one that is only
+  // needs its styling worked out again, which does not lay anything out.
   function briefly(node, name, ms) {
     if (!node || STILL) { return; }
-    node.classList.remove(name);
-    void node.offsetWidth;
+    if (node.classList.contains(name)) {
+      node.classList.remove(name);
+      void getComputedStyle(node).animationName;
+    }
     node.classList.add(name);
     clearTimeout(node.motionTimer);
     node.motionTimer = setTimeout(function () {
