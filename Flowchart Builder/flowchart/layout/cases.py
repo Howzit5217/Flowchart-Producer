@@ -52,17 +52,26 @@ def layout_select(item):
         elems.append(("text", ax + 5, bus_y + 15, label, "start"))
         if b.h == 0:                              # empty Case: one plain line
             if not all_end:
-                elems.append(("line", ax, bus_y, ax, merge, ax != center))
+                elems.append(("line", ax, bus_y, ax, merge, False))
         else:
             elems.append(("line", ax, bus_y, ax, top, True))
             elems += shift(b.elems, x, top)
             if not b.terminal:
-                elems.append(("line", ax, top + b.h, ax, merge, ax != center))
+                elems.append(("line", ax, top + b.h, ax, merge, False))
         x += b.w
+    # And they come home the way they went out, mirrored: each outside case
+    # comes down and turns in towards the middle, the way the two sides of
+    # an If do.  It was one line straight across, which the cases at either
+    # end only ran into -- a line coming down that stops where another one
+    # starts is two lines, not one line turning, so the corners at the
+    # foot of the chart stayed square while the ones at its head were
+    # rounded off.  Down and in is one line with a bend in it, and a bend
+    # is rounded.
     if not all_end:
         live = [axes[i] for i, (_, b) in enumerate(branches) if not b.terminal]
-        lo, hi = min(live + [center]), max(live + [center])
-        elems.append(("line", lo, merge, hi, merge, False))
+        for end in sorted({min(live + [center]), max(live + [center])}):
+            if abs(end - center) > 0.5:
+                elems.append(("line", end, merge, center, merge, False))
 
     left = max(center, dia.w / 2.0)
     width = max(span, dia.w)
