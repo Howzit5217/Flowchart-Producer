@@ -170,6 +170,82 @@ def join_room(runs):
     return math.ceil(short / step - 0.001) * step
 
 
+# ------------------------------------------------------------------ labels --
+# A True, a False or a Case, written beside the line it names.  They were
+# set a fixed few pixels off the line, which was a few pixels off the line
+# and not off the arrowhead on it: a head is as wide as HEAD_WIDE, so the
+# word beside a line going down sat a pixel from the side of the head and
+# read as running into it, and the word above a line going into the side of
+# a box sat on the corner of the head there.  Nor did the few pixels grow
+# when the words did, so at a bigger size a label ran up into the diamond
+# it came out of, or down into the shape its line went into.
+#
+# So every label keeps LABEL_GAP of clear paper between its letters and
+# the widest thing on its line, which is the head, and where it goes is
+# worked out from how big the words are set.
+
+_HANGS = frozenset("gjpqyQ,;()[]{}|_$@")      # what reaches below the line
+
+
+def label_clear():
+    """How far a label's letters stand off the middle of its line: half a
+    head, the gap, and a pixel for the pen -- a head is outlined as well as
+    filled, and a bold T's ink starts a little before its width does."""
+    return settings.HEAD_WIDE / 2.0 + settings.LABEL_GAP + 1.0
+
+
+def label_drop(text):
+    """How far the letters of text reach below the baseline, if they do."""
+    if any(ch in _HANGS for ch in text):
+        return measure.FONT_SIZE * measure.DESCENT
+    return 0.0
+
+
+def label_room(text):
+    """How much of a line's length a label beside it takes up, counting
+    the gap it keeps clear above and below.  It is set by the middle of its
+    capitals, so whatever hangs below them needs its room on both sides."""
+    if not text:
+        return 0.0
+    cap = measure.FONT_SIZE * measure.CAP
+    return cap + 2 * (settings.LABEL_GAP + label_drop(text))
+
+
+def label_run(*texts):
+    """How long a line going down has to be for these labels to stand
+    beside it: the usual gap, and whole grid steps more where the words are
+    set too big to fit in it -- the shapes below have to stay on the
+    ruling."""
+    short = max([label_room(t) for t in texts] + [0.0]) - settings.VGAP
+    if short <= 0:
+        return settings.VGAP
+    step = settings.GRID_STEP if settings.GRID_STEP > 0 else short
+    return settings.VGAP + math.ceil(short / step - 0.001) * step
+
+
+def label_beside(x, y, text, side, run=None):
+    """A label for the line going down from (x, y), on `side` of it (-1 the
+    left, 1 the right): half way down the first `run` of it, which is as
+    much as label_run asks for unless the caller says, and far enough out
+    that the head the line ends on stays clear of it too."""
+    if run is None:
+        run = label_run(text)
+    cap = measure.FONT_SIZE * measure.CAP
+    return ("text", x + side * label_clear(), y + (run + cap) / 2.0, text,
+            "start" if side > 0 else "end")
+
+
+def label_above(x, y, text, side):
+    """A label for the line setting off sideways from the point (x, y) of a
+    shape, towards `side`: just past the point, and high enough that a head
+    on the line -- where it goes straight into the side of a box -- stays
+    clear of it.  LABEL_PAD is the room it is given, half in front of the
+    word and half after."""
+    return ("text", x + side * settings.LABEL_PAD / 2.0,
+            y - label_clear() - label_drop(text), text,
+            "start" if side > 0 else "end")
+
+
 def tail_shape(block):
     return edge_shape(block)
 

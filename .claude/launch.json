@@ -83,6 +83,15 @@
         "8811"
       ],
       "port": 8811
+    },
+    {
+      "name": "big-site",
+      "runtimeExecutable": "python",
+      "runtimeArgs": [
+        "C:/Users/origa/AppData/Local/Temp/claude/C--Users-origa-Downloads-GitHub-Flowchart-Producer/af55efa8-38ca-4345-887a-67934f89fd7d/scratchpad/big_site.py",
+        "8799"
+      ],
+      "port": 8799
     }
   ]
 }

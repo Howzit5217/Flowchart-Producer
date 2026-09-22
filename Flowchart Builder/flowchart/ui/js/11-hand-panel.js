@@ -42,7 +42,7 @@
     var spot = chart.createSVGPoint();
     spot.x = where.clientX;
     spot.y = where.clientY;
-    spot = spot.matrixTransform(frame.inverse());
+    spot = onHand(spot.matrixTransform(frame.inverse()));
     var kind = dragging_kind ||
                (where.dataTransfer && where.dataTransfer.getData("text/plain"));
     if (!kind) { return false; }
@@ -146,7 +146,7 @@
     var join = document.createElement("button");
     join.className = "btn small" + (joining ? " primary" : "");
     join.textContent = joining ? TXT.connect_now : TXT.connect;
-    join.onclick = function () { joining = !joining; drawHandPanel(); };
+    join.onclick = function () { joining = !joining; joinFrom = null; drawHandPanel(); };
     var cut = document.createElement("button");
     cut.className = "btn small";
     cut.textContent = TXT.delete;
@@ -265,21 +265,49 @@
     box.appendChild(list);
   }
 
-  function joinUp(fromId, toId) {         // one shape leads to another
+  // One shape leads to another.  `fromSide` and `toSide` are the dots it
+  // was drawn from and to, if it was drawn from and to dots (0-3, in the
+  // order ports() gives them): those are its sides from then on.  A side
+  // not given is left to the arrow to find, and it takes a free one.
+  function joinUp(fromId, toId, fromSide, toSide) {
+    joinFrom = null;
     if (!fromId || !toId || fromId === toId) { return; }
-    var already = outOf(fromId).some(function (l) { return l.to === toId; });
-    if (already) { return; }
-    keepUndo();
-    var from = nodeById(fromId);
-    var tag = "";
-    if (from && from.kind === "diamond") {
-      tag = outOf(fromId).length ? TXT.no : TXT.yes;
+    var fixed = {};
+    if (PORT_SIDES[fromSide]) { fixed.fromSide = PORT_SIDES[fromSide]; }
+    if (PORT_SIDES[toSide]) { fixed.toSide = PORT_SIDES[toSide]; }
+    var already = outOf(fromId).filter(function (l) { return l.to === toId; })[0];
+    if (already) {
+      // Drawn again between the same two, from other dots: the one arrow
+      // moves over to those, which is how an arrow is given other sides.
+      if (!fixed.fromSide && !fixed.toSide) { return; }
+      keepUndo();
+      if (fixed.fromSide) { already.fromSide = fixed.fromSide; }
+      if (fixed.toSide) { already.toSide = fixed.toSide; }
+    } else {
+      keepUndo();
+      var from = nodeById(fromId);
+      var tag = "";
+      if (from && from.kind === "diamond") {
+        tag = outOf(fromId).length ? TXT.no : TXT.yes;
+      }
+      var link = { from: fromId, to: toId, label: tag };
+      if (fixed.fromSide) { link.fromSide = fixed.fromSide; }
+      if (fixed.toSide) { link.toSide = fixed.toSide; }
+      hand.links.push(link);
     }
-    hand.links.push({ from: fromId, to: toId, label: tag });
     joining = false;
     drawHand();
     drawHandPanel();
     showReport();
+  }
+
+  // The other way round: from where it went to where it came from, by the
+  // same two sides, so turning an arrow round turns it and does not move it.
+  function turnLink(link) {
+    var was = link.from; link.from = link.to; link.to = was;
+    var side = link.fromSide; link.fromSide = link.toSide; link.toSide = side;
+    if (!link.fromSide) { delete link.fromSide; }
+    if (!link.toSide) { delete link.toSide; }
   }
 
   function linkById(id) {
@@ -361,7 +389,7 @@
     flip.className = "btn small";
     flip.textContent = TXT.turn_it_round;
     flip.onclick = function () {
-      var was = link.from; link.from = link.to; link.to = was;
+      turnLink(link);
       drawHand(); drawHandPanel(); showReport();
     };
     var cut = document.createElement("button");
@@ -377,10 +405,11 @@
     box.appendChild(go);
   }
 
-  function handClick(id) {                // a shape was clicked on the chart
-    chosen = null;
+  function handClick(id, side) {          // a shape was clicked on the chart
+    chosen = null;                        //   (or one of its dots: `side`)
     if (joining && picked && picked !== id) {
-      joinUp(picked, id);
+      joinUp(picked, id, joinFrom && joinFrom.id === picked ? joinFrom.side : null,
+             side);
       return;
     }
     picked = id;

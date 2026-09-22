@@ -170,6 +170,138 @@ def covered_tips(svg):
     return hits
 
 
+def _meets(a, b, box):
+    """Does the segment a-b pass through the box?"""
+    x0, y0, x1, y1 = box
+    t0, t1 = 0.0, 1.0
+    dx, dy = b[0] - a[0], b[1] - a[1]
+    for p, q in ((-dx, a[0] - x0), (dx, x1 - a[0]), (-dy, a[1] - y0), (dy, y1 - a[1])):
+        if p == 0:
+            if q < 0:
+                return False
+            continue
+        t = q / p
+        if p < 0:
+            t0 = max(t0, t)
+        else:
+            t1 = min(t1, t)
+        if t0 > t1:
+            return False
+    return True
+
+
+def _off_box(px, py, box):
+    return math.hypot(max(box[0] - px, 0, px - box[2]), max(box[1] - py, 0, py - box[3]))
+
+
+def _off_segment(px, py, a, b):
+    vx, vy = b[0] - a[0], b[1] - a[1]
+    run = vx * vx + vy * vy
+    t = 0.0 if not run else max(0.0, min(1.0, ((px - a[0]) * vx + (py - a[1]) * vy) / run))
+    return math.hypot(px - a[0] - vx * t, py - a[1] - vy * t)
+
+
+def _segment_to_box(a, b, box):
+    """How near the segment a-b comes to the box: nought where they meet."""
+    if _meets(a, b, box):
+        return 0.0
+    corners = ((box[0], box[1]), (box[2], box[1]), (box[0], box[3]), (box[2], box[3]))
+    return min([_off_box(a[0], a[1], box), _off_box(b[0], b[1], box)] +
+               [_off_segment(cx, cy, a, b) for cx, cy in corners])
+
+
+def _inside(px, py, ring):
+    hit = False
+    for (ax, ay), (bx, by) in zip(ring, ring[1:] + ring[:1]):
+        if (ay > py) != (by > py) and px < (bx - ax) * (py - ay) / (by - ay) + ax:
+            hit = not hit
+    return hit
+
+
+def _route_legs(d):
+    """A route's path as straight pieces, its rounded corners included."""
+    legs_, at = [], None
+    for bit in re.finditer(r"([MLQ])([-\d.,\s]+)", d):
+        n = [float(v) for v in re.findall(r"-?\d+(?:\.\d+)?", bit.group(2))]
+        if bit.group(1) == "M":
+            at = (n[0], n[1])
+        elif bit.group(1) == "L":
+            legs_.append((at, (n[0], n[1])))
+            at = (n[0], n[1])
+        else:
+            (cx, cy), end, was = (n[0], n[1]), (n[2], n[3]), at
+            for k in range(1, 9):
+                t = k / 8.0
+                pt = ((1 - t) ** 2 * at[0] + 2 * (1 - t) * t * cx + t * t * end[0],
+                      (1 - t) ** 2 * at[1] + 2 * (1 - t) * t * cy + t * t * end[1])
+                legs_.append((was, pt))
+                was = pt
+            at = end
+    return legs_
+
+
+def crowded_labels(svg, width_of, room=3.0):
+    """A True, a False or a Case whose letters come within `room` of a
+    line, an arrowhead or a shape: (how many, of how many).
+
+    What this was written for: the word beside a line going down, set five
+    pixels off the line and so a pixel off the side of the arrowhead on it;
+    the word above a line going into the side of a box, sitting on the
+    corner of the head there; and the word on a Do ... Until's way back,
+    written straight across the line going up.  The letters are measured as
+    the drawing measures them -- `width_of(text, size, bold)` across, and a
+    capital's height above the baseline -- so it is the words themselves
+    that are kept clear, not the patch of paper behind them.  Every stroke
+    counts as far as it is drawn wide."""
+    import html
+    size = float(re.search(r'<g font-family="[^"]*" font-size="([\d.]+)"', svg).group(1))
+    lines = []
+    for d in re.findall(r'<path class="flow" d="([^"]+)"', svg):
+        lines += _route_legs(d)
+    rings = []                              # (corners, half the pen)
+    for pts in re.findall(r'<polygon class="head" points="([^"]+)"', svg):
+        n = [float(v) for v in re.findall(r"-?[\d.]+", pts)]
+        rings.append((list(zip(n[0::2], n[1::2])), 0.3))
+    for g in re.finditer(r'<g class="node"[^>]*>(.*?)</g>', svg, re.S):
+        for tag in re.findall(r"<(?:rect|polygon|ellipse)[^>]*>", g.group(1)):
+            if 'class="ghost"' in tag or 'class="trim"' in tag:
+                continue
+            box = re.search(r'x="(-?[\d.]+)" y="(-?[\d.]+)" width="([\d.]+)" height="([\d.]+)"', tag)
+            corners = re.search(r'points="([^"]+)"', tag)
+            round_ = re.search(r'cx="(-?[\d.]+)" cy="(-?[\d.]+)" rx="([\d.]+)" ry="([\d.]+)"', tag)
+            if box:
+                x, y, w, h = (float(v) for v in box.groups())
+                rings.append(([(x, y), (x + w, y), (x + w, y + h), (x, y + h)], 0.65))
+            elif corners:
+                n = [float(v) for v in re.findall(r"-?[\d.]+", corners.group(1))]
+                rings.append((list(zip(n[0::2], n[1::2])), 0.65))
+            elif round_:
+                cx, cy, rx, ry = (float(v) for v in round_.groups())
+                rings.append(([(cx + rx * math.cos(k * math.pi / 16),
+                                cy + ry * math.sin(k * math.pi / 16))
+                               for k in range(32)], 0.65))
+    labels = re.findall(r'<text class="label" x="(-?[\d.]+)" y="(-?[\d.]+)" '
+                        r'text-anchor="(\w+)"[^>]*>([^<]+)</text>', svg)
+    hits = 0
+    for x, y, anchor, said in labels:
+        said = html.unescape(said)
+        x, y, wide = float(x), float(y), width_of(said, size, True)
+        left = {"end": x - wide, "middle": x - wide / 2.0}.get(anchor, x)
+        hangs = any(ch in "gjpqyQ,;()[]{}|_$@" for ch in said)
+        box = (left, y - 0.72 * size, left + wide, y + (0.21 * size if hangs else 0.0))
+        near = min([_segment_to_box(a, b, box) - 0.65 for a, b in lines] + [room + 1])
+        for ring, pen in rings:
+            if near < room:
+                break
+            if _inside((box[0] + box[2]) / 2.0, (box[1] + box[3]) / 2.0, ring):
+                near = 0.0
+                break
+            for a, b in zip(ring, ring[1:] + ring[:1]):
+                near = min(near, _segment_to_box(a, b, box) - pen)
+        hits += near < room
+    return hits, len(labels)
+
+
 def crowded_heads(svg, room=6.0):
     """Two arrowheads closer together than `room`, which reads as a pile of
     them rather than as two arrows.

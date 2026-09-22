@@ -15,11 +15,22 @@
     copy.removeAttribute("style");
     copy.removeAttribute("id");
     all(".node.on", copy).forEach(function (g) { g.classList.remove("on"); });
+    wholeCopy(copy);
     copy.setAttribute("xmlns", "http://www.w3.org/2000/svg");
     copy.setAttribute("width", Math.round(W * (scale || 1)));
     copy.setAttribute("height", Math.round(H * (scale || 1)));
     return '<?xml version="1.0" encoding="UTF-8"?>\n' +
            new XMLSerializer().serializeToString(copy);
+  }
+  // A copy of the chart is the whole of it.  The page leaves the bands of a
+  // big chart that are nowhere near the screen out of its own drawing (see
+  // showBands), and says so with a word on the chart and on each band it
+  // shows; a copy away from the page has nothing to leave out for, so the
+  // words come off it and every band is in it.
+  function wholeCopy(copy) {
+    copy.classList.remove("culled");
+    all(".stretch.seen", copy).forEach(function (b) { b.classList.remove("seen"); });
+    if (!copy.getAttribute("class")) { copy.removeAttribute("class"); }
   }
   var svgUrl = null;
   function linkSvg() {
@@ -355,6 +366,7 @@
       g.classList.remove("on");
       g.classList.remove("now");
     });
+    wholeCopy(copy);                     // every band, on paper
     // Millimetres, so the drawing arrives on the sheet the size it says it
     // is rather than at whatever a pixel turns out to be on this printer.
     var w = W * MM, h = H * MM;

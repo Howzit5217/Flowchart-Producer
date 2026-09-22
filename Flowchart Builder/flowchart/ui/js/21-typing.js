@@ -154,13 +154,13 @@
     var a = nodeById(link.from), b = nodeById(link.to);
     if (!a || !b) { return; }
     keepUndo();
-    var pts = linkPath(a, b);
+    var pts = routeAll()[hand.links.indexOf(link)] || linkPath(a, b, link);
     var mid = pts[Math.floor(pts.length / 2)];
     var svg = el("#chart");
     var frame = svg.getScreenCTM();
     var spot = svg.createSVGPoint();
-    spot.x = mid[0];
-    spot.y = mid[1];
+    spot.x = mid[0] + handOrigin.x;      // on the paper, which may reach
+    spot.y = mid[1] + handOrigin.y;      //   out further than the design
     spot = spot.matrixTransform(frame);
     var stage = el("#stage"), room = stage.getBoundingClientRect();
     var pad = document.createElement("input");

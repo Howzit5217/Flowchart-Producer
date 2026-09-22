@@ -2,8 +2,8 @@
 from .. import settings
 from ..layout import blocks
 from ..layout.blocks import (
-    Block, clear_foot, join_room, layout_seq, node_block, part_of, shift,
-    tail_shape)
+    Block, clear_foot, join_room, label_above, label_beside, label_run,
+    layout_seq, node_block, part_of, shift, tail_shape)
 from ..measure import text_w
 from ..parse.nodes import Loop
 from ..words.lookup import word
@@ -32,9 +32,10 @@ def layout_pre(item):
     up = loop_up()
     elems = shift(dia.elems, -dia.axis, 0)
     y = dia.h
-    elems += [("line", 0, y, 0, y + settings.VGAP, True),
-              ("text", 5, y + settings.VGAP / 2.0 + 4, into, "start")]
-    y += settings.VGAP
+    run = label_run(into)
+    elems += [("line", 0, y, 0, y + run, True),
+              label_beside(0, y, into, 1)]
+    y += run
     elems += shift(body.elems, -body.axis, y)
     body_top = y
     y += body.h
@@ -74,7 +75,7 @@ def layout_pre(item):
     # would stop dead there with a head on it, and the turn would come out
     # square, drawn as two strokes meeting rather than one line bending.
     elems += [("line", half, dia.h / 2.0, right_x, dia.h / 2.0, False),
-              ("text", half + 6, dia.h / 2.0 - 6, out, "start"),
+              label_above(half, dia.h / 2.0, out, 1),
               ("line", right_x, dia.h / 2.0, right_x, exit_y, False),
               ("line", right_x, exit_y, 0, exit_y, False)]
 
@@ -100,13 +101,24 @@ def layout_post(item):
     elems += shift(dia.elems, -dia.axis, y)
     y += dia.h
 
-    back_x = -(max(half, body.axis) + settings.HGAP)
+    # The way back goes up far enough out for the word written on it to
+    # fit between the diamond and the turn.  It went up one gap out from
+    # the body, and a word longer than that gap ran over the line going up.
+    back_x = -max(max(half, body.axis) + settings.HGAP,
+                  half + text_w(again, bold=True) + settings.LABEL_PAD)
     elems += [("line", -half, dia_cy, back_x, dia_cy, False),
-              ("text", -half - 6, dia_cy - 6, again, "end"),
+              label_above(-half, dia_cy, again, -1),
               ("line", back_x, dia_cy, back_x, -up, False),
               ("line", back_x, -up, 0, -up, False),
               ("line", 0, -up, 0, 0, True),
-              ("text", 5, y + 13, done, "start")]
+              label_beside(0, y, done, 1)]
+    # The way out is the line below, which is whatever comes next's to
+    # draw, and it is one gap long.  Where the word on it is too big for
+    # that, the loop carries the line on down itself first.
+    more = label_run(done) - settings.VGAP
+    if more > 0:
+        elems.append(("line", 0, y, 0, y + more, False))
+        y += more
 
     left = -back_x
     right = max(half, body.w - body.axis)

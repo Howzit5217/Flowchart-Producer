@@ -603,15 +603,6 @@
   @keyframes sure-out { to { opacity: 0; transform: scale(.97); } }
 
   /* -------------------------------------------------- the chart itself -- */
-  /* A freshly drawn chart arrives with its paper.  The script puts this on
-     only when the drawing is a new one, so nothing flickers while a shape is
-     being dragged about: that redraws the same chart many times a second, and
-     a chart that faded in each time would be unreadable.
-
-     It moves the paper, not the chart on it.  Moving the chart alone slid it
-     inside the sheet it sits on and left a strip of bare sheet showing along
-     the top and down each side -- a white line round the edge of the drawing,
-     for as long as the arriving took.  The two are one thing and move as one. */
   /* The paper is two things wearing one color: the rectangle the drawing
      fills, and the rounded block it is clipped to.  This selector catches
      both -- the block takes a background, the rectangle a fill -- so a new
@@ -624,30 +615,42 @@
                 background-color var(--move) var(--ease-soft),
                 fill var(--move) var(--ease-soft);
   }
-  .sheet.fresh { animation: chart-in .45s var(--ease) backwards; }
-  @keyframes chart-in { from { opacity: 0; transform: translateY(8px) scale(.99); } }
-  /* And the chart on it puts itself together in the order the program
-     reads: the script tells each part when its turn is, and this is only
-     what a turn looks like.  A shape rises a little into place -- moved,
-     never scaled, for the reason given for the step marker below -- a
-     line is drawn out of the shape it leaves, and its arrowhead, its
-     True or False and the patch behind them land as the line arrives.
-     The line is drawn with a dash exactly as long as itself, slid along
-     it; the script measures how long that is. */
-  #sheet.fresh.cascade svg .node {
-    animation: node-in .42s var(--ease) backwards;
-    animation-delay: var(--in, 0ms);
-  }
-  #sheet.fresh.cascade svg .flow {
+  /* A new chart is drawn onto the paper rather than arriving on it (see
+     "drawn in ink" in 26-motion.js).  The script says when each piece's
+     turn comes and how long it takes; this is only what a turn looks like.
+
+     A piece waiting for the pen is not there.  Its turn come, a line is
+     drawn along itself with a dash exactly as long as it is, slid along
+     it; the outline of a shape is drawn the same way, and its color washes
+     in once the outline is closed; words are written in from the left; an
+     arrowhead lands.  All of it at one pace: the curve is a straight one,
+     because a pen that slows down at the end of every line is not drawing
+     at one speed.
+
+     --late is how far behind its turn a piece was started, taken off every
+     delay so a frame that came late does not slow anything down.  Paper
+     and drawing are left alone: nothing moves, nothing is scaled. */
+  svg .ink-wait { visibility: hidden; }
+  svg .ink-line {
     stroke-dasharray: var(--len) var(--len);
-    animation: flow-draw .3s var(--ease-soft) backwards;
-    animation-delay: var(--in, 0ms);
+    animation: ink-line var(--dur) linear var(--late, 0ms) backwards,
+               ink-wash .32s var(--ease-soft) calc(var(--dur) + var(--late, 0ms)) backwards;
   }
-  #sheet.fresh.cascade svg :is(.head, .label, .patch) {
-    animation: fade-in .2s var(--ease-soft) backwards;
-    animation-delay: var(--in, 0ms);
+  svg .flow.ink-line { animation: ink-line var(--dur) linear var(--late, 0ms) backwards; }
+  svg .ink-wash {
+    animation: ink-wash .32s var(--ease-soft)
+               calc(var(--d, 0ms) + var(--late, 0ms)) backwards;
   }
-  @keyframes node-in { from { opacity: 0; transform: translateY(7px); } }
+  svg .ink-write {
+    animation: ink-write var(--dur) linear calc(var(--d, 0ms) + var(--late, 0ms)) backwards;
+  }
+  svg .ink-pop { animation: fade-in .16s var(--ease-soft) var(--late, 0ms) backwards; }
+  @keyframes ink-line { from { stroke-dashoffset: var(--len); } }
+  @keyframes ink-wash { from { fill-opacity: 0; } }
+  @keyframes ink-write {
+    from { clip-path: inset(0 100% 0 0); }
+    to { clip-path: inset(0 0 0 0); }
+  }
   @keyframes flow-draw { from { stroke-dashoffset: var(--len); } }
   @keyframes fade-out { to { opacity: 0; } }
 

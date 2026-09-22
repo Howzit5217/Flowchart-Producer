@@ -1127,6 +1127,9 @@
     animation: breathe 1.5s ease-in-out infinite;
   }
   svg .spot:hover { fill-opacity: .9; r: 8; animation: none; }
+  /* the dot a line being dragged would go to, let go now -- a drag holds on
+     to the pointer, so the dot under it never hears that it is pointed at */
+  svg .spot.aimed { fill-opacity: .9; animation: none; }
   @keyframes breathe {
     0%, 100% { fill-opacity: .18; }
     50% { fill-opacity: .55; }
@@ -1690,6 +1693,24 @@
      the stage still scrolls normally where there is no shape under it. */
   #chart, #chart * { touch-action: none; }
   #chart { -webkit-user-select: none; user-select: none; }
+  /* A chart of thousands of shapes comes in bands, and the bands nowhere
+     near the screen are left out of the page's drawing until the view comes
+     near them (see showBands).  Left out means not laid out at all, which is
+     the point: a browser lays out every word it has been given, seen or not,
+     and does it all again at every step of a zoom.  Only the chart on the
+     page is ever like this -- a copy of it has no id, and has every band.
+
+     Every piece in a band is left out, not only the band.  A band left out
+     on its own still had the browser do most of the work for everything in
+     it -- a zoom step cost 450ms that way, and 58ms with every piece left
+     out, the same as taking the bands out of the page altogether.
+
+     On a screen only: the browser's own Print takes the page as it stands,
+     and on paper there is no screen for any band to be far from. */
+  @media screen {
+    #chart.culled .stretch:not(.seen),
+    #chart.culled .stretch:not(.seen) * { display: none; }
+  }
 
   /* The veil only ever exists on a narrow screen.  Said plainly here so that
      on a wide one it is not a stray box sitting in the row with the panel
@@ -2452,15 +2473,6 @@
   @keyframes sure-out { to { opacity: 0; transform: scale(.97); } }
 
   /* -------------------------------------------------- the chart itself -- */
-  /* A freshly drawn chart arrives with its paper.  The script puts this on
-     only when the drawing is a new one, so nothing flickers while a shape is
-     being dragged about: that redraws the same chart many times a second, and
-     a chart that faded in each time would be unreadable.
-
-     It moves the paper, not the chart on it.  Moving the chart alone slid it
-     inside the sheet it sits on and left a strip of bare sheet showing along
-     the top and down each side -- a white line round the edge of the drawing,
-     for as long as the arriving took.  The two are one thing and move as one. */
   /* The paper is two things wearing one color: the rectangle the drawing
      fills, and the rounded block it is clipped to.  This selector catches
      both -- the block takes a background, the rectangle a fill -- so a new
@@ -2473,30 +2485,42 @@
                 background-color var(--move) var(--ease-soft),
                 fill var(--move) var(--ease-soft);
   }
-  .sheet.fresh { animation: chart-in .45s var(--ease) backwards; }
-  @keyframes chart-in { from { opacity: 0; transform: translateY(8px) scale(.99); } }
-  /* And the chart on it puts itself together in the order the program
-     reads: the script tells each part when its turn is, and this is only
-     what a turn looks like.  A shape rises a little into place -- moved,
-     never scaled, for the reason given for the step marker below -- a
-     line is drawn out of the shape it leaves, and its arrowhead, its
-     True or False and the patch behind them land as the line arrives.
-     The line is drawn with a dash exactly as long as itself, slid along
-     it; the script measures how long that is. */
-  #sheet.fresh.cascade svg .node {
-    animation: node-in .42s var(--ease) backwards;
-    animation-delay: var(--in, 0ms);
-  }
-  #sheet.fresh.cascade svg .flow {
+  /* A new chart is drawn onto the paper rather than arriving on it (see
+     "drawn in ink" in 26-motion.js).  The script says when each piece's
+     turn comes and how long it takes; this is only what a turn looks like.
+
+     A piece waiting for the pen is not there.  Its turn come, a line is
+     drawn along itself with a dash exactly as long as it is, slid along
+     it; the outline of a shape is drawn the same way, and its color washes
+     in once the outline is closed; words are written in from the left; an
+     arrowhead lands.  All of it at one pace: the curve is a straight one,
+     because a pen that slows down at the end of every line is not drawing
+     at one speed.
+
+     --late is how far behind its turn a piece was started, taken off every
+     delay so a frame that came late does not slow anything down.  Paper
+     and drawing are left alone: nothing moves, nothing is scaled. */
+  svg .ink-wait { visibility: hidden; }
+  svg .ink-line {
     stroke-dasharray: var(--len) var(--len);
-    animation: flow-draw .3s var(--ease-soft) backwards;
-    animation-delay: var(--in, 0ms);
+    animation: ink-line var(--dur) linear var(--late, 0ms) backwards,
+               ink-wash .32s var(--ease-soft) calc(var(--dur) + var(--late, 0ms)) backwards;
   }
-  #sheet.fresh.cascade svg :is(.head, .label, .patch) {
-    animation: fade-in .2s var(--ease-soft) backwards;
-    animation-delay: var(--in, 0ms);
+  svg .flow.ink-line { animation: ink-line var(--dur) linear var(--late, 0ms) backwards; }
+  svg .ink-wash {
+    animation: ink-wash .32s var(--ease-soft)
+               calc(var(--d, 0ms) + var(--late, 0ms)) backwards;
   }
-  @keyframes node-in { from { opacity: 0; transform: translateY(7px); } }
+  svg .ink-write {
+    animation: ink-write var(--dur) linear calc(var(--d, 0ms) + var(--late, 0ms)) backwards;
+  }
+  svg .ink-pop { animation: fade-in .16s var(--ease-soft) var(--late, 0ms) backwards; }
+  @keyframes ink-line { from { stroke-dashoffset: var(--len); } }
+  @keyframes ink-wash { from { fill-opacity: 0; } }
+  @keyframes ink-write {
+    from { clip-path: inset(0 100% 0 0); }
+    to { clip-path: inset(0 0 0 0); }
+  }
   @keyframes flow-draw { from { stroke-dashoffset: var(--len); } }
   @keyframes fade-out { to { opacity: 0; } }
 
@@ -3764,6 +3788,7 @@
     var had = el(".highlights", g);
     if (had) { had.remove(); }
     if (!color || !texts.length) { return; }
+    inView(g);                           // a word left out cannot be measured
     var NS = "http://www.w3.org/2000/svg";
     var pen = document.createElementNS(NS, "g");
     pen.setAttribute("class", "highlights");
@@ -4962,7 +4987,9 @@
     spot.x = ev.clientX;
     spot.y = ev.clientY;
     spot = spot.matrixTransform(frame.inverse());
-    return { x: spot.x, y: spot.y };   // the paper's corner is the origin
+    // The paper's corner is the origin -- except by hand, where the paper
+    // can reach out past where the design's own numbers start.
+    return byHand ? onHand(spot) : { x: spot.x, y: spot.y };
   }
 
   // How much chart there is to shift about.  A chart of a few dozen shapes
@@ -4982,6 +5009,7 @@
     chart.id = "chart";
     var box = (chart.getAttribute("viewBox") || "").split(/[\s,]+/).map(Number);
     W = box[2] || 800; H = box[3] || 600;
+    readBands();         // before anything has the page lay the chart out
     heavy = chart.querySelectorAll(".node").length > HEAVY;
     sizeList();          // what a PNG of it comes to, now the chart is known
     chart.onclick = function (ev) {
@@ -4989,7 +5017,7 @@
       if (byHand) {
         var arrow = ev.target.closest ? ev.target.closest(".link") : null;
         var spot = ev.target.closest ? ev.target.closest(".spot") : null;
-        if (spot) { handClick(+spot.dataset.i); return; }
+        if (spot) { handClick(+spot.dataset.i, +spot.dataset.side); return; }
         if (g) { handClick(+g.dataset.i.slice(1)); }
         else if (arrow) { pickLink(+arrow.dataset.link); }
         else {
@@ -5068,6 +5096,62 @@
     return (seen[id] || []).filter(function (g) { return g.isConnected; });
   }
 
+  // ---------------------------------------------- only what can be seen --
+  // A browser lays out every word of a drawing, on the screen or not, and
+  // lays every one of them out again whenever the zoom changes.  On a chart
+  // of thirty thousand shapes that was a second and a half on arrival and
+  // half a second for every step of the zoom, spent on words thousands of
+  // screens away.  So the drawing of a chart that big comes in bands, each
+  // a stretch of its height (draw/svg.py), and only the bands near what is
+  // on the stage are drawn at all: the rest are left out until the view
+  // comes near them.  Nothing is taken out of the chart -- every shape is
+  // still there to be found, colored, counted, saved and printed, and a
+  // copy of the chart carries every band -- it is only not laid out.
+  //
+  // Anything about to measure a shape asks for its band first (inView), so
+  // that nothing is measured while it is left out.
+  var bands = [];                        // this drawing's bands, if any
+  function readBands() {
+    bands = [];
+    all(".stretch", chart).forEach(function (g) {
+      var y = (g.getAttribute("data-y") || "").split(" ").map(Number);
+      var sure = y.length === 2 && isFinite(y[0]) && isFinite(y[1]);
+      bands.push({ el: g, on: false, top: sure ? y[0] : -Infinity,
+                   foot: sure ? y[1] : Infinity });
+    });
+    if (bands.length) { chart.classList.add("culled"); }
+  }
+
+  // The bands a screen and a half either side of what the stage shows.
+  // Measured off the page, like the camera, so that it is right however the
+  // chart got where it is: scrolled, carried, zoomed or drawn again.
+  function showBands() {
+    if (!chart || !bands.length || !zoom) { return; }
+    var stage = el("#stage");
+    if (!stage) { return; }
+    var r = chart.getBoundingClientRect(), s = stage.getBoundingClientRect();
+    var top = (s.top - r.top) / zoom, foot = (s.bottom - r.top) / zoom;
+    var pad = Math.max(600, (foot - top) * 1.5);
+    top -= pad;
+    foot += pad;
+    bands.forEach(function (b) {
+      var on = b.foot >= top && b.top <= foot;
+      if (on !== b.on) { b.on = on; b.el.classList.toggle("seen", on); }
+    });
+  }
+
+  function inView(g) {
+    var band = g && g.closest ? g.closest(".stretch") : null;
+    if (!band || band.classList.contains("seen")) { return; }
+    band.classList.add("seen");
+    bands.forEach(function (b) { if (b.el === band) { b.on = true; } });
+  }
+
+  if (el("#stage")) {
+    el("#stage").addEventListener("scroll", showBands, { passive: true });
+  }
+  window.addEventListener("resize", showBands);
+
   // Carrying something towards the edge takes the view with it.  Without
   // this, dragging a shape to where there is no room yet means letting go,
   // scrolling, picking it up again, and again -- when what you meant was
@@ -5120,6 +5204,9 @@
       ev.stopPropagation();
       var from = nodeById(+knob.dataset.i);
       if (!from) { return; }
+      // The dot it was drawn from is the side it leaves by, from now on.
+      var side = +knob.dataset.side;
+      var start = ports(from)[side] || from;
       try { svg.setPointerCapture(ev.pointerId); } catch (e) { /* mouse: fine */ }
       keepUndo();                        // joining two up can be stepped back
       // What is being drawn is an arrow, so it is drawn as one: a solid line
@@ -5134,15 +5221,51 @@
       tip.setAttribute("class", "band-tip");
       band.appendChild(wire);
       band.appendChild(tip);
+      // Every other shape puts its dots out while the line is drawn, the way
+      // they do for click a dot, click a dot, so that a line dragged can be
+      // let go on the side it should come in by as well as be drawn from the
+      // side it leaves by.  The dot the point comes near lights up, the
+      // point goes to it, and that is the side the arrow keeps.
+      var aims = document.createElementNS("http://www.w3.org/2000/svg", "g");
+      aims.setAttribute("class", "aims");
+      hand.nodes.forEach(function (n) {
+        if (n.id === from.id) { return; }
+        ports(n).forEach(function (port, s) {
+          var dot = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+          dot.setAttribute("class", "spot");
+          dot.setAttribute("data-i", n.id);
+          dot.setAttribute("data-side", s);
+          dot.setAttribute("cx", port.x + handOrigin.x + port.dx * 1.5);
+          dot.setAttribute("cy", port.y + handOrigin.y + port.dy * 1.5);
+          dot.setAttribute("r", DOT_SPOT);
+          aims.appendChild(dot);
+        });
+      });
+      svg.appendChild(aims);
       svg.appendChild(band);
+      var aimed = null;                  // the dot it would go to, let go now
       var box = svg.getBoundingClientRect();
       var scale = (box.width || W) / W;
       var at = { x: ev.clientX, y: ev.clientY };
+      // Drawn on the paper, so from where the dot is on the paper.
+      var fromX = start.x + handOrigin.x, fromY = start.y + handOrigin.y;
       function reach() {
         box = svg.getBoundingClientRect();   // the view may have moved under us
         var toX = (at.x - box.left) / scale, toY = (at.y - box.top) / scale;
-        wire.setAttribute("d", "M" + from.x + "," + from.y + "L" + toX + "," + toY);
-        var dx = toX - from.x, dy = toY - from.y;
+        var near = null, nearest = Math.pow(18 / scale, 2);
+        Array.prototype.forEach.call(aims.childNodes, function (dot) {
+          var far = Math.pow(dot.getAttribute("cx") - toX, 2) +
+                    Math.pow(dot.getAttribute("cy") - toY, 2);
+          if (far < nearest) { nearest = far; near = dot; }
+        });
+        if (near !== aimed) {
+          if (aimed) { aimed.classList.remove("aimed"); aimed.setAttribute("r", DOT_SPOT); }
+          if (near) { near.classList.add("aimed"); near.setAttribute("r", DOT_SPOT + 2); }
+          aimed = near;
+        }
+        if (aimed) { toX = +aimed.getAttribute("cx"); toY = +aimed.getAttribute("cy"); }
+        wire.setAttribute("d", "M" + fromX + "," + fromY + "L" + toX + "," + toY);
+        var dx = toX - fromX, dy = toY - fromY;
         var run = Math.hypot(dx, dy) || 1;
         var ux = dx / run, uy = dy / run;
         var back = 11, wide = 4.5;
@@ -5163,21 +5286,25 @@
         window.removeEventListener("pointermove", move);
         window.removeEventListener("pointerup", drop);
         band.remove();
+        aims.remove();
         var went = Math.abs(e.clientX - ev.clientX) + Math.abs(e.clientY - ev.clientY);
         if (went < 5) {
           // Pressed and let go on the spot: take it as a click, and wait for
           // the shape it should go to rather than asking for a drag.
           picked = from.id;
           joining = true;
+          joinFrom = { id: from.id, side: side };   // and it leaves from here
           drawHand();
           drawHandPanel();
           return;
         }
         var under = document.elementFromPoint(e.clientX, e.clientY);
         var g = under && under.closest ? under.closest(".node") : null;
-        var dot = under && under.closest ? under.closest(".spot") : null;
-        if (dot) { joinUp(from.id, +dot.dataset.i); return; }
-        if (g) { joinUp(from.id, +g.dataset.i.slice(1)); return; }
+        var dot = aimed || (under && under.closest ? under.closest(".spot") : null);
+        // Let go on a dot, it goes in there; anywhere else on the shape, it
+        // goes in whichever side is free and suits it.
+        if (dot) { joinUp(from.id, +dot.dataset.i, side, +dot.dataset.side); return; }
+        if (g) { joinUp(from.id, +g.dataset.i.slice(1), side); return; }
         // Let go over nothing.  The shape you were drawing from stays the one
         // in hand, so you can simply try again rather than hunt for it.
         picked = from.id;
@@ -5238,24 +5365,34 @@
       var wasDown = stage ? stage.scrollTop : 0;
       var wasHoldX = holdX, wasHoldY = holdY;
       var at = { x: ev.clientX, y: ev.clientY };
+      var pressed = onPaper(ev);         // where on the design it was taken up
 
       function move(e) {
         at = { x: e.clientX, y: e.clientY };
         carry();
       }
       function carry() {
-        // How far the view itself has travelled since the press, which the
-        // shape has to make up if it is to stay under the mouse: scrolled
-        // one way, or, on a loose chart, carried the other.
-        var gone = ((stage ? stage.scrollLeft - wasLeft : 0)
-                    - (holdX - wasHoldX)) / scale;
-        var fell = ((stage ? stage.scrollTop - wasDown : 0)
-                    - (holdY - wasHoldY)) / scale;
-        var dx = (at.x - fromX) / scale + gone;
-        var dy = (at.y - fromY) / scale + fell;
+        // How far it has been carried, on the design: where the mouse is on
+        // it now against where it was pressed, asked of the page.  Adding up
+        // how far the view had travelled since the press -- scrolled one way,
+        // or, on a loose chart, carried the other -- counted the view being
+        // put back while the paper grew (keepStill) as the view moving, and
+        // pushed the shape on by that much again.
+        var here = pressed && onPaper({ clientX: at.x, clientY: at.y });
+        var dx, dy;
+        if (here) {
+          dx = here.x - pressed.x;
+          dy = here.y - pressed.y;
+        } else {                         // a drawing the page will not place
+          dx = (at.x - fromX) / scale + ((stage ? stage.scrollLeft - wasLeft : 0)
+                                         - (holdX - wasHoldX)) / scale;
+          dy = (at.y - fromY) / scale + ((stage ? stage.scrollTop - wasDown : 0)
+                                         - (holdY - wasHoldY)) / scale;
+        }
         if (!stirred && Math.abs(dx) < NUDGE && Math.abs(dy) < NUDGE) { return; }
         if (!noted) { noted = true; keepUndo(); }
         stirred = true;
+        shapeCarried = true;                // the view is kept still under it
         chase(at, carry);
         if (grip) {
           // The corner opposite the one being held stays where it is, so the
@@ -5289,6 +5426,7 @@
       function drop() {
         chaseStop();
         guides = [];                     // the red lines go with the holding
+        shapeCarried = false;
         window.removeEventListener("pointermove", move);
         window.removeEventListener("pointerup", drop);
         if (!stirred && g) {
@@ -5303,7 +5441,7 @@
             if (now) { typeInto(now); }
           }
         }
-        else { drawHand(); drawHandPanel(); }
+        else { drawHand(); drawHandPanel(); letGo(); }
       }
       window.addEventListener("pointermove", move);
       window.addEventListener("pointerup", drop);
@@ -5340,6 +5478,7 @@
     chart.removeAttribute("height");
     el("#pct").textContent = Math.round(zoom * 100) + "%";
     holdClamp();                         // a bigger chart has less room to roam
+    showBands();                         // closer in, or further out
   }
   // A step that would carry the zoom past actual size stops there instead.
   // Every zoom set by something other than these two buttons -- Fit, or a
@@ -5441,6 +5580,7 @@
     var dy = (r.top + y * zoom) - (s.top + stage.clientHeight / 2);
     if (loose) { holdBy(-dx, -dy); }
     else { stage.scrollLeft += dx; stage.scrollTop += dy; }
+    showBands();                         // before anything looks at it
   }
 
   // Where the flow begins, put where it can be seen.  The stage keeps
@@ -5459,6 +5599,7 @@
     if (!chart || !stage) { return; }
     var first = el('.node[data-kind="oval"]', chart) || el(".node", chart);
     if (!first || !first.getBBox) { return; }
+    inView(first);
     var box;
     try { box = first.getBBox(); } catch (e) { return; }
     var down = stage.clientHeight * 0.35 / Math.max(zoom, 0.01);
@@ -5533,6 +5674,7 @@
   function followNode(node) {
     var stage = el("#stage"), box = null;
     if (!stage || !node || !node.getBBox) { return; }
+    inView(node);
     try { box = node.getBBox(); } catch (e) { return; }
     if (!box || !box.width || !box.height) { return; }
     var across = stage.clientWidth - 52, down = stage.clientHeight - 52;
@@ -5582,6 +5724,7 @@
     if (!wrap) { return; }
     wrap.style.setProperty("--hold-x", holdX.toFixed(1) + "px");
     wrap.style.setProperty("--hold-y", holdY.toFixed(1) + "px");
+    showBands();                         // carried, not scrolled: no event says so
   }
 
   // Where the offset is allowed to be, given how big the chart is right now
@@ -5627,6 +5770,61 @@
     holdX += dx;
     holdY += dy;
     holdClamp();
+  }
+
+  // Keeping the view still while the paper changes size under it.  Drawn
+  // by hand, the paper grows to take whatever is put near its edge -- on
+  // either side -- and what is on it would move with it: more paper on the
+  // left pushes everything right, and a paper narrower than the stage sits
+  // in the middle of it, so it moves by half of whatever it grows by, on
+  // whichever side.  `dx` is how far the drawing has just moved across the
+  // screen; this moves it back.  Loose, the chart is carried back; held,
+  // the stage is scrolled back, as far as it can be.
+  //
+  // What scrolling cannot take -- all of it, while the paper is narrower
+  // than the stage and has no scrolling to do -- the paper is pushed back
+  // for instead, for as long as a shape is being carried, so the one being
+  // carried stays under the mouse and nothing else moves at all.  Let go,
+  // and it settles back into the middle of the stage.
+  var shapeCarried = false;               // a shape is being dragged about
+  var drift = 0;                         // how far the paper is pushed across
+
+  function keepStill(dx) {
+    var stage = el("#stage"), paper = el("#sheet");
+    if (!stage || !paper || !(Math.abs(dx) >= 0.05)) { return; }
+    if (loose) { holdBy(-dx, 0); return; }
+    // Still settling back from the last time?  Then from where it has got to.
+    if (paper.style.transition.indexOf("transform") >= 0) {
+      var now = /matrix\(([^)]+)\)/.exec(getComputedStyle(paper).transform);
+      drift = now ? parseFloat(now[1].split(",")[4]) || 0 : 0;
+    }
+    var was = stage.scrollLeft;
+    stage.scrollLeft = was + dx - drift;   // and what was pushed, if it can
+    drift += stage.scrollLeft - was - dx;
+    if (Math.abs(drift) < 0.5) { drift = 0; }
+    paper.style.transition = "";
+    paper.style.transform = drift ? "translateX(" + drift.toFixed(1) + "px)" : "";
+    if (!shapeCarried) { letGo(); }
+  }
+
+  function letGo() {
+    var stage = el("#stage"), paper = el("#sheet");
+    if (!paper || !drift) { drift = 0; return; }
+    var was = stage ? stage.scrollLeft : 0;
+    if (stage) { stage.scrollLeft = was - drift; }
+    var rest = drift + (stage ? stage.scrollLeft - was : 0);
+    drift = 0;
+    paper.style.transition = "none";
+    paper.style.transform = "";
+    if (Math.abs(rest) < 0.5 || STILL) { paper.style.transition = ""; return; }
+    paper.style.transform = "translateX(" + rest.toFixed(1) + "px)";
+    void paper.offsetWidth;              // from there, not from nothing
+    paper.style.transition = "transform .3s var(--ease)";
+    paper.style.transform = "";
+    var mine = letGo.last = (letGo.last || 0) + 1;
+    setTimeout(function () {             // and the paper's own transitions back
+      if (mine === letGo.last && !drift) { paper.style.transition = ""; }
+    }, 340);
   }
 
   // Switching either way leaves the chart looking exactly where it was.
@@ -5875,11 +6073,22 @@
     copy.removeAttribute("style");
     copy.removeAttribute("id");
     all(".node.on", copy).forEach(function (g) { g.classList.remove("on"); });
+    wholeCopy(copy);
     copy.setAttribute("xmlns", "http://www.w3.org/2000/svg");
     copy.setAttribute("width", Math.round(W * (scale || 1)));
     copy.setAttribute("height", Math.round(H * (scale || 1)));
     return '<?xml version="1.0" encoding="UTF-8"?>\n' +
            new XMLSerializer().serializeToString(copy);
+  }
+  // A copy of the chart is the whole of it.  The page leaves the bands of a
+  // big chart that are nowhere near the screen out of its own drawing (see
+  // showBands), and says so with a word on the chart and on each band it
+  // shows; a copy away from the page has nothing to leave out for, so the
+  // words come off it and every band is in it.
+  function wholeCopy(copy) {
+    copy.classList.remove("culled");
+    all(".stretch.seen", copy).forEach(function (b) { b.classList.remove("seen"); });
+    if (!copy.getAttribute("class")) { copy.removeAttribute("class"); }
   }
   var svgUrl = null;
   function linkSvg() {
@@ -6215,6 +6424,7 @@
       g.classList.remove("on");
       g.classList.remove("now");
     });
+    wholeCopy(copy);                     // every band, on paper
     // Millimetres, so the drawing arrives on the sheet the size it says it
     // is rather than at whatever a pixel turns out to be on this printer.
     var w = W * MM, h = H * MM;
@@ -6348,6 +6558,7 @@
       if (first) { self.postMessage({ id: job.id, note: "starting" }); }
       start(job).then(function (py) {
         if (first) { self.postMessage({ id: job.id, note: "ready" }); }
+        if (job.warm) { self.postMessage({ id: job.id, out: "" }); return; }
         var fn = py.globals.get("draw_json");
         var out = fn(job.ask);
         fn.destroy();
@@ -6412,6 +6623,37 @@
       pyJobs = {};
       return drawHere(ask);
     });
+  }
+
+  // Python, started in the worker while the program is still being written,
+  // so that the first build finds it ready.  It used to be started on the
+  // page's own thread instead: a whole second Python that no build ever
+  // used, since every build is drawn in the worker.  The first build still
+  // waited for the worker's Python to start from nothing, and the page went
+  // on holding both of them -- memory a program of forty thousand lines
+  // needs for itself.  Where there is no worker, it is the old way still.
+  function warmAside() {
+    var hand = pythonHand();
+    if (!hand) { startPython(); return; }
+    var says = el("#build-note");
+    var id = pyNext++;
+    function unsaid() {                  // "starting", once it no longer is
+      if (says && says.textContent === TXT.starting) { says.textContent = TXT.ready; }
+    }
+    pyJobs[id] = {
+      go: unsaid,
+      no: function () {                  // the build will try again, and say so
+        if (says && says.textContent === TXT.starting) { says.textContent = ""; }
+      },
+      note: function (what) {
+        if (what === "starting" && says && !says.textContent) {
+          says.className = "";
+          says.textContent = TXT.starting;
+        }
+      }
+    };
+    hand.postMessage({ id: id, warm: true, where: PYODIDE,
+                       root: new URL(".", location.href).href, files: PYFILES });
   }
 
   function drawHere(ask) {               // the slow way: on the page's thread
@@ -7107,6 +7349,7 @@
   var HAND_RULE = 20;                    // what is drawn
   var HAND_GRID = HAND_RULE / 4;         // what shapes settle on
   var picked = null, chosen = null, joining = false;
+  var joinFrom = null;                   // the dot a line being joined leaves by
 
   // Lining things up.  While a shape is being carried, its middle is watched
   // against the middle of every other shape; come within reach of one and it
@@ -7351,18 +7594,29 @@
         pts.push([midx, a[1]], [midx, b[1]]);
       }
     } else if (p.dx === 0) {                        // one of each
-      pts.push([a[0], b[1]]);
+      // Round by a lane, the line runs out along it and then comes in at
+      // the side it was told to -- asked for only when that side is fixed.
+      if (lane != null) { pts.push([a[0], lane], [b[0], lane]); }
+      else { pts.push([a[0], b[1]]); }
     } else {
-      pts.push([b[0], a[1]]);
+      if (lane != null) { pts.push([lane, a[1]], [lane, b[1]]); }
+      else { pts.push([b[0], a[1]]); }
     }
     pts.push(b, [q.x, q.y]);
     return tidy(pts);
   }
 
+  // A line within this much of a shape's outline counts as going through
+  // it.  Run straight down the edge of a box, it is read as part of the
+  // box -- and it was allowed to, since only running inside one counted,
+  // so a line could come down one side of a box and straight through the
+  // point of the arrowhead going into it.
+  var GRAZE = 2;
+
   function cutsThrough(pts, node, from, to) {   // does any leg cross this shape
     var n = turned(node);
-    var x0 = n.x - n.w / 2 + 1, x1 = n.x + n.w / 2 - 1;
-    var y0 = n.y - n.h / 2 + 1, y1 = n.y + n.h / 2 - 1;
+    var x0 = n.x - n.w / 2 - GRAZE, x1 = n.x + n.w / 2 + GRAZE;
+    var y0 = n.y - n.h / 2 - GRAZE, y1 = n.y + n.h / 2 + GRAZE;
     var first = from == null ? 1 : from;
     var last = to == null ? pts.length - 1 : to;
     for (var i = first; i <= last; i++) {
@@ -7407,23 +7661,87 @@
     return through * 10000 + bends * 100 + len;
   }
 
-  function linkPath(a, b) {               // corners only, never a diagonal
-    var outs = ports(a), ins = ports(b);
-    var best = null, bestPrice = Infinity;
+  // Round a corner by two lanes: out along one, over along the other, and
+  // in.  Only a line whose sides are fixed needs this -- one that has to
+  // leave from the foot and come back in at the top of a shape above it,
+  // say -- since any other can simply take the sides that face each other.
+  function roundPorts(p, q, laneY, laneX) {
+    var a = [p.x + p.dx * STAND, p.y + p.dy * STAND];
+    var b = [q.x + q.dx * STAND, q.y + q.dy * STAND];
+    var pts = [[p.x, p.y], a];
+    if (p.dx === 0) {
+      pts.push([a[0], laneY], [laneX, laneY], [laneX, b[1]]);
+    } else {
+      pts.push([laneX, a[1]], [laneX, laneY], [b[0], laneY]);
+    }
+    pts.push(b, [q.x, q.y]);
+    return tidy(pts);
+  }
 
+  // Whether a line leaves its shape the way the side it leaves by faces,
+  // and comes in to the other the way that side faces.  Out of the right
+  // side and then straight back left again is out and back through the
+  // shape it came from -- but tidy() sees the stand-off and the run back
+  // as one straight line and makes them one, so nothing else notices.  No
+  // side a line was free to pick ever wanted it; a side it has to keep, to
+  // a shape round the back of it, would take it every time.  Nor, on a
+  // side it has to keep (`keepP`, `keepQ`), may it turn before it is a
+  // stand-off clear: out a pixel and straight down again runs down the
+  // side of the shape it has just left.
+  function outward(pts, p, q, keepP, keepQ) {
+    var first = pts[1], last = pts[pts.length - 2], bent = pts.length > 2;
+    return (first[0] - p.x) * p.dx + (first[1] - p.y) * p.dy >
+             (bent && keepP ? STAND - 0.5 : 0.5) &&
+           (last[0] - q.x) * q.dx + (last[1] - q.y) * q.dy >
+             (bent && keepQ ? STAND - 0.5 : 0.5);
+  }
+
+  // The four sides of a shape, in the order ports() gives them.  An arrow
+  // drawn from one of the dots on a shape to one of the dots on another
+  // keeps those two sides for good (link.fromSide, link.toSide), however
+  // the shapes are moved about afterwards: it was put there on purpose.
+  var PORT_SIDES = ["top", "foot", "left", "right"];
+  // What it costs a line to use a side another line already uses.  Less
+  // than running through a shape, which is harder still to follow, but a
+  // good deal more than a longer way round: two arrows down one side read
+  // as one arrow, and nobody can tell which way either of them goes.
+  var CROWD = 3000;
+
+  function linkPath(a, b, link, taken) {  // corners only, never a diagonal
+    var outs = ports(a), ins = ports(b);
+    var best = null, bestPrice = Infinity, bestOut = 0, bestIn = 0;
+    var outOnly = link ? PORT_SIDES.indexOf(link.fromSide) : -1;
+    var inOnly = link ? PORT_SIDES.indexOf(link.toSide) : -1;
+
+    // `taken` says how many other lines are on each side of each shape.
+    function crowd(id, side) {
+      var here = taken && taken[id];
+      return here ? here[side] || 0 : 0;
+    }
     function weigh(pts, i, j) {
       // down out of one and in at the top of the next is how a flowchart
       // reads, so it wins any tie
       var price = priceOf(pts, a, b) - (i === 1 && j === 0 ? 1 : 0);
-      if (price < bestPrice) { best = pts; bestPrice = price; }
+      if (!outward(pts, outs[i], ins[j], outOnly >= 0, inOnly >= 0)) { price += 10000; }
+      if (outOnly < 0) { price += CROWD * crowd(a.id, i); }
+      if (inOnly < 0) { price += CROWD * crowd(b.id, j); }
+      if (price < bestPrice) { best = pts; bestPrice = price; bestOut = i; bestIn = j; }
+    }
+    function tryJoin(i, j, lane) {        // unless a side it has to keep says no
+      if ((outOnly >= 0 && i !== outOnly) || (inOnly >= 0 && j !== inOnly)) { return; }
+      weigh(joinPorts(outs[i], ins[j], lane), i, j);
+    }
+    function done() {                     // and which sides it went by
+      best.sides = [bestOut, bestIn];
+      return best;
     }
 
     for (var i = 0; i < outs.length; i++) {
       for (var j = 0; j < ins.length; j++) {
-        weigh(joinPorts(outs[i], ins[j]), i, j);
+        tryJoin(i, j);
       }
     }
-    if (bestPrice < 10000) { return best; }     // nothing in the way: done
+    if (bestPrice < 10000) { return done(); }   // nothing in the way: done
 
     // Something is in the way of every straight join, so look for a lane to
     // go round by -- just clear of each shape's own edges, which is where a
@@ -7456,21 +7774,110 @@
         return Math.abs(p - to) - Math.abs(q - to);
       }).slice(0, NEAREST);
     }
+    var allY = lanesY.slice(), allX = lanesX.slice();
     lanesY = closest(lanesY, (a.y + b.y) / 2);
     lanesX = closest(lanesX, (a.x + b.x) / 2);
+    // A line held to a side wants the lanes just outside that side as well,
+    // and those can be further off than half way: the one lane that gets a
+    // line from the right of a decision round to a box below and to its
+    // left is the one just right of the decision.
+    var endsY = [], endsX = [];
+    if (outOnly >= 0 || inOnly >= 0) {
+      var p0 = outOnly >= 0 ? outs[outOnly] : { x: a.x, y: a.y, dx: 0, dy: 0 };
+      var q0 = inOnly >= 0 ? ins[inOnly] : { x: b.x, y: b.y, dx: 0, dy: 0 };
+      // and the lanes just clear of both shapes at once, which is the way
+      // round the outside of the pair: out of the top and back in at the
+      // foot of a shape below, say
+      var ta = turned(a), tb = turned(b);
+      endsY = merged(nearBoth(allY, p0.y + p0.dy * STAND, q0.y + q0.dy * STAND),
+                     [Math.min(ta.y - ta.h / 2, tb.y - tb.h / 2) - STAND,
+                      Math.max(ta.y + ta.h / 2, tb.y + tb.h / 2) + STAND]);
+      endsX = merged(nearBoth(allX, p0.x + p0.dx * STAND, q0.x + q0.dx * STAND),
+                     [Math.min(ta.x - ta.w / 2, tb.x - tb.w / 2) - STAND,
+                      Math.max(ta.x + ta.w / 2, tb.x + tb.w / 2) + STAND]);
+      lanesY = merged(lanesY, endsY);
+      lanesX = merged(lanesX, endsX);
+    }
+    function nearBoth(lanes, one, two) {
+      return merged(closest(lanes.slice(), one).slice(0, NEAREST / 2),
+                    closest(lanes.slice(), two).slice(0, NEAREST / 2));
+    }
+    function merged(one, two) {
+      return one.concat(two.filter(function (v) { return one.indexOf(v) < 0; }));
+    }
     for (var k = 0; k < lanesY.length; k++) {
       for (var m = 0; m < 2; m++) {             // out of the top or the foot
-        weigh(joinPorts(outs[m], ins[1 - m], lanesY[k]), m, 1 - m);
-        weigh(joinPorts(outs[m], ins[m], lanesY[k]), m, m);
+        tryJoin(m, 1 - m, lanesY[k]);
+        tryJoin(m, m, lanesY[k]);
       }
     }
     for (k = 0; k < lanesX.length; k++) {
       for (m = 2; m < 4; m++) {                 // out of a side
-        weigh(joinPorts(outs[m], ins[5 - m], lanesX[k]), m, 5 - m);
-        weigh(joinPorts(outs[m], ins[m], lanesX[k]), m, m);
+        tryJoin(m, 5 - m, lanesX[k]);
+        tryJoin(m, m, lanesX[k]);
       }
     }
-    return best;
+    if (bestPrice < 10000 || (outOnly < 0 && inOnly < 0)) { return done(); }
+
+    // A line held to its sides may have none of those ways open to it: out
+    // of the foot and into a side, or back up to the top of a shape above.
+    // So it may also go out along a lane and come in from one side, or
+    // round a corner by two lanes, one each way.
+    for (k = 0; k < lanesY.length; k++) {
+      for (i = 0; i < 2; i++) { tryJoin(i, 2, lanesY[k]); tryJoin(i, 3, lanesY[k]); }
+    }
+    for (k = 0; k < lanesX.length; k++) {
+      for (i = 2; i < 4; i++) { tryJoin(i, 0, lanesX[k]); tryJoin(i, 1, lanesX[k]); }
+    }
+    if (bestPrice < 10000) { return done(); }
+    for (i = 0; i < 4; i++) {             // round a corner, near its two ends
+      for (j = 0; j < 4; j++) {
+        if ((outOnly >= 0 && i !== outOnly) || (inOnly >= 0 && j !== inOnly)) { continue; }
+        for (k = 0; k < endsY.length; k++) {
+          for (m = 0; m < endsX.length; m++) {
+            // half of these double straight back, and are not worth pricing
+            var round = roundPorts(outs[i], ins[j], endsY[k], endsX[m]);
+            if (outward(round, outs[i], ins[j], outOnly >= 0, inOnly >= 0)) {
+              weigh(round, i, j);
+            }
+          }
+        }
+      }
+    }
+    return done();
+  }
+
+  // Every arrow on the paper, routed in the order they were drawn, so that
+  // each one knows which sides the others have used.  A side an arrow was
+  // drawn to keeps is spoken for before anything is routed at all; every
+  // other arrow finds its own way, and stays off a side some other arrow is
+  // already on wherever it has a free one to take instead.
+  //
+  // It used to be that every arrow found its way as if it were the only
+  // one there, so the cheapest side for one was the cheapest for the next:
+  // two answers out of a decision could leave from the same point and run
+  // down the one line, and an arrow drawn from the right-hand dot would
+  // swap to the foot, where another already was, the moment a shape moved.
+  // Everything that asks where an arrow goes asks here, so that what is
+  // clicked, typed on and checked is the arrow that is drawn.
+  function routeAll() {
+    var taken = {};
+    function note(id, side) {
+      (taken[id] = taken[id] || [0, 0, 0, 0])[side]++;
+    }
+    hand.links.forEach(function (link) {
+      var i = PORT_SIDES.indexOf(link.fromSide), j = PORT_SIDES.indexOf(link.toSide);
+      if (i >= 0) { note(link.from, i); }
+      if (j >= 0) { note(link.to, j); }
+    });
+    return hand.links.map(function (link) {
+      var a = nodeById(link.from), b = nodeById(link.to);
+      if (!a || !b) { return null; }
+      var pts = linkPath(a, b, link, taken);
+      if (PORT_SIDES.indexOf(link.fromSide) < 0) { note(link.from, pts.sides[0]); }
+      if (PORT_SIDES.indexOf(link.toSide) < 0) { note(link.to, pts.sides[1]); }
+      return pts;
+    });
   }
 
   // How far a point is from a line between two points.  Used to work out
@@ -7490,11 +7897,10 @@
   // takes the nearest arrow within reach instead of just clearing what was
   // selected.
   function linkNear(x, y, within) {
-    var best = null, howNear = within;
-    hand.links.forEach(function (link) {
-      var a = nodeById(link.from), b = nodeById(link.to);
-      if (!a || !b) { return; }
-      var pts = linkPath(a, b);
+    var best = null, howNear = within, routes = routeAll();
+    hand.links.forEach(function (link, li) {
+      var pts = routes[li];
+      if (!pts) { return; }
       for (var i = 1; i < pts.length; i++) {
         var off = offLine(x, y, pts[i - 1][0], pts[i - 1][1], pts[i][0], pts[i][1]);
         if (off < howNear) { howNear = off; best = link; }
@@ -7534,49 +7940,261 @@
              wide: x };
   }
 
-  // The point half way along a path, by length rather than by how many
-  // corners it happens to have.
-  function halfWay(pts) {
-    function leg(i) {
-      return Math.hypot(pts[i + 1][0] - pts[i][0], pts[i + 1][1] - pts[i][1]);
+  // Where the word on an arrow goes.  First choice is half way along the
+  // longest straight run of it, and beside that run rather than on it --
+  // above it, and centred, where it goes across; to the right of it, and
+  // level with its middle, where it goes up or down.  Either way it keeps
+  // LABEL_CLEAR off the middle of the line, which is half an arrowhead and
+  // some clear paper more, so the head stays clear of it as well as the line.
+  //
+  // It was always put up and to the right of the half way point, a few
+  // pixels out.  Beside a line going up, that put the word against the
+  // side of the head; above a line going across it ran on towards the far
+  // end, over the head there and into the shape the arrow went into,
+  // which is drawn on top of it.  And half way by length could be right at
+  // a corner, with the word hanging off the end of one run and beside the
+  // next.
+  //
+  // Nor is the first choice taken where it is not clear.  Shapes are drawn
+  // over the arrows, so a word that reaches into a box is cut off by it --
+  // which on a short arrow between two boxes is where the middle puts it --
+  // and a word across another arrow is patched over half of that arrow.
+  // So the other side of the run is tried, and places further along it --
+  // right up against either end of it, too, which on an arrow shorter than
+  // the word puts the word over the shoulder of a diamond rather than into
+  // the box the arrow meets -- and the other runs; then all of that again
+  // further out from the line, by half the height of the words and then by
+  // the whole of it, since bigger words need to stand higher to clear the
+  // same shoulder.  The first spot that keeps LABEL_ROOM of clear paper
+  // from every shape, line and head is the one; where nothing does, the
+  // spot that comes nearest to it.
+  var LABEL_CLEAR = 9;                   // as label_clear() in layout/blocks.py
+  var LABEL_ROOM = 3;                    // clear enough, from anything else
+  var LABEL_HANGS = /[gjpqyQ,;()\[\]{}|_$@]/;   // letters that reach below the line
+  var LABEL_ALONG = [0.5, 0.3, 0.7, 0.15, 0.85];
+  var LABEL_OUT = [0, 0.6, 1.2];         // further out than LABEL_CLEAR, in capitals
+  var LABEL_END = 6;                     // a word against the end of a run stops this short
+
+  // How near the segment a-b comes to the box, less `pen`; below nought
+  // where they meet.
+  function segToBox(a, b, box, pen) {
+    var t0 = 0, t1 = 1, dx = b[0] - a[0], dy = b[1] - a[1];
+    var sides = [[-dx, a[0] - box.x0], [dx, box.x1 - a[0]],
+                 [-dy, a[1] - box.y0], [dy, box.y1 - a[1]]];
+    var meets = sides.every(function (pq) {
+      if (!pq[0]) { return pq[1] >= 0; }
+      var t = pq[1] / pq[0];
+      if (pq[0] < 0) { t0 = Math.max(t0, t); } else { t1 = Math.min(t1, t); }
+      return t0 <= t1;
+    });
+    if (meets) { return -pen - 1; }
+    function offBox(x, y) {
+      return Math.hypot(Math.max(box.x0 - x, 0, x - box.x1),
+                        Math.max(box.y0 - y, 0, y - box.y1));
     }
-    var far = 0, i;
-    for (i = 0; i < pts.length - 1; i++) { far += leg(i); }
-    var want = far / 2, gone = 0;
-    for (i = 0; i < pts.length - 1; i++) {
-      var here = leg(i);
-      if (here > 0 && gone + here >= want) {
-        var part = (want - gone) / here;
-        return [pts[i][0] + (pts[i + 1][0] - pts[i][0]) * part,
-                pts[i][1] + (pts[i + 1][1] - pts[i][1]) * part];
+    function offSeg(x, y) {
+      var run = dx * dx + dy * dy;
+      var t = run ? Math.max(0, Math.min(1, ((x - a[0]) * dx + (y - a[1]) * dy) / run)) : 0;
+      return Math.hypot(x - a[0] - dx * t, y - a[1] - dy * t);
+    }
+    return Math.min(offBox(a[0], a[1]), offBox(b[0], b[1]),
+                    offSeg(box.x0, box.y0), offSeg(box.x1, box.y0),
+                    offSeg(box.x0, box.y1), offSeg(box.x1, box.y1)) - pen;
+  }
+
+  // What a word on an arrow keeps clear of, worked out once a drawing: every
+  // shape -- a diamond as the diamond it is, so a word can stand by its
+  // point the way the built charts put one, anything else as the box it
+  // stands in -- every run of every arrow, every head, and the paper's edge.
+  function labelKeep(routes, heads, dx, dy, wide, tall) {
+    var shapes = hand.nodes.map(function (n) {
+      var t = turned(n), x = t.x + dx, y = t.y + dy;
+      var box = { x0: x - t.w / 2, y0: y - t.h / 2, x1: x + t.w / 2, y1: y + t.h / 2 };
+      if (n.kind !== "diamond") { return { box: box }; }
+      return { box: box, ring: [[x, box.y0], [box.x1, y], [x, box.y1], [box.x0, y]] };
+    });
+    var runs = [];
+    routes.forEach(function (pts) {
+      for (var i = 0; pts && i < pts.length - 1; i++) { runs.push([pts[i], pts[i + 1]]); }
+    });
+    return { shapes: shapes, runs: runs, heads: heads,
+             paper: { x0: 0, y0: dy, x1: wide, y1: tall } };
+  }
+
+  // The part of all that within reach of one arrow's words: a word never
+  // stands further off its arrow than this, so nothing further away can be
+  // in its way, and on a big design most of it is further away.
+  function labelNearby(keep, pts, reach) {
+    var x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+    pts.forEach(function (p) {
+      x0 = Math.min(x0, p[0]); y0 = Math.min(y0, p[1]);
+      x1 = Math.max(x1, p[0]); y1 = Math.max(y1, p[1]);
+    });
+    x0 -= reach; y0 -= reach; x1 += reach; y1 += reach;
+    function meets(ax, ay, bx, by) { return ax <= x1 && bx >= x0 && ay <= y1 && by >= y0; }
+    function along(seg) {
+      return meets(Math.min(seg[0][0], seg[1][0]), Math.min(seg[0][1], seg[1][1]),
+                   Math.max(seg[0][0], seg[1][0]), Math.max(seg[0][1], seg[1][1]));
+    }
+    return { paper: keep.paper,
+             shapes: keep.shapes.filter(function (s) {
+               return meets(s.box.x0, s.box.y0, s.box.x1, s.box.y1);
+             }),
+             runs: keep.runs.filter(along), heads: keep.heads.filter(along) };
+  }
+
+  // How much clear paper a word standing in `box` would have round it:
+  // below nought where it would run into something.  Once it is down to
+  // `floor` the rest is not looked at -- the spot is no use by then.
+  function labelClearance(box, keep, floor) {
+    var near = Math.min(box.x0 - keep.paper.x0, box.y0 - keep.paper.y0,
+                        keep.paper.x1 - box.x1, keep.paper.y1 - box.y1);
+    var i, j;
+    for (i = 0; i < keep.shapes.length && near > floor; i++) {
+      var s = keep.shapes[i], b = s.box;
+      var gapX = Math.max(b.x0 - box.x1, box.x0 - b.x1);
+      var gapY = Math.max(b.y0 - box.y1, box.y0 - b.y1);
+      if (gapX >= near || gapY >= near) { continue; }  // nowhere near it
+      if (!s.ring) {
+        near = Math.min(near, gapX > 0 && gapY > 0 ? Math.hypot(gapX, gapY)
+                                                   : Math.max(gapX, gapY));
+        continue;
       }
-      gone += here;
+      var r = s.ring, rx = (b.x1 - b.x0) / 2, ry = (b.y1 - b.y0) / 2;
+      var cx = (box.x0 + box.x1) / 2, cy = (box.y0 + box.y1) / 2;
+      if (Math.abs(cx - r[0][0]) / rx + Math.abs(cy - r[1][1]) / ry <= 1) {
+        near = Math.min(near, -1);            // standing inside it
+        continue;
+      }
+      for (j = 0; j < 4; j++) {
+        near = Math.min(near, segToBox(r[j], r[(j + 1) % 4], box, 0.65));
+      }
     }
-    return pts[pts.length - 1];
+    for (i = 0; i < keep.runs.length && near > floor; i++) {
+      near = Math.min(near, segToBox(keep.runs[i][0], keep.runs[i][1], box, 0.65));
+    }
+    for (i = 0; i < keep.heads.length && near > floor; i++) {   // 8 across its base
+      near = Math.min(near, segToBox(keep.heads[i][0], keep.heads[i][1], box, 4.3));
+    }
+    return near;
+  }
+
+  // The spot itself, from the word's measured width and what it has to keep
+  // clear of.  Kept apart from the measuring, which needs a page, so that
+  // the choice can be tried outside one (tests/router.js).
+  function labelPlace(pts, wide, size, drop, keep) {
+    var cap = size * 0.72, runs = [];
+    for (var i = 0; i < pts.length - 1; i++) {
+      runs.push({ a: pts[i], b: pts[i + 1], i: i,
+                  len: Math.hypot(pts[i + 1][0] - pts[i][0], pts[i + 1][1] - pts[i][1]) });
+    }
+    runs.sort(function (p, q) {                 // longest first; the first, if two tie
+      return Math.abs(q.len - p.len) > 0.5 ? q.len - p.len : p.i - q.i;
+    });
+    var best = null;
+    if (keep) {
+      keep = labelNearby(keep, pts, wide + cap + LABEL_CLEAR +
+                                    LABEL_OUT[LABEL_OUT.length - 1] * cap + LABEL_ROOM + 4);
+    }
+    function tryAt(x0, base) {
+      var box = { x0: x0, y0: base - cap, x1: x0 + wide, y1: base + drop };
+      // no use unless it is clear, or at least clearer than the best so far
+      var floor = best ? Math.min(LABEL_ROOM, best.near + 0.01) : -Infinity;
+      var near = keep ? labelClearance(box, keep, floor) : LABEL_ROOM;
+      if (!best || near > best.near + 0.01) { best = { x: x0, y: base, near: near }; }
+      return near >= LABEL_ROOM;
+    }
+    for (var o = 0; o < LABEL_OUT.length; o++) {
+      var off = LABEL_CLEAR + LABEL_OUT[o] * cap;
+      for (var r = 0; r < runs.length; r++) {
+        var a = runs[r].a, b = runs[r].b, len = runs[r].len || 1;
+        var across = Math.abs(b[0] - a[0]) >= Math.abs(b[1] - a[1]);
+        var span = across ? wide : cap;         // how much of the run the word takes
+        var at = LABEL_ALONG.map(function (t) { return t * len; })
+                            .concat([LABEL_END + span / 2, len - LABEL_END - span / 2]);
+        // and then everywhere along it, a few pixels at a time, as far as
+        // hanging a word's length past either end: an arrow that goes into
+        // the notch of a shape, or into the waist of a slanted side, ends
+        // inside the box the shape stands in, so against its end is not
+        // clear of that box, and only further back is
+        var step = Math.max(4, (len + span) / 24);
+        for (var s = -span / 2; s <= len + span / 2; s += step) { at.push(s); }
+        for (var k = 0; k < at.length; k++) {
+          var mx = a[0] + (b[0] - a[0]) * at[k] / len;
+          var my = a[1] + (b[1] - a[1]) * at[k] / len;
+          var done = across
+            ? tryAt(mx - wide / 2, my - off - drop) ||              // above
+              tryAt(mx - wide / 2, my + off + cap)                  // below
+            : tryAt(mx + off, my + cap / 2) ||                      // right
+              tryAt(mx - off - wide, my + cap / 2);                 // left
+          if (done) { return best; }
+        }
+      }
+    }
+    return best;
+  }
+
+  function labelSpot(pts, words, keep) {
+    var size = HAND_TYPE * chartPt() / PLAIN_PT;
+    var pen = measure.pen || (measure.pen = document.createElement("canvas")
+                              .getContext("2d"));
+    pen.font = "bold " + size + "px " + (FACES[lettersOf().face] || FACES.sans);
+    var wide = pen.measureText(words).width;
+    var drop = LABEL_HANGS.test(words) ? size * 0.21 : 0;
+    var spot = labelPlace(pts, wide, size, drop, keep);
+    return { x: spot.x, y: spot.y, wide: wide, size: size, drop: drop };
+  }
+
+  // Where the design's own 0,0 is on the paper.  The paper used to keep its
+  // corner there, and everything had to stay right of it and below it, so
+  // a chart could only ever be built out to the right: from a Start in the
+  // middle of the paper, a No going off to the left ran into the edge
+  // after a couple of hundred pixels.  Now the paper reaches out to the
+  // left for whatever is put there, a ruled square at a time, and the
+  // shapes keep their own numbers while it does -- only where the paper
+  // starts moves, so moving one shape still moves one shape and nothing
+  // else.  (The top stays put: that is where the flow starts from.)
+  var handOrigin = { x: 0, y: 0 };
+  var handPaper = null;                  // the drawing that was drawn last
+
+  function handScreenX() {               // the design's 0, across the screen
+    var r = chart.getBoundingClientRect();
+    return r.left + handOrigin.x * (r.width / (W || 1));
+  }
+  // A point on the paper, in the design's own numbers.
+  function onHand(p) {
+    return p && { x: p.x - handOrigin.x, y: p.y - handOrigin.y };
   }
 
   function drawHand() {
-    var pad = 40, maxx = 520, maxy = 280, ox = 0, oy = 0;
-    hand.nodes.forEach(function (n) {       // the paper keeps its corner, so
-      measure(n);                           //   moving one shape moves one
+    var pad = 40, maxx = 520, maxy = 280, ox = 0, oy = 0, least = Infinity;
+    hand.nodes.forEach(function (n) {
+      measure(n);
       var room = turned(n);
-      n.x = Math.max(room.w / 2 + 20, n.x); //   shape and nothing else
       n.y = Math.max(room.h / 2 + 20, n.y);
+      least = Math.min(least, n.x - room.w / 2);
       maxx = Math.max(maxx, n.x + room.w / 2);
       maxy = Math.max(maxy, n.y + room.h / 2);
     });
+    if (least < 20) {                  // out past the left edge: more paper
+      ox = Math.ceil((20 - least) / HAND_RULE) * HAND_RULE;
+    }
     var key = keyRow();
     oy = key.tall;                     // the chart sits below the key
-    var wide = Math.round(Math.max(maxx + pad, (key.wide || 0) + pad));
+    var wide = Math.round(Math.max(maxx + pad + ox, (key.wide || 0) + pad));
     var tall = Math.round(maxy + pad + key.tall);
+    // Where the design's 0,0 is on the screen before this drawing replaces
+    // the last, so the view can be kept still over it afterwards.
+    var before = handPaper && handPaper === chart ? handScreenX() : null;
 
     var out = ['<svg xmlns="http://www.w3.org/2000/svg" id="chart" width="' +
                wide + '" height="' + tall + '" viewBox="0 0 ' + wide + ' ' +
                tall + '">',
                '<rect class="sheet" width="100%" height="100%" fill="#ffffff"/>'];
     var fine = [], major = [], i;
+    var ruled = ox / HAND_RULE;        // the heavy lines stay with the shapes
     for (i = 0; i * HAND_RULE <= wide; i++) {
-      (i % 5 ? fine : major).push("M" + i * HAND_RULE + ",0V" + tall);
+      (((i - ruled) % 5 + 5) % 5 ? fine : major).push("M" + i * HAND_RULE + ",0V" + tall);
     }
     for (i = 0; i * HAND_RULE <= tall; i++) {
       (i % 5 ? fine : major).push("M0," + i * HAND_RULE + "H" + wide);
@@ -7592,11 +8210,27 @@
              'stroke-linecap="round" stroke-linejoin="round">');
 
     var tips = [];                     // held back so nothing paints over them
-    hand.links.forEach(function (link) {
-      var a = nodeById(link.from), b = nodeById(link.to);
-      if (!a || !b) { return; }
+    // Every arrow is routed before any is drawn, so that the word on one
+    // can keep clear of all the others, and of their heads.
+    var routes = routeAll().map(function (pts) {
+      return pts && pts.map(function (p) { return [p[0] + ox, p[1] + oy]; });
+    });
+    var keep = null;
+    if (hand.links.some(function (link) { return link.label; })) {
+      var heads = [];
+      routes.forEach(function (pts, li) {
+        if (!pts || hand.links[li].head === false) { return; }
+        var tip = pts[pts.length - 1], back = pts[pts.length - 2];
+        var run = Math.hypot(tip[0] - back[0], tip[1] - back[1]) || 1;
+        heads.push([tip, [tip[0] - (tip[0] - back[0]) / run * 10,
+                          tip[1] - (tip[1] - back[1]) / run * 10]]);
+      });
+      keep = labelKeep(routes, heads, ox, oy, wide, tall);
+    }
+    hand.links.forEach(function (link, li) {
+      var pts = routes[li];
+      if (!pts) { return; }
       if (!link.id) { link.id = hand.nextLink = (hand.nextLink || 0) + 1; }
-      var pts = linkPath(a, b).map(function (p) { return [p[0] + ox, p[1] + oy]; });
       var last = pts[pts.length - 1], prev = pts[pts.length - 2];
       var run = Math.hypot(last[0] - prev[0], last[1] - prev[1]) || 1;
       var ux = (last[0] - prev[0]) / run, uy = (last[1] - prev[1]) / run;
@@ -7619,22 +8253,26 @@
                  'stroke-width="0.6" stroke-linejoin="miter"/>');
       }
       if (link.label) {
-        // Half way along the line, measured -- not at whichever corner
-        // happens to sit in the middle of the list of them.  A straight
-        // arrow has two points in it, so the middle of that list was the
-        // far end of the arrow: the word was written on the arrowhead,
-        // and on an arrow pointing rightwards that put it inside the
-        // shape it was pointing at, where the shape is drawn over the top
-        // of it and nobody ever saw it.  Which is why the False on a
-        // decision could be read going one way and not the other.
-        var mid = halfWay(pts);
-        var k = chartPt() / PLAIN_PT;   // the patch grows with the words
-        out.push('<rect class="patch" x="' + (mid[0] + 4) + '" y="' +
-                 (mid[1] - 6 - 10 * k) + '" width="' + (link.label.length * 7 * k + 8) +
-                 '" height="' + 13 * k + '" fill="#ffffff" stroke="none"/>');
-        out.push('<text class="label" x="' + (mid[0] + 6) + '" y="' + (mid[1] - 6) +
-                 '" font-weight="bold" stroke="none" fill="#000000">' +
-                 escaped(link.label) + "</text>");
+        // Along the line, measured -- not at whichever corner happens to
+        // sit in the middle of the list of them.  A straight arrow has two
+        // points in it, so the middle of that list was the far end of the
+        // arrow: the word was written on the arrowhead, and on an arrow
+        // pointing rightwards that put it inside the shape it was pointing
+        // at, where the shape is drawn over the top of it and nobody ever
+        // saw it.  Which is why the False on a decision could be read going
+        // one way and not the other.  See labelSpot for where, exactly.
+        var spot = labelSpot(pts, link.label, keep);
+        // The patch is measured from the words too, as the drawn charts'
+        // are: a guess at seven pixels a letter left the end of a wide
+        // word bare, with the line showing through it.
+        out.push('<rect class="patch" x="' + (spot.x - 4).toFixed(1) + '" y="' +
+                 (spot.y - spot.size + 1).toFixed(1) + '" width="' +
+                 (spot.wide + 8).toFixed(1) + '" height="' +
+                 (spot.size + spot.drop).toFixed(1) +
+                 '" fill="#ffffff" stroke="none"/>');
+        out.push('<text class="label" x="' + spot.x.toFixed(1) + '" y="' +
+                 spot.y.toFixed(1) + '" font-weight="bold" stroke="none" ' +
+                 'fill="#000000">' + escaped(link.label) + "</text>");
       }
       out.push("</g>");
     });
@@ -7665,8 +8303,9 @@
         // shape puts its own dots out, so joining two up is click a dot,
         // click a dot -- no holding the button down and no aiming at a
         // one-pixel line.
-        ports(n).forEach(function (port) {
-          out.push('<circle class="spot" data-i="' + n.id + '" cx="' +
+        ports(n).forEach(function (port, side) {
+          out.push('<circle class="spot" data-i="' + n.id + '" data-side="' +
+                   side + '" cx="' +
                    (port.x + ox + port.dx * 1.5) + '" cy="' +
                    (port.y + oy + port.dy * 1.5) + '" r="' + DOT_SPOT + '"/>');
         });
@@ -7677,9 +8316,9 @@
         // diamond -- rather than out on the corner of the box round it.
         // Press and drag from one to draw a line, or just click it and then
         // click where it should go.
-        ports(n).forEach(function (port) {
+        ports(n).forEach(function (port, side) {
           out.push('<circle class="knob' + (joining ? " lit" : "") +
-                   '" data-i="' + n.id + '" cx="' +
+                   '" data-i="' + n.id + '" data-side="' + side + '" cx="' +
                    (port.x + ox + port.dx * 1.5) + '" cy="' +
                    (port.y + oy + port.dy * 1.5) + '" r="' + DOT_KNOB +
                    '" fill="#14427c" stroke="#ffffff" stroke-width="1.5"/>');
@@ -7709,7 +8348,15 @@
     });
     out.push("</g></svg>");
     el("#sheet").innerHTML = out.join("\n");
+    handOrigin = { x: ox, y: oy };
     bind();
+    handPaper = chart;
+    // More paper on the left pushes everything on it right, and a paper in
+    // the middle of the stage moves half as far again whichever side it
+    // grows on -- so a shape being carried out to either side slid away
+    // from the mouse as it went.  The view is put back so that nothing on
+    // the paper moves but what was moved.
+    if (before !== null) { keepStill(handScreenX() - before); }
     paint();
     el("#sub").textContent = TXT.as_chart + " · " + wide + " x " + tall + " px";
     handKeep();
@@ -7759,7 +8406,7 @@
     var spot = chart.createSVGPoint();
     spot.x = where.clientX;
     spot.y = where.clientY;
-    spot = spot.matrixTransform(frame.inverse());
+    spot = onHand(spot.matrixTransform(frame.inverse()));
     var kind = dragging_kind ||
                (where.dataTransfer && where.dataTransfer.getData("text/plain"));
     if (!kind) { return false; }
@@ -7863,7 +8510,7 @@
     var join = document.createElement("button");
     join.className = "btn small" + (joining ? " primary" : "");
     join.textContent = joining ? TXT.connect_now : TXT.connect;
-    join.onclick = function () { joining = !joining; drawHandPanel(); };
+    join.onclick = function () { joining = !joining; joinFrom = null; drawHandPanel(); };
     var cut = document.createElement("button");
     cut.className = "btn small";
     cut.textContent = TXT.delete;
@@ -7982,21 +8629,49 @@
     box.appendChild(list);
   }
 
-  function joinUp(fromId, toId) {         // one shape leads to another
+  // One shape leads to another.  `fromSide` and `toSide` are the dots it
+  // was drawn from and to, if it was drawn from and to dots (0-3, in the
+  // order ports() gives them): those are its sides from then on.  A side
+  // not given is left to the arrow to find, and it takes a free one.
+  function joinUp(fromId, toId, fromSide, toSide) {
+    joinFrom = null;
     if (!fromId || !toId || fromId === toId) { return; }
-    var already = outOf(fromId).some(function (l) { return l.to === toId; });
-    if (already) { return; }
-    keepUndo();
-    var from = nodeById(fromId);
-    var tag = "";
-    if (from && from.kind === "diamond") {
-      tag = outOf(fromId).length ? TXT.no : TXT.yes;
+    var fixed = {};
+    if (PORT_SIDES[fromSide]) { fixed.fromSide = PORT_SIDES[fromSide]; }
+    if (PORT_SIDES[toSide]) { fixed.toSide = PORT_SIDES[toSide]; }
+    var already = outOf(fromId).filter(function (l) { return l.to === toId; })[0];
+    if (already) {
+      // Drawn again between the same two, from other dots: the one arrow
+      // moves over to those, which is how an arrow is given other sides.
+      if (!fixed.fromSide && !fixed.toSide) { return; }
+      keepUndo();
+      if (fixed.fromSide) { already.fromSide = fixed.fromSide; }
+      if (fixed.toSide) { already.toSide = fixed.toSide; }
+    } else {
+      keepUndo();
+      var from = nodeById(fromId);
+      var tag = "";
+      if (from && from.kind === "diamond") {
+        tag = outOf(fromId).length ? TXT.no : TXT.yes;
+      }
+      var link = { from: fromId, to: toId, label: tag };
+      if (fixed.fromSide) { link.fromSide = fixed.fromSide; }
+      if (fixed.toSide) { link.toSide = fixed.toSide; }
+      hand.links.push(link);
     }
-    hand.links.push({ from: fromId, to: toId, label: tag });
     joining = false;
     drawHand();
     drawHandPanel();
     showReport();
+  }
+
+  // The other way round: from where it went to where it came from, by the
+  // same two sides, so turning an arrow round turns it and does not move it.
+  function turnLink(link) {
+    var was = link.from; link.from = link.to; link.to = was;
+    var side = link.fromSide; link.fromSide = link.toSide; link.toSide = side;
+    if (!link.fromSide) { delete link.fromSide; }
+    if (!link.toSide) { delete link.toSide; }
   }
 
   function linkById(id) {
@@ -8078,7 +8753,7 @@
     flip.className = "btn small";
     flip.textContent = TXT.turn_it_round;
     flip.onclick = function () {
-      var was = link.from; link.from = link.to; link.to = was;
+      turnLink(link);
       drawHand(); drawHandPanel(); showReport();
     };
     var cut = document.createElement("button");
@@ -8094,10 +8769,11 @@
     box.appendChild(go);
   }
 
-  function handClick(id) {                // a shape was clicked on the chart
-    chosen = null;
+  function handClick(id, side) {          // a shape was clicked on the chart
+    chosen = null;                        //   (or one of its dots: `side`)
     if (joining && picked && picked !== id) {
-      joinUp(picked, id);
+      joinUp(picked, id, joinFrom && joinFrom.id === picked ? joinFrom.side : null,
+             side);
       return;
     }
     picked = id;
@@ -8153,10 +8829,11 @@
 
     // a line that runs through a shape on its way past is not wrong, but it
     // is the thing that makes a hand-drawn chart hard to follow
-    hand.links.forEach(function (link) {
+    var routes = routeAll();              // the lines as they are drawn
+    hand.links.forEach(function (link, li) {
       var a = nodeById(link.from), b = nodeById(link.to);
-      if (!a || !b) { return; }
-      var pts = linkPath(a, b);
+      var pts = routes[li];
+      if (!a || !b || !pts) { return; }
       hand.nodes.forEach(function (n) {
         if (n.id === a.id || n.id === b.id) { return; }
         for (var i = 0; i < pts.length - 1; i++) {
@@ -8589,6 +9266,10 @@
           was.y = Math.min(was.y, n.y - n.h / 2);
         });
         keepUndo();
+        // Sides an arrow was drawn to keep were picked for where the shapes
+        // stood; tidied, they stand somewhere else, so every arrow finds
+        // its way again (and still keeps off a side another arrow is on).
+        hand.links.forEach(function (l) { delete l.fromSide; delete l.toSide; });
         moving.forEach(function (id) {
           var spot = places[id], node = spot.node;
           node.x = Math.round((spot.x * by - least.x + was.x) / HAND_GRID) * HAND_GRID;
@@ -12929,7 +13610,9 @@
           var g = el('.node[data-i="h' + node.id + '"]', chart);
           if (g) { typeInto(g); }
         } },
-      { name: TXT.connect, go: function () { joining = true; drawHandPanel(); } },
+      { name: TXT.connect, go: function () {
+          joining = true; joinFrom = null; drawHandPanel();
+        } },
       { name: TXT.m_copy, go: function () {
           keepUndo();
           var twin = JSON.parse(JSON.stringify(node));
@@ -12981,7 +13664,7 @@
           link.dash = !link.dash; drawHand(); drawHandPanel();
         } },
       { name: TXT.turn_it_round, go: function () {
-          var was = link.from; link.from = link.to; link.to = was;
+          turnLink(link);
           drawHand(); drawHandPanel(); showReport();
         } },
       "-",
@@ -13227,13 +13910,13 @@
     var a = nodeById(link.from), b = nodeById(link.to);
     if (!a || !b) { return; }
     keepUndo();
-    var pts = linkPath(a, b);
+    var pts = routeAll()[hand.links.indexOf(link)] || linkPath(a, b, link);
     var mid = pts[Math.floor(pts.length / 2)];
     var svg = el("#chart");
     var frame = svg.getScreenCTM();
     var spot = svg.createSVGPoint();
-    spot.x = mid[0];
-    spot.y = mid[1];
+    spot.x = mid[0] + handOrigin.x;      // on the paper, which may reach
+    spot.y = mid[1] + handOrigin.y;      //   out further than the design
     spot = spot.matrixTransform(frame);
     var stage = el("#stage"), room = stage.getBoundingClientRect();
     var pad = document.createElement("input");
@@ -14390,7 +15073,7 @@
       ev.preventDefault();
       keepUndo();
       var by = keyStep(ev);
-      node.x = Math.max(node.w / 2 + 20, node.x + WAYS[ev.key][0] * by);
+      node.x += WAYS[ev.key][0] * by;    // the paper grows to the left too
       node.y = Math.max(node.h / 2 + 20, node.y + WAYS[ev.key][1] * by);
       drawHand();
       drawHandPanel();
@@ -14842,6 +15525,7 @@
   var drawn = null;                      // the drawing the last rise was for
   var opening = false;                   // the build nobody asked for
   bind = function () {
+    inkEnd();                            // a new drawing ends the last one's
     bindPlain();
     if (byHand) { return; }
     handSeen = null;                     // the paper is not a drawing by hand
@@ -14864,7 +15548,7 @@
     // since the styling is shaken afresh every time it is built.
     if (drawn !== null && now !== drawn) {
       if (tooBigToSee()) { atActualSize(); }
-      briefly(paper, "fresh", Math.max(520, cascade(paper)));
+      inkStart(paper);
     }
     drawn = now;
   };
@@ -14884,80 +15568,385 @@
             svg.textContent.length].join(" ");
   }
 
-  // A new chart puts itself together rather than arriving in one piece:
-  // the shapes in the order the program reads, each line drawn out of the
-  // shape it leaves, and its arrowhead landing as the line gets there.
-  // Watching it assemble is watching the program's order laid out, which
-  // is the thing the chart is for.
+  // --------------------------------------------------------- drawn in ink --
+  // A new chart is drawn onto the paper the way the pictures that open each
+  // chapter of Super Paper Mario are: a pen goes round each shape, its color
+  // washes in once the outline is closed, its words are written in from the
+  // left, and the line leaving it is drawn on to the next shape, where its
+  // arrowhead lands -- in the order the program reads, one after another.
   //
-  // It is quick -- the whole of it is under a second however long the
-  // program -- and a chart past a few score shapes simply rises as one,
-  // because a hundred and fifty things arriving one after another is not
-  // an order anybody can follow, only a wait.
+  // At one speed.  A long line takes longer to draw than a short one and a
+  // big chart longer than a small one, because that is what drawing is;
+  // nothing is squeezed into a length of time decided beforehand.  The
+  // speed is on the screen, so a chart shown smaller is not drawn slower.
   //
-  // Nothing is moved in the drawing itself.  Each part is told when its
-  // turn comes, and the stylesheet does the rest while the paper is fresh;
-  // when it is not, those words mean nothing.  Returns how long it takes.
-  var CASCADE_MOST = 150;                // shapes, past which it rises as one
-  function cascade(paper) {
-    paper.classList.remove("cascade");
+  // Only what can be seen is drawn.  A chart too big for the screen is
+  // shown at actual size with its Start in view, and a pen that carried on
+  // below the edge of the screen for minutes would be drawing for nobody --
+  // and anybody who scrolled down would find a chart still waiting to be
+  // drawn.  What is off the screen is simply there, and the pen goes from
+  // one thing that can be seen to the next.
+  //
+  // Touch anything -- a press, the wheel, a key -- and it is finished at
+  // once: the drawing is there to be looked at, never to be waited on.
+  //
+  // Nothing is said to the paper, or to the drawing as a whole, apart from
+  // hiding it for the moment it takes to plan.  A word on either has every
+  // piece of the chart looked at again when it goes on and again when it
+  // comes off -- nearly two seconds each way on a chart of thirty thousand
+  // shapes -- so each piece the pen will draw is told so on its own, and
+  // nothing else in the chart is touched at all.  Nothing is moved or
+  // scaled either: a sheet two million pixels tall shrunk by one part in a
+  // hundred is swept ten thousand pixels at its top, and the view is aimed
+  // at the Start while it is.
+  var PEN = 1500;                        // px a second a line is drawn at
+  var WRITE = 520;                       // and words written at
+  var WASH = 320;                        // ms a shape's color takes to wash in
+  var ink = null;                        // the drawing going on, if any
+  var INK_VARS = ["--len", "--dur", "--d", "--late"];
+
+  function inkStart(paper) {
     var svg = el("svg", paper);
-    var nodes = svg ? all(".node", svg) : [];
-    if (STILL || !nodes.length || nodes.length > CASCADE_MOST) { return 0; }
-    var step = Math.min(42, 480 / nodes.length);    // between two shapes
-    var DRAW = 300;                                 // one line, drawn
-    var last = 0;
-    var boxes = nodes.map(function (g, i) {
-      var b = g.getBBox(), t = Math.round(i * step);
-      g.style.setProperty("--in", t + "ms");
-      return { x: b.x, y: b.y, w: b.width, h: b.height, t: t };
-    });
-    // Whichever shape a point is on, or nearest to: a line goes when the
-    // shape it leaves has arrived.
-    function nearest(x, y) {
-      var best = boxes[0], far = Infinity;
-      boxes.forEach(function (b) {
-        var dx = Math.max(b.x - x, 0, x - b.x - b.w);
-        var dy = Math.max(b.y - y, 0, y - b.y - b.h);
-        if (dx * dx + dy * dy < far) { far = dx * dx + dy * dy; best = b; }
-      });
-      return best.t;
-    }
-    var ends = [];
-    all(".flow", svg).forEach(function (line) {
-      var n = (line.getAttribute("d") || "").match(/-?\d*\.?\d+(?:e-?\d+)?/gi);
-      if (!n || n.length < 4 || !line.getTotalLength) { return; }
-      var t = Math.round(nearest(+n[0], +n[1]) + step * 0.6);
-      // A little longer than the line itself, so the gap in the dash is
-      // longer too and no rounded end peeps out at the far end of it.
-      line.style.setProperty("--len", (line.getTotalLength() + 2).toFixed(1));
-      line.style.setProperty("--in", t + "ms");
-      ends.push({ x: +n[n.length - 2], y: +n[n.length - 1], t: t });
-      last = Math.max(last, t + DRAW);
-    });
-    all(".head, .label, .patch", svg).forEach(function (bit) {
-      var b = bit.getBBox(), cx = b.x + b.width / 2, cy = b.y + b.height / 2;
-      var t = nearest(cx, cy) + step;
-      if (bit.classList.contains("head")) {
-        // an arrowhead is where its line finishes, and lands as it does
-        var mine = null, far = 400;       // no further off than 20
-        ends.forEach(function (end) {
-          var d = (end.x - cx) * (end.x - cx) + (end.y - cy) * (end.y - cy);
-          if (d < far) { far = d; mine = end; }
-        });
-        if (mine) { t = mine.t + DRAW * 0.8; }
-      }
-      bit.style.setProperty("--in", Math.round(t) + "ms");
-      last = Math.max(last, t + 200);
-    });
-    boxes.forEach(function (b) { last = Math.max(last, b.t + 420); });
-    paper.classList.add("cascade");
-    return Math.round(last) + 60;
+    if (STILL || !svg || document.hidden) { return; }
+    var mine = { svg: svg, pieces: [], frame: 0, timer: 0, safety: 0, total: 0 };
+    ink = mine;
+    // Hidden until it is known what the pen will draw.  That waits on the
+    // size the chart is shown at, which the build settles a moment after
+    // this -- it asked for the fitting before the drawing was bound, so a
+    // timer asked for now comes after it.  A chart that appeared whole and
+    // then vanished to be drawn would be the one thing an entrance must not
+    // do; an empty sheet for a moment is only paper.
+    svg.style.opacity = "0";
+    inkListen(true);
+    mine.timer = setTimeout(function () {
+      if (ink !== mine) { return; }
+      try { inkPlan(mine); }
+      catch (e) { mine.pieces.forEach(inkOff); mine.pieces = []; }
+      svg.style.opacity = "";
+      if (!mine.pieces.length) { inkEnd(); return; }
+      inkGo(mine);
+    }, 0);
   }
 
+  // Where every piece the pen will draw is, how long each takes, and when
+  // its turn comes.
+  function inkPlan(mine) {
+    var svg = mine.svg, stage = el("#stage");
+    if (!svg.isConnected || !stage || !W) { return; }
+    var r = svg.getBoundingClientRect(), s = stage.getBoundingClientRect();
+    var k = r.width / W;                 // screen px to one of the chart's own
+    if (!(k > 0)) { return; }
+    var edge = 24;                       // a little past the edge is drawn too
+    var view = { x0: (s.left - r.left - edge) / k, y0: (s.top - r.top - edge) / k,
+                 x1: (s.right - r.left + edge) / k, y1: (s.bottom - r.top + edge) / k };
+    function seen(b) {
+      return !!b && b.x <= view.x1 && b.x + b.w >= view.x0 &&
+             b.y <= view.y1 && b.y + b.h >= view.y0;
+    }
+    function boxOf(bit) {
+      try {
+        var b = bit.getBBox();
+        // A piece of a big chart the page has left out of its drawing, being
+        // nowhere near the screen (showBands), is not laid out, and measures
+        // as nothing at all at the chart's corner -- which is on the screen
+        // whenever the Start is.  It is not there to be drawn.
+        if (!b.width && !b.height) { return null; }
+        return { x: b.x, y: b.y, w: b.width, h: b.height };
+      } catch (e) { return null; }
+    }
+    function pairsOf(text) {
+      var n = (text || "").match(/-?\d*\.?\d+(?:e-?\d+)?/gi) || [], out = [];
+      for (var i = 0; i + 1 < n.length; i += 2) { out.push([+n[i], +n[i + 1]]); }
+      return out;
+    }
+    function spanOf(pts) {
+      var x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+      pts.forEach(function (p) {
+        x0 = Math.min(x0, p[0]); y0 = Math.min(y0, p[1]);
+        x1 = Math.max(x1, p[0]); y1 = Math.max(y1, p[1]);
+      });
+      return { x: x0, y: y0, w: x1 - x0, h: y1 - y0 };
+    }
+    function away(b, x, y) {             // how far a point is from a box
+      var dx = Math.max(b.x - x, 0, x - b.x - b.w);
+      var dy = Math.max(b.y - y, 0, y - b.y - b.h);
+      return Math.sqrt(dx * dx + dy * dy);
+    }
+    function drawMs(len) { return len * k / PEN * 1000; }
+    function writeMs(wide) { return wide * k / WRITE * 1000; }
+    function ms(n) { return Math.round(n) + "ms"; }
+
+    var here = whoIsIn(), pieces = mine.pieces;
+    // The shapes on the screen, in the order they come in the drawing --
+    // which is the order the program reads -- and those just off it, which
+    // a line on the screen may be leaving from.
+    var shapes = [], near = [];
+    here.nodes.forEach(function (g) {
+      var b = boxOf(g);
+      if (!b) { return; }
+      var one = { el: g, box: b, leaving: [], coming: [], said: [] };
+      if (seen(b)) { shapes.push(one); near.push(one); }
+      else if (b.x <= view.x1 + 200 && b.x + b.w >= view.x0 - 200 &&
+               b.y <= view.y1 + 200 && b.y + b.h >= view.y0 - 200) { near.push(one); }
+    });
+    function nearest(list, x, y, within, not) {
+      var best = null, far = within;
+      list.forEach(function (one) {
+        if (one === not) { return; }
+        var d = away(one.box, x, y);
+        if (d <= far) { far = d; best = one; }
+      });
+      return best;
+    }
+
+    // Each line on the screen belongs to the shape it leaves, drawn when
+    // that shape is done -- or, where it starts from somewhere that is not
+    // a shape on the screen, like the middle of a join, to the shape it
+    // goes into, drawn just before that one.
+    var lines = [], loose = [], ends = {};
+    here.flows.forEach(function (line) {
+      var pts = pairsOf(line.getAttribute("d"));
+      if (pts.length < 2 || !line.getTotalLength) { return; }
+      if (!seen(spanOf(pts))) { return; }
+      var a = pts[0], z = pts[pts.length - 1], len = 0;
+      try { len = line.getTotalLength(); } catch (e) { len = 0; }
+      var one = { el: line, len: len, pts: pts, dur: drawMs(len), heads: [], labels: [] };
+      lines.push(one);
+      // Where it leaves from first: a short stem under a diamond ends within
+      // a head's length of the diamond too, and taken for a line going into
+      // it, it was drawn before the diamond it leaves.
+      var out = nearest(near, a[0], a[1], 3, null);
+      if (out && shapes.indexOf(out) < 0) { out = null; }   // it leaves off the screen
+      var into = out ? null : nearest(shapes, z[0], z[1], 16, null);
+      if (out) { out.leaving.push(one); }
+      else if (into) { into.coming.push(one); }
+      else { loose.push(one); }
+      ends[Math.round(z[0]) + " " + Math.round(z[1])] = one;
+    });
+    function lineEndingAt(x, y) {
+      for (var dx = -1; dx <= 1; dx++) {
+        for (var dy = -1; dy <= 1; dy++) {
+          var got = ends[(Math.round(x) + dx) + " " + (Math.round(y) + dy)];
+          if (got) { return got; }
+        }
+      }
+      return null;
+    }
+    // An arrowhead lands as its line arrives.  A line with a head on it
+    // stops at the head's broad end; a short one runs on to its point.
+    var strayHeads = [];
+    here.heads.forEach(function (head) {
+      var p = pairsOf(head.getAttribute("points"));
+      if (p.length < 3 || !seen(spanOf(p))) { return; }
+      var its = lineEndingAt((p[1][0] + p[2][0]) / 2, (p[1][1] + p[2][1]) / 2) ||
+                lineEndingAt(p[0][0], p[0][1]);
+      if (its) { its.heads.push(head); } else { strayHeads.push(head); }
+    });
+    // How near a point is to a line, and how far along the line the
+    // nearest place on it is, as a share of the whole.
+    function alongside(line, x, y) {
+      var pts = line.pts, best = Infinity, at = 0, run = 0;
+      for (var i = 1; i < pts.length; i++) {
+        var ax = pts[i - 1][0], ay = pts[i - 1][1];
+        var dx = pts[i][0] - ax, dy = pts[i][1] - ay, seg = Math.sqrt(dx * dx + dy * dy);
+        var u = seg ? Math.max(0, Math.min(1, ((x - ax) * dx + (y - ay) * dy) / (seg * seg))) : 0;
+        var d = Math.sqrt(Math.pow(ax + u * dx - x, 2) + Math.pow(ay + u * dy - y, 2));
+        if (d < best) { best = d; at = run + u * seg; }
+        run += seg;
+      }
+      return { far: best, share: run ? at / run : 0 };
+    }
+    // The True, False or Case beside a line, and the patch of paper behind
+    // it, are written as the pen passes them; a module's name with the
+    // shape it heads; the chart's title and whose it is, first of all.
+    var heading = [];
+    here.said.forEach(function (words) {
+      var b = boxOf(words);
+      if (!seen(b)) { return; }
+      var patch = words.previousElementSibling;
+      if (!patch || !patch.classList.contains("patch")) { patch = null; }
+      var one = { el: words, patch: patch, dur: writeMs(b.w), share: 0 };
+      var cx = b.x + b.w / 2, cy = b.y + b.h / 2;
+      if (words.classList.contains("label")) {
+        var best = null, far = 40;
+        lines.forEach(function (line) {
+          var got = alongside(line, cx, cy);
+          if (got.far < far) { far = got.far; best = line; one.share = got.share; }
+        });
+        if (best) { best.labels.push(one); return; }
+      }
+      var by = words.classList.contains("heading")
+             ? nearest(shapes, b.x, b.y + b.h, 80, null)
+             : words.classList.contains("label") ? nearest(shapes, cx, cy, 80, null) : null;
+      if (by) { by.said.push(one); return; }
+      heading.push(one);
+    });
+
+    function put(bit, t, cls, vars, kids) {
+      bit.classList.add("ink-wait");
+      var p = { el: bit, t: t, cls: cls, vars: vars || {}, kids: kids || [], lasts: 0 };
+      pieces.push(p);
+      return p;
+    }
+    function write(one, t) {
+      put(one.el, t, "ink-write", { "--dur": ms(one.dur) }).lasts = one.dur;
+      if (one.patch) { put(one.patch, t, null); }
+      return t + one.dur;
+    }
+    function drawLine(line, t) {
+      put(line.el, t, "ink-line", { "--len": (line.len + 2).toFixed(1),
+                                   "--dur": ms(line.dur) }).lasts = line.dur;
+      line.heads.forEach(function (head) {
+        put(head, t + line.dur, "ink-pop").lasts = 160;
+      });
+      line.labels.forEach(function (one) { write(one, t + line.dur * one.share); });
+      return t + line.dur;
+    }
+
+    var t = 0;
+    heading.forEach(function (one) { t = write(one, t); });
+    var after = t;
+    loose.forEach(function (line) { after = Math.max(after, drawLine(line, t)); });
+    t = after;
+    shapes.forEach(function (one) {
+      var ready = t;
+      one.coming.forEach(function (line) { ready = Math.max(ready, drawLine(line, t)); });
+      t = ready;
+      // Round the outline, every stroke of it at once; the color washes in
+      // behind each once it is closed; the words are written as the pen
+      // comes round to finish, one line of them after another.
+      var kids = [], outline = 0, texts = [];
+      Array.prototype.forEach.call(one.el.children, function (bit) {
+        var tag = bit.tagName.toLowerCase();
+        if (tag === "text") { texts.push(bit); return; }
+        if (bit.classList.contains("ghost")) { return; }
+        var len = 0;
+        if (tag !== "g" && bit.getTotalLength) {
+          try { len = bit.getTotalLength(); } catch (e) { len = 0; }
+        }
+        if (len > 0) {
+          var d = drawMs(len);
+          outline = Math.max(outline, d);
+          kids.push({ el: bit, cls: "ink-line", vars: { "--len": (len + 2).toFixed(1),
+                                                        "--dur": ms(d) } });
+        } else {
+          kids.push({ el: bit, cls: "ink-wash", vars: {} });
+        }
+      });
+      kids.forEach(function (kid) {
+        if (kid.cls === "ink-wash") { kid.vars["--d"] = ms(outline); }
+      });
+      var at = outline * 0.7;
+      texts.forEach(function (words) {
+        var b = boxOf(words), d = b ? writeMs(b.w) : 0;
+        kids.push({ el: words, cls: "ink-write", vars: { "--d": ms(at), "--dur": ms(d) } });
+        at += d;
+      });
+      put(one.el, t, null, {}, kids).lasts = Math.max(outline + WASH, at);
+      one.said.forEach(function (words) { write(words, t); });
+      t += Math.max(outline, at);
+      var gone = t;
+      one.leaving.forEach(function (line) { gone = Math.max(gone, drawLine(line, t)); });
+      t = gone;
+    });
+    strayHeads.forEach(function (head) { put(head, t, "ink-pop").lasts = 160; });
+    pieces.sort(function (a, b) { return a.t - b.t; });
+    mine.total = 0;
+    pieces.forEach(function (p) { mine.total = Math.max(mine.total, p.t + p.lasts); });
+  }
+
+  function inkGo(mine) {
+    var pieces = mine.pieces, next = 0, began = 0, live = [];
+    function frame(stamp) {
+      if (ink !== mine) { return; }
+      if (!began) { began = stamp; }
+      var now = stamp - began;
+      while (next < pieces.length && pieces[next].t <= now) {
+        var p = pieces[next++];
+        inkOn(p, now - p.t);
+        live.push(p);
+      }
+      // Each piece is let go as soon as it has been drawn, so a border that
+      // is dashed goes back to its dashes rather than waiting on the rest.
+      live = live.filter(function (p) {
+        if (p.t + p.lasts + 30 > now) { return true; }
+        inkOff(p);
+        return false;
+      });
+      if (next < pieces.length || live.length) { mine.frame = requestAnimationFrame(frame); }
+      else { inkEnd(); }
+    }
+    mine.frame = requestAnimationFrame(frame);
+    // Frames are only drawn for a window somebody can see; an ordinary
+    // timer finishes it whatever happens.
+    mine.safety = setTimeout(function () {
+      if (ink === mine) { inkEnd(); }
+    }, mine.total + 2000);
+  }
+
+  // Its turn: shown, and told how far behind its turn it already is, so
+  // that a frame arriving late leaves nothing drawn slower than the rest.
+  function inkOn(p, late) {
+    p.el.classList.remove("ink-wait");
+    if (p.cls) { p.el.classList.add(p.cls); }
+    Object.keys(p.vars).forEach(function (name) { p.el.style.setProperty(name, p.vars[name]); });
+    p.el.style.setProperty("--late", -Math.round(late) + "ms");
+    p.kids.forEach(function (kid) {
+      kid.el.classList.add(kid.cls);
+      Object.keys(kid.vars).forEach(function (name) {
+        kid.el.style.setProperty(name, kid.vars[name]);
+      });
+    });
+    p.on = true;
+  }
+
+  // Drawn, or no longer wanted drawn: back to exactly what it was, so a
+  // saved copy of the chart carries no trace of how it arrived.
+  function inkOff(p) {
+    p.el.classList.remove("ink-wait");
+    if (!p.on) { return; }
+    p.on = false;
+    if (p.cls) { p.el.classList.remove(p.cls); }
+    INK_VARS.forEach(function (name) { p.el.style.removeProperty(name); });
+    p.kids.forEach(function (kid) {
+      kid.el.classList.remove(kid.cls);
+      INK_VARS.forEach(function (name) { kid.el.style.removeProperty(name); });
+    });
+  }
+
+  function inkEnd() {
+    var mine = ink;
+    if (!mine) { return; }
+    ink = null;
+    cancelAnimationFrame(mine.frame);
+    clearTimeout(mine.timer);
+    clearTimeout(mine.safety);
+    inkListen(false);
+    mine.svg.style.opacity = "";
+    mine.pieces.forEach(inkOff);
+  }
+
+  function inkStop(ev) {
+    if (ev.type === "keydown" && /^(Shift|Control|Alt|Meta|CapsLock)$/.test(ev.key)) { return; }
+    if (ev.type === "visibilitychange" && !document.hidden) { return; }
+    inkEnd();
+  }
+  var INK_WHEEL = { capture: true, passive: true };
+  function inkListen(on) {
+    var how = on ? "addEventListener" : "removeEventListener";
+    document[how]("pointerdown", inkStop, true);
+    document[how]("keydown", inkStop, true);
+    document[how]("visibilitychange", inkStop);
+    window[how]("resize", inkStop);
+    var stage = el("#stage");
+    if (stage) { stage[how]("wheel", inkStop, INK_WHEEL); }
+  }
+
+  var CASCADE_MOST = 150;                // shapes, past which it is shown at actual size
+
   // ------------------------------------------- a chart too big to see whole --
-  // A chart that fits on the stage puts itself together where it stands, as
-  // above.  One that does not -- too many shapes to follow at once, or too
+  // A chart that fits on the stage is fitted to it and drawn where it
+  // stands, as above.  One that does not -- too many shapes to follow at once, or too
   // tall to show whole at a size anybody could read -- used to rise as one
   // block, shrunk to the width of the stage, and left you to find your own
   // way to its Start.
@@ -14970,7 +15959,7 @@
   // is put in view by the build itself, as for any chart.
   var atFull = false;                    // this drawing stays at actual size
 
-  // Too big for the cascade, or too big to show whole at a size that can
+  // Too many shapes, or too big to show whole at a size that can
   // be read: the same line fitIfItMustBe draws, past which it gives up on
   // the whole chart and fits only its width.
   function tooBigToSee() {
@@ -16579,7 +17568,7 @@
       opening = true;                    // drawn on opening, not asked for
       el("#build").click();
     }
-    else if (MODE === "web") { startPython(); }  // warm it up while they type
+    else if (MODE === "web") { warmAside(); }    // warm it up while they type
   }
 })();
 </script>

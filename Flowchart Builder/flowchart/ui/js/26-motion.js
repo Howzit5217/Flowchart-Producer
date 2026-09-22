@@ -450,6 +450,7 @@
   var drawn = null;                      // the drawing the last rise was for
   var opening = false;                   // the build nobody asked for
   bind = function () {
+    inkEnd();                            // a new drawing ends the last one's
     bindPlain();
     if (byHand) { return; }
     handSeen = null;                     // the paper is not a drawing by hand
@@ -472,7 +473,7 @@
     // since the styling is shaken afresh every time it is built.
     if (drawn !== null && now !== drawn) {
       if (tooBigToSee()) { atActualSize(); }
-      briefly(paper, "fresh", Math.max(520, cascade(paper)));
+      inkStart(paper);
     }
     drawn = now;
   };
@@ -492,80 +493,385 @@
             svg.textContent.length].join(" ");
   }
 
-  // A new chart puts itself together rather than arriving in one piece:
-  // the shapes in the order the program reads, each line drawn out of the
-  // shape it leaves, and its arrowhead landing as the line gets there.
-  // Watching it assemble is watching the program's order laid out, which
-  // is the thing the chart is for.
+  // --------------------------------------------------------- drawn in ink --
+  // A new chart is drawn onto the paper the way the pictures that open each
+  // chapter of Super Paper Mario are: a pen goes round each shape, its color
+  // washes in once the outline is closed, its words are written in from the
+  // left, and the line leaving it is drawn on to the next shape, where its
+  // arrowhead lands -- in the order the program reads, one after another.
   //
-  // It is quick -- the whole of it is under a second however long the
-  // program -- and a chart past a few score shapes simply rises as one,
-  // because a hundred and fifty things arriving one after another is not
-  // an order anybody can follow, only a wait.
+  // At one speed.  A long line takes longer to draw than a short one and a
+  // big chart longer than a small one, because that is what drawing is;
+  // nothing is squeezed into a length of time decided beforehand.  The
+  // speed is on the screen, so a chart shown smaller is not drawn slower.
   //
-  // Nothing is moved in the drawing itself.  Each part is told when its
-  // turn comes, and the stylesheet does the rest while the paper is fresh;
-  // when it is not, those words mean nothing.  Returns how long it takes.
-  var CASCADE_MOST = 150;                // shapes, past which it rises as one
-  function cascade(paper) {
-    paper.classList.remove("cascade");
+  // Only what can be seen is drawn.  A chart too big for the screen is
+  // shown at actual size with its Start in view, and a pen that carried on
+  // below the edge of the screen for minutes would be drawing for nobody --
+  // and anybody who scrolled down would find a chart still waiting to be
+  // drawn.  What is off the screen is simply there, and the pen goes from
+  // one thing that can be seen to the next.
+  //
+  // Touch anything -- a press, the wheel, a key -- and it is finished at
+  // once: the drawing is there to be looked at, never to be waited on.
+  //
+  // Nothing is said to the paper, or to the drawing as a whole, apart from
+  // hiding it for the moment it takes to plan.  A word on either has every
+  // piece of the chart looked at again when it goes on and again when it
+  // comes off -- nearly two seconds each way on a chart of thirty thousand
+  // shapes -- so each piece the pen will draw is told so on its own, and
+  // nothing else in the chart is touched at all.  Nothing is moved or
+  // scaled either: a sheet two million pixels tall shrunk by one part in a
+  // hundred is swept ten thousand pixels at its top, and the view is aimed
+  // at the Start while it is.
+  var PEN = 1500;                        // px a second a line is drawn at
+  var WRITE = 520;                       // and words written at
+  var WASH = 320;                        // ms a shape's color takes to wash in
+  var ink = null;                        // the drawing going on, if any
+  var INK_VARS = ["--len", "--dur", "--d", "--late"];
+
+  function inkStart(paper) {
     var svg = el("svg", paper);
-    var nodes = svg ? all(".node", svg) : [];
-    if (STILL || !nodes.length || nodes.length > CASCADE_MOST) { return 0; }
-    var step = Math.min(42, 480 / nodes.length);    // between two shapes
-    var DRAW = 300;                                 // one line, drawn
-    var last = 0;
-    var boxes = nodes.map(function (g, i) {
-      var b = g.getBBox(), t = Math.round(i * step);
-      g.style.setProperty("--in", t + "ms");
-      return { x: b.x, y: b.y, w: b.width, h: b.height, t: t };
-    });
-    // Whichever shape a point is on, or nearest to: a line goes when the
-    // shape it leaves has arrived.
-    function nearest(x, y) {
-      var best = boxes[0], far = Infinity;
-      boxes.forEach(function (b) {
-        var dx = Math.max(b.x - x, 0, x - b.x - b.w);
-        var dy = Math.max(b.y - y, 0, y - b.y - b.h);
-        if (dx * dx + dy * dy < far) { far = dx * dx + dy * dy; best = b; }
-      });
-      return best.t;
-    }
-    var ends = [];
-    all(".flow", svg).forEach(function (line) {
-      var n = (line.getAttribute("d") || "").match(/-?\d*\.?\d+(?:e-?\d+)?/gi);
-      if (!n || n.length < 4 || !line.getTotalLength) { return; }
-      var t = Math.round(nearest(+n[0], +n[1]) + step * 0.6);
-      // A little longer than the line itself, so the gap in the dash is
-      // longer too and no rounded end peeps out at the far end of it.
-      line.style.setProperty("--len", (line.getTotalLength() + 2).toFixed(1));
-      line.style.setProperty("--in", t + "ms");
-      ends.push({ x: +n[n.length - 2], y: +n[n.length - 1], t: t });
-      last = Math.max(last, t + DRAW);
-    });
-    all(".head, .label, .patch", svg).forEach(function (bit) {
-      var b = bit.getBBox(), cx = b.x + b.width / 2, cy = b.y + b.height / 2;
-      var t = nearest(cx, cy) + step;
-      if (bit.classList.contains("head")) {
-        // an arrowhead is where its line finishes, and lands as it does
-        var mine = null, far = 400;       // no further off than 20
-        ends.forEach(function (end) {
-          var d = (end.x - cx) * (end.x - cx) + (end.y - cy) * (end.y - cy);
-          if (d < far) { far = d; mine = end; }
-        });
-        if (mine) { t = mine.t + DRAW * 0.8; }
-      }
-      bit.style.setProperty("--in", Math.round(t) + "ms");
-      last = Math.max(last, t + 200);
-    });
-    boxes.forEach(function (b) { last = Math.max(last, b.t + 420); });
-    paper.classList.add("cascade");
-    return Math.round(last) + 60;
+    if (STILL || !svg || document.hidden) { return; }
+    var mine = { svg: svg, pieces: [], frame: 0, timer: 0, safety: 0, total: 0 };
+    ink = mine;
+    // Hidden until it is known what the pen will draw.  That waits on the
+    // size the chart is shown at, which the build settles a moment after
+    // this -- it asked for the fitting before the drawing was bound, so a
+    // timer asked for now comes after it.  A chart that appeared whole and
+    // then vanished to be drawn would be the one thing an entrance must not
+    // do; an empty sheet for a moment is only paper.
+    svg.style.opacity = "0";
+    inkListen(true);
+    mine.timer = setTimeout(function () {
+      if (ink !== mine) { return; }
+      try { inkPlan(mine); }
+      catch (e) { mine.pieces.forEach(inkOff); mine.pieces = []; }
+      svg.style.opacity = "";
+      if (!mine.pieces.length) { inkEnd(); return; }
+      inkGo(mine);
+    }, 0);
   }
 
+  // Where every piece the pen will draw is, how long each takes, and when
+  // its turn comes.
+  function inkPlan(mine) {
+    var svg = mine.svg, stage = el("#stage");
+    if (!svg.isConnected || !stage || !W) { return; }
+    var r = svg.getBoundingClientRect(), s = stage.getBoundingClientRect();
+    var k = r.width / W;                 // screen px to one of the chart's own
+    if (!(k > 0)) { return; }
+    var edge = 24;                       // a little past the edge is drawn too
+    var view = { x0: (s.left - r.left - edge) / k, y0: (s.top - r.top - edge) / k,
+                 x1: (s.right - r.left + edge) / k, y1: (s.bottom - r.top + edge) / k };
+    function seen(b) {
+      return !!b && b.x <= view.x1 && b.x + b.w >= view.x0 &&
+             b.y <= view.y1 && b.y + b.h >= view.y0;
+    }
+    function boxOf(bit) {
+      try {
+        var b = bit.getBBox();
+        // A piece of a big chart the page has left out of its drawing, being
+        // nowhere near the screen (showBands), is not laid out, and measures
+        // as nothing at all at the chart's corner -- which is on the screen
+        // whenever the Start is.  It is not there to be drawn.
+        if (!b.width && !b.height) { return null; }
+        return { x: b.x, y: b.y, w: b.width, h: b.height };
+      } catch (e) { return null; }
+    }
+    function pairsOf(text) {
+      var n = (text || "").match(/-?\d*\.?\d+(?:e-?\d+)?/gi) || [], out = [];
+      for (var i = 0; i + 1 < n.length; i += 2) { out.push([+n[i], +n[i + 1]]); }
+      return out;
+    }
+    function spanOf(pts) {
+      var x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+      pts.forEach(function (p) {
+        x0 = Math.min(x0, p[0]); y0 = Math.min(y0, p[1]);
+        x1 = Math.max(x1, p[0]); y1 = Math.max(y1, p[1]);
+      });
+      return { x: x0, y: y0, w: x1 - x0, h: y1 - y0 };
+    }
+    function away(b, x, y) {             // how far a point is from a box
+      var dx = Math.max(b.x - x, 0, x - b.x - b.w);
+      var dy = Math.max(b.y - y, 0, y - b.y - b.h);
+      return Math.sqrt(dx * dx + dy * dy);
+    }
+    function drawMs(len) { return len * k / PEN * 1000; }
+    function writeMs(wide) { return wide * k / WRITE * 1000; }
+    function ms(n) { return Math.round(n) + "ms"; }
+
+    var here = whoIsIn(), pieces = mine.pieces;
+    // The shapes on the screen, in the order they come in the drawing --
+    // which is the order the program reads -- and those just off it, which
+    // a line on the screen may be leaving from.
+    var shapes = [], near = [];
+    here.nodes.forEach(function (g) {
+      var b = boxOf(g);
+      if (!b) { return; }
+      var one = { el: g, box: b, leaving: [], coming: [], said: [] };
+      if (seen(b)) { shapes.push(one); near.push(one); }
+      else if (b.x <= view.x1 + 200 && b.x + b.w >= view.x0 - 200 &&
+               b.y <= view.y1 + 200 && b.y + b.h >= view.y0 - 200) { near.push(one); }
+    });
+    function nearest(list, x, y, within, not) {
+      var best = null, far = within;
+      list.forEach(function (one) {
+        if (one === not) { return; }
+        var d = away(one.box, x, y);
+        if (d <= far) { far = d; best = one; }
+      });
+      return best;
+    }
+
+    // Each line on the screen belongs to the shape it leaves, drawn when
+    // that shape is done -- or, where it starts from somewhere that is not
+    // a shape on the screen, like the middle of a join, to the shape it
+    // goes into, drawn just before that one.
+    var lines = [], loose = [], ends = {};
+    here.flows.forEach(function (line) {
+      var pts = pairsOf(line.getAttribute("d"));
+      if (pts.length < 2 || !line.getTotalLength) { return; }
+      if (!seen(spanOf(pts))) { return; }
+      var a = pts[0], z = pts[pts.length - 1], len = 0;
+      try { len = line.getTotalLength(); } catch (e) { len = 0; }
+      var one = { el: line, len: len, pts: pts, dur: drawMs(len), heads: [], labels: [] };
+      lines.push(one);
+      // Where it leaves from first: a short stem under a diamond ends within
+      // a head's length of the diamond too, and taken for a line going into
+      // it, it was drawn before the diamond it leaves.
+      var out = nearest(near, a[0], a[1], 3, null);
+      if (out && shapes.indexOf(out) < 0) { out = null; }   // it leaves off the screen
+      var into = out ? null : nearest(shapes, z[0], z[1], 16, null);
+      if (out) { out.leaving.push(one); }
+      else if (into) { into.coming.push(one); }
+      else { loose.push(one); }
+      ends[Math.round(z[0]) + " " + Math.round(z[1])] = one;
+    });
+    function lineEndingAt(x, y) {
+      for (var dx = -1; dx <= 1; dx++) {
+        for (var dy = -1; dy <= 1; dy++) {
+          var got = ends[(Math.round(x) + dx) + " " + (Math.round(y) + dy)];
+          if (got) { return got; }
+        }
+      }
+      return null;
+    }
+    // An arrowhead lands as its line arrives.  A line with a head on it
+    // stops at the head's broad end; a short one runs on to its point.
+    var strayHeads = [];
+    here.heads.forEach(function (head) {
+      var p = pairsOf(head.getAttribute("points"));
+      if (p.length < 3 || !seen(spanOf(p))) { return; }
+      var its = lineEndingAt((p[1][0] + p[2][0]) / 2, (p[1][1] + p[2][1]) / 2) ||
+                lineEndingAt(p[0][0], p[0][1]);
+      if (its) { its.heads.push(head); } else { strayHeads.push(head); }
+    });
+    // How near a point is to a line, and how far along the line the
+    // nearest place on it is, as a share of the whole.
+    function alongside(line, x, y) {
+      var pts = line.pts, best = Infinity, at = 0, run = 0;
+      for (var i = 1; i < pts.length; i++) {
+        var ax = pts[i - 1][0], ay = pts[i - 1][1];
+        var dx = pts[i][0] - ax, dy = pts[i][1] - ay, seg = Math.sqrt(dx * dx + dy * dy);
+        var u = seg ? Math.max(0, Math.min(1, ((x - ax) * dx + (y - ay) * dy) / (seg * seg))) : 0;
+        var d = Math.sqrt(Math.pow(ax + u * dx - x, 2) + Math.pow(ay + u * dy - y, 2));
+        if (d < best) { best = d; at = run + u * seg; }
+        run += seg;
+      }
+      return { far: best, share: run ? at / run : 0 };
+    }
+    // The True, False or Case beside a line, and the patch of paper behind
+    // it, are written as the pen passes them; a module's name with the
+    // shape it heads; the chart's title and whose it is, first of all.
+    var heading = [];
+    here.said.forEach(function (words) {
+      var b = boxOf(words);
+      if (!seen(b)) { return; }
+      var patch = words.previousElementSibling;
+      if (!patch || !patch.classList.contains("patch")) { patch = null; }
+      var one = { el: words, patch: patch, dur: writeMs(b.w), share: 0 };
+      var cx = b.x + b.w / 2, cy = b.y + b.h / 2;
+      if (words.classList.contains("label")) {
+        var best = null, far = 40;
+        lines.forEach(function (line) {
+          var got = alongside(line, cx, cy);
+          if (got.far < far) { far = got.far; best = line; one.share = got.share; }
+        });
+        if (best) { best.labels.push(one); return; }
+      }
+      var by = words.classList.contains("heading")
+             ? nearest(shapes, b.x, b.y + b.h, 80, null)
+             : words.classList.contains("label") ? nearest(shapes, cx, cy, 80, null) : null;
+      if (by) { by.said.push(one); return; }
+      heading.push(one);
+    });
+
+    function put(bit, t, cls, vars, kids) {
+      bit.classList.add("ink-wait");
+      var p = { el: bit, t: t, cls: cls, vars: vars || {}, kids: kids || [], lasts: 0 };
+      pieces.push(p);
+      return p;
+    }
+    function write(one, t) {
+      put(one.el, t, "ink-write", { "--dur": ms(one.dur) }).lasts = one.dur;
+      if (one.patch) { put(one.patch, t, null); }
+      return t + one.dur;
+    }
+    function drawLine(line, t) {
+      put(line.el, t, "ink-line", { "--len": (line.len + 2).toFixed(1),
+                                   "--dur": ms(line.dur) }).lasts = line.dur;
+      line.heads.forEach(function (head) {
+        put(head, t + line.dur, "ink-pop").lasts = 160;
+      });
+      line.labels.forEach(function (one) { write(one, t + line.dur * one.share); });
+      return t + line.dur;
+    }
+
+    var t = 0;
+    heading.forEach(function (one) { t = write(one, t); });
+    var after = t;
+    loose.forEach(function (line) { after = Math.max(after, drawLine(line, t)); });
+    t = after;
+    shapes.forEach(function (one) {
+      var ready = t;
+      one.coming.forEach(function (line) { ready = Math.max(ready, drawLine(line, t)); });
+      t = ready;
+      // Round the outline, every stroke of it at once; the color washes in
+      // behind each once it is closed; the words are written as the pen
+      // comes round to finish, one line of them after another.
+      var kids = [], outline = 0, texts = [];
+      Array.prototype.forEach.call(one.el.children, function (bit) {
+        var tag = bit.tagName.toLowerCase();
+        if (tag === "text") { texts.push(bit); return; }
+        if (bit.classList.contains("ghost")) { return; }
+        var len = 0;
+        if (tag !== "g" && bit.getTotalLength) {
+          try { len = bit.getTotalLength(); } catch (e) { len = 0; }
+        }
+        if (len > 0) {
+          var d = drawMs(len);
+          outline = Math.max(outline, d);
+          kids.push({ el: bit, cls: "ink-line", vars: { "--len": (len + 2).toFixed(1),
+                                                        "--dur": ms(d) } });
+        } else {
+          kids.push({ el: bit, cls: "ink-wash", vars: {} });
+        }
+      });
+      kids.forEach(function (kid) {
+        if (kid.cls === "ink-wash") { kid.vars["--d"] = ms(outline); }
+      });
+      var at = outline * 0.7;
+      texts.forEach(function (words) {
+        var b = boxOf(words), d = b ? writeMs(b.w) : 0;
+        kids.push({ el: words, cls: "ink-write", vars: { "--d": ms(at), "--dur": ms(d) } });
+        at += d;
+      });
+      put(one.el, t, null, {}, kids).lasts = Math.max(outline + WASH, at);
+      one.said.forEach(function (words) { write(words, t); });
+      t += Math.max(outline, at);
+      var gone = t;
+      one.leaving.forEach(function (line) { gone = Math.max(gone, drawLine(line, t)); });
+      t = gone;
+    });
+    strayHeads.forEach(function (head) { put(head, t, "ink-pop").lasts = 160; });
+    pieces.sort(function (a, b) { return a.t - b.t; });
+    mine.total = 0;
+    pieces.forEach(function (p) { mine.total = Math.max(mine.total, p.t + p.lasts); });
+  }
+
+  function inkGo(mine) {
+    var pieces = mine.pieces, next = 0, began = 0, live = [];
+    function frame(stamp) {
+      if (ink !== mine) { return; }
+      if (!began) { began = stamp; }
+      var now = stamp - began;
+      while (next < pieces.length && pieces[next].t <= now) {
+        var p = pieces[next++];
+        inkOn(p, now - p.t);
+        live.push(p);
+      }
+      // Each piece is let go as soon as it has been drawn, so a border that
+      // is dashed goes back to its dashes rather than waiting on the rest.
+      live = live.filter(function (p) {
+        if (p.t + p.lasts + 30 > now) { return true; }
+        inkOff(p);
+        return false;
+      });
+      if (next < pieces.length || live.length) { mine.frame = requestAnimationFrame(frame); }
+      else { inkEnd(); }
+    }
+    mine.frame = requestAnimationFrame(frame);
+    // Frames are only drawn for a window somebody can see; an ordinary
+    // timer finishes it whatever happens.
+    mine.safety = setTimeout(function () {
+      if (ink === mine) { inkEnd(); }
+    }, mine.total + 2000);
+  }
+
+  // Its turn: shown, and told how far behind its turn it already is, so
+  // that a frame arriving late leaves nothing drawn slower than the rest.
+  function inkOn(p, late) {
+    p.el.classList.remove("ink-wait");
+    if (p.cls) { p.el.classList.add(p.cls); }
+    Object.keys(p.vars).forEach(function (name) { p.el.style.setProperty(name, p.vars[name]); });
+    p.el.style.setProperty("--late", -Math.round(late) + "ms");
+    p.kids.forEach(function (kid) {
+      kid.el.classList.add(kid.cls);
+      Object.keys(kid.vars).forEach(function (name) {
+        kid.el.style.setProperty(name, kid.vars[name]);
+      });
+    });
+    p.on = true;
+  }
+
+  // Drawn, or no longer wanted drawn: back to exactly what it was, so a
+  // saved copy of the chart carries no trace of how it arrived.
+  function inkOff(p) {
+    p.el.classList.remove("ink-wait");
+    if (!p.on) { return; }
+    p.on = false;
+    if (p.cls) { p.el.classList.remove(p.cls); }
+    INK_VARS.forEach(function (name) { p.el.style.removeProperty(name); });
+    p.kids.forEach(function (kid) {
+      kid.el.classList.remove(kid.cls);
+      INK_VARS.forEach(function (name) { kid.el.style.removeProperty(name); });
+    });
+  }
+
+  function inkEnd() {
+    var mine = ink;
+    if (!mine) { return; }
+    ink = null;
+    cancelAnimationFrame(mine.frame);
+    clearTimeout(mine.timer);
+    clearTimeout(mine.safety);
+    inkListen(false);
+    mine.svg.style.opacity = "";
+    mine.pieces.forEach(inkOff);
+  }
+
+  function inkStop(ev) {
+    if (ev.type === "keydown" && /^(Shift|Control|Alt|Meta|CapsLock)$/.test(ev.key)) { return; }
+    if (ev.type === "visibilitychange" && !document.hidden) { return; }
+    inkEnd();
+  }
+  var INK_WHEEL = { capture: true, passive: true };
+  function inkListen(on) {
+    var how = on ? "addEventListener" : "removeEventListener";
+    document[how]("pointerdown", inkStop, true);
+    document[how]("keydown", inkStop, true);
+    document[how]("visibilitychange", inkStop);
+    window[how]("resize", inkStop);
+    var stage = el("#stage");
+    if (stage) { stage[how]("wheel", inkStop, INK_WHEEL); }
+  }
+
+  var CASCADE_MOST = 150;                // shapes, past which it is shown at actual size
+
   // ------------------------------------------- a chart too big to see whole --
-  // A chart that fits on the stage puts itself together where it stands, as
-  // above.  One that does not -- too many shapes to follow at once, or too
+  // A chart that fits on the stage is fitted to it and drawn where it
+  // stands, as above.  One that does not -- too many shapes to follow at once, or too
   // tall to show whole at a size anybody could read -- used to rise as one
   // block, shrunk to the width of the stage, and left you to find your own
   // way to its Start.
@@ -578,7 +884,7 @@
   // is put in view by the build itself, as for any chart.
   var atFull = false;                    // this drawing stays at actual size
 
-  // Too big for the cascade, or too big to show whole at a size that can
+  // Too many shapes, or too big to show whole at a size that can
   // be read: the same line fitIfItMustBe draws, past which it gives up on
   // the whole chart and fits only its width.
   function tooBigToSee() {

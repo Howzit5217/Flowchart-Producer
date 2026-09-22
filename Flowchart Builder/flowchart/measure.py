@@ -4,6 +4,8 @@ FONT = "Arial, Helvetica, sans-serif"
 FONT_SIZE = 11
 LINE_H = 13
 CHAR_W = FONT_SIZE * 0.55          # only a fallback: see text_w() below
+CAP = 0.72                          # how far a capital stands above the
+DESCENT = 0.21                      #   baseline, and a g hangs below it, in ems
 
 # What the words are set in when nobody has asked for anything else.  The
 # studio can ask for them bigger or smaller, in bold, in another typeface,

@@ -15,7 +15,9 @@
     spot.x = ev.clientX;
     spot.y = ev.clientY;
     spot = spot.matrixTransform(frame.inverse());
-    return { x: spot.x, y: spot.y };   // the paper's corner is the origin
+    // The paper's corner is the origin -- except by hand, where the paper
+    // can reach out past where the design's own numbers start.
+    return byHand ? onHand(spot) : { x: spot.x, y: spot.y };
   }
 
   // How much chart there is to shift about.  A chart of a few dozen shapes
@@ -35,6 +37,7 @@
     chart.id = "chart";
     var box = (chart.getAttribute("viewBox") || "").split(/[\s,]+/).map(Number);
     W = box[2] || 800; H = box[3] || 600;
+    readBands();         // before anything has the page lay the chart out
     heavy = chart.querySelectorAll(".node").length > HEAVY;
     sizeList();          // what a PNG of it comes to, now the chart is known
     chart.onclick = function (ev) {
@@ -42,7 +45,7 @@
       if (byHand) {
         var arrow = ev.target.closest ? ev.target.closest(".link") : null;
         var spot = ev.target.closest ? ev.target.closest(".spot") : null;
-        if (spot) { handClick(+spot.dataset.i); return; }
+        if (spot) { handClick(+spot.dataset.i, +spot.dataset.side); return; }
         if (g) { handClick(+g.dataset.i.slice(1)); }
         else if (arrow) { pickLink(+arrow.dataset.link); }
         else {
@@ -121,6 +124,62 @@
     return (seen[id] || []).filter(function (g) { return g.isConnected; });
   }
 
+  // ---------------------------------------------- only what can be seen --
+  // A browser lays out every word of a drawing, on the screen or not, and
+  // lays every one of them out again whenever the zoom changes.  On a chart
+  // of thirty thousand shapes that was a second and a half on arrival and
+  // half a second for every step of the zoom, spent on words thousands of
+  // screens away.  So the drawing of a chart that big comes in bands, each
+  // a stretch of its height (draw/svg.py), and only the bands near what is
+  // on the stage are drawn at all: the rest are left out until the view
+  // comes near them.  Nothing is taken out of the chart -- every shape is
+  // still there to be found, colored, counted, saved and printed, and a
+  // copy of the chart carries every band -- it is only not laid out.
+  //
+  // Anything about to measure a shape asks for its band first (inView), so
+  // that nothing is measured while it is left out.
+  var bands = [];                        // this drawing's bands, if any
+  function readBands() {
+    bands = [];
+    all(".stretch", chart).forEach(function (g) {
+      var y = (g.getAttribute("data-y") || "").split(" ").map(Number);
+      var sure = y.length === 2 && isFinite(y[0]) && isFinite(y[1]);
+      bands.push({ el: g, on: false, top: sure ? y[0] : -Infinity,
+                   foot: sure ? y[1] : Infinity });
+    });
+    if (bands.length) { chart.classList.add("culled"); }
+  }
+
+  // The bands a screen and a half either side of what the stage shows.
+  // Measured off the page, like the camera, so that it is right however the
+  // chart got where it is: scrolled, carried, zoomed or drawn again.
+  function showBands() {
+    if (!chart || !bands.length || !zoom) { return; }
+    var stage = el("#stage");
+    if (!stage) { return; }
+    var r = chart.getBoundingClientRect(), s = stage.getBoundingClientRect();
+    var top = (s.top - r.top) / zoom, foot = (s.bottom - r.top) / zoom;
+    var pad = Math.max(600, (foot - top) * 1.5);
+    top -= pad;
+    foot += pad;
+    bands.forEach(function (b) {
+      var on = b.foot >= top && b.top <= foot;
+      if (on !== b.on) { b.on = on; b.el.classList.toggle("seen", on); }
+    });
+  }
+
+  function inView(g) {
+    var band = g && g.closest ? g.closest(".stretch") : null;
+    if (!band || band.classList.contains("seen")) { return; }
+    band.classList.add("seen");
+    bands.forEach(function (b) { if (b.el === band) { b.on = true; } });
+  }
+
+  if (el("#stage")) {
+    el("#stage").addEventListener("scroll", showBands, { passive: true });
+  }
+  window.addEventListener("resize", showBands);
+
   // Carrying something towards the edge takes the view with it.  Without
   // this, dragging a shape to where there is no room yet means letting go,
   // scrolling, picking it up again, and again -- when what you meant was
@@ -173,6 +232,9 @@
       ev.stopPropagation();
       var from = nodeById(+knob.dataset.i);
       if (!from) { return; }
+      // The dot it was drawn from is the side it leaves by, from now on.
+      var side = +knob.dataset.side;
+      var start = ports(from)[side] || from;
       try { svg.setPointerCapture(ev.pointerId); } catch (e) { /* mouse: fine */ }
       keepUndo();                        // joining two up can be stepped back
       // What is being drawn is an arrow, so it is drawn as one: a solid line
@@ -187,15 +249,51 @@
       tip.setAttribute("class", "band-tip");
       band.appendChild(wire);
       band.appendChild(tip);
+      // Every other shape puts its dots out while the line is drawn, the way
+      // they do for click a dot, click a dot, so that a line dragged can be
+      // let go on the side it should come in by as well as be drawn from the
+      // side it leaves by.  The dot the point comes near lights up, the
+      // point goes to it, and that is the side the arrow keeps.
+      var aims = document.createElementNS("http://www.w3.org/2000/svg", "g");
+      aims.setAttribute("class", "aims");
+      hand.nodes.forEach(function (n) {
+        if (n.id === from.id) { return; }
+        ports(n).forEach(function (port, s) {
+          var dot = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+          dot.setAttribute("class", "spot");
+          dot.setAttribute("data-i", n.id);
+          dot.setAttribute("data-side", s);
+          dot.setAttribute("cx", port.x + handOrigin.x + port.dx * 1.5);
+          dot.setAttribute("cy", port.y + handOrigin.y + port.dy * 1.5);
+          dot.setAttribute("r", DOT_SPOT);
+          aims.appendChild(dot);
+        });
+      });
+      svg.appendChild(aims);
       svg.appendChild(band);
+      var aimed = null;                  // the dot it would go to, let go now
       var box = svg.getBoundingClientRect();
       var scale = (box.width || W) / W;
       var at = { x: ev.clientX, y: ev.clientY };
+      // Drawn on the paper, so from where the dot is on the paper.
+      var fromX = start.x + handOrigin.x, fromY = start.y + handOrigin.y;
       function reach() {
         box = svg.getBoundingClientRect();   // the view may have moved under us
         var toX = (at.x - box.left) / scale, toY = (at.y - box.top) / scale;
-        wire.setAttribute("d", "M" + from.x + "," + from.y + "L" + toX + "," + toY);
-        var dx = toX - from.x, dy = toY - from.y;
+        var near = null, nearest = Math.pow(18 / scale, 2);
+        Array.prototype.forEach.call(aims.childNodes, function (dot) {
+          var far = Math.pow(dot.getAttribute("cx") - toX, 2) +
+                    Math.pow(dot.getAttribute("cy") - toY, 2);
+          if (far < nearest) { nearest = far; near = dot; }
+        });
+        if (near !== aimed) {
+          if (aimed) { aimed.classList.remove("aimed"); aimed.setAttribute("r", DOT_SPOT); }
+          if (near) { near.classList.add("aimed"); near.setAttribute("r", DOT_SPOT + 2); }
+          aimed = near;
+        }
+        if (aimed) { toX = +aimed.getAttribute("cx"); toY = +aimed.getAttribute("cy"); }
+        wire.setAttribute("d", "M" + fromX + "," + fromY + "L" + toX + "," + toY);
+        var dx = toX - fromX, dy = toY - fromY;
         var run = Math.hypot(dx, dy) || 1;
         var ux = dx / run, uy = dy / run;
         var back = 11, wide = 4.5;
@@ -216,21 +314,25 @@
         window.removeEventListener("pointermove", move);
         window.removeEventListener("pointerup", drop);
         band.remove();
+        aims.remove();
         var went = Math.abs(e.clientX - ev.clientX) + Math.abs(e.clientY - ev.clientY);
         if (went < 5) {
           // Pressed and let go on the spot: take it as a click, and wait for
           // the shape it should go to rather than asking for a drag.
           picked = from.id;
           joining = true;
+          joinFrom = { id: from.id, side: side };   // and it leaves from here
           drawHand();
           drawHandPanel();
           return;
         }
         var under = document.elementFromPoint(e.clientX, e.clientY);
         var g = under && under.closest ? under.closest(".node") : null;
-        var dot = under && under.closest ? under.closest(".spot") : null;
-        if (dot) { joinUp(from.id, +dot.dataset.i); return; }
-        if (g) { joinUp(from.id, +g.dataset.i.slice(1)); return; }
+        var dot = aimed || (under && under.closest ? under.closest(".spot") : null);
+        // Let go on a dot, it goes in there; anywhere else on the shape, it
+        // goes in whichever side is free and suits it.
+        if (dot) { joinUp(from.id, +dot.dataset.i, side, +dot.dataset.side); return; }
+        if (g) { joinUp(from.id, +g.dataset.i.slice(1), side); return; }
         // Let go over nothing.  The shape you were drawing from stays the one
         // in hand, so you can simply try again rather than hunt for it.
         picked = from.id;
@@ -291,24 +393,34 @@
       var wasDown = stage ? stage.scrollTop : 0;
       var wasHoldX = holdX, wasHoldY = holdY;
       var at = { x: ev.clientX, y: ev.clientY };
+      var pressed = onPaper(ev);         // where on the design it was taken up
 
       function move(e) {
         at = { x: e.clientX, y: e.clientY };
         carry();
       }
       function carry() {
-        // How far the view itself has travelled since the press, which the
-        // shape has to make up if it is to stay under the mouse: scrolled
-        // one way, or, on a loose chart, carried the other.
-        var gone = ((stage ? stage.scrollLeft - wasLeft : 0)
-                    - (holdX - wasHoldX)) / scale;
-        var fell = ((stage ? stage.scrollTop - wasDown : 0)
-                    - (holdY - wasHoldY)) / scale;
-        var dx = (at.x - fromX) / scale + gone;
-        var dy = (at.y - fromY) / scale + fell;
+        // How far it has been carried, on the design: where the mouse is on
+        // it now against where it was pressed, asked of the page.  Adding up
+        // how far the view had travelled since the press -- scrolled one way,
+        // or, on a loose chart, carried the other -- counted the view being
+        // put back while the paper grew (keepStill) as the view moving, and
+        // pushed the shape on by that much again.
+        var here = pressed && onPaper({ clientX: at.x, clientY: at.y });
+        var dx, dy;
+        if (here) {
+          dx = here.x - pressed.x;
+          dy = here.y - pressed.y;
+        } else {                         // a drawing the page will not place
+          dx = (at.x - fromX) / scale + ((stage ? stage.scrollLeft - wasLeft : 0)
+                                         - (holdX - wasHoldX)) / scale;
+          dy = (at.y - fromY) / scale + ((stage ? stage.scrollTop - wasDown : 0)
+                                         - (holdY - wasHoldY)) / scale;
+        }
         if (!stirred && Math.abs(dx) < NUDGE && Math.abs(dy) < NUDGE) { return; }
         if (!noted) { noted = true; keepUndo(); }
         stirred = true;
+        shapeCarried = true;                // the view is kept still under it
         chase(at, carry);
         if (grip) {
           // The corner opposite the one being held stays where it is, so the
@@ -342,6 +454,7 @@
       function drop() {
         chaseStop();
         guides = [];                     // the red lines go with the holding
+        shapeCarried = false;
         window.removeEventListener("pointermove", move);
         window.removeEventListener("pointerup", drop);
         if (!stirred && g) {
@@ -356,7 +469,7 @@
             if (now) { typeInto(now); }
           }
         }
-        else { drawHand(); drawHandPanel(); }
+        else { drawHand(); drawHandPanel(); letGo(); }
       }
       window.addEventListener("pointermove", move);
       window.addEventListener("pointerup", drop);
@@ -393,6 +506,7 @@
     chart.removeAttribute("height");
     el("#pct").textContent = Math.round(zoom * 100) + "%";
     holdClamp();                         // a bigger chart has less room to roam
+    showBands();                         // closer in, or further out
   }
   // A step that would carry the zoom past actual size stops there instead.
   // Every zoom set by something other than these two buttons -- Fit, or a
@@ -494,6 +608,7 @@
     var dy = (r.top + y * zoom) - (s.top + stage.clientHeight / 2);
     if (loose) { holdBy(-dx, -dy); }
     else { stage.scrollLeft += dx; stage.scrollTop += dy; }
+    showBands();                         // before anything looks at it
   }
 
   // Where the flow begins, put where it can be seen.  The stage keeps
@@ -512,6 +627,7 @@
     if (!chart || !stage) { return; }
     var first = el('.node[data-kind="oval"]', chart) || el(".node", chart);
     if (!first || !first.getBBox) { return; }
+    inView(first);
     var box;
     try { box = first.getBBox(); } catch (e) { return; }
     var down = stage.clientHeight * 0.35 / Math.max(zoom, 0.01);
@@ -586,6 +702,7 @@
   function followNode(node) {
     var stage = el("#stage"), box = null;
     if (!stage || !node || !node.getBBox) { return; }
+    inView(node);
     try { box = node.getBBox(); } catch (e) { return; }
     if (!box || !box.width || !box.height) { return; }
     var across = stage.clientWidth - 52, down = stage.clientHeight - 52;
@@ -635,6 +752,7 @@
     if (!wrap) { return; }
     wrap.style.setProperty("--hold-x", holdX.toFixed(1) + "px");
     wrap.style.setProperty("--hold-y", holdY.toFixed(1) + "px");
+    showBands();                         // carried, not scrolled: no event says so
   }
 
   // Where the offset is allowed to be, given how big the chart is right now
@@ -680,6 +798,61 @@
     holdX += dx;
     holdY += dy;
     holdClamp();
+  }
+
+  // Keeping the view still while the paper changes size under it.  Drawn
+  // by hand, the paper grows to take whatever is put near its edge -- on
+  // either side -- and what is on it would move with it: more paper on the
+  // left pushes everything right, and a paper narrower than the stage sits
+  // in the middle of it, so it moves by half of whatever it grows by, on
+  // whichever side.  `dx` is how far the drawing has just moved across the
+  // screen; this moves it back.  Loose, the chart is carried back; held,
+  // the stage is scrolled back, as far as it can be.
+  //
+  // What scrolling cannot take -- all of it, while the paper is narrower
+  // than the stage and has no scrolling to do -- the paper is pushed back
+  // for instead, for as long as a shape is being carried, so the one being
+  // carried stays under the mouse and nothing else moves at all.  Let go,
+  // and it settles back into the middle of the stage.
+  var shapeCarried = false;               // a shape is being dragged about
+  var drift = 0;                         // how far the paper is pushed across
+
+  function keepStill(dx) {
+    var stage = el("#stage"), paper = el("#sheet");
+    if (!stage || !paper || !(Math.abs(dx) >= 0.05)) { return; }
+    if (loose) { holdBy(-dx, 0); return; }
+    // Still settling back from the last time?  Then from where it has got to.
+    if (paper.style.transition.indexOf("transform") >= 0) {
+      var now = /matrix\(([^)]+)\)/.exec(getComputedStyle(paper).transform);
+      drift = now ? parseFloat(now[1].split(",")[4]) || 0 : 0;
+    }
+    var was = stage.scrollLeft;
+    stage.scrollLeft = was + dx - drift;   // and what was pushed, if it can
+    drift += stage.scrollLeft - was - dx;
+    if (Math.abs(drift) < 0.5) { drift = 0; }
+    paper.style.transition = "";
+    paper.style.transform = drift ? "translateX(" + drift.toFixed(1) + "px)" : "";
+    if (!shapeCarried) { letGo(); }
+  }
+
+  function letGo() {
+    var stage = el("#stage"), paper = el("#sheet");
+    if (!paper || !drift) { drift = 0; return; }
+    var was = stage ? stage.scrollLeft : 0;
+    if (stage) { stage.scrollLeft = was - drift; }
+    var rest = drift + (stage ? stage.scrollLeft - was : 0);
+    drift = 0;
+    paper.style.transition = "none";
+    paper.style.transform = "";
+    if (Math.abs(rest) < 0.5 || STILL) { paper.style.transition = ""; return; }
+    paper.style.transform = "translateX(" + rest.toFixed(1) + "px)";
+    void paper.offsetWidth;              // from there, not from nothing
+    paper.style.transition = "transform .3s var(--ease)";
+    paper.style.transform = "";
+    var mine = letGo.last = (letGo.last || 0) + 1;
+    setTimeout(function () {             // and the paper's own transitions back
+      if (mine === letGo.last && !drift) { paper.style.transition = ""; }
+    }, 340);
   }
 
   // Switching either way leaves the chart looking exactly where it was.

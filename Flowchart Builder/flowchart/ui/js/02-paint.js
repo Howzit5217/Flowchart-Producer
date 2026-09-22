@@ -160,6 +160,7 @@
     var had = el(".highlights", g);
     if (had) { had.remove(); }
     if (!color || !texts.length) { return; }
+    inView(g);                           // a word left out cannot be measured
     var NS = "http://www.w3.org/2000/svg";
     var pen = document.createElementNS(NS, "g");
     pen.setAttribute("class", "highlights");

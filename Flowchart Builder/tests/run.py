@@ -203,6 +203,92 @@ def _():
         hits, tips, " (first: %s)" % first if first else "")
 
 
+# Every kind of line that has a word written by it: the two sides of an If,
+# an If with no Else and a Then too wide to fork, a chain of Else Ifs, a
+# While, a For, a Do ... Until and a Do ... While, and a Select, one of
+# whose cases has letters hanging below the line.
+LABELLED = """Start
+Declare Integer n
+Input n
+If n > 0 Then
+    Display "positive"
+Else
+    Display "not positive"
+End If
+If n = 2 Then
+    Display "two, and a long line of words to make it wide"
+    Display "more words that go on and on for a while here"
+    Set n = n + 1
+End If
+If n = 5 Then
+    Display "five"
+Else If n = 6 Then
+    Display "six"
+Else If n = 7 Then
+    Display "seven"
+Else
+    Display "something else"
+End If
+While n < 10
+    Set n = n + 1
+End While
+For i = 1 To 3
+    Display i
+End For
+Do
+    Set n = n - 1
+Until n < 3
+Do
+    Set n = n + 2
+While n < 20
+Select Case n
+    Case 1
+        Display "Adding."
+    Case 2
+        Display "Removing."
+    Case 3
+    Case "yes"
+    Default
+        Display "Not on the menu."
+End Select
+End
+"""
+
+
+@check("no word on a line runs into a line, a head or a shape")
+def _():
+    """The Trues, Falses and Cases keep clear of everything drawn near
+    them -- at the plain size, and with the words set bigger, where the
+    lines they sit by have to grow to hold them."""
+    fb = builder()
+    hits = seen = 0
+    first = None
+    looks = list(every_chart())
+    keep = (fb.CHAIN_LIMIT, fb.FOR_STYLE)
+    try:
+        for size in (11, 16, 24):
+            fb.set_type({"size": size})
+            for seed in (1, 4, 7):
+                looks.append(("labelled at %dpx seed %d" % (size, seed),
+                              drawn(None, text=LABELLED, shape="tall", seed=seed)))
+            # and the Else Ifs queued down the page, the For as one hexagon
+            fb.CHAIN_LIMIT, fb.FOR_STYLE = 0, "hexagon"
+            looks.append(("labelled at %dpx, queued" % size,
+                          drawn(None, text=LABELLED, shape="tall")))
+            fb.CHAIN_LIMIT, fb.FOR_STYLE = keep
+    finally:
+        fb.set_type(None)
+        fb.CHAIN_LIMIT, fb.FOR_STYLE = keep
+    for name, svg in looks:
+        n, of = charts.crowded_labels(svg, fb.text_w)
+        hits += n
+        seen += of
+        if n and first is None:
+            first = name
+    return hits == 0, "%d of %d words too close%s" % (
+        hits, seen, " (first: %s)" % first if first else "")
+
+
 @check("a line coming back into the flow says which way")
 def _():
     hits, first = 0, None

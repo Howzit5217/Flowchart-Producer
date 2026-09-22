@@ -72,6 +72,8 @@ VGAP = 20                           # a whole grid step, so shapes line up      
 HGAP = 24                           # horizontal breathing room for branches
 LABEL_PAD = 12                      # room a True / False label needs beside
                                     #   the diamond it belongs to
+LABEL_GAP = 4                       # clear paper between a label's letters
+                                    #   and the line or arrowhead it is by
 LOOP_UP = 20                        # room above a loop for the loop-back arrow
 
 HEAD_LEN = 10                       # arrowhead: how far back from the point
@@ -97,6 +99,15 @@ AUTO_SHAPE = 1.25                   # what auto aims at: between a square
                                     #   and a 16:9 frame
 AUTO_KEEP = (0.5, 2.2)              # auto leaves a chart alone while its
                                     #   shape is already inside this
+FIT_MOST = 1000                     # a chart with more shapes than this is
+                                    #   never reshaped, whatever the shape
+                                    #   asked for: nothing that big is read
+                                    #   whole in any frame, so there is no
+                                    #   outline worth reshaping it for
+BAND_FROM = 1200                    # a chart with more shapes than this is
+BAND_H = 1600                       #   drawn in bands this tall, which a page
+                                    #   showing it can leave out while they
+                                    #   are nowhere near the screen
 ROUTE_COST = 0.8                    # and how much a layout is marked down
                                     #   for arrows that go the long way
                                     #   about, so that two layouts of much

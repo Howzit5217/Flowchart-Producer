@@ -507,3 +507,21 @@
      the stage still scrolls normally where there is no shape under it. */
   #chart, #chart * { touch-action: none; }
   #chart { -webkit-user-select: none; user-select: none; }
+  /* A chart of thousands of shapes comes in bands, and the bands nowhere
+     near the screen are left out of the page's drawing until the view comes
+     near them (see showBands).  Left out means not laid out at all, which is
+     the point: a browser lays out every word it has been given, seen or not,
+     and does it all again at every step of a zoom.  Only the chart on the
+     page is ever like this -- a copy of it has no id, and has every band.
+
+     Every piece in a band is left out, not only the band.  A band left out
+     on its own still had the browser do most of the work for everything in
+     it -- a zoom step cost 450ms that way, and 58ms with every piece left
+     out, the same as taking the bands out of the page altogether.
+
+     On a screen only: the browser's own Print takes the page as it stands,
+     and on paper there is no screen for any band to be far from. */
+  @media screen {
+    #chart.culled .stretch:not(.seen),
+    #chart.culled .stretch:not(.seen) * { display: none; }
+  }

@@ -86,13 +86,31 @@ def fit_shape(charts, spec):
         # scoring loop below, which asks for exactly the same three among
         # its candidates -- and a third time by the early return, which
         # rebuilt the very layout it had just measured.
-        plain = {}                                 # one column, per chain style
-        for chain in chains:
-            plain[chain] = build(0, chain, keep[1])
-        natural = plain[keep[0]]
+        #
+        # The layout as it stands is built first, and the other two only if
+        # it is not to be kept: auto keeps it whenever it is already a
+        # sensible shape, and building the others first was two whole
+        # layouts built only to be thrown away.  Nothing here draws on the
+        # shake, so which order they are built in changes no chart.
+        #
+        # A program of thousands of shapes is kept as it stands, whatever
+        # shape was asked for.  No frame shows a chart that big whole, so
+        # there is no outline worth fitting it to -- and the one that came
+        # nearest was every chain forked into lanes: a program of forty-three
+        # thousand lines came out a million and a half pixels wide, took six
+        # times as long to draw under auto and twenty times as long asked to
+        # be square, and was neither: it could only be read by scrolling
+        # sideways across a mile of empty lanes.
+        natural = build(0, keep[0], keep[1])
+        if sum(1 for e in natural[0] if e[0] == "shape") > settings.FIT_MOST:
+            return natural[0]
         if str(spec).strip().lower() == "auto" \
                 and settings.AUTO_KEEP[0] <= natural[1] / natural[2] <= settings.AUTO_KEEP[1]:
             return natural[0]                      # already a sensible shape
+        plain = {keep[0]: natural}                 # one column, per chain style
+        for chain in chains:
+            if chain not in plain:
+                plain[chain] = build(0, chain, keep[1])
 
         tallest = max(h for _, _, h in plain.values())
         # Columns are the one layout that cannot be routed tidily: the arrow

@@ -49,10 +49,11 @@
 
     // a line that runs through a shape on its way past is not wrong, but it
     // is the thing that makes a hand-drawn chart hard to follow
-    hand.links.forEach(function (link) {
+    var routes = routeAll();              // the lines as they are drawn
+    hand.links.forEach(function (link, li) {
       var a = nodeById(link.from), b = nodeById(link.to);
-      if (!a || !b) { return; }
-      var pts = linkPath(a, b);
+      var pts = routes[li];
+      if (!a || !b || !pts) { return; }
       hand.nodes.forEach(function (n) {
         if (n.id === a.id || n.id === b.id) { return; }
         for (var i = 0; i < pts.length - 1; i++) {
@@ -485,6 +486,10 @@
           was.y = Math.min(was.y, n.y - n.h / 2);
         });
         keepUndo();
+        // Sides an arrow was drawn to keep were picked for where the shapes
+        // stood; tidied, they stand somewhere else, so every arrow finds
+        // its way again (and still keeps off a side another arrow is on).
+        hand.links.forEach(function (l) { delete l.fromSide; delete l.toSide; });
         moving.forEach(function (id) {
           var spot = places[id], node = spot.node;
           node.x = Math.round((spot.x * by - least.x + was.x) / HAND_GRID) * HAND_GRID;

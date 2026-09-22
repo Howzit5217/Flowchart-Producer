@@ -84,6 +84,7 @@
       if (first) { self.postMessage({ id: job.id, note: "starting" }); }
       start(job).then(function (py) {
         if (first) { self.postMessage({ id: job.id, note: "ready" }); }
+        if (job.warm) { self.postMessage({ id: job.id, out: "" }); return; }
         var fn = py.globals.get("draw_json");
         var out = fn(job.ask);
         fn.destroy();
@@ -148,6 +149,37 @@
       pyJobs = {};
       return drawHere(ask);
     });
+  }
+
+  // Python, started in the worker while the program is still being written,
+  // so that the first build finds it ready.  It used to be started on the
+  // page's own thread instead: a whole second Python that no build ever
+  // used, since every build is drawn in the worker.  The first build still
+  // waited for the worker's Python to start from nothing, and the page went
+  // on holding both of them -- memory a program of forty thousand lines
+  // needs for itself.  Where there is no worker, it is the old way still.
+  function warmAside() {
+    var hand = pythonHand();
+    if (!hand) { startPython(); return; }
+    var says = el("#build-note");
+    var id = pyNext++;
+    function unsaid() {                  // "starting", once it no longer is
+      if (says && says.textContent === TXT.starting) { says.textContent = TXT.ready; }
+    }
+    pyJobs[id] = {
+      go: unsaid,
+      no: function () {                  // the build will try again, and say so
+        if (says && says.textContent === TXT.starting) { says.textContent = ""; }
+      },
+      note: function (what) {
+        if (what === "starting" && says && !says.textContent) {
+          says.className = "";
+          says.textContent = TXT.starting;
+        }
+      }
+    };
+    hand.postMessage({ id: id, warm: true, where: PYODIDE,
+                       root: new URL(".", location.href).href, files: PYFILES });
   }
 
   function drawHere(ask) {               // the slow way: on the page's thread

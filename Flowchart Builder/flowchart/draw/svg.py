@@ -6,7 +6,7 @@ from .. import measure, settings
 from ..draw.grid import grid_lines
 from ..draw.outlines import shape_art
 from ..draw.arrows import arrow_head, chain_lines, path_d
-from ..layout.blocks import shift
+from ..layout.blocks import label_drop, shift
 from ..layout.columns import bbox
 from ..measure import FONT, line_h, text_w, type_of
 from ..shapes import geom_of
@@ -210,23 +210,56 @@ def to_svg(elems, title=None, author=None):
             return False
         return came not in leaving.get(pt, set()) and runs_through(pt)
 
+    # A chart of thousands of shapes is written in bands, each a stretch of
+    # its height, so that a page showing it can leave out whatever is
+    # nowhere near the screen.  A browser lays out every word of a drawing
+    # whether it can be seen or not, and lays them all out again at every
+    # step of a zoom: on a program of forty-three thousand lines that was
+    # well over a second on arrival and half a second a zoom step, for a
+    # screenful of words.  Each piece goes in the band its top falls in, and
+    # a band says how far its pieces reach, so a line that runs a long way
+    # down is shown for as long as any of it is in sight.
+    #
+    # The routes, the shapes and the tips are banded separately, and every
+    # band of routes comes before every band of shapes and every band of
+    # tips after both, so nothing paints over anything it did not before.
+    # A chart with fewer shapes is written exactly as it always was.
+    tips = []
+    banded = {} if len(boxes) > settings.BAND_FROM > 0 else None
+
+    def put(layer, top, foot, piece):
+        """A piece of the drawing: 0 a route, 1 a shape or a label, 2 a tip."""
+        if banded is None:
+            (tips if layer == 2 else out).append(piece)
+            return
+        key = (layer, int(top // settings.BAND_H))
+        band = banded.get(key)
+        if band is None:
+            band = banded[key] = [top, foot, []]
+        band[0], band[1] = min(band[0], top), max(band[1], foot)
+        band[2].append(piece)
+
     # Routes first, because the shapes and the labels are meant to paint over
     # them.  The tips are held back to the very end: a label carries a patch
     # of blank paper behind it so the line does not run through the word, and
     # where a label sat near the end of a route that patch took the point off
     # the arrow with it.  Nothing should ever be painted over a tip.
-    tips = []
     for pts, arrow in chain_lines(segs):
         head = None
+        end = pts[-1][1]
         if reaches_a_shape(pts) or joins_a_line(pts):
             head, pts = arrow_head(pts)
         d = path_d(pts)
         if d:
-            out.append(f'<path class="flow" d="{d}" fill="none"/>')
+            ys = [p[1] for p in pts]
+            put(0, min(ys) - 2, max(ys) + 2,
+                f'<path class="flow" d="{d}" fill="none"/>')
         if head:
-            tips.append(f'<polygon class="head" points="{head}" fill="{settings.INK}" '
-                        f'stroke="{settings.INK}" stroke-width="0.6" '
-                        'stroke-linejoin="miter"/>')
+            reach = settings.HEAD_LEN + 4
+            put(2, end - reach, end + reach,
+                f'<polygon class="head" points="{head}" fill="{settings.INK}" '
+                f'stroke="{settings.INK}" stroke-width="0.6" '
+                'stroke-linejoin="miter"/>')
 
     for e in elems:
         if e[0] == "line":
@@ -238,19 +271,27 @@ def to_svg(elems, title=None, author=None):
             tw = text_w(s_, measure.FONT_SIZE, True) + 8  # patch keeps the label
             bx = {"end": x - tw + 4,            #   off whatever line runs behind it
                   "middle": x - tw / 2.0}.get(anchor, x - 4)
-            out.append(f'<rect class="patch" x="{bx:.1f}" '
-                       f'y="{y - (measure.FONT_SIZE - 1):.1f}" width="{tw:.1f}" '
-                       f'height="{measure.LINE_H:g}" fill="{settings.SHEET}" '
-                       'stroke="none"/>')
-            out.append(f'<text class="label" x="{x:.1f}" y="{y:.1f}" '
-                       f'text-anchor="{anchor}" font-weight="bold" '
-                       f'stroke="none" fill="{settings.INK}">{html.escape(s_)}</text>')
+            # and goes no lower than the letters do: a patch a line of words
+            # tall reached down past a True towards the line under it, and at
+            # a big size took a bite out of the corner the line turned at
+            top = y - (measure.FONT_SIZE - 1)
+            tall = measure.FONT_SIZE + label_drop(s_)
+            put(1, top, top + tall,
+                f'<rect class="patch" x="{bx:.1f}" '
+                f'y="{top:.1f}" width="{tw:.1f}" '
+                f'height="{tall:.1f}" fill="{settings.SHEET}" '
+                'stroke="none"/>')
+            put(1, top, top + tall,
+                f'<text class="label" x="{x:.1f}" y="{y:.1f}" '
+                f'text-anchor="{anchor}" font-weight="bold" '
+                f'stroke="none" fill="{settings.INK}">{html.escape(s_)}</text>')
         elif e[0] == "htext":
             _, x, y, s_, anchor = e
-            out.append(f'<text class="heading" x="{x:.1f}" y="{y:.1f}" '
-                       f'text-anchor="{anchor}" font-size="13" '
-                       f'font-weight="bold" stroke="none" fill="{settings.INK}">'
-                       f'{html.escape(s_)}</text>')
+            put(1, y - 16, y + 5,
+                f'<text class="heading" x="{x:.1f}" y="{y:.1f}" '
+                f'text-anchor="{anchor}" font-size="13" '
+                f'font-weight="bold" stroke="none" fill="{settings.INK}">'
+                f'{html.escape(s_)}</text>')
         else:
             _, shape, cx, cy, w, h, lines = e[:7]
             said = e[7] if len(e) > 7 else 0
@@ -264,10 +305,10 @@ def to_svg(elems, title=None, author=None):
             # chart can pick out one shape, or every shape of one kind, and
             # color it.
             nodes += 1
-            out.append(f'<g class="node" data-kind="{shape}" '
-                       f'data-i="{said or nodes}">')
+            piece = [f'<g class="node" data-kind="{shape}" '
+                     f'data-i="{said or nodes}">']
             drawn = geom_of(shape)
-            out += shape_art(drawn, cx, cy, w, h, paint)
+            piece += shape_art(drawn, cx, cy, w, h, paint)
             if drawn == "store":                 # the words clear of the lip
                 ty = cy + min(5.0, h * 0.09)
             elif drawn == "offpage":             # clear of the point at the foot
@@ -285,11 +326,21 @@ def to_svg(elems, title=None, author=None):
             tall = line_h(size)
             y0 = ty - (len(lines) - 1) * tall / 2.0 + 4.0 * size / measure.BASE_SIZE
             for i, line in enumerate(lines):
-                out.append(f'<text x="{tx:.1f}" y="{y0 + i*tall:.1f}" '
-                           f'text-anchor="middle" stroke="none" fill="{settings.INK}">'
-                           f'{html.escape(line)}</text>')
+                piece.append(f'<text x="{tx:.1f}" y="{y0 + i*tall:.1f}" '
+                             f'text-anchor="middle" stroke="none" fill="{settings.INK}">'
+                             f'{html.escape(line)}</text>')
+            piece.append("</g>")
+            put(1, t - 4, b + 4, "\n".join(piece))
+    if banded is None:
+        out += tips                         # the points of the arrows, on top
+    else:
+        for key in sorted(banded):          # routes, then shapes, then tips
+            top, foot, pieces = banded[key]
+            # "stretch", not "band": the page already has a .band -- the line
+            # drawn while two shapes are being joined -- and styles it
+            out.append(f'<g class="stretch" data-y="{top:.0f} {foot:.0f}">')
+            out += pieces
             out.append("</g>")
-    out += tips                             # the points of the arrows, on top
     out += ["</g>", "</svg>"]
     return "\n".join(out)
 

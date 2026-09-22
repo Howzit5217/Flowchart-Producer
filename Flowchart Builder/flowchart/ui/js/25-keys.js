@@ -175,7 +175,7 @@
       ev.preventDefault();
       keepUndo();
       var by = keyStep(ev);
-      node.x = Math.max(node.w / 2 + 20, node.x + WAYS[ev.key][0] * by);
+      node.x += WAYS[ev.key][0] * by;    // the paper grows to the left too
       node.y = Math.max(node.h / 2 + 20, node.y + WAYS[ev.key][1] * by);
       drawHand();
       drawHandPanel();

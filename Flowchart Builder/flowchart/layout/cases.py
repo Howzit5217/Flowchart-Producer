@@ -1,7 +1,11 @@
 """Select Case, and the lane each branch gets."""
+import math
+
 from .. import settings
 from ..layout import blocks
-from ..layout.blocks import Block, layout_seq, node_block, shift
+from ..layout.blocks import (
+    Block, label_beside, label_clear, label_run, layout_seq, node_block,
+    shift)
 from ..measure import text_w
 from ..parse.nodes import Node
 
@@ -14,7 +18,8 @@ def layout_select(item):
     branches = []
     for label, items in item.branches:
         b = layout_seq(items)
-        need = text_w(label, bold=True) + 14     # room for the label beside the line
+        # room for the label beside the line, and a little after it
+        need = label_clear() + text_w(label, bold=True) + settings.LABEL_PAD / 2.0
         if b.w - b.axis < need:
             b = Block(b.axis + need, b.h, b.axis, b.elems, b.terminal)
         branches.append((label, b))
@@ -30,6 +35,13 @@ def layout_select(item):
     center = span / 2.0
     bus_y = dia.h + settings.VGAP / 2.0
     top = dia.h + settings.VGAP + settings.GRID_STEP
+    # Each case's line down from the bus is long enough for its word to
+    # stand beside it, clear of the bus above and the branch below --
+    # further, in whole grid steps, where the words are set big.
+    short = bus_y + label_run(*(label for label, _ in branches)) - top
+    if short > 0:
+        step = settings.GRID_STEP if settings.GRID_STEP > 0 else short
+        top += math.ceil(short / step - 0.001) * step
     tallest = max(b.h for _, b in branches)
     all_end = all(b.terminal for _, b in branches)
     merge = top + tallest + (0 if all_end else settings.VGAP)
@@ -49,7 +61,7 @@ def layout_select(item):
         if i:
             x += settings.HGAP
         ax = axes[i]
-        elems.append(("text", ax + 5, bus_y + 15, label, "start"))
+        elems.append(label_beside(ax, bus_y, label, 1, top - bus_y))
         if b.h == 0:                              # empty Case: one plain line
             if not all_end:
                 elems.append(("line", ax, bus_y, ax, merge, False))

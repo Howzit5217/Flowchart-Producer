@@ -190,7 +190,9 @@
           var g = el('.node[data-i="h' + node.id + '"]', chart);
           if (g) { typeInto(g); }
         } },
-      { name: TXT.connect, go: function () { joining = true; drawHandPanel(); } },
+      { name: TXT.connect, go: function () {
+          joining = true; joinFrom = null; drawHandPanel();
+        } },
       { name: TXT.m_copy, go: function () {
           keepUndo();
           var twin = JSON.parse(JSON.stringify(node));
@@ -242,7 +244,7 @@
           link.dash = !link.dash; drawHand(); drawHandPanel();
         } },
       { name: TXT.turn_it_round, go: function () {
-          var was = link.from; link.from = link.to; link.to = was;
+          turnLink(link);
           drawHand(); drawHandPanel(); showReport();
         } },
       "-",

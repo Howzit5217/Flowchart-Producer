@@ -681,6 +681,9 @@
     animation: breathe 1.5s ease-in-out infinite;
   }
   svg .spot:hover { fill-opacity: .9; r: 8; animation: none; }
+  /* the dot a line being dragged would go to, let go now -- a drag holds on
+     to the pointer, so the dot under it never hears that it is pointed at */
+  svg .spot.aimed { fill-opacity: .9; animation: none; }
   @keyframes breathe {
     0%, 100% { fill-opacity: .18; }
     50% { fill-opacity: .55; }

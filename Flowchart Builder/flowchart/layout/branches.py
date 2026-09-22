@@ -2,8 +2,8 @@
 from .. import settings
 from ..layout import blocks
 from ..layout.blocks import (
-    Block, head_shape, join_room, layout_seq, node_block, part_of, shift,
-    tail_shape)
+    Block, head_shape, join_room, label_above, label_beside, label_run,
+    layout_seq, node_block, part_of, shift, tail_shape)
 from ..measure import text_w
 
 
@@ -66,8 +66,7 @@ def layout_chain(tests, tail, thens, other):
         d_top = y + sink
         cy = d_top + mid
         elems += shift(dia.elems, -dia.axis, d_top)
-        elems.append(("text", side * (d_half + 6), cy - 6, settings.YES,
-                      "end" if side < 0 else "start"))
+        elems.append(label_above(side * d_half, cy, settings.YES, side))
         d_bot = d_top + dia.h
         if head:                            # straight in at the side
             elems.append(("line", side * d_half, cy,
@@ -109,10 +108,12 @@ def layout_chain(tests, tail, thens, other):
         else:                               # an empty Then: straight home
             bot = d_bot
             backs.append(cy)
-        nxt = max(bot, d_bot) + settings.VGAP
+        # False goes on down, and says so on its way: the line is long
+        # enough for the word to stand beside it clear of the diamond and
+        # of whatever it goes into, however big the words are
+        nxt = max(max(bot, d_bot) + settings.VGAP, d_bot + label_run(settings.NO))
         elems += [("line", 0, d_bot, 0, nxt, not (last and not other.h)),
-                  ("text", -side * 5, d_bot + 14, settings.NO,
-                   "start" if side < 0 else "end")]
+                  label_beside(0, d_bot, settings.NO, -side)]
         y = nxt
 
     if other.h:                             # the Else, on the line it is on
@@ -228,10 +229,10 @@ def layout_fork(item):
         return side * (half + gap + out)
 
     if not item.orelse and half + t_gap + (then.w - then.axis) > settings.FORK_LIMIT:
+        top = dia.h + label_run(settings.YES)
         y = top + then.h
         elems += [("line", 0, dia.h, 0, top, True),
-                  ("text", -e_side * 5, dia.h + settings.VGAP / 2.0 + 4, settings.YES,
-                   "end" if e_side > 0 else "start")]
+                  label_beside(0, dia.h, settings.YES, -e_side)]
         elems += shift(then.elems, -then.axis, top)
         merge = bottom = y + settings.VGAP
         if not then.terminal:
@@ -243,8 +244,7 @@ def layout_fork(item):
         out = then.w - then.axis if e_side > 0 else then.axis
         lane = e_side * (max(half, out) + e_gap)       # clear of the branch
         elems += [("line", e_side * half, mid, lane, mid, False),
-                  ("text", e_side * (half + 6), mid - 6, settings.NO,
-                   "start" if e_side > 0 else "end"),
+                  label_above(e_side * half, mid, settings.NO, e_side),
                   ("line", lane, mid, lane, merge, False),
                   ("line", lane, merge, 0, merge, True)]
         near = max(half, then.axis if e_side > 0 else then.w - then.axis)
@@ -288,8 +288,7 @@ def layout_fork(item):
     merge += 0 if both_end else settings.VGAP
 
     for side, label, ax, sign, head, b_top in lanes:
-        elems.append(("text", sign * (half + 6), cy - 6, label,
-                      "end" if sign < 0 else "start"))
+        elems.append(label_above(sign * half, cy, label, sign))
         if head:                     # straight in at the side of the box
             elems.append(("line", sign * half, cy,
                           ax + (head[1] if sign < 0 else head[0]) - side.axis,

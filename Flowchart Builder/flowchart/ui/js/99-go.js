@@ -55,6 +55,6 @@
       opening = true;                    // drawn on opening, not asked for
       el("#build").click();
     }
-    else if (MODE === "web") { startPython(); }  // warm it up while they type
+    else if (MODE === "web") { warmAside(); }    // warm it up while they type
   }
 })();
