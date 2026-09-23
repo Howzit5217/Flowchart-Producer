@@ -126,7 +126,7 @@ def drawn(program, **how):
     # Compressed, it is drawn the way the studio draws it: shaken, then
     # tightened.  What that changes is put back, because some of it -- the
     # wall round the paper, the gaps between charts -- no shake resets.
-    spacing = {name: getattr(fb, name) for name in fb.TIGHT}
+    spacing = {name: getattr(fb, name) for name in set(fb.TIGHT) | set(fb.ROOMY)}
     try:
         fb.SHAPE = how.get("shape", "auto")
         fb.VARIETY = how.get("variety", False)
@@ -135,6 +135,9 @@ def drawn(program, **how):
             fb.style_variety(how["seed"])
         if how.get("tight"):
             for name, value in fb.TIGHT.items():
+                setattr(fb, name, value)
+        elif how.get("roomy"):
+            for name, value in fb.ROOMY.items():
                 setattr(fb, name, value)
         return fb.make_flowchart(text, title=how.get("title", "Test"),
                                  max_h=how.get("max_h", 0))
@@ -404,11 +407,126 @@ def _():
     fb = builder()
     off = seen = 0
     for _, svg in every_chart():
-        a, b = charts.off_the_grid(svg, charts.grid_step(svg) or fb.GRID_STEP)
+        a, b = charts.off_the_grid(svg, charts.grid_step(svg) or fb.GRID_STEP,
+                                   charts.grid_from(svg))
         off += a
         seen += b
     share = 0 if not seen else off * 100.0 / seen
     return share < 2, "%d of %d edges off the ruling (%.0f%%)" % (off, seen, share)
+
+
+def paper_size(svg):
+    box = re.search(r'viewBox="0 0 ([\d.]+) ([\d.]+)"', svg)
+    return float(box.group(1)), float(box.group(2))
+
+
+@check("a shape asked for is the shape of the paper, in every design")
+def _():
+    """Square comes back square -- plain, compressed or roomy, whatever the
+    program -- and so does every other shape asked for by name.  The sheet
+    is written in whole pixels, so a pixel either way is all it may miss by."""
+    fb = builder()
+    bad, seen = [], 0
+    for program in PROGRAMS:
+        for shape in ("square", "wide", "page", "4:3"):
+            want = fb.shape_target(shape)
+            for design in ("plain", "tight", "roomy"):
+                w, h = paper_size(drawn(program, shape=shape, seed=4,
+                                        **({design: True} if design != "plain" else {})))
+                seen += 1
+                if abs(w - h * want) > 1.0 + want:
+                    bad.append("%s %s %s: %gx%g" % (program[:-4], shape, design, w, h))
+    return not bad, "%d drawings%s" % (seen, "" if not bad else " -- " + "; ".join(bad[:3]))
+
+
+def designed(text, design):
+    """The program read the way one design reads it, the settings put back."""
+    fb = builder()
+    change = {"tight": fb.TIGHT, "roomy": fb.ROOMY}.get(design, {})
+    keep = {name: getattr(fb, name) for name in change}
+    try:
+        for name, value in change.items():
+            setattr(fb, name, value)
+        return fb.program_json(fb.parse_program(text))
+    finally:
+        for name, value in keep.items():
+            setattr(fb, name, value)
+
+
+@check("compressed and roomy are other charts of the same program")
+def _():
+    """Each design sets the program out differently -- compressed shares its
+    shapes out among more steps, roomy among fewer -- and none of them
+    changes a thing the program does: the same statements, in the same
+    order, from the same lines, for the runner and the code writer alike."""
+    fewer = more = 0
+    bad = []
+    for program in PROGRAMS:
+        text = io.open(os.path.join(HERE, "programs", program), encoding="utf-8").read()
+        said = {}
+        shapes = {}
+        for design in ("plain", "tight", "roomy"):
+            ast = designed(text, design)
+            said[design] = [(s.get("op"), s.get("line"), s.get("text")) for s in statements(ast)]
+            shapes[design] = len(set(s.get("id") for s in statements(ast)))
+        for design in ("tight", "roomy"):
+            if said[design] != said["plain"]:
+                bad.append("%s %s reads differently" % (program[:-4], design))
+        if shapes["tight"] > shapes["plain"] or shapes["roomy"] < shapes["plain"]:
+            bad.append("%s: %d / %d / %d shapes" % (program[:-4], shapes["tight"],
+                                                    shapes["plain"], shapes["roomy"]))
+        fewer += shapes["tight"] < shapes["plain"]
+        more += shapes["roomy"] > shapes["plain"]
+    ok = not bad and fewer * 2 >= len(PROGRAMS) and more * 2 >= len(PROGRAMS)
+    return ok, "%d of %d programs in fewer shapes compressed, %d in more roomy%s" % (
+        fewer, len(PROGRAMS), more, "" if not bad else " -- " + "; ".join(bad[:3]))
+
+
+# What a few of the examples are for, said the way the page should say it.
+# The rest only have to be called something other than their first line.
+CALLED = {
+    "e_add": "Adds two numbers",
+    "e_decide": "Checks whether age >= 18",
+    "e_count": "Counts from 1 to 5",
+    "e_leap": "Checks whether a year is a leap year",
+    "e_fizz": "Plays FizzBuzz",
+    "e_countdown": "Counts down from 10",
+    "e_sumevens": "Adds up the even numbers from 1 to 20",
+    "e_votes": "Counts the votes and names the winner",
+    "e_bank": "Keeps a bank balance, with deposits and withdrawals",
+    "e_rps": "Plays rock, paper, scissors",
+}
+
+
+@check("a program nobody named is called what it does")
+def _():
+    """No title, and the page names the program from what it is for -- a
+    leap year, a countdown, a bank account -- rather than from its first
+    line, which is nearly always a Declare.  Every example and every puzzle
+    is asked, in each of the page's languages."""
+    if not node_there():
+        return None, "node is not installed -- skipped"
+    fb = builder()
+    bad, seen = [], 0
+    for lang in sorted(fb.WORDS):
+        with tempfile.NamedTemporaryFile("w", suffix=".json", delete=False,
+                                         encoding="utf-8") as words:
+            json.dump(fb.WORDS[lang], words)
+        try:
+            got = subprocess.run(["node", os.path.join(HERE, "names.js"), words.name],
+                                 capture_output=True, text=True, encoding="utf-8",
+                                 timeout=60)
+        finally:
+            os.unlink(words.name)
+        if got.returncode:
+            return False, got.stderr.strip()[-300:]
+        for key, name in json.loads(got.stdout):
+            seen += 1
+            if not name or "{" in name:
+                bad.append("%s %s: %r" % (lang, key, name))
+            elif lang == "en" and key in CALLED and name != CALLED[key]:
+                bad.append("%s: %r, not %r" % (key, name, CALLED[key]))
+    return not bad, "%d programs named%s" % (seen, "" if not bad else " -- " + "; ".join(bad[:3]))
 
 
 # ------------------------------------------------------------- the shapes --

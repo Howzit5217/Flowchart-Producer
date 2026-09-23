@@ -33,11 +33,16 @@
     if (!copy.getAttribute("class")) { copy.removeAttribute("class"); }
   }
   var svgUrl = null;
-  function linkSvg() {
+  function linkSvg(ev) {
     if (svgUrl) { URL.revokeObjectURL(svgUrl); }
-    svgUrl = URL.createObjectURL(
-        new Blob([plain(1)], { type: "image/svg+xml;charset=utf-8" }));
+    var blob = new Blob([plain(1)], { type: "image/svg+xml;charset=utf-8" });
+    svgUrl = URL.createObjectURL(blob);
     el("#svg-link").href = svgUrl;
+    // With a folder picked in Files the link is not followed: the drawing
+    // goes where everything else saved from here goes (19-folder.js).
+    if (ev && intoFolder(blob, el("#svg-link").download || "flowchart.svg")) {
+      ev.preventDefault();
+    }
   }
   el("#svg-link").addEventListener("click", linkSvg);   // always the latest
   // Nothing made yet: the press above makes the copy, before the browser
@@ -49,7 +54,13 @@
     el("#svg-link").href = "#";
   }
 
+  // Every file this page hands over comes through here: into the folder
+  // picked in Files if there is one, and the browser's downloads if not.
   function save(blob, filename) {
+    if (!intoFolder(blob, filename)) { download(blob, filename); }
+  }
+
+  function download(blob, filename) {
     var url = URL.createObjectURL(blob);
     var a = document.createElement("a");
     a.href = url;

@@ -860,14 +860,17 @@
   // headed with what it is without anybody stopping to type it.  An example
   // is called what its button says; a puzzle is only numbered, for the
   // reason the puzzles give (its name is most of the answer); and anything
-  // else is called by the comment it opens with, or failing that by the
-  // first thing it says.  A title somebody typed is theirs and is never
-  // written over: only an empty one, or one put there by this, is.
+  // else is called by the comment it opens with, or failing that by what
+  // it does (see 09-names.js), or failing even that by the first thing it
+  // says.  A title somebody typed is theirs and is never written over: only
+  // an empty one, or one put there by this, is.
   //
   // Where the name came from is kept, not the name, so it is said in the
   // language of the page at each drawing -- and so an example with a line
   // or two changed is still that example.  Pasting or dropping a program
-  // in, emptying the box, or opening a file lets it go.
+  // in, emptying the box, or opening a file lets it go.  A name read off
+  // the words is not kept at all: it is read again at every drawing, so a
+  // program that grows into something else is called what it has become.
   var titleFrom = null;                 // { key } / { puzzle } / { text }
   var titlePut = "";                    // what was last written into the box
 
@@ -899,7 +902,7 @@
       var line = lines[i].trim();
       var note = /^(?:\/\/+|\/\*+)\s*(.*?)\s*(?:\*+\/)?$/.exec(line);
       if (note) {
-        if (note[1] && !said) { return { text: shortTitle(note[1]) }; }
+        if (note[1] && !said) { return { text: shortTitle(note[1]), guess: true }; }
         continue;
       }
       if (!said) {
@@ -907,7 +910,9 @@
         if (put && put[2].trim()) { said = put[2]; }
       }
     }
-    return said ? { text: shortTitle(said.replace(/[\s.:,;!?-]+$/, "")) } : null;
+    var does = describeProgram(code);
+    if (does) { return { text: does, guess: true }; }
+    return said ? { text: shortTitle(said.replace(/[\s.:,;!?-]+$/, "")), guess: true } : null;
   }
 
   function shortTitle(s) {
@@ -927,7 +932,7 @@
     if (titleOwned()) { return; }
     if (!code.trim()) { titleFrom = null; }
     var from = titleFrom || (code.trim() ? titleFromWords(code) : null);
-    titleFrom = from;
+    titleFrom = from && !from.guess ? from : null;
     el("#f-title").value = titlePut = from ? titleOfFrom(from) : "";
   }
 

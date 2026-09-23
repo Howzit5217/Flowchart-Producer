@@ -66,7 +66,9 @@ def described(elems):
     return word("chart_desc", n=sum(counted.values()), kinds=named)
 
 
-def to_svg(elems, title=None, author=None):
+def to_svg(elems, title=None, author=None, paper=None):
+    """The drawing, as SVG.  `paper` is the shape to cut the sheet to, width
+    over height (see paper_ratio), or None to fit the sheet to the chart."""
     # Drawing starts here, not at the first route: gluing the lines into
     # routes and working out their heads comes first and is a third of the
     # work, and said nothing -- so the page counted it as laying out.
@@ -89,7 +91,6 @@ def to_svg(elems, title=None, author=None):
             nudge_y = (-(min(tops) + down)) % settings.GRID_STEP
             over += nudge_x
             down += nudge_y
-    elems = shift(elems, over, down)
     # And the far side is given the same room as the near one.  It used to be
     # given the margin alone, so whatever the nudge added on the left and at
     # the top came straight off the right and the bottom: a chart two
@@ -98,6 +99,22 @@ def to_svg(elems, title=None, author=None):
     # to one side of its own sheet.
     width = maxx - minx + (wall + nudge_x) * 2
     height = maxy - miny + (wall + nudge_y) * 2 + head_h
+    # Cut to a shape, the sheet grows on its short side until it is exactly
+    # that shape, and the chart -- title and all -- stands in the middle of
+    # it, the wall still the same on both sides.  The ruling moves with the
+    # chart rather than staying at the corner of the sheet, so the shapes
+    # still stand on its lines however much room was added.
+    pad_x = pad_y = 0.0
+    if paper and width > 0 and height > 0:
+        if width / height < paper:
+            pad_x = (height * paper - width) / 2.0
+        else:
+            pad_y = (width / paper - height) / 2.0
+        width += pad_x * 2
+        height += pad_y * 2
+        over += pad_x
+        down += pad_y
+    elems = shift(elems, over, down)
 
     out = [
         '<?xml version="1.0" encoding="UTF-8"?>',
@@ -116,7 +133,7 @@ def to_svg(elems, title=None, author=None):
     # page leaves it out with the rest of that band when it is far away, and
     # its upright lines are combs (see combs), or it outweighs the chart.
     banding = sum(1 for e in elems if e[0] == "shape") > settings.BAND_FROM > 0
-    slabs = grid_slabs(width, height, combed=banding)
+    slabs = grid_slabs(width, height, combed=banding, at=(pad_x, pad_y))
     if not banding:
         out += [piece for _, _, piece in slabs]
     out += [
@@ -131,11 +148,11 @@ def to_svg(elems, title=None, author=None):
     # The title stands inside the wall like everything else, its first line
     # hanging from where the wall ends, rather than up against the top edge.
     if title:
-        out.append(f'<text class="title" x="{wall}" y="{wall + 12}" font-size="16" '
+        out.append(f'<text class="title" x="{wall + pad_x:g}" y="{wall + pad_y + 12:g}" font-size="16" '
                    f'font-weight="bold" stroke="none" fill="{settings.INK}">'
                    f'{html.escape(title)}</text>')
         if author:
-            out.append(f'<text class="author" x="{wall}" y="{wall + 29}" stroke="none" '
+            out.append(f'<text class="author" x="{wall + pad_x:g}" y="{wall + pad_y + 29:g}" stroke="none" '
                        f'fill="{settings.INK}">{html.escape(author)}</text>')
 
     # A route gets an arrowhead where it arrives at a shape, and also where

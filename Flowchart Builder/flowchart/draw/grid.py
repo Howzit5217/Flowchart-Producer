@@ -15,7 +15,7 @@ def grid_lines(width, height):
     return [piece for _, _, piece in grid_slabs(width, height)]
 
 
-def grid_slabs(width, height, combed=False):
+def grid_slabs(width, height, combed=False, at=(0.0, 0.0)):
     """The grid in slabs down the chart: (top, foot, the paths) for each.
 
     It was two paths from the top of the chart to the foot, and on a tall
@@ -31,7 +31,13 @@ def grid_slabs(width, height, combed=False):
     it always was.
 
     `combed` is for a chart drawn in bands, which is a big one: its upright
-    lines are written as combs (see combs) rather than a line at a time."""
+    lines are written as combs (see combs) rather than a line at a time.
+
+    `at` is where the ruling is laid from, which is the corner of the sheet
+    unless the sheet was cut to a shape (see to_svg): then the chart stands
+    in from the corner by however much was added, and the ruling with it --
+    a darker line wherever there would have been one had the sheet not
+    grown."""
     if not settings.GRID or settings.GRID_STEP <= 0:
         return []
     step, every = settings.GRID_STEP, settings.GRID_MAJOR
@@ -39,15 +45,16 @@ def grid_slabs(width, height, combed=False):
     # one and the ruling runs on across the joins unbroken.
     tall = max(step * (every or 1), settings.BAND_H // (step * (every or 1)) * step * (every or 1))
     columns = []
-    n, x = 0, 0.0
+    n = -int(at[0] // step)                 # which line of the ruling x is
+    x = at[0] + n * step
     while x <= width + 0.01 and not combed:
         columns.append((x, bool(every) and n % every == 0))
         x += step
         n += 1
     slabs = []
     top = 0.0
-    n = 0                                   # which row of the ruling y is
-    y = 0.0
+    n = -int(at[1] // step)                 # which row of the ruling y is
+    y = at[1] + n * step
     while True:
         foot = min(height, top + tall)
         last = foot >= height - 0.01
@@ -62,7 +69,7 @@ def grid_slabs(width, height, combed=False):
         for name, d, ink, wide in (("fine", fine, settings.GRID_INK, 0.7),
                                    ("major", major, settings.GRID_INK_MAJOR, 1.0)):
             if combed:
-                paths += combs(name, top, foot, width, ink, wide)
+                paths += combs(name, top, foot, width, ink, wide, at[0])
             if d:
                 # square ends said outright: in a band it sits inside the
                 # drawing's group, which rounds the ends of everything else
@@ -79,7 +86,7 @@ def grid_slabs(width, height, combed=False):
 COMB_W = 8192                           # how wide one comb runs, at most
 
 
-def combs(name, top, foot, width, ink, wide):
+def combs(name, top, foot, width, ink, wide, at=0.0):
     """One slab's upright lines of one kind, fine or major, as combs.
 
     Written a line at a time, every slab carries every upright line the
@@ -116,7 +123,7 @@ def combs(name, top, foot, width, ink, wide):
         after = marks[k + 1] if k + 1 < len(marks) else marks[0] + period
         dashes += [wide, after - x - wide]
     dashed = " ".join("%g" % round(d, 3) for d in dashes)
-    first = marks[0] - wide / 2.0
+    first = at + marks[0] - wide / 2.0     # `at`: where the ruling is laid from
     across = period * max(1, -(-COMB_W // period))    # whole periods, so every
     mid, thick = (top + foot) / 2.0, foot - top       #   comb meets the next
     out = []                                          #   halfway between lines

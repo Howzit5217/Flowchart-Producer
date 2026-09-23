@@ -185,6 +185,30 @@
         "C:/Users/origa/Downloads/GitHub/Flowchart-Producer/Flowchart Builder"
       ],
       "port": 8893
+    },
+    {
+      "name": "design-gallery",
+      "runtimeExecutable": "python",
+      "runtimeArgs": [
+        "-m",
+        "http.server",
+        "8894",
+        "--directory",
+        "C:/Users/origa/AppData/Local/Temp/claude/C--Users-origa-Downloads-GitHub-Flowchart-Producer/09f3ea6f-94ec-492c-8ae6-dc58f528146e/scratchpad"
+      ],
+      "port": 8894
+    },
+    {
+      "name": "pseudo-keep-site",
+      "runtimeExecutable": "python",
+      "runtimeArgs": [
+        "-m",
+        "http.server",
+        "8903",
+        "--directory",
+        "C:/Users/origa/Downloads/GitHub/Flowchart-Producer/Flowchart Builder"
+      ],
+      "port": 8903
     }
   ]
 }

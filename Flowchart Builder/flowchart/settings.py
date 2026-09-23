@@ -153,21 +153,62 @@ MONO = True                         # plain black and white; pass --color to
 GROUP_OUTPUT = True                 # a run of Display lines shares one
 GROUP_MAX = 5                       #   symbol, up to this many lines, the
                                     #   way a run of Declares already does
+GROUP_DECLARES = True               # a run of Declares shares one box;
+                                    #   False gives each its own
+GROUP_STEPS = False                 # and more than that shares, when True:
+                                    #   an Input joins the Displays around
+                                    #   it in one symbol -- the question and
+                                    #   the answer to it -- and a run of
+                                    #   plain steps, Declares and Sets alike,
+                                    #   is one process box
+COMPACT = False                     # True: Auto lays the chart out as the
+                                    #   most compact block it can make of it
+                                    #   -- lanes, queues, columns and all --
+                                    #   rather than keeping the chart as it
+                                    #   comes whenever that is a fair shape
+AREA_COST = 0.35                    # how much a compact layout is marked
+                                    #   down for every time over it comes
+                                    #   out bigger than the smallest one
+                                    #   tried, so a block is not bought with
+                                    #   a sheet of empty lanes
+
+# The two other ways of drawing a chart are two other designs, not only two
+# other spacings: each changes what goes in a shape and how the shapes are
+# set out, as well as how far apart they stand.
 ROOMY = dict(VGAP=30, HGAP=30, PAD_Y=11, NODE_MIN_H=38, DIA_MIN_H=60,
-             DIA_W=150, LOOP_UP=24)  # the airier old spacing: --roomy
+             DIA_W=150, LOOP_UP=24,
+             GROUP_DECLARES=False, GROUP_MAX=2, FORK_LIMIT=1e9,
+             CHAIN_LIMIT=1600)
+                                    # roomy: the airier spacing, and a chart
+                                    #   opened out -- a box for every
+                                    #   Declare, Displays shared two at
+                                    #   most, every If forked both ways, and
+                                    #   a chain of Else Ifs set out in lanes
+                                    #   side by side until it is half as
+                                    #   wide again as it otherwise would be.
+                                    #   --roomy
 TIGHT = dict(GRID_STEP=8, VGAP=16, LOOP_UP=16, PAD_Y=5, NODE_MIN_H=24,
              DIA_MIN_H=40, OVAL_H=26, NODE_W=72, OVAL_W=72, DIA_W=100,
              HGAP=14, LABEL_PAD=8, SLANT=8, CORNER_R=4, COL_GAP=40,
-             CHART_GAP=32, MARGIN=16, TITLE_H=40, HEADING_H=24)
+             CHART_GAP=32, MARGIN=16, TITLE_H=40, HEADING_H=24,
+             GROUP_STEPS=True, GROUP_MAX=8, FORK_LIMIT=0, COMPACT=True,
+             COLUMN_COST=0.08)
                                     # as small and tight as a chart goes and
                                     #   still reads, the words the size they
                                     #   were: --tight.  A finer grid is most
-                                    #   of it -- a shape's height is rounded
-                                    #   up to two squares, so on a 20px grid
-                                    #   two lines of words take 80px, on an
-                                    #   8px one 48 -- and every gap, every
-                                    #   box's least size and the wall round
-                                    #   the paper come down with it
+                                    #   of the spacing -- a shape's height is
+                                    #   rounded up to two squares, so on a
+                                    #   20px grid two lines of words take
+                                    #   80px, on an 8px one 48 -- and every
+                                    #   gap, every box's least size and the
+                                    #   wall round the paper come down with
+                                    #   it.  And it is drawn as a different
+                                    #   chart: fewer shapes (the steps that
+                                    #   run on from one another share them),
+                                    #   an If with no Else kept on the line
+                                    #   it stands on, and the whole of it
+                                    #   folded into a compact block, into
+                                    #   columns if that is what it takes
 
 GRID = True                         # faint graph-paper grid behind the chart
 GRID_STEP = 20                      # spacing of the fine grid lines, in px

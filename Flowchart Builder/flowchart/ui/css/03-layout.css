@@ -136,6 +136,20 @@
   .sheet-menu .hint:empty { display: none; }
   .sheet-menu .hint { margin-top: 10px; }
   #save-menu { width: 262px; }
+  /* which of the two it is, straight under its heading, then the buttons */
+  .sheet-menu #fd-where { margin-top: 0; }
+  /* A file written into the folder picked in Files, said at the foot of
+     the page for a moment, over everything -- it may have been saved from
+     the pseudocode or the code, full screen. */
+  #saved-to {
+    position: fixed; z-index: 90; left: 16px; right: 16px; bottom: 58px;
+    width: fit-content; max-width: calc(100vw - 32px); margin: 0 auto;
+    padding: 8px 14px; border-radius: 10px; font-size: 13px;
+    background: var(--panel); color: var(--ink);
+    border: 1px solid var(--line); box-shadow: var(--shadow);
+    overflow-wrap: anywhere; pointer-events: none;
+  }
+  #saved-to.bad { color: var(--bad); }
 
   /* ------------------------------------------ the two halves of Files -- */
   #files-tabs { margin-bottom: 14px; }

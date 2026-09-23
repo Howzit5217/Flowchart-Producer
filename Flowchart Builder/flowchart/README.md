@@ -105,6 +105,7 @@ the `@@CSS@@` and `@@JS@@` marks in `studio.html` and hands back the page.
 | `ui/js/18-code.js` | What Python, Java, C#, C++ and JavaScript each do differently — a block each |
 | `ui/js/18-write.js` | The writer, which knows no language by name, and the screen the code is written in on |
 | `ui/js/19-files.js` | Saving a design to a file, and opening it again |
+| `ui/js/19-folder.js` | Saving into a folder picked in Files instead of the browser's downloads |
 | `ui/js/20-menu.js` | The right button |
 | `ui/js/21-typing.js` | Double-click to type in a shape |
 | `ui/js/22-settings.js` | The settings sheet: light or dark, which side, full screen |

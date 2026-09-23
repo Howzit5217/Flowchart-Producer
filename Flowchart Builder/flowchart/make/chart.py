@@ -4,7 +4,7 @@ import os
 from .. import settings
 from ..draw.svg import to_svg
 from ..make.legend import with_legend
-from ..make.fit import fit_shape
+from ..make.fit import fit_shape, paper_ratio
 from ..layout.columns import arrange, layout_chart
 from ..parse.read import parse_program
 
@@ -19,15 +19,17 @@ def make_flowchart(text, title=None, author=None, max_h=settings.COLUMN_H,
     draws it and hands it to the runner from that one reading."""
     if charts is None:
         charts = parse_program(text)
+    paper = paper_ratio(settings.SHAPE)              # square asked, square given
     if settings.SHAPE and not max_h:                 # let the shape pick the layout
-        return to_svg(fit_shape(charts, settings.SHAPE), title, author)
+        return to_svg(fit_shape(charts, settings.SHAPE), title, author, paper)
     layouts = [layout_chart(c, max_h, heading=len(charts) > 1) for c in charts]
-    return to_svg(with_legend(arrange(layouts)), title, author)
+    return to_svg(with_legend(arrange(layouts)), title, author, paper)
 
 
 def make_flowcharts(text, title=None, author=None, max_h=settings.COLUMN_H):
     """Whole program -> [(module name, SVG string), ...], one per module."""
     charts = parse_program(text)
+    paper = paper_ratio(settings.SHAPE)
     result = []
     for c in charts:
         if settings.SHAPE and not max_h:             # each module shaped on its own
@@ -35,7 +37,7 @@ def make_flowcharts(text, title=None, author=None, max_h=settings.COLUMN_H):
         else:
             elems, _, _ = layout_chart(c, max_h, heading=len(charts) > 1)
         name = c.module.name if c.module else "main"
-        result.append((name, to_svg(with_legend(elems), title, author)))
+        result.append((name, to_svg(with_legend(elems), title, author, paper)))
     return result
 
 

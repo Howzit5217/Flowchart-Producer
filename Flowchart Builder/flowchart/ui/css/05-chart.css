@@ -362,6 +362,13 @@
     background-attachment: local;
   }
   #code-slot #code:focus { box-shadow: none; border: 0; outline: 0; }
+  /* Copy and Save it, on the same ground as the program, the way the code
+     screen has them under the code.  The slot's padding above them is
+     where the box's sideways bar runs, so they start straight under it. */
+  #code-keep {
+    flex: none; display: flex; gap: 8px; flex-wrap: wrap;
+    padding: 0 16px 16px; background: var(--code-bg);
+  }
 
   /* ----------------------------------- the run and the code, filling the screen -- */
   /* The same trick again, and for the same reason.  What a program prints,

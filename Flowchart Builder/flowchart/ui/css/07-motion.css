@@ -287,6 +287,8 @@
   #rail:not([hidden]) { animation: rail-in var(--move) var(--ease) backwards; }
   #rail .icon { animation: row-up .34s var(--ease) backwards; }
   #rail .icon:nth-child(2) { animation-delay: .07s; }
+  /* the word that something was saved into the folder, up from the foot */
+  #saved-to:not([hidden]) { animation: row-up var(--move) var(--ease) backwards; }
   @keyframes rail-in { from { opacity: 0; transform: translateX(-12px); } }
   @keyframes row-up { from { opacity: 0; transform: translateY(8px); } }
 
@@ -898,6 +900,20 @@
                 transform var(--tap) var(--ease-soft);
   }
   .slider-step:active { transform: scale(.88); }
+  /* The panel's bar slides in from the edge when there is something to
+     scroll and back out when there is not, in the strip the panel keeps
+     for it (01-base.css), rather than blinking on and off. */
+  #panel > .slider.y {
+    transition: transform var(--move) var(--ease),
+                opacity var(--quick) var(--ease-soft), visibility 0s;
+  }
+  #panel > .slider.y.none {
+    display: flex; transform: translateX(100%); opacity: 0;
+    visibility: hidden; pointer-events: none;
+    transition: transform var(--move) var(--ease),
+                opacity var(--quick) var(--ease-soft),
+                visibility 0s linear var(--move);
+  }
 
   /* The band over the line a run is on glides from one line to the next,
      so a loop is seen going back up to its top rather than the band just

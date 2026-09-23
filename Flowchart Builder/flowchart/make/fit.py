@@ -29,6 +29,22 @@ def shape_target(spec):
         return settings.AUTO_SHAPE
 
 
+def paper_ratio(spec):
+    """The shape the paper itself is cut to, width over height, or None.
+
+    Auto and tall are a way of laying the chart out, not a frame, and the
+    paper fits whatever comes of them.  Anything named -- square, wide,
+    page, 16:9 -- is a frame, and the chart is laid out as near it as the
+    program allows and then set on a sheet of exactly that shape: some
+    programs cannot be made square by any arrangement of their shapes (one
+    If and nothing else is as wide as its two answers), and a square asked
+    for should still come back square."""
+    key = str(spec or "").strip().lower()
+    if key in ("", "auto", "tall", "off", "none"):
+        return None
+    return shape_target(key)
+
+
 def wander(elems, span):
     """How far the longest single arrow runs, against the size of the whole
     chart.  A chart whose arrows go from one shape to the next scores near
@@ -68,6 +84,11 @@ def fit_shape(charts, spec):
     keep = (settings.CHAIN_LIMIT, settings.MAX_ROW_W)
     target = shape_target(spec)
     head = len(charts) > 1
+    # Auto keeps a chart that is already a fair shape as it comes -- unless
+    # it is compressed, where the design is the most compact block the
+    # program can be laid out as, and that is looked for however the chart
+    # happened to come out.
+    as_it_comes = str(spec).strip().lower() == "auto" and not settings.COMPACT
 
     def build(max_h, chain, row_w):
         settings.CHAIN_LIMIT, settings.MAX_ROW_W = chain, row_w
@@ -105,14 +126,14 @@ def fit_shape(charts, spec):
         # stage under auto, which keeps a big chart as it stands; a shape
         # asked for by name may lay a big one out six times, and this is the
         # first of them.
-        progress.span(0.0, 1.0 if str(spec).strip().lower() == "auto" else 1 / 6.0)
+        progress.span(0.0, 1.0 if as_it_comes else 1 / 6.0)
         natural = build(0, keep[0], keep[1])
         if sum(1 for e in natural[0] if e[0] == "shape") > settings.FIT_MOST:
-            if str(spec).strip().lower() == "auto":
+            if as_it_comes:
                 return natural[0]
             return fork_to_fit(lambda rate: by_rate(build, rate, keep),
                                natural, target)
-        if str(spec).strip().lower() == "auto" \
+        if as_it_comes \
                 and settings.AUTO_KEEP[0] <= natural[1] / natural[2] <= settings.AUTO_KEEP[1]:
             return natural[0]                      # already a sensible shape
         plain = {keep[0]: natural}                 # one column, per chain style
@@ -121,20 +142,28 @@ def fit_shape(charts, spec):
                 plain[chain] = build(0, chain, keep[1])
 
         tallest = max(h for _, _, h in plain.values())
+        least = min(w * h for _, w, h in plain.values()) or 1.0
         # Columns are the one layout that cannot be routed tidily: the arrow
         # into a column climbs the whole one it leaves and runs back over the
         # top of the chart.  So auto never reaches for them -- it picks the
         # best-shaped of the layouts that read cleanly -- and a shape asked
-        # for by name only gets them when they earn COLUMN_COST.
+        # for by name only gets them when they earn COLUMN_COST.  Compressed
+        # is the exception: a block is the whole point of it, and a column
+        # is the only way a long run of steps becomes one.
         steps = [0.0]
-        if str(spec).strip().lower() != "auto":
+        if str(spec).strip().lower() != "auto" or settings.COMPACT:
             steps += [tallest * (0.92 ** i) for i in range(1, 26)]
+        # No column shorter than a dozen squares of the ruling or so: a
+        # column of two shapes is an arrow up the page for every two steps.
+        # Counted in the grid's own squares, so a compressed chart, on its
+        # finer grid, can wrap as short as it has come out small.
+        floor = 240.0 * min(1.0, settings.GRID_STEP / 16.0)
         best, best_score = None, None
         for chain in chains:
             for row_w in rows:
                 last = None            # the layout the last limit produced
                 for max_h in steps:
-                    if max_h and max_h < 240:
+                    if max_h and max_h < floor:
                         continue
                     # A ceiling no lower than the height the chart already
                     # came out at cannot make it wrap any differently, so
@@ -154,6 +183,8 @@ def fit_shape(charts, spec):
                     cols = max(1.0, round(plain[chain][2] / h)) if h else 1.0
                     score = (abs(math.log((w / h) / target))
                              + settings.COLUMN_COST * (cols - 1))
+                    if settings.COMPACT:        # a block, not a sheet of lanes
+                        score += settings.AREA_COST * math.log(max(1.0, w * h / least))
                     if settings.SHAKE is not None:       # a nudge, so two runs of the
                         score += settings.SHAKE.uniform(0, 0.05)   # same file differ
                     # How far the arrows run is the dear part of the score:

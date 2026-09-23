@@ -137,6 +137,14 @@
   .slide-frame.has-y > .slider.x { right: 15px; }
   .slide-frame.has-x > .slider.y { bottom: 15px; }
   .slider.none { display: none; }
+  /* The panel keeps the strip its bar stands in whether the bar is up or
+     not.  Given only while the bar was up, the strip came and went with
+     it, and every word in the panel moved over fifteen pixels and back --
+     re-wrapping, and so changing how long the panel was, which is the very
+     thing that says whether the bar is wanted.  Kept, the bar only ever
+     comes and goes in a space that is already its own (07-motion.css
+     slides it). */
+  #panel.slide-frame.room:not(.hide) { padding-right: 15px; }
   .slider-track { position: relative; flex: 1; min-width: 0; min-height: 0; }
   .slider-grip {
     position: absolute; border-radius: 99px; background: var(--line);

@@ -63,12 +63,17 @@ def options():
                          "the tests queue up down the page instead "
                          "(around 900; 0 always queues them)")
     ap.add_argument("--roomy", action="store_true",
-                    help="the older, airier spacing: every gap wider and "
-                         "every shape taller, so a bigger chart")
+                    help="roomy: every gap wider and every shape taller, "
+                         "and the chart opened out -- a box for every "
+                         "Declare, every If forked both ways, chains of "
+                         "Else Ifs set out in lanes")
     ap.add_argument("--tight", action="store_true",
                     help="compressed: the chart as small and tight as it "
                          "goes -- a finer grid, shorter gaps, snug shapes, "
-                         "the words the size they were")
+                         "the words the size they were -- and drawn with "
+                         "fewer shapes (a question and its Input share one, "
+                         "a run of Sets one box), folded into a compact "
+                         "block, in columns if need be")
     ap.add_argument("--no-group-output", action="store_true",
                     help="one symbol per Display, instead of one shared by "
                          "a run of them")

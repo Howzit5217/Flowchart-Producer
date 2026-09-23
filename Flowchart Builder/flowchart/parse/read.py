@@ -8,7 +8,8 @@ from ..parse.nodes import For, If, Loop, Module, Node, Select
 from ..parse.keywords import (
     R_CASE, R_CLOSER, R_DECL, R_DO, R_ELSE, R_ELSEIF, R_ELSE_INLINE, R_END,
     R_ENDANY, R_ENDIF, R_ENDLOOP, R_ENDMOD, R_ENDSEL, R_FOR, R_IF, R_LOOPCOND,
-    R_MODULE, R_OUT, R_REPEAT, R_SELECT, R_THEN, R_UNTIL, R_WHILE)
+    R_IN, R_MODULE, R_OUT, R_REPEAT, R_SELECT, R_THEN, R_UNTIL, R_WHILE)
+from ..parse.data import R_SET
 from ..parse.statements import (
     Chart, Frame, ends_flow, make_module, parse_for, simple_node,
     split_outside_quotes, strip_then)
@@ -33,6 +34,21 @@ def room_to_nest():
     program and a crash."""
     if sys.version_info >= (3, 11) and sys.getrecursionlimit() < 60000:
         sys.setrecursionlimit(60000)
+
+
+# The words a line can open with and be something other than a Set,
+# whatever follows them: "module = 5" is read as a module, and stays one.
+STRUCTURE = {"module", "function", "sub", "procedure", "def", "method",
+             "subroutine", "if", "else", "elseif", "elif", "otherwise",
+             "while", "do", "loop", "repeat", "until", "for", "select",
+             "switch", "case", "default", "return", "call", "end", "fi",
+             "wend", "done", "od"}
+
+
+def plain_set(s):
+    """An assignment and nothing else: x = 5, Set total = total + n."""
+    m = R_SET.match(s)
+    return bool(m) and re.split(r"\W", s, 1)[0].lower() not in STRUCTURE
 
 
 def parse_program(text):
@@ -237,7 +253,7 @@ def parse_program(text):
         here[0] = at_line
         s = tidy(raw)
         if not s:
-            if outs:
+            if outs or (declares and not all(R_DECL.match(d) for d in declares)):
                 flush()       # a blank line between two Displays keeps them
             continue          #   apart: the spacing is the author's to set
 
@@ -254,6 +270,8 @@ def parse_program(text):
                 run_at[0] = at_line
             declares.append(s)
             at_declares.append(at_line)
+            if not settings.GROUP_DECLARES:
+                flush()                             # roomy: a box apiece
             continue
         if settings.GROUP_OUTPUT and R_OUT.match(s) and not R_CLOSER.match(s):
             if declares or len(outs) >= settings.GROUP_MAX:  # a run of Displays shares
@@ -262,6 +280,30 @@ def parse_program(text):
                 run_at[0] = at_line
             outs.append(s)
             at_outs.append(at_line)
+            continue
+        # Compressed, more of a program shares a shape than its Displays.
+        # The Input after "What is your name?" is the other half of the
+        # same exchange, and goes in the symbol that asked; and a run of
+        # Sets is one piece of working-out, set down in one box with the
+        # Declares it follows.  Only plain assignments: a call, a wait or a
+        # Return is a thing the reader follows the flow to, and keeps its
+        # own shape.  Each line is still its own statement to the runner.
+        if settings.GROUP_STEPS and settings.GROUP_OUTPUT and R_IN.match(s) \
+                and not R_CLOSER.match(s):
+            if declares or len(outs) >= settings.GROUP_MAX:
+                flush()
+            if not outs:
+                run_at[0] = at_line
+            outs.append(s)
+            at_outs.append(at_line)
+            continue
+        if settings.GROUP_STEPS and plain_set(s):
+            if outs or len(declares) >= settings.GROUP_MAX:
+                flush()
+            if not declares:
+                run_at[0] = at_line
+            declares.append(s)
+            at_declares.append(at_line)
             continue
         flush()
 

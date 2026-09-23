@@ -258,8 +258,10 @@
     return !!(el("#code") && el("#code").value.trim());
   }
 
-  // What a save is called: the title, or failing that the puzzle it is,
-  // or failing that the first line that says anything.
+  // What a save is called: the title, or failing that the puzzle it is, or
+  // failing that what the program does (see 09-names.js) -- and only when
+  // there is nothing to tell that from, the first line that says anything.
+  // A drawing by hand is read the same way, its questions asked as Ifs.
   function titleNow() {
     var named = el("#f-title") ? el("#f-title").value.trim() : "";
     if (named) { return named; }
@@ -268,8 +270,12 @@
              (TXT[onPuzzle.key + "_t"] ? " · " + TXT[onPuzzle.key + "_t"] : "");
     }
     var lines = byHand
-      ? (hand.nodes || []).map(function (n) { return n.kind === "oval" ? "" : n.text; })
+      ? (hand.nodes || []).map(function (n) {
+          return n.kind === "oval" ? "" : (n.kind === "diamond" ? "If " : "") + n.text;
+        })
       : el("#code").value.split("\n");
+    var does = describeProgram(lines.join("\n"));
+    if (does) { return does; }
     for (var i = 0; i < lines.length; i++) {
       var line = String(lines[i] || "").trim();
       if (line && !/^(start|begin|main|stop|end)$/i.test(line)) {

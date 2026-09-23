@@ -292,17 +292,38 @@
     // nobody can see still being measured.  Its own resize watcher tells
     // it everything a window resize would, and goes when it goes.
     if (!how.brief) { window.addEventListener("resize", refreshSoon); }
-    if (window.ResizeObserver) { new ResizeObserver(refreshSoon).observe(box); }
+    var sizes = window.ResizeObserver ? new ResizeObserver(refreshSoon) : null;
+    if (sizes) { sizes.observe(box); }
+    // A box of a fixed height -- the panel -- never changes size itself
+    // while what is in it grows and shrinks, so it is what is in it that is
+    // watched.  The writing below only says a change has begun: a card
+    // folding away loses its height over a quarter of a second after its
+    // class has changed, and measured then, the panel was still as long as
+    // it had been.  So the bar stayed up over a panel with nothing left to
+    // scroll, or stayed down over one that had just grown too long, until
+    // something else happened to have it measured again.  Watching the
+    // size of what is inside, it is measured all the way through.
+    function watchInside(node) {
+      if (sizes && how.deep && node.nodeType === 1) { sizes.observe(node); }
+    }
+    Array.prototype.forEach.call(box.children, watchInside);
     // A box put away or brought back says so in an attribute rather than by
     // changing size, and a box being written into is written into before it
     // has a new size for anybody to notice.  Neither reaches a resize
     // watcher, so the writing itself is watched as well.
     if (window.MutationObserver) {
-      new MutationObserver(refreshSoon).observe(box, {
+      new MutationObserver(function (changes) {
+        changes.forEach(function (change) {
+          if (change.target === box) { Array.prototype.forEach.call(change.addedNodes, watchInside); }
+        });
+        refreshSoon();
+      }).observe(box, {
         childList: true, subtree: !!how.deep, attributes: true,
         attributeFilter: ["class", "hidden", "style"]
       });
     }
+    // And once anything inside has finished moving, measured once more.
+    if (how.deep) { box.addEventListener("transitionend", refreshSoon); }
     return refreshSoon;
   }
 
@@ -538,6 +559,14 @@
   if (el("#code-big")) {
     el("#code-big").onclick = function () { codeFull(el("#code-over").hidden); };
     el("#code-done").onclick = function () { codeFull(false); };
+    // What the box says at the press, since it is still being written in;
+    // saved as plain text under the chart's name, which Files > Open reads
+    // straight back into the box.
+    copyButton(function () { return el("#code").value; }, el("#code-copy"));
+    el("#code-save").onclick = function () {
+      save(new Blob([el("#code").value], { type: "text/plain;charset=utf-8" }),
+           (chartFileName() || "flowchart") + ".txt");
+    };
     window.addEventListener("keydown", function (ev) {
       if (ev.key === "Escape" && el("#code-over") && !el("#code-over").hidden) {
         codeFull(false);

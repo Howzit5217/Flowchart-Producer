@@ -96,6 +96,14 @@ __OPTIONS__
          whoever opens it is looking at the same chart. -->
     <button class="btn wide" id="link-copy" data-w="l_copy">__W(l_copy)__</button>
     <p class="hint" id="link-note"></p>
+    <!-- Where all of the above goes: the browser's downloads, or a folder
+         picked here.  19-folder.js says which, and says so instead of
+         offering the button where the browser cannot do it. -->
+    <h3 data-w="fd_head">__W(fd_head)__</h3>
+    <p class="hint" id="fd-where"></p>
+    <button class="btn wide" id="fd-pick" data-w="fd_pick"
+            data-w-title="fd_pick_tip" title="__W(fd_pick_tip)__">__W(fd_pick)__</button>
+    <button class="btn wide" id="fd-off" data-w="fd_off" hidden>__W(fd_off)__</button>
     <h3 data-w="print_head">__W(print_head)__</h3>
     <button class="btn wide" id="print-open" data-w="print_it">__W(print_it)__</button>
     <h3 data-w="import_head">__W(import_head)__</h3>
@@ -262,6 +270,14 @@ __SVG__
       <button class="btn small primary" id="code-done" data-w="done">__W(done)__</button>
     </div>
     <div id="code-slot"><pre class="code-rule" id="code-rule" aria-hidden="true"></pre></div>
+    <!-- Copy and Save it, under the program the way the code screen has
+         them under the code.  The program is the thing being written up
+         here, and taking it somewhere else was Ctrl+A, Ctrl+C or the Files
+         menu, which saves the whole piece of work rather than the text. -->
+    <div id="code-keep">
+      <button class="btn small" id="code-copy" data-w="r_copy">__W(r_copy)__</button>
+      <button class="btn small" id="code-save" data-w="r_save_code">__W(r_save_code)__</button>
+    </div>
   </div>
 </div>
 
@@ -524,6 +540,10 @@ __SVG__
     <div id="code-out" hidden></div>
   </div>
 </div>
+
+<!-- A file just written into the folder picked in Files, said for a
+     moment, since the browser's downloads are not there to say it. -->
+<div id="saved-to" role="status" aria-live="polite" hidden></div>
 
 <script>
 @@JS@@</script>

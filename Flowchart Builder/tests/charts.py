@@ -416,23 +416,32 @@ def grid_step(svg):
     None where there is no grid drawn to read.  A chart is drawn on a grid
     of its own -- shaken, or compressed -- so this is the step to measure
     it against, rather than whatever the last drawing left the settings at."""
-    first = re.search(r'class="grid fine" d="M([\d.]+),[\d.]+V', svg)
-    return float(first.group(1)) if first and float(first.group(1)) > 0 else None
+    # The rows across, rather than the first upright: a sheet cut to a shape
+    # rules from wherever the chart stands, not from its corner.
+    rows = sorted(set(float(y) for y in re.findall(r'M0,([\d.]+)H', svg)))
+    return rows[1] - rows[0] if len(rows) > 1 and rows[1] > rows[0] else None
 
 
-def off_the_grid(svg, step):
+def grid_from(svg):
+    """How far down the sheet the ruling is laid from, within one step: the
+    top of the sheet, unless the sheet grew to be cut to a shape."""
+    rows = sorted(set(float(y) for y in re.findall(r'M0,([\d.]+)H', svg)))
+    return rows[0] if rows else 0.0
+
+
+def off_the_grid(svg, step, at=0.0):
     """Shape edges that do not sit on a grid line: (how many, of how many).
 
-    The grid is ruled from the chart's corner in steps of `step`, so a shape
-    is on it when its top and its foot are whole steps down.  Only the ones
-    measured exactly are counted -- a page or a drum drawn as a curve cannot
-    be measured from what is written down.
+    The grid is ruled from `at` down the sheet in steps of `step`, so a
+    shape is on it when its top and its foot are whole steps down from
+    there.  Only the ones measured exactly are counted -- a page or a drum
+    drawn as a curve cannot be measured from what is written down.
     """
     off = seen = 0
     for left, top, right, foot, sure in shapes(svg):
         if not sure:
             continue
-        for edge in (top, foot):
+        for edge in (top - at, foot - at):
             seen += 1
             if abs(edge / step - round(edge / step)) > 0.02:
                 off += 1

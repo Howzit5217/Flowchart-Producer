@@ -1197,11 +1197,16 @@
   // reach the promise, and the button did nothing and said nothing.  The
   // old way still works everywhere, and where even that will not, the
   // button says so rather than pretending it worked.
-  function copyButton(text) {
-    var copy = document.createElement("button");
+  //
+  // The pseudocode screen hands over a button of its own and a way to read
+  // the box rather than the text in it, because that box is still being
+  // written in: what is copied is what it says at the press.
+  function copyButton(text, copy) {
+    copy = copy || document.createElement("button");
     copy.className = "btn small";
     copy.textContent = TXT.r_copy;
     copy.onclick = function () {
+      var said = typeof text === "function" ? text() : text;
       function well() {
         copy.textContent = TXT.r_copied;
         setTimeout(function () { copy.textContent = TXT.r_copy; }, 1400);
@@ -1211,12 +1216,12 @@
         setTimeout(function () { copy.textContent = TXT.r_copy; }, 2200);
       }
       if (navigator.clipboard && navigator.clipboard.writeText) {
-        navigator.clipboard.writeText(text).then(well, function () {
-          if (!oldCopy(text)) { badly(); } else { well(); }
+        navigator.clipboard.writeText(said).then(well, function () {
+          if (!oldCopy(said)) { badly(); } else { well(); }
         });
         return;
       }
-      if (oldCopy(text)) { well(); } else { badly(); }
+      if (oldCopy(said)) { well(); } else { badly(); }
     };
     return copy;
   }
