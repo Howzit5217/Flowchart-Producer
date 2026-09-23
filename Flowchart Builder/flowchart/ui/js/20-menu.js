@@ -22,8 +22,10 @@
     all(".menu").forEach(function (m) { m.remove(); });
     letGoOfMenus();
   }
+  // The colors opened from a menu row sit beside the menu rather than in
+  // it, and choosing one is not a press somewhere else.
   document.addEventListener("click", function (ev) {
-    if (!ev.target.closest || !ev.target.closest(".menu")) { closeMenu(); }
+    if (!ev.target.closest || !ev.target.closest(".menu, .colorpop")) { closeMenu(); }
   });
   window.addEventListener("keydown", function (ev) {
     if (ev.key === "Escape") { closeMenu(); }
@@ -100,28 +102,20 @@
   }
 
   // Picking a color from the menu.  The row carries a swatch of what it is
-  // now; pressing it opens the machine's own color picker, and the shape
-  // takes the color as you move about in it, so you can see what you are
-  // choosing before you settle on it.
+  // now; pressing it opens the squares and sliders beside the menu (see
+  // colorPop), and the shape takes the color as you move about in them, so
+  // you can see what you are choosing before you settle on it.
   function paintRow(name, now, fallback, onPick) {
-    return { swatch: now || fallback, name: name, keepOpen: true,
+    var at = now || fallback;
+    return { swatch: at, name: name, keepOpen: true,
              go: function (row) {
-               var pick = document.createElement("input");
-               pick.type = "color";
-               pick.value = now || fallback;
-               pick.style.cssText = "position:absolute;opacity:0;pointer-events:none";
-               // It lives inside the row, so its own click would bubble back
-               // to the row and open another one, and another, until the
-               // stack gave out.  It stops here.
-               pick.addEventListener("click", function (e) { e.stopPropagation(); });
-               row.appendChild(pick);
-               pick.oninput = function () {
-                 onPick(pick.value);
+               row.setAttribute("aria-haspopup", "dialog");
+               colorPop(row, at, function (v) {
+                 at = v;
+                 onPick(v);
                  var dot = row.querySelector(".dot");
-                 if (dot) { dot.style.background = pick.value; }
-               };
-               pick.onchange = function () { setTimeout(function () { pick.remove(); }, 0); };
-               pick.click();
+                 if (dot) { dot.style.background = v; }
+               });
              } };
   }
 

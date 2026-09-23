@@ -17,6 +17,8 @@ FR = {
     "t_italic": "Italique", "t_under": "Souligné",
     "t_strike": "Barré", "t_color": "Couleur",
     "t_mark": "Surligné", "t_mark_none": "Sans surlignage",
+    "cp_sat": "Saturation", "cp_bright": "Luminosité",
+    "cp_recent": "Récentes", "cp_code": "Code couleur",
     "t_mark_own": "Autre couleur", "m_yellow": "Jaune",
     "m_green": "Vert", "m_pink": "Rose",
     "m_blue": "Bleu", "m_orange": "Orange",

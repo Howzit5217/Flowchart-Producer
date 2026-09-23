@@ -76,8 +76,6 @@ function runner(WORDS) {
   function tapeSays() {}
   function tapeFull() {}
   function tapeToEnd() {}
-  function keepView() {}
-  function backToView() {}
   function followNode() {}
   function lineSpan() { return null; }
   function showLine() {}

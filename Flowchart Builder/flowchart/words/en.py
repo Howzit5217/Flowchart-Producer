@@ -19,6 +19,8 @@ EN = {
     "t_italic": "Italic", "t_under": "Underline",
     "t_strike": "Strikethrough", "t_color": "Color",
     "t_mark": "Highlight", "t_mark_none": "No highlight",
+    "cp_sat": "Saturation", "cp_bright": "Brightness",
+    "cp_recent": "Recent", "cp_code": "Color code",
     "t_mark_own": "Another color", "m_yellow": "Yellow",
     "m_green": "Green", "m_pink": "Pink",
     "m_blue": "Blue", "m_orange": "Orange",

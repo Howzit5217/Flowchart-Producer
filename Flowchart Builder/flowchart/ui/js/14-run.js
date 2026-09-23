@@ -174,6 +174,11 @@
       litNow.push(g);
       if (!lit) { lit = g; }
     });
+    // All at once, the line and the camera catch up once a frame rather
+    // than at every step: thousands of steps a second, each measuring the
+    // page and moving the view, is the run spending its time on pictures
+    // nobody could have seen.  What the frame shows is where it has got to.
+    if (id && flatOut()) { followSoon(item, lit); return; }
     // The line is marked after the shapes are lit, not between putting the
     // last one out and lighting the next.  Marking it measures the page,
     // and a page measured halfway through a change is laid out for the
@@ -188,6 +193,28 @@
     // behind the sheet at every step.  It picks up again the moment the
     // sheet is put away.
     if (lit && following() && !tapeCovers()) { followNode(lit); }
+  }
+
+  // Where a run at full speed has got to, waiting for the next frame.
+  // Each step puts itself here in place of the one before, so however many
+  // steps a frame holds, the frame goes to the last of them -- and goes
+  // there at once, with no glide: a camera easing from shape to shape
+  // could never keep up, and one that is always behind says the program is
+  // somewhere it has already left.
+  var soonItem = null, soonShape = null, soonFrame = 0;
+  function followSoon(item, lit) {
+    soonItem = item;
+    soonShape = lit;
+    if (!soonFrame) { soonFrame = requestAnimationFrame(caughtUp); }
+  }
+  function caughtUp() {
+    if (soonFrame) { cancelAnimationFrame(soonFrame); }
+    soonFrame = 0;
+    var item = soonItem, lit = soonShape;
+    soonItem = soonShape = null;
+    if (!item) { return; }
+    markLine(item.id, item.line);
+    if (lit && lit.isConnected && following() && !tapeCovers()) { followNode(lit, 0); }
   }
 
   // The line of pseudocode the shape was drawn from, marked where it is
@@ -831,18 +858,17 @@
   }
   function byStep() { return pace() === "press"; }
   function timed() { return pace() === "timed"; }
-  // On every pace but full speed.  At full speed the chart would be a blur
-  // of shapes flying past, which is worse to watch than not moving at all
-  // -- so a run at full speed simply does not follow, and one that is being
-  // watched, however it is paced, always does.
-  //
-  // It used to be a switch of its own, sitting beside the pace with the
-  // pace deciding whether it was allowed to be on.  Nobody turns it off:
-  // watching the chart is the whole reason for stepping through, and a
-  // switch that is on every time it is able to be on is a switch that only
-  // ever had one answer.  So it is not asked any more.
+  function flatOut() { return !quiet && pace() === "fast"; }
+  // On every pace, and there is no turning it off.  It used to be a switch
+  // of its own, and then a thing full speed did without, on the grounds
+  // that the chart would only be a blur of shapes flying past.  But a run
+  // All at once left the view wherever it had been, a screen or ten away
+  // from where the program was, with nothing on the chart saying where it
+  // had got to.  So full speed follows as well; it simply jumps rather than
+  // glides, a frame at a time (followSoon), and it is only the pace that
+  // decides how long each step is held for (hold).
   function following() {
-    return !quiet && pace() !== "fast";
+    return !quiet;
   }
   if (el("#r-pace")) {
     el("#r-pace").onchange = function () {
@@ -856,9 +882,6 @@
       // let go of here -- an Input box somebody is still typing into is a
       // question that has not been answered yet.
       if (napOff) { napOff(); }
-      // Gone to full speed: the band on the line it was on is stale the
-      // moment it stops being followed.
-      if (!following()) { markLine(null); }
       try { localStorage.setItem("flowchart-pace", pace()); }
       catch (e) { /* storage turned off: it starts on Step slowly */ }
     };
@@ -885,7 +908,7 @@
   // is, so nothing that steps through the program has to know which of the
   // three it is waiting on.
   function hold() {
-    if (quiet) { return Promise.resolve(); }
+    if (quiet || flatOut()) { return Promise.resolve(); }   // full speed holds nothing
     // Listening to the program: a step the program put no time on is over
     // as soon as it can be seen to have happened.  What paces this run is
     // the waits written into it, and nothing else.
@@ -961,7 +984,6 @@
       markFault(null);                   // last time's red, gone
       tapeShow("run");                   // whatever was being read, watch this
       tapeSays("r_head", TXT.r_head, "");
-      if (following()) { keepView(); }   // to give back at the end of it
       runSays(TXT.r_stop);
       el("#tape").innerHTML = "";
       watchClear();                      // nothing held yet, this time round
@@ -986,9 +1008,15 @@
         broke = thrown;
       }
     }
+    // And the view stays where the program finished -- on the End, for a
+    // program that got there -- rather than going back to where it stood
+    // before the run.  Carried back to the top, a run that had just been
+    // watched all the way down ended somewhere else entirely, and the last
+    // thing it did was the one thing no longer in sight.  A run at full
+    // speed is brought up to its last step first, which is the End too.
     if (!quiet) {
+      caughtUp();
       lightUp(null);
-      backToView();
     }
     if (broke) { sayFault(broke, "bad"); }
     var over = false;

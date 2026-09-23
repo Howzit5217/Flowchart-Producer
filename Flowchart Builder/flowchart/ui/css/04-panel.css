@@ -23,12 +23,64 @@
   .row.pick { cursor: pointer; border-radius: 6px; }
   .row.pick:hover { background: var(--line-soft); }
   .swatch {
-    width: 26px; height: 26px; padding: 0; border-radius: 7px; cursor: pointer;
-    border: 1px solid var(--line); background: var(--panel); overflow: hidden;
+    flex: none; width: 26px; height: 26px; padding: 2px; border-radius: 7px;
+    cursor: pointer; border: 1px solid var(--line); background: var(--panel);
+    overflow: hidden;
   }
-  .swatch::-webkit-color-swatch-wrapper { padding: 2px; }
-  .swatch::-webkit-color-swatch { border: none; border-radius: 5px; }
-  .swatch::-moz-color-swatch { border: none; border-radius: 5px; }
+  .swatch > span { display: block; width: 100%; height: 100%; border-radius: 5px; }
+
+  /* ---------------------------------------------------- picking a color -- */
+  /* Squares, not a wash: a row of grays, six rows of every color from pale
+     to deep, and the ones picked lately -- then how strong and how bright,
+     each on a slider painted with what it would give. */
+  .colorpop {
+    position: fixed; z-index: 72; width: 280px; padding: 10px;
+    display: flex; flex-direction: column; gap: 3px;
+    background: var(--panel); color: var(--ink); border: 1px solid var(--line);
+    border-radius: 12px; box-shadow: var(--shadow);
+  }
+  .cp-grid { display: grid; grid-template-columns: repeat(12, 1fr); gap: 3px; }
+  .cp-grays { margin-bottom: 6px; }
+  .cp-sq {
+    width: 100%; aspect-ratio: 1; padding: 0; cursor: pointer;
+    border: 1px solid rgba(128, 128, 128, .3); border-radius: 4px;
+  }
+  .cp-sq.on {
+    position: relative; z-index: 1;
+    box-shadow: 0 0 0 2px var(--panel), 0 0 0 4px var(--accent);
+  }
+  .cp-sq:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .cp-head { margin: 7px 0 1px; font-size: 11.5px; color: var(--muted); }
+  .cp-slides {
+    display: grid; grid-template-columns: max-content 1fr 2.2em;
+    align-items: center; gap: 9px 10px; margin-top: 11px; font-size: 12.5px;
+  }
+  .cp-num {
+    text-align: right; color: var(--muted); font-variant-numeric: tabular-nums;
+  }
+  .cp-range {
+    -webkit-appearance: none; appearance: none; width: 100%; height: 12px;
+    margin: 0; cursor: pointer; border-radius: 6px;
+    border: 1px solid rgba(128, 128, 128, .3);
+  }
+  .cp-range::-webkit-slider-thumb {
+    -webkit-appearance: none; width: 16px; height: 16px; border-radius: 50%;
+    background: #fff; box-shadow: 0 0 0 1px rgba(0, 0, 0, .4), 0 1px 4px rgba(0, 0, 0, .35);
+  }
+  .cp-range::-moz-range-thumb {
+    width: 16px; height: 16px; border: 0; border-radius: 50%;
+    background: #fff; box-shadow: 0 0 0 1px rgba(0, 0, 0, .4), 0 1px 4px rgba(0, 0, 0, .35);
+  }
+  .cp-range:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+  .cp-foot { display: flex; align-items: center; gap: 8px; margin-top: 11px; }
+  .cp-chip {
+    flex: none; width: 36px; height: 30px; border-radius: 7px;
+    border: 1px solid rgba(128, 128, 128, .3);
+  }
+  .colorpop .cp-code {
+    flex: 1; min-width: 0; padding: 6px 9px;
+    font: 12.5px/1.2 ui-monospace, Consolas, "Courier New", monospace;
+  }
   .legendkey { width: 22px; height: 16px; flex: none; }
 
   /* ------------------------------------------------------------ the words -- */
@@ -117,11 +169,7 @@
   /* Until a color of its own is the one in use, it shows every color at
      once rather than the one it would open on -- which, being the yellow
      pen's, read as a second yellow pen. */
-  .swatch.pen-other:not(.on)::-webkit-color-swatch {
-    background: conic-gradient(#f87171, #fbbf24, #a3e635, #22d3ee, #818cf8,
-                               #e879f9, #f87171) !important;
-  }
-  .swatch.pen-other:not(.on)::-moz-color-swatch {
+  .swatch.pen-other:not(.on) > span {
     background: conic-gradient(#f87171, #fbbf24, #a3e635, #22d3ee, #818cf8,
                                #e879f9, #f87171) !important;
   }

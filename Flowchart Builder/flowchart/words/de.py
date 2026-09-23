@@ -17,6 +17,8 @@ DE = {
     "t_italic": "Kursiv", "t_under": "Unterstrichen",
     "t_strike": "Durchgestrichen", "t_color": "Farbe",
     "t_mark": "Markierung", "t_mark_none": "Keine Markierung",
+    "cp_sat": "Sättigung", "cp_bright": "Helligkeit",
+    "cp_recent": "Zuletzt verwendet", "cp_code": "Farbcode",
     "t_mark_own": "Andere Farbe", "m_yellow": "Gelb",
     "m_green": "Grün", "m_pink": "Rosa",
     "m_blue": "Blau", "m_orange": "Orange",

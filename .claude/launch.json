@@ -161,6 +161,18 @@
         "C:/Users/origa/Downloads/GitHub/Flowchart-Producer/Flowchart Builder"
       ],
       "port": 8871
+    },
+    {
+      "name": "colors-site",
+      "runtimeExecutable": "python",
+      "runtimeArgs": [
+        "-m",
+        "http.server",
+        "8887",
+        "--directory",
+        "C:/Users/origa/Downloads/GitHub/Flowchart-Producer/Flowchart Builder"
+      ],
+      "port": 8887
     }
   ]
 }

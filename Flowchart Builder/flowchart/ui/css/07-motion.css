@@ -342,6 +342,23 @@
   }
   .swatch:hover { transform: scale(1.1); border-color: var(--accent); }
   .swatch:active { transform: scale(.96); }
+  /* The squares grow under the pointer, above their neighbors, so the one
+     about to be chosen is the one that stands out; the box they are in
+     grows out of its corner the way the menu does. */
+  .colorpop { transform-origin: top left; animation: menu-pop .19s var(--ease) backwards; }
+  .cp-sq {
+    transition: transform var(--quick) var(--ease-back),
+                box-shadow var(--quick) var(--ease-soft);
+  }
+  .cp-sq:hover {
+    position: relative; z-index: 2; transform: scale(1.22);
+    box-shadow: 0 2px 7px rgba(16, 24, 40, .28);
+  }
+  .cp-sq.on:hover {
+    box-shadow: 0 0 0 2px var(--panel), 0 0 0 4px var(--accent),
+                0 2px 7px rgba(16, 24, 40, .28);
+  }
+  .cp-sq:active { transform: scale(1.06); }
   .row { transition: background-color var(--quick) var(--ease-soft); }
   .legendkey svg { transition: transform var(--quick) var(--ease-back); }
   .row:hover .legendkey svg { transform: scale(1.1); }
@@ -934,5 +951,5 @@
     }
     .btn:hover, .icon:hover, .preset:hover, .tab:hover, .swatch:hover,
     .menu button:hover, .fault:hover, .mark:hover,
-    .tog:hover, .pen:hover { transform: none; }
+    .tog:hover, .pen:hover, .cp-sq:hover { transform: none; }
   }

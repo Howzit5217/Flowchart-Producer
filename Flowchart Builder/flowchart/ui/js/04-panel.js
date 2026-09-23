@@ -5,33 +5,325 @@
 //  One part of the studio's script.  The parts run inside one function,
 //  in the order parts.py lists them, and share everything between them.
 // ---------------------------------------------------------------------------
+  // ------------------------------------------------------ picking a color --
+  // The machine's own picker is a whole chart of color, one wash running
+  // into the next, with nothing in it you can point at twice.  This one is
+  // squares: a row of grays, then every color from pale to deep, then the
+  // colors picked lately -- and under them a slider for how strong the
+  // color is and one for how bright, for anything in between.  The shape
+  // takes the color as it is chosen, square or slider, so what you see is
+  // what you are choosing, and pressing anywhere else is choosing it.
+  var POP_HUES = [0, 22, 42, 62, 100, 145, 175, 195, 215, 240, 270, 315];
+  var POP_SHADES = [[.14, 1], [.32, 1], [.58, .97], [.85, .88], [.85, .62],
+                    [.85, .38]];                    // how strong, how bright
+  var POP_ACROSS = POP_HUES.length;                // squares in a row
+  var POP_KEPT = "flowchart-recent-colors";
+  var popNow = null;                               // the one that is open
+
+  function hsvHex(h, s, v) {
+    function part(n) {
+      var k = (n + h / 60) % 6;
+      var c = v - v * s * Math.max(0, Math.min(k, 4 - k, 1));
+      return ("0" + Math.round(c * 255).toString(16)).slice(-2);
+    }
+    return "#" + part(5) + part(3) + part(1);
+  }
+  // A gray has no hue of its own, so it keeps the one it was given: the
+  // strength slider pulled up from a gray brings back the color it was
+  // near, not red every time.
+  function hexHsv(hex, hue) {
+    var n = parseInt(hex.slice(1), 16);
+    var r = (n >> 16 & 255) / 255, g = (n >> 8 & 255) / 255, b = (n & 255) / 255;
+    var hi = Math.max(r, g, b), d = hi - Math.min(r, g, b), h = hue || 0;
+    if (d) {
+      h = 60 * (hi === r ? ((g - b) / d + 6) % 6 : hi === g ? (b - r) / d + 2
+                                                           : (r - g) / d + 4);
+    }
+    return { h: h, s: hi ? d / hi : 0, v: hi };
+  }
+  function fullHex(text) {               // "#abc", "abc" or "#aabbcc", or ""
+    var m = /^#?([0-9a-f]{3}|[0-9a-f]{6})$/i.exec(String(text || "").trim());
+    if (!m) { return ""; }
+    return "#" + (m[1].length === 3 ? m[1].replace(/./g, "$&$&") : m[1]).toLowerCase();
+  }
+
+  // The colors picked lately, newest first, for making a second shape the
+  // same color as the first -- which a slider on its own could not do.
+  function recentColors() {
+    try {
+      var was = JSON.parse(localStorage.getItem(POP_KEPT));
+      return Array.isArray(was) ? was.filter(fullHex).slice(0, POP_ACROSS) : [];
+    } catch (e) { return []; }
+  }
+  function rememberColor(hex) {
+    var list = recentColors().filter(function (c) { return c !== hex; });
+    list.unshift(hex);
+    try { localStorage.setItem(POP_KEPT, JSON.stringify(list.slice(0, POP_ACROSS))); }
+    catch (e) { /* not kept, then: the squares are still all there */ }
+  }
+
+  function shutColorPop(back) {
+    if (popNow) { popNow.shut(back); }
+  }
+
+  // Opened from `anchor`, below it -- or, for a row of the menu on the
+  // right button, beside the menu, so the menu is still there to read.
+  // Pressed again, the same anchor shuts it.
+  function colorPop(anchor, value, onPick, onDone) {
+    if (popNow && popNow.anchor === anchor) { shutColorPop(); return; }
+    shutColorPop();
+    var start = fullHex(value) || "#000000";
+    var now = start, told = start;
+    var hsv = hexHsv(start, 210);
+    var box = document.createElement("div");
+    box.className = "colorpop";
+    box.setAttribute("role", "dialog");
+    box.setAttribute("aria-label", anchor.getAttribute("aria-label") ||
+                     anchor.textContent || TXT.color_of_it);
+
+    var squares = [];
+    function squareRow(colors, extra) {
+      var row = document.createElement("div");
+      row.className = "cp-grid" + (extra ? " " + extra : "");
+      colors.forEach(function (hex) {
+        var b = document.createElement("button");
+        b.type = "button";
+        b.className = "cp-sq";
+        b.style.background = hex;
+        b.dataset.hex = hex;
+        b.title = hex;
+        b.setAttribute("aria-label", hex);
+        b.tabIndex = -1;
+        b.onclick = function () { choose(hex, true); };
+        row.appendChild(b);
+        squares.push(b);
+      });
+      box.appendChild(row);
+    }
+    var grays = [];
+    for (var g = 0; g < POP_ACROSS; g++) { grays.push(hsvHex(0, 0, 1 - g / (POP_ACROSS - 1))); }
+    squareRow(grays, "cp-grays");
+    POP_SHADES.forEach(function (sv) {
+      squareRow(POP_HUES.map(function (h) { return hsvHex(h, sv[0], sv[1]); }));
+    });
+    var recent = recentColors();
+    if (recent.length) {
+      var head = document.createElement("div");
+      head.className = "cp-head";
+      head.textContent = TXT.cp_recent;
+      box.appendChild(head);
+      squareRow(recent, "cp-recent");
+    }
+    // One stop for the Tab key, and the arrows to go about the squares,
+    // the way a grid of anything is gone about.  No key pressed in here is
+    // for the page behind: an arrow is not a nudge for the shape, nor
+    // Delete a way to lose it.
+    box.addEventListener("keydown", function (ev) {
+      ev.stopPropagation();
+      var at = squares.indexOf(document.activeElement);
+      if (at < 0) { return; }
+      var to = { ArrowLeft: -1, ArrowRight: 1, ArrowUp: -POP_ACROSS,
+                 ArrowDown: POP_ACROSS }[ev.key];
+      if (!to) { return; }
+      ev.preventDefault();
+      var next = squares[Math.max(0, Math.min(squares.length - 1, at + to))];
+      squares[at].tabIndex = -1;
+      next.tabIndex = 0;
+      next.focus();
+    });
+
+    var slides = document.createElement("div");
+    slides.className = "cp-slides";
+    function slider(word, part) {
+      var said = document.createElement("span");
+      said.textContent = word;
+      var range = document.createElement("input");
+      range.type = "range";
+      range.min = 0; range.max = 100; range.step = 1;
+      range.className = "cp-range";
+      range.setAttribute("aria-label", word);
+      var num = document.createElement("span");
+      num.className = "cp-num";
+      range.oninput = function () {
+        hsv[part] = range.value / 100;
+        choose(hsvHex(hsv.h, hsv.s, hsv.v));
+      };
+      slides.appendChild(said);
+      slides.appendChild(range);
+      slides.appendChild(num);
+      return { range: range, num: num };
+    }
+    var strong = slider(TXT.cp_sat, "s"), bright = slider(TXT.cp_bright, "v");
+    box.appendChild(slides);
+
+    var foot = document.createElement("div");
+    foot.className = "cp-foot";
+    var chip = document.createElement("span");
+    chip.className = "cp-chip";
+    var code = document.createElement("input");
+    code.type = "text";
+    code.className = "field cp-code";
+    code.maxLength = 7;
+    code.spellcheck = false;
+    code.setAttribute("aria-label", TXT.cp_code);
+    code.oninput = function () {
+      var hex = fullHex(code.value);
+      if (hex) { choose(hex, true, true); }
+    };
+    code.onkeydown = function (ev) {
+      if (ev.key === "Enter") { ev.preventDefault(); shut(true); }
+    };
+    code.onblur = function () { code.value = now; };
+    foot.appendChild(chip);
+    foot.appendChild(code);
+    box.appendChild(foot);
+
+    // `whole` is a color from outside the sliders -- a square, or typed --
+    // and they are set from it; a slider moving changes only its own part.
+    function choose(hex, whole, typed) {
+      if (whole) { hsv = hexHsv(hex, hsv.h); }
+      now = hex;
+      show(typed);
+      if (now !== told) { told = now; onPick(now); }
+    }
+    function show(typed) {
+      chip.style.background = now;
+      if (!typed) { code.value = now; }
+      [[strong, hsv.s], [bright, hsv.v]].forEach(function (one) {
+        var n = Math.round(one[1] * 100);
+        if (+one[0].range.value !== n) { one[0].range.value = n; }
+        one[0].num.textContent = n;
+      });
+      strong.range.style.background = "linear-gradient(to right, " +
+        hsvHex(hsv.h, 0, hsv.v) + ", " + hsvHex(hsv.h, 1, hsv.v) + ")";
+      bright.range.style.background = "linear-gradient(to right, #000, " +
+        hsvHex(hsv.h, hsv.s, 1) + ")";
+      // Only a square whose state changes is written to: a class set to
+      // what it already was still wakes anything watching the page.
+      squares.forEach(function (b) {
+        var on = b.dataset.hex === now;
+        if (b.classList.contains("on") !== on) {
+          b.classList.toggle("on", on);
+          b.setAttribute("aria-pressed", on ? "true" : "false");
+        }
+      });
+    }
+    show();
+    var lit = squares.filter(function (b) { return b.dataset.hex === now; })[0];
+    (lit || squares[0]).tabIndex = 0;
+
+    // Its size as laid out, not as drawn: it grows in from a little
+    // smaller, and measured mid-grow it would be put a little out of place.
+    function place() {
+      var menu = anchor.closest ? anchor.closest(".menu") : null;
+      var from = anchor.getBoundingClientRect();
+      var room = { width: box.offsetWidth, height: box.offsetHeight };
+      var x, y;
+      if (menu) {
+        var m = menu.getBoundingClientRect();
+        x = m.right + 6 + room.width <= innerWidth - 8 ? m.right + 6 : m.left - 6 - room.width;
+        y = from.top - 8;
+      } else {
+        x = from.left;
+        y = from.bottom + 6 + room.height <= innerHeight - 8 ? from.bottom + 6
+                                                             : from.top - 6 - room.height;
+      }
+      box.style.left = Math.max(8, Math.min(x, innerWidth - room.width - 8)) + "px";
+      box.style.top = Math.max(8, Math.min(y, innerHeight - room.height - 8)) + "px";
+    }
+
+    // Pressing anywhere else puts it away.  What it hands on when it goes
+    // waits for that press to be let go of: a card put up again under a
+    // press takes away the very button it was pressing.
+    function outside(ev) {
+      if (box.contains(ev.target) || anchor.contains(ev.target)) { return; }
+      shut(false, true);
+    }
+    function keys(ev) {
+      if (ev.key !== "Escape") { return; }
+      ev.stopImmediatePropagation();    // this, and not the menu behind it
+      shut(true);
+    }
+    function scrolled(ev) {
+      if (ev.target === document || (ev.target.contains && ev.target.contains(anchor))) {
+        place();
+      }
+    }
+    var gone = false;
+    function shut(back, pressed) {
+      if (gone) { return; }
+      gone = true;
+      if (popNow === handle) { popNow = null; }
+      document.removeEventListener("pointerdown", outside, true);
+      window.removeEventListener("keydown", keys, true);
+      document.removeEventListener("scroll", scrolled, true);
+      window.removeEventListener("resize", place);
+      anchor.setAttribute("aria-expanded", "false");
+      if (back && document.body.contains(anchor)) { anchor.focus(); }
+      box.remove();
+      if (now === start) { return; }
+      rememberColor(now);
+      if (!onDone) { return; }
+      var hand = function () { setTimeout(function () { onDone(now); }, 0); };
+      if (!pressed) { hand(); return; }
+      var letGo = function () {
+        window.removeEventListener("pointerup", letGo, true);
+        window.removeEventListener("pointercancel", letGo, true);
+        hand();
+      };
+      window.addEventListener("pointerup", letGo, true);
+      window.addEventListener("pointercancel", letGo, true);
+    }
+    var handle = { anchor: anchor, shut: shut };
+    popNow = handle;
+    document.body.appendChild(box);
+    place();
+    anchor.setAttribute("aria-expanded", "true");
+    document.addEventListener("pointerdown", outside, true);
+    window.addEventListener("keydown", keys, true);
+    document.addEventListener("scroll", scrolled, true);
+    window.addEventListener("resize", place);
+    (lit || squares[0]).focus({ preventScroll: true });
+  }
+
   // A color picker being dragged says so many times a second, and every
   // one of those is a live preview: the chart takes the color at the next
   // frame and nothing else happens.  Anything that has to put a piece of
-  // the panel up again waits for onDone -- the picker being let go of --
+  // the panel up again waits for onDone -- the picker being put away --
   // because rebuilding rows in the middle of a drag takes them out from
   // under the hand that is dragging, and costs more than the painting did.
   function swatch(value, fallback, onPick, onDone) {
-    var input = document.createElement("input");
-    input.type = "color";
-    input.className = "swatch";
-    input.value = value || fallback;
-    // One drag of a picker is one thing done, not the sixty the picker
-    // reports on the way to it, so the copy to step back to is taken once:
-    // before the first of those changes anything.  Starting again is
-    // noticed at the picker being opened as well as at its being let go
-    // of, because a picker closed without choosing need not say so.
-    var started = false;
-    input.onfocus = function () { started = false; };
-    input.oninput = function () {
-      if (!started) { started = true; keepUndo(); }
-      onPick(input.value);
+    var b = document.createElement("button");
+    b.type = "button";
+    b.className = "swatch";
+    b.setAttribute("aria-haspopup", "dialog");
+    b.setAttribute("aria-expanded", "false");
+    // Named for whatever the row it is put in says it is for -- Fill,
+    // Paper, Lines -- once it is in that row, unless it was named already.
+    setTimeout(function () {
+      if (b.hasAttribute("aria-label")) { return; }
+      var row = b.parentNode;
+      var said = row && (row.querySelector(".name") || row.querySelector("span"));
+      b.setAttribute("aria-label", (said && said.textContent.trim()) || TXT.color_of_it);
+    }, 0);
+    var shows = document.createElement("span");
+    b.appendChild(shows);
+    b.value = fullHex(value) || fullHex(fallback) || "#000000";
+    shows.style.background = b.value;
+    b.onclick = function (ev) {
+      ev.stopPropagation();             // the menus' press-anywhere-to-shut
+      // One visit to the picker is one thing done, not the sixty the
+      // sliders report on the way, so the copy to step back to is taken
+      // once: before the first of those changes anything.
+      var started = false;
+      colorPop(b, b.value, function (v) {
+        if (!started) { started = true; keepUndo(); }
+        b.value = v;
+        shows.style.background = v;
+        onPick(v);
+      }, onDone);
     };
-    input.onchange = function () {
-      started = false;
-      if (onDone) { onDone(input.value); }
-    };
-    return input;
+    return b;
   }
 
   function buildKinds() {

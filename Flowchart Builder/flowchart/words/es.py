@@ -17,6 +17,8 @@ ES = {
     "t_italic": "Cursiva", "t_under": "Subrayado",
     "t_strike": "Tachado", "t_color": "Color",
     "t_mark": "Resaltado", "t_mark_none": "Sin resaltado",
+    "cp_sat": "Saturación", "cp_bright": "Brillo",
+    "cp_recent": "Recientes", "cp_code": "Código de color",
     "t_mark_own": "Otro color", "m_yellow": "Amarillo",
     "m_green": "Verde", "m_pink": "Rosa",
     "m_blue": "Azul", "m_orange": "Naranja",

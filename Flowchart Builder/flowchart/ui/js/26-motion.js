@@ -545,20 +545,20 @@
   // seconds and one of a hundred half a minute -- and nobody waits half a
   // minute to be shown a chart they have already been told is ready.
   //
-  // So a big drawing is not slowed to a crawl; it is drawn by more of the
-  // pen at once.  Each piece is still drawn exactly as it was -- the same
-  // outline, the same wash behind it, the same words written in from the
-  // left -- but the next one is begun before the last is finished, so the
-  // drawing arrives as a wave passing down the chart rather than a single
-  // point crawling along it.  Past what even that can bring in, the pen
-  // quickens too, up to a limit: fast enough to keep the whole thing inside
-  // a few seconds, never so fast that the drawing turns into a flash.
+  // So a big drawing is not slowed to a crawl: the pen quickens, up to a
+  // limit -- fast enough to keep the whole thing inside a few seconds,
+  // never so fast that the drawing turns into a flash.  Each piece is still
+  // drawn in the same way -- the outline, the wash behind it, the words
+  // written in from the left -- and still after whatever leads to it.  Only
+  // past what the quickest pen can bring in is the next piece begun before
+  // the last is finished, so that a very full screen arrives as a wave
+  // rather than a crawl; even then an arrowhead waits for its line and a
+  // shape for the line into it.
   //
-  // A small chart is not touched at all.  Under EASY the wave is a single
-  // pen going round one thing at a time, which is what it always was.
+  // A small chart is not touched at all.  Under EASY the pen goes round one
+  // thing at a time at its own speed, which is what it always was.
   var EASY = 1800;                       // ms a drawing may take before it is hurried
   var CAP = 2600;                        // and about the longest any of them takes
-  var AT_ONCE = 6;                       // pieces under the pen together before it quickens
   var QUICKEST = 2.2;                    // times its own speed, at the very most
 
   // The same again for the words inside one shape.  Written line after line
@@ -688,14 +688,15 @@
     // While is the one that cannot lead into anything -- the shape it points
     // at has been on the paper since the top of the loop -- so that one is
     // drawn as its own shape finishes, which is the moment it makes sense.
-    var lines = [], loose = [], ends = {};
+    var lines = [], loose = [], ends = {}, endAll = {};
     here.flows.forEach(function (line) {
       var pts = pairsOf(line.getAttribute("d"));
       if (pts.length < 2 || !line.getTotalLength) { return; }
       if (!seen(spanOf(pts))) { return; }
       var a = pts[0], z = pts[pts.length - 1], len = 0;
       try { len = line.getTotalLength(); } catch (e) { len = 0; }
-      var one = { el: line, len: len, pts: pts, dur: drawMs(len), heads: [], labels: [] };
+      var one = { el: line, len: len, pts: pts, dur: drawMs(len), heads: [], labels: [],
+                  then: [], feeders: 0 };
       lines.push(one);
       // Where it leaves from first, and never taken for where it arrives: a
       // short stem under a diamond ends within a head's length of the
@@ -708,7 +709,34 @@
       if (into) { into.coming.push(one); }
       else if (out) { out.leaving.push(one); }
       else { loose.push(one); }
-      ends[Math.round(z[0]) + " " + Math.round(z[1])] = one;
+      var key = Math.round(z[0]) + " " + Math.round(z[1]);
+      ends[key] = one;
+      (endAll[key] = endAll[key] || []).push(one);
+    });
+    // A line that neither leaves a shape nor goes into one: the stretch
+    // where two branches have met and run on together, or a way home
+    // joining another line.  These were drawn first of all -- before the
+    // Start, while the paper was still bare -- so the lines along the foot
+    // of an If were there waiting before anything that leads to them had
+    // been drawn.  Each is drawn when the pen gets to it instead: as the
+    // last of the lines running into where it begins arrives, or failing
+    // any, after the shape it starts nearest; failing that, at the end.
+    var homeless = [];
+    loose.forEach(function (one) {
+      var a = one.pts[0], feeders = [];
+      for (var dx = -1; dx <= 1; dx++) {
+        for (var dy = -1; dy <= 1; dy++) {
+          (endAll[(Math.round(a[0]) + dx) + " " + (Math.round(a[1]) + dy)] || [])
+            .forEach(function (f) { if (f !== one && feeders.indexOf(f) < 0) { feeders.push(f); } });
+        }
+      }
+      if (feeders.length) {
+        feeders.forEach(function (f) { f.then.push(one); });
+        one.feeders = feeders.length;
+        return;
+      }
+      var by = nearest(shapes, a[0], a[1], 400, null);
+      if (by) { by.leaving.push(one); } else { homeless.push(one); }
     });
     function lineEndingAt(x, y) {
       for (var dx = -1; dx <= 1; dx++) {
@@ -804,40 +832,63 @@
     // are counted at the pen's own speed throughout and squeezed as each
     // piece is written down, so that what is worked out here does not
     // depend on how hurried the answer turns out to be.
+    //
+    // What rides on a line keeps to that line, however squeezed the turns
+    // are: its arrowhead lands when the line reaches it, a True or False
+    // is written as the pen passes it, and the shape a line leads into
+    // begins when the line arrives.  They were timed from the line's turn,
+    // squeezed like everything else, while the line itself was still drawn
+    // at the pen's own speed -- so on a hurried drawing the head appeared at
+    // the end of a line the pen had not got to yet, and the shape before
+    // the arrow into it.  `lag` is that: real time after a piece's squeezed
+    // turn, in step with the line it belongs to.
     function layOut(rate, squeeze, pieces, mark) {
       var wash = Math.max(140, WASH / rate);
       var pop = Math.max(90, POP / rate);
       var hurry = rate > 1;              // the washes and the arrowheads too
-      function put(bit, at, cls, vars, kids) {
+      lines.forEach(function (line) { line.left = line.feeders; line.ready = 0; line.done = false; });
+      function put(bit, at, cls, vars, kids, lag) {
         if (mark) { bit.classList.add("ink-wait"); }
-        var p = { el: bit, t: at * squeeze, cls: cls, vars: vars || {},
+        var p = { el: bit, t: at * squeeze + (lag || 0), cls: cls, vars: vars || {},
                   kids: kids || [], lasts: 0 };
         pieces.push(p);
         return p;
       }
-      function write(one, at) {
-        put(one.el, at, "ink-write", { "--dur": ms(one.dur / rate) }).lasts = one.dur / rate;
-        if (one.patch) { put(one.patch, at, null); }
+      function write(one, at, lag) {
+        put(one.el, at, "ink-write", { "--dur": ms(one.dur / rate) }, null, lag).lasts = one.dur / rate;
+        if (one.patch) { put(one.patch, at, null, null, null, lag); }
         return at + one.dur;
       }
       function drawLine(line, at) {
+        if (line.done) { return at + line.dur; }
+        line.done = true;
         put(line.el, at, "ink-line", { "--len": (line.len + 2).toFixed(1),
                                        "--dur": ms(line.dur / rate) }).lasts = line.dur / rate;
         line.heads.forEach(function (head) {
-          put(head, at + line.dur, "ink-pop", hurry ? { "--pop": ms(pop) } : null).lasts = pop;
+          put(head, at, "ink-pop", hurry ? { "--pop": ms(pop) } : null, null,
+              line.dur / rate).lasts = pop;
         });
-        line.labels.forEach(function (one) { write(one, at + line.dur * one.share); });
-        return at + line.dur;
+        line.labels.forEach(function (one) { write(one, at, line.dur * one.share / rate); });
+        var end = at + line.dur;
+        // and whatever runs on from where it stops, once the last line
+        // running into that point has arrived
+        line.then.forEach(function (next) {
+          next.ready = Math.max(next.ready, end);
+          if (--next.left === 0) { drawLine(next, next.ready); }
+        });
+        return end;
       }
 
       var t = 0;
       heading.forEach(function (one) { t = write(one, t); });
-      var after = t;
-      loose.forEach(function (line) { after = Math.max(after, drawLine(line, t)); });
-      t = after;
       shapes.forEach(function (one) {
-        var ready = t;
-        one.coming.forEach(function (line) { ready = Math.max(ready, drawLine(line, t)); });
+        var ready = t, arrives = 0;
+        one.coming.forEach(function (line) {
+          ready = Math.max(ready, drawLine(line, t));
+          arrives = Math.max(arrives, line.dur / rate);
+        });
+        // not before the last line into it has arrived, even hurried
+        var lag = Math.max(0, t * squeeze + arrives - ready * squeeze);
         t = ready;
         // Round the outline, every stroke of it at once; the color washes in
         // behind each once it is closed; the words are written as the pen
@@ -868,13 +919,18 @@
         // is the same for all of them, and it is inherited, so one word on
         // the group is one style to put on and one to take off instead of
         // four or five.
-        put(one.el, t, null, hurry ? { "--wash": ms(wash) } : {}, kids)
+        put(one.el, t, null, hurry ? { "--wash": ms(wash) } : {}, kids, lag)
           .lasts = Math.max(outline / rate + wash, said / rate);
-        one.said.forEach(function (words) { write(words, t); });
+        one.said.forEach(function (words) { write(words, t, lag); });
         t += Math.max(outline, said);
         var gone = t;
         one.leaving.forEach(function (line) { gone = Math.max(gone, drawLine(line, t)); });
         t = gone;
+      });
+      // Lines with nothing leading to them on the screen, and any still
+      // waiting on a line that never came, go last rather than first.
+      homeless.concat(loose).forEach(function (line) {
+        if (!line.done) { t = Math.max(t, drawLine(line, t)); }
       });
       strayHeads.forEach(function (head) {
         put(head, t, "ink-pop", hurry ? { "--pop": ms(pop) } : null).lasts = pop;
@@ -888,14 +944,20 @@
     // and once for real.  What is wanted is the whole of a short drawing and
     // no more than about CAP of a long one, approached rather than reached,
     // so that a chart twice the size of another still takes a little longer
-    // than it rather than exactly as long.  Bringing the turns that much
-    // closer together is what makes the wave; the pen is only asked to
-    // quicken once the wave would otherwise have more than AT_ONCE pieces
-    // going at the same time.
+    // than it rather than exactly as long.
+    //
+    // The pen quickens to fit first, and only what it cannot fit is made up
+    // by beginning pieces early.  It was the other way about: the turns were
+    // brought closer together from the first second over, while the pen
+    // kept its own speed until six pieces were going at once -- so on any
+    // drawing past the mark the next shape was begun before the line into
+    // it was done, again and again down the chart, and things appeared
+    // before the pen had reached them.  Quickened by as much as the turns
+    // are squeezed, every piece still starts as the one before it ends.
     var natural = layOut(1, 1, [], false);
     var want = natural <= EASY ? natural : EASY + (CAP - EASY) * (1 - EASY / natural);
     var squeeze = natural > 0 ? want / natural : 1;
-    var rate = Math.min(QUICKEST, Math.max(1, 1 / (squeeze * AT_ONCE)));
+    var rate = Math.min(QUICKEST, Math.max(1, 1 / squeeze));
     mine.total = layOut(rate, squeeze, pieces, true);
     pieces.sort(function (a, b) { return a.t - b.t; });
   }

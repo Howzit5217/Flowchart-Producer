@@ -138,8 +138,9 @@ def layout_chain(tests, tail, thens, other):
         # the way home comes in side-on here, with a head on it, so the
         # line carries on far enough for the next head to stand clear
         bottom += join_room(settings.VGAP)
-        elems += [("line", 0, foot, 0, merge, False),
-                  ("line", 0, merge, 0, bottom, False)]
+        elems.append(("line", 0, foot, 0, merge, False))
+        if bottom > merge:                  # none, when the gap is room enough
+            elems.append(("line", 0, merge, 0, bottom, False))
     if backs:                               # the rail, down to the meeting
         elems += [("line", rail, min(backs), rail, merge, False),
                   ("line", rail, merge, lane if straight is not None else 0,
@@ -294,8 +295,9 @@ def layout_fork(item):
             # False comes back in side-on, with a head on it, so the line
             # carries on far enough for the next head to stand clear
             bottom += join_room(settings.VGAP)
-            elems += [("line", 0, y, 0, merge, False),
-                      ("line", 0, merge, 0, bottom, False)]
+            elems.append(("line", 0, y, 0, merge, False))
+            if bottom > merge:              # none, when the gap is room enough
+                elems.append(("line", 0, merge, 0, bottom, False))
         out = then.w - then.axis if e_side > 0 else then.axis
         lane = e_side * (max(half, out) + e_gap)       # clear of the branch
         elems += [("line", e_side * half, mid, lane, mid, False),

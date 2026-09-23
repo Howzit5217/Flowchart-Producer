@@ -302,6 +302,52 @@ def _():
         hits, " (first: %s)" % first if first else "")
 
 
+FIZZ = """Start
+Set i = 1
+While i <= 15
+    If i mod 15 = 0 Then
+        Display "FizzBuzz"
+    Else If i mod 3 = 0 Then
+        Display "Fizz"
+    Else If i mod 5 = 0 Then
+        Display "Buzz"
+    Else
+        Display i
+    End If
+    Set i = i + 1
+End While
+Stop
+"""
+
+
+@check("a branch coming home says which way, however it is shaken")
+def _():
+    """The check above, over many more shakes of one chain of Else Ifs.
+
+    How much line the layout keeps under a join is shaken with everything
+    else, and on some shakes it came to nothing -- a line of no length, at
+    the join, that read as a line running across and took the head off the
+    branch coming home there: FizzBuzz's way back into the line down to
+    Set i = i + 1.  The three seeds above never drew it."""
+    fb = builder()
+    hits, first, seen = 0, None, 0
+    keep = fb.CHAIN_LIMIT
+    try:
+        for chains in (keep, 0):             # forked, and queued down the page
+            fb.CHAIN_LIMIT = chains
+            for shape in ("auto", "square", "wide"):
+                for seed in range(1, 31):
+                    n = charts.bare_joins(drawn("", text=FIZZ, shape=shape, seed=seed))
+                    seen += 1
+                    hits += n
+                    if n and first is None:
+                        first = "%s seed %d%s" % (shape, seed, " queued" if not chains else "")
+    finally:
+        fb.CHAIN_LIMIT = keep
+    return hits == 0, "%d drawings, %d without a head%s" % (
+        seen, hits, " (first: %s)" % first if first else "")
+
+
 @check("no route takes more than five turns")
 def _():
     worst = max(charts.most_turns(svg) for _, svg in every_chart())

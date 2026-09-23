@@ -696,7 +696,7 @@
   // actual size, which is where a chart opens and where its words read.
   var LEEWAY = 1.5;
 
-  function followNode(node) {
+  function followNode(node, ms) {      // ms: how long the move takes; 0 jumps
     var stage = el("#stage"), box = null;
     if (!stage || !node || !node.getBBox) { return; }
     inView(node);
@@ -712,19 +712,8 @@
     var far = heavy ? Infinity : want * LEEWAY;
     if (fits && zoom * LEEWAY >= near && zoom <= far) { want = zoom; }
     else if (heavy) { want = Math.min(want, 1); }
-    glideTo(box.x + box.width / 2, box.y + box.height / 2, want, 240);
-  }
-
-  // Where it was before the program took the wheel, so it can be given back
-  // afterwards.  A run that ends leaving the chart somewhere in the middle
-  // of itself at some zoom nobody chose is a run that has to be tidied up
-  // after by hand, every time.
-  var wasView = null;
-  function keepView() { wasView = viewNow(); }
-  function backToView() {
-    var was = wasView;
-    wasView = null;
-    if (was) { glideTo(was.x, was.y, was.zoom, 300); }
+    glideTo(box.x + box.width / 2, box.y + box.height / 2, want,
+            ms === undefined ? 240 : ms);
   }
 
   // ------------------------------------- held in place, or loose upon it --

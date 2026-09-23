@@ -155,7 +155,14 @@ def to_svg(elems, title=None, author=None):
     boxes = [(e[2] - e[4] / 2.0, e[3] - e[5] / 2.0,
               e[2] + e[4] / 2.0, e[3] + e[5] / 2.0)
              for e in elems if e[0] == "shape"]
-    segs = [e for e in elems if e[0] == "line"]
+    # A line of no length draws nothing, but it was counted when asking which
+    # way the lines at a point go -- as running across, since it runs
+    # neither way -- so a branch coming home across the page seemed to
+    # carry straight on at the join and was given no head.  The layout left
+    # one wherever the room it keeps below a join came to nothing (FizzBuzz,
+    # on some shakes, going home into the line down to Set i = i + 1).
+    segs = [e for e in elems if e[0] == "line"
+            and (abs(e[3] - e[1]) > 0.01 or abs(e[4] - e[2]) > 0.01)]
 
     # Which shapes stand on each square of a coarse grid laid over the
     # chart, so that asking whether a route points into a shape looks only
