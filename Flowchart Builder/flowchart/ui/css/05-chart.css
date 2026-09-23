@@ -587,7 +587,8 @@
      left on, the rule for a shape's rectangles above would have drawn each
      one as a black box round the words.  How the words are set -- their
      size, their face, bold or underlined -- is not ink, and prints. */
-  .no-ink svg .highlights { display: none !important; }
+  .no-ink svg .highlights,
+  .no-ink svg .highlights-was { display: none !important; }
   .no-ink:not(.show-grid) svg .grid { display: none !important; }
   .no-ink.show-grid svg .grid { display: inline !important; stroke: #b9c0c9 !important; }
 

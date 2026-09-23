@@ -1242,27 +1242,94 @@
   // A highlighter going across the words, rather than the words simply
   // turning out to have been highlighted.  The marks are drawn again
   // whenever the shape is painted -- which is whenever any color on the
-  // page changes -- so the stroke is kept for a mark that is really new:
-  // a pen pressed a moment ago, and a shape that was not already wearing
-  // that color.
-  var penAt = 0;                         // when a pen was last taken up
-  var markSeen = {};                     // shape -> the color it was marked in
+  // page changes -- so the stroke is kept for a mark somebody has just
+  // asked for: a pen, Apply to all, Paste or Clear pressed a moment ago,
+  // on a shape whose marks are not already that color.  What is there
+  // already is read off the shape itself rather than remembered by its
+  // number, because two shapes can share a number (a For's three all have
+  // its line), and one of them taking a pen set the other one going again.
+  //
+  // Over a color already there, the new one goes across on top of it and
+  // the old one is only taken away once it has been covered.  It used to
+  // vanish the moment the pen was pressed, so the new color crossed bare
+  // paper and the old one was seen to blink out first.  Taken off, the
+  // marks are wiped away the same way, left to right and a line at a time.
+  //
+  // Only the shapes on the screen are drawn over -- a stroke nobody can see
+  // is only time spent -- and on Apply to all they go one after another,
+  // down the chart, like a pen going round it.
+  var markAsked = 0;                     // when a mark was last asked for
+  var markBy = "";                       // and whether by a press or a drag
+  var markRun = 0;                       // how many have gone across since
+  var MARK_TOOLS = ".pen, [data-tool=spread], [data-tool=paste-look], [data-tool=clear]";
   document.addEventListener("click", function (ev) {
-    if (ev.target.closest && ev.target.closest(".pen")) { penAt = Date.now(); }
+    if (ev.target.closest && ev.target.closest(MARK_TOOLS)) {
+      markAsked = Date.now(); markBy = "press"; markRun = 0;
+    }
   }, true);
   document.addEventListener("input", function (ev) {
-    if (ev.target.closest && ev.target.closest(".pen-other")) { penAt = Date.now(); }
+    if (ev.target.closest && ev.target.closest(".pen-other")) {
+      if (markBy !== "drag" || Date.now() - markAsked > 1500) { markRun = 0; }
+      markAsked = Date.now(); markBy = "drag";
+    }
   }, true);
+
+  // Whether a shape is anywhere on the stage.  One the page has left out of
+  // its drawing, being nowhere near the screen, measures as nothing at all.
+  function markInSight(g) {
+    var stage = el("#stage");
+    if (!stage) { return true; }
+    var b = g.getBoundingClientRect(), s = stage.getBoundingClientRect();
+    if (!b.width && !b.height) { return false; }
+    return b.right >= s.left && b.left <= s.right &&
+           b.bottom >= s.top && b.top <= s.bottom;
+  }
+
+  // Each mark in its turn: a line at a time within a shape, and each shape
+  // a little after the one before it, up to a point.
+  function markTurns(pen, lead) {
+    pen.style.setProperty("--lead", lead + "ms");
+    all(".highlight", pen).forEach(function (r, i) { r.style.setProperty("--i", i); });
+  }
+
   var markUpPlain = markUp;
   markUp = function (g, texts, color) {
+    // Waiting on a fresh coat, it is not drawn yet; and told to keep still,
+    // it simply changes.
+    if (coatLater || STILL) { return markUpPlain(g, texts, color); }
+    var had = el(".highlights", g);
+    var first = had ? el(".highlight", had) : null;
+    var was = first ? first.getAttribute("fill") || "" : "";
     markUpPlain(g, texts, color);
-    var key = g.getAttribute("data-i") || "";
-    var fresh = color && markSeen[key] !== color && Date.now() - penAt < 900;
-    markSeen[key] = color || "";
-    var pen = fresh && !STILL ? el(".highlights", g) : null;
-    if (!pen) { return; }
-    all(".highlight", pen).forEach(function (r, i) { r.style.setProperty("--i", i); });
-    pen.classList.add("swiped");
+    var now = Date.now();
+    if (now - markAsked > 1500 || (color || "") === was) { return; }
+    // A color being dragged about on the sliders follows the drag once it
+    // has gone across, rather than going across again at every step of it.
+    if (markBy === "drag" && now - (g._markAt || 0) < 900) { return; }
+    var pen = color ? el(".highlights", g) : null;
+    if (!(pen || was) || !markInSight(g)) { return; }
+    g._markAt = now;
+    var lead = Math.min(markRun++, 14) * 45;
+    if (pen) {
+      markTurns(pen, lead);
+      pen.classList.add("swiped");
+    }
+    if (!was) { return; }
+    // The marks that were there, back under the new ones, or back where
+    // they were to be wiped away -- and gone once that is done.
+    had.setAttribute("class", "highlights-was" + (pen ? "" : " wiping"));
+    markTurns(had, lead);
+    g.insertBefore(had, pen || (texts[0] && texts[0].parentNode === g ? texts[0] : null));
+    var ender = pen ? pen.lastChild : had.lastChild;
+    var lines = (pen || had).childNodes.length;
+    var done = false;
+    var gone = function () {
+      if (done) { return; }
+      done = true;
+      if (had.parentNode) { had.parentNode.removeChild(had); }
+    };
+    if (ender) { ender.addEventListener("animationend", gone); }
+    setTimeout(gone, lead + lines * 70 + 1200);   // and if it never plays
   };
 
   // The band over the line a run is on glides from one line to the next,

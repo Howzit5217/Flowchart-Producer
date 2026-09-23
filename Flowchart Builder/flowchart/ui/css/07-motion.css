@@ -801,16 +801,26 @@
       animation-delay: var(--born, 0ms);
     }
     /* A highlighter goes across the words from the left, a line at a
-       time, the way one goes across a page. */
+       time, the way one goes across a page -- over whatever color was
+       there, which waits underneath until it is covered.  --lead is how
+       long this shape waits its turn behind the ones before it. */
     svg .highlights.swiped .highlight {
       transform-box: fill-box; transform-origin: left center;
       animation: swipe .36s var(--ease) backwards;
-      animation-delay: calc(var(--i, 0) * 70ms);
+      animation-delay: calc(var(--lead, 0ms) + var(--i, 0) * 70ms);
+    }
+    /* And taken off, it is wiped away the same way: from the left, a line
+       at a time, each line staying whole until its turn comes. */
+    svg .highlights-was.wiping .highlight {
+      transform-box: fill-box; transform-origin: right center;
+      animation: wipe .3s var(--ease) forwards;
+      animation-delay: calc(var(--lead, 0ms) + var(--i, 0) * 70ms);
     }
   }
   @keyframes born-grow { from { transform: scale(.72); } }
   @keyframes gone-shrink { to { transform: scale(.84); } }
   @keyframes swipe { from { transform: scaleX(0); } }
+  @keyframes wipe { to { transform: scaleX(0); } }
   /* zoom, when a button asked for it rather than a drag */
   .sheet.gliding > svg { transition: width .3s var(--ease); }
 

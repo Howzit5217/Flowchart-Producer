@@ -106,8 +106,12 @@
 
   /* --------------------------------------------- the panel on the right -- */
   /* Flex order does the moving, so nothing in the panel has to know where
-     it sits.  Only the borders and the arrow on the collapse button care
-     which way round it is. */
+     it sits.  Only the borders and the collapse button care which way
+     round it is -- the button both ways: it points the way the panel
+     goes when it shuts, and it stands on the side of the panel next to
+     the chart, as it does on the left.  Turned round but left where it
+     was, it sat on the outside edge of a panel on the right, against the
+     side of the window, pointing out of it. */
   body[data-side="right"] #stage,
   body[data-side="right"] .stage-frame { order: 1; }
   body[data-side="right"] #panel { order: 2; }
@@ -116,6 +120,7 @@
   body[data-side="right"] #rail {
     border-right: 0; border-left: 1px solid var(--line);
   }
+  body[data-side="right"] #collapse { order: -1; }
   body[data-side="right"] #collapse svg { transform: scaleX(-1); }
   /* ------------------------------------------------- the download sheet -- */
   .sheet-menu .btn.wide {

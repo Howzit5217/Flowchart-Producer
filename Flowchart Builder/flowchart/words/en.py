@@ -431,6 +431,17 @@ EN = {
     "d_leap": "Checks whether a year is a leap year",
     "d_bank": "Keeps a bank balance, with deposits and withdrawals",
     "d_loan": "Works out how long a loan takes to pay off",
+    # named for what the program works out: {what} and {from}/{to} are its
+    # own words, title-cased (Tuition Increase, Square Feet to Acres)
+    "d_budget": "Budget Analysis",
+    "d_rise": "{what} Increase",
+    "d_fall": "{what} Decrease",
+    "d_doubling": "{what} Doubling",
+    "d_pop_growth": "Population Growth",
+    "d_compound": "Compound Interest",
+    "d_to": "{from} to {to}",
+    "d_total_of": "Total {what}",
+    "d_average_of": "Average {what}",
     "d_pay": "Works out pay from the hours worked",
     "d_tip": "Works out the tip and splits the check",
     "d_vending": "Runs a vending machine and gives change",

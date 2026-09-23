@@ -497,35 +497,95 @@ CALLED = {
     "e_rps": "Plays rock, paper, scissors",
 }
 
+# And programs written the way a textbook exercise is, named for what they
+# work out and called what they call it -- the value that grows by a rate
+# each year, the tax it prints, the conversion it makes -- rather than
+# "Counts from 1 to 5" for every one with a loop in it.
+SHELF = {
+    "shelf_tuition": ("Constant Real START_TUITION = 6000.00\n"
+                      "Constant Real INCREASE_RATE = 0.02\n"
+                      "Constant Integer NUM_YEARS = 5\n\n"
+                      "Declare Real tuition = START_TUITION\n"
+                      "Declare Integer year\n\n"
+                      "Display \"Projected semester tuition for the next five years:\"\n\n"
+                      "For year = 1 To NUM_YEARS\n"
+                      "    Set tuition = tuition * (1 + INCREASE_RATE)\n"
+                      "    Display \"Year \", year, \": $\", tuition\n"
+                      "End For", "Tuition Increase"),
+    "shelf_tax": ("Constant Real STATE_RATE = 0.05\n"
+                  "Constant Real COUNTY_RATE = 0.025\n"
+                  "Declare Real purchase\n"
+                  "Input purchase\n"
+                  "Set stateTax = purchase * STATE_RATE\n"
+                  "Set countyTax = purchase * COUNTY_RATE\n"
+                  "Set totalTax = stateTax + countyTax\n"
+                  "Display \"State sales tax: $\", stateTax\n"
+                  "Display \"County sales tax: $\", countyTax\n"
+                  "Display \"Total sales tax: $\", totalTax", "Sales Tax"),
+    "shelf_distance": ("Input speed\n"
+                       "Input hours\n"
+                       "Display \"Hour    Distance Traveled\"\n"
+                       "For hour = 1 To hours\n"
+                       "    Set distance = speed * hour\n"
+                       "    Display hour, \"       \", distance\n"
+                       "End For", "Distance Traveled"),
+    "shelf_bmi": ("Input weight\n"
+                  "Input height\n"
+                  "Set bmi = weight * 703 / (height * height)\n"
+                  "Display \"Your body mass index is \", bmi\n"
+                  "If bmi < 18.5 Then\n"
+                  "    Display \"Underweight\"\n"
+                  "End If", "Body Mass Index"),
+    "shelf_land": ("Constant Integer SQFT_PER_ACRE = 43560\n"
+                   "Declare Real squareFeet\n"
+                   "Input squareFeet\n"
+                   "Set acres = squareFeet / SQFT_PER_ACRE\n"
+                   "Display \"That is \", acres, \" acres.\"", "Square Feet to Acres"),
+    "shelf_depreciation": ("Constant Real LOSS_RATE = 0.15\n"
+                           "Declare Real carValue = 20000\n"
+                           "For year = 1 To 6\n"
+                           "    Set carValue = carValue * (1 - LOSS_RATE)\n"
+                           "    Display \"Year \", year, \": $\", carValue\n"
+                           "End For", "Car Value Decrease"),
+}
+
 
 @check("a program nobody named is called what it does")
 def _():
     """No title, and the page names the program from what it is for -- a
-    leap year, a countdown, a bank account -- rather than from its first
-    line, which is nearly always a Declare.  Every example and every puzzle
-    is asked, in each of the page's languages."""
+    leap year, a countdown, a bank account, a tuition that goes up by two
+    percent a year -- rather than from its first line, which is nearly
+    always a Declare.  Every example, every puzzle and the shelf above is
+    asked, in each of the page's languages."""
     if not node_there():
         return None, "node is not installed -- skipped"
     fb = builder()
     bad, seen = [], 0
+    called = dict(CALLED, **{key: pair[1] for key, pair in SHELF.items()})
+    with tempfile.NamedTemporaryFile("w", suffix=".json", delete=False,
+                                     encoding="utf-8") as shelf:
+        json.dump([[key, pair[0]] for key, pair in SHELF.items()], shelf)
     for lang in sorted(fb.WORDS):
         with tempfile.NamedTemporaryFile("w", suffix=".json", delete=False,
                                          encoding="utf-8") as words:
             json.dump(fb.WORDS[lang], words)
         try:
-            got = subprocess.run(["node", os.path.join(HERE, "names.js"), words.name],
+            got = subprocess.run(["node", os.path.join(HERE, "names.js"), words.name,
+                                  shelf.name],
                                  capture_output=True, text=True, encoding="utf-8",
                                  timeout=60)
         finally:
             os.unlink(words.name)
         if got.returncode:
+            os.unlink(shelf.name)
             return False, got.stderr.strip()[-300:]
         for key, name in json.loads(got.stdout):
             seen += 1
             if not name or "{" in name:
                 bad.append("%s %s: %r" % (lang, key, name))
-            elif lang == "en" and key in CALLED and name != CALLED[key]:
-                bad.append("%s: %r, not %r" % (key, name, CALLED[key]))
+            elif lang == "en" and key in called and name != called[key]:
+                bad.append("%s: %r, not %r" % (key, name, called[key]))
+    os.unlink(shelf.name)
     return not bad, "%d programs named%s" % (seen, "" if not bad else " -- " + "; ".join(bad[:3]))
 
 

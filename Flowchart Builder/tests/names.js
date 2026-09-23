@@ -37,4 +37,10 @@ literal("09-build.js", "STARTS").forEach(function (level) {
 literal("28-puzzles.js", "PUZZLES").forEach(function (level) {
   level[1].forEach(function (one) { out.push([one.key, describeProgram(one.start)]); });
 });
+// And any others run.py hands over, as [key, program] pairs in a file.
+if (process.argv[3]) {
+  JSON.parse(fs.readFileSync(process.argv[3], "utf8")).forEach(function (one) {
+    out.push([one[0], describeProgram(one[1])]);
+  });
+}
 process.stdout.write(JSON.stringify(out));
