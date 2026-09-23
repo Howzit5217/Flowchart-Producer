@@ -482,10 +482,7 @@
     // comes back.  So the flourish is kept for a drawing that is not the
     // one already on the paper -- which a built chart nearly always is,
     // since the styling is shaken afresh every time it is built.
-    if (drawn !== null && now !== drawn) {
-      if (tooBigToSee()) { atActualSize(); }
-      inkStart(paper);
-    }
+    if (drawn !== null && now !== drawn) { inkStart(paper); }
     drawn = now;
   };
 
@@ -585,10 +582,10 @@
     if (STILL || !svg || document.hidden) { return; }
     var mine = { svg: svg, pieces: [], frame: 0, timer: 0, safety: 0, total: 0 };
     ink = mine;
-    // Hidden until it is known what the pen will draw.  That waits on the
-    // size the chart is shown at, which the build settles a moment after
-    // this -- it asked for the fitting before the drawing was bound, so a
-    // timer asked for now comes after it.  A chart that appeared whole and
+    // Hidden until it is known what the pen will draw.  That waits on
+    // where the view stands, which the build settles a moment after this
+    // -- it puts the Start in view once the drawing is bound, so a timer
+    // asked for now comes after it.  A chart that appeared whole and
     // then vanished to be drawn would be the one thing an entrance must not
     // do; an empty sheet for a moment is only paper.
     svg.style.opacity = "0";
@@ -990,55 +987,11 @@
     if (stage) { stage[how]("wheel", inkStop, INK_WHEEL); }
   }
 
-  var CASCADE_MOST = 150;                // shapes, past which it is shown at actual size
-
-  // ------------------------------------------- a chart too big to see whole --
-  // A chart that fits on the stage is fitted to it and drawn where it
-  // stands, as above.  One that does not -- too many shapes to follow at once, or too
-  // tall to show whole at a size anybody could read -- used to rise as one
-  // block, shrunk to the width of the stage, and left you to find your own
-  // way to its Start.
-  //
-  // So it is shown at its actual size instead, with its Start in view --
-  // which is where anybody reading a chart that big begins.  Nothing else:
-  // it once put itself together piece by piece under a camera that chased
+  // Every new chart arrives at actual size with its Start in view, however
+  // big it is: the build sees to both (drawItNow, showTheStart).  A big one
+  // once put itself together piece by piece under a camera that chased
   // whatever was arriving and flew back to the Start at the end, and a
-  // view that will not hold still is not one anybody can read.  The Start
-  // is put in view by the build itself, as for any chart.
-  var atFull = false;                    // this drawing stays at actual size
-
-  // Too many shapes, or too big to show whole at a size that can
-  // be read: the same line fitIfItMustBe draws, past which it gives up on
-  // the whole chart and fits only its width.
-  function tooBigToSee() {
-    if (!chart || !W || !H) { return false; }
-    if (whoIsIn().nodes.length > CASCADE_MOST) { return true; }
-    var box = el("#stage");
-    if (!box) { return false; }
-    var face = getComputedStyle(box);
-    var across = box.clientWidth - parseFloat(face.paddingLeft)
-                                 - parseFloat(face.paddingRight) - 14;
-    var down = box.clientHeight - parseFloat(face.paddingTop)
-                                - parseFloat(face.paddingBottom) - 14;
-    if (across <= 0 || down <= 0) { return false; }
-    return Math.min(across / W, down / H) < 0.3;
-  }
-
-  // A drawing that is being shown at actual size is not fitted to the stage
-  // when it arrives.  The build asks for the fitting before the drawing is
-  // bound, so the answer is left here for it to find.
-  var fitPlain = fitIfItMustBe;
-  fitIfItMustBe = function () {
-    if (atFull) { atFull = false; return; }
-    fitPlain();
-  };
-
-  function atActualSize() {
-    atFull = true;
-    glideStop();
-    zoom = 1;
-    show();
-  }
+  // view that will not hold still is not one anybody can read.
 
   // ---------------------------------------------- drawing it by hand --
   // By hand the whole drawing is poured in again on every change, so from

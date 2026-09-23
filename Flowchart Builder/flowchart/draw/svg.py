@@ -74,16 +74,26 @@ def to_svg(elems, title=None, author=None):
     # the edge of everything includes labels and arrowheads sitting at
     # whatever height they happen to sit at.  Only the whole chart moves, so
     # nothing inside it is disturbed; the margin grows by up to one step.
-    over, down = settings.MARGIN - minx, settings.MARGIN - miny + head_h
+    wall = settings.MARGIN
+    over, down = wall - minx, wall - miny + head_h
+    nudge_x = nudge_y = 0.0
     if settings.GRID and settings.GRID_STEP > 0:
         tops = [e[3] - e[5] / 2.0 for e in elems if e[0] == "shape"]
         lefts = [e[2] - e[4] / 2.0 for e in elems if e[0] == "shape"]
         if tops:
-            over += (-(min(lefts) + over)) % settings.GRID_STEP
-            down += (-(min(tops) + down)) % settings.GRID_STEP
+            nudge_x = (-(min(lefts) + over)) % settings.GRID_STEP
+            nudge_y = (-(min(tops) + down)) % settings.GRID_STEP
+            over += nudge_x
+            down += nudge_y
     elems = shift(elems, over, down)
-    width = maxx - minx + settings.MARGIN * 2
-    height = maxy - miny + settings.MARGIN * 2 + head_h
+    # And the far side is given the same room as the near one.  It used to be
+    # given the margin alone, so whatever the nudge added on the left and at
+    # the top came straight off the right and the bottom: a chart two
+    # squares clear of the left edge and the top could stand under half a
+    # square from the right and the foot of the paper, and sit visibly off
+    # to one side of its own sheet.
+    width = maxx - minx + (wall + nudge_x) * 2
+    height = maxy - miny + (wall + nudge_y) * 2 + head_h
 
     out = [
         '<?xml version="1.0" encoding="UTF-8"?>',
@@ -107,12 +117,14 @@ def to_svg(elems, title=None, author=None):
     # the chart can recolor them with the rest.  Without the name they were
     # the only writing on the chart that stayed black whatever color the
     # paper was put on -- which on dark paper meant they were not there.
+    # The title stands inside the wall like everything else, its first line
+    # hanging from where the wall ends, rather than up against the top edge.
     if title:
-        out.append(f'<text class="title" x="{settings.MARGIN}" y="25" font-size="16" '
+        out.append(f'<text class="title" x="{wall}" y="{wall + 12}" font-size="16" '
                    f'font-weight="bold" stroke="none" fill="{settings.INK}">'
                    f'{html.escape(title)}</text>')
         if author:
-            out.append(f'<text class="author" x="{settings.MARGIN}" y="42" stroke="none" '
+            out.append(f'<text class="author" x="{wall}" y="{wall + 29}" stroke="none" '
                        f'fill="{settings.INK}">{html.escape(author)}</text>')
 
     # A route gets an arrowhead where it arrives at a shape, and also where

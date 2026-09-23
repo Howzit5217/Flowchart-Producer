@@ -66,9 +66,17 @@
         // does on a computer.  They go at once rather than one after the
         // other: two dozen small files over one connection is no wait at
         // all, and it is a fifth of what one joined-up file used to cost.
+        //
+        // Each is checked with the server rather than taken from the
+        // browser's cache on trust.  Taken on trust, a page that had just
+        // been put up again ran the Python it had kept from the last visit
+        // -- new buttons, old drawing -- for hours afterwards, a file being
+        // kept for longer the longer it had gone unchanged before.  A file
+        // that has not changed still comes from the cache, after a reply
+        // that says so.
         var fetched = 0;
         return Promise.all(job.files.map(function (path) {
-          return fetch(job.root + path).then(function (r) {
+          return fetch(job.root + path, { cache: "no-cache" }).then(function (r) {
             if (!r.ok) { throw new Error(path + " (" + r.status + ")"); }
             return r.text();
           }).then(function (text) {
@@ -235,7 +243,7 @@
       return loadPyodide({ indexURL: PYODIDE });
     }).then(function (py) {
       return Promise.all(PYFILES.map(function (path) {
-        return fetch(path).then(function (r) {
+        return fetch(path, { cache: "no-cache" }).then(function (r) {   // as above
           if (!r.ok) { throw new Error(path + " (" + r.status + ")"); }
           return r.text();
         }).then(function (text) { return [path, text]; });
@@ -962,7 +970,14 @@
         // away: you pressed the button to see a chart, not to keep looking at
         // the button.  On a wide screen it stays where it is.
         if (!again && panelIsOver()) { showPanel(false); }
-        if (!again) { setTimeout(fitIfItMustBe, 0); }  // never with its sides cut off
+        // A new chart opens at actual size, 100%, whatever the last one was
+        // left at, and showTheStart below puts its Start in view.  It used
+        // to be shrunk to fit whenever it was wider or taller than the stage
+        // -- and otherwise kept the zoom of the chart before it -- so the
+        // same program opened at 40% one time and 100% the next, and the
+        // shrinking came after the Start had been found, leaving the view
+        // wherever that put it.  Fit is still a press away for the whole.
+        if (!again) { glideStop(); zoom = 1; }   // bind() shows it at that
         FILE = data.name || FILE;
         el("#svg-link").download = FILE + ".svg";
         document.title = data.title || FILE;

@@ -5,6 +5,7 @@ import webbrowser
 from .. import settings
 from ..page import empty_chart, to_page
 from ..studio.drawing import draw_for_studio
+from ..words import reread
 from ..words.lookup import apply_language, word
 
 
@@ -43,6 +44,7 @@ def serve(port, text="", title=None, author=None):
             if path not in ("/", "/index.html"):
                 self.reply("Nothing here.", "text/plain; charset=utf-8", 404)
                 return
+            reread()                            # words changed since it started
             for bit in query.split("&"):        # ?lang=es, from the picker
                 if bit.startswith("lang="):
                     apply_language(bit[5:])
@@ -66,6 +68,7 @@ def serve(port, text="", title=None, author=None):
             try:
                 size = int(self.headers.get("Content-Length") or 0)
                 ask = _json.loads(self.rfile.read(size).decode("utf-8"))
+                reread()
                 if ask.get("lang"):
                     apply_language(ask["lang"])
                 out = draw_for_studio(ask)

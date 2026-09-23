@@ -476,30 +476,6 @@
     });
   }
 
-  // A chart wider than the room it has is shown at a size that fits.  On a
-  // phone that is nearly always, and a chart with its sides cut off is no
-  // use to anybody; on a wide screen it only happens to charts that really
-  // are too big, which is exactly when it is wanted.
-  function fitIfItMustBe() {
-    var box = el("#stage");
-    if (!chart || !box || !W || !H) { return; }
-    var face = getComputedStyle(box);
-    var across = box.clientWidth - parseFloat(face.paddingLeft)
-                                 - parseFloat(face.paddingRight) - 14;
-    var down = box.clientHeight - parseFloat(face.paddingTop)
-                                - parseFloat(face.paddingBottom) - 14;
-    if (across <= 0) { return; }
-    if (W * zoom <= across && H * zoom <= down) { return; }   // it already fits
-    // Fit whichever way is the tight one, so the whole chart is there to see.
-    // On a screen short enough that fitting the height would shrink it past
-    // reading, fit the width instead and let it be scrolled -- a chart too
-    // small to read is no better than one with its foot cut off.
-    var byWidth = across / W;
-    var whole = Math.min(byWidth, down > 0 ? down / H : byWidth);
-    zoom = Math.max(0.1, Math.min(4, whole < 0.3 ? byWidth : whole));
-    show();
-  }
-
   function show() {
     if (!chart) { return; }
     chart.style.width = (W * zoom).toFixed(0) + "px";

@@ -165,7 +165,9 @@ PAGE = True                         # also write a small .html viewer beside
                                     #   the .svg, with download links on it
 PNG_SCALE = 4                       # the page's PNG button starts at 4x size
 
-MARGIN = 24
+MARGIN = 40                         # the wall of paper round the chart: two
+                                    #   squares of the grid, the same on
+                                    #   every side
 COL_GAP = 72                        # gutter between two columns of one chart
 COLUMN_H = 0                        # 0: one column, however tall that comes
                                     #   out.  Set a height (or pass
@@ -173,5 +175,7 @@ COLUMN_H = 0                        # 0: one column, however tall that comes
                                     #   into columns instead -- but every
                                     #   wrap costs an arrow that climbs the
                                     #   whole column it leaves
-TITLE_H = 44
-HEADING_H = 28                      # room for a module's heading above its chart
+TITLE_H = 60                        # the title and name, inside the wall:
+                                    #   three squares, so the chart under
+                                    #   them still starts on the ruling
+HEADING_H = 28                     # room for a module's heading above its chart
