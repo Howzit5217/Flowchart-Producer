@@ -584,6 +584,11 @@
      transform on one of those is a thing the browser is right to ignore.
      Told to keep still, they simply are there, as everything else here is. */
   #code-out .code-part { animation: wrote-in .22s var(--ease-soft) backwards; }
+  /* And the line that stands there while a big one is still being worked
+     out breathes, because a word that does not move says the same thing a
+     stopped page says. */
+  .code-waiting { animation: said-waits 1.6s var(--ease-soft) infinite; }
+  @keyframes said-waits { 50% { opacity: .45; } }
   @keyframes wrote-in { from { opacity: 0; } }
   .code-bar .popped { animation: pop-in .26s var(--ease-back) backwards; }
   @keyframes pop-in { from { opacity: 0; transform: scale(.85); } }

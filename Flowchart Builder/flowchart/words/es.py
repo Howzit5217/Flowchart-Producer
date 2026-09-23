@@ -440,6 +440,7 @@ ES = {
     "c_one_chart": "Demasiado corto para dividirlo: sale en un solo archivo.",
     "c_cut_into": "Sin módulos: se divide en {n} partes y lo que comparten.",
     "c_files": "{n} archivos", "c_save_all": "Guardarlos todos",
+    "c_writing": "Escribiéndolo…",
     "c_zipped": "{n} archivos, en un .zip",
     "your_name": "Tu nombre", "shape": "Forma",
     "language": "Idioma", "key_switch": "Leyenda",

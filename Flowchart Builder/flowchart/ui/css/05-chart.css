@@ -395,6 +395,10 @@
     background-attachment: local;
   }
   #code-out .go { flex: none; }
+  /* While a big one is being written out.  It stands where the first line
+     of the program is about to be, so that the code arrives where the
+     waiting was rather than somewhere else. */
+  .code-waiting { flex: none; margin: 0; padding: 2px 0 0 14px; }
 
   /* Which file of the program is on the screen, where it came out as
      several.  A row of tabs above the code, scrolling sideways on its own

@@ -444,6 +444,7 @@ EN = {
     "c_one_chart": "Too short to be worth cutting up: it comes out as one file.",
     "c_cut_into": "No modules, so it is cut into {n} parts and what they share.",
     "c_files": "{n} files", "c_save_all": "Save them all",
+    "c_writing": "Writing it out…",
     "c_zipped": "{n} files, as one .zip",
     "shape": "Shape",
     "language": "Language", "key_switch": "Key", "tint_switch": "Tints",

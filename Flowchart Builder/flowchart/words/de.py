@@ -440,6 +440,7 @@ DE = {
     "c_one_chart": "Zu kurz zum Aufteilen: es wird eine einzige Datei.",
     "c_cut_into": "Ohne Module: in {n} Teile zerlegt und was sie teilen.",
     "c_files": "{n} Dateien", "c_save_all": "Alle speichern",
+    "c_writing": "Wird geschrieben…",
     "c_zipped": "{n} Dateien, in einer .zip",
     "shape": "Form",
     "language": "Sprache", "key_switch": "Legende", "tint_switch": "Farbtöne",

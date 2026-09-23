@@ -347,15 +347,8 @@
   // to split -- a chart with no modules in it is one chart and one file.
   // What comes back is always a list, because one file is a list of one and
   // everything downstream would rather not be asked which it has.
-  function written(lang, apart) {
+  function writeOut(lang, apart, prog) {
     var L = LANGS[lang], out = [];
-    // Asked for several files from a program that is one chart, the charts
-    // are made first: cutUp lifts the parts out and hands back a program
-    // with modules in it, which is a program this already knows how to
-    // write out as a file each.  It hands back nothing where the cut would
-    // not be an improvement, and then the one file is what there is.
-    var cut = apart ? cutUp(AST) : null;
-    var prog = studied(cut || AST);
     var name = (el("#f-title").value || "").replace(/[^A-Za-z0-9]/g, "") || "Program";
     // A class cannot be called 2ndTry, or for, or Math.
     if (/^[0-9]/.test(name) || L.kept[name] || L.kept[name.toLowerCase()]) {
@@ -990,6 +983,111 @@
   // One file, which is what everything that only ever wanted one asks for --
   // the screen with a program on it, and tests/written.py, which runs what
   // this writes in every language it can find a compiler for.
+  // ------------------------------------- writing it out, a piece at a time --
+  // Asking for the code used to be one statement that did everything and
+  // handed the program back: read the whole thing through to work out what
+  // every name holds, then write it out in the language asked for.  On a
+  // chart of twenty thousand shapes that is most of a second, and it was
+  // spent with the page stopped dead -- no scroll, no button, nothing
+  // drawn -- which reads as the thing having crashed rather than as it
+  // working.
+  //
+  // So the work is handed back as a run of pieces instead, and whoever
+  // asked runs them.  The page runs one a frame and draws in between, so
+  // the screen is up and saying what it is doing the whole way through;
+  // written() below runs the lot in one go, which is what tests/run.py
+  // wants and what everything that has no page to keep answering wants.
+  //
+  // None of the pieces is the whole of the work, and none of them knows it
+  // is being run this way: they are the passes that were always there.
+
+  // The reading, kept against the program it was of.  It is the same
+  // reading whichever language comes out of it, so changing the language
+  // -- or asking for the same program twice -- finds it rather than doing
+  // it again.  Two are kept, because a program cut into parts is a second
+  // program made out of the first and both are read.
+  //
+  // Nothing is kept until the last of the passes has run: a reading that
+  // was interrupted halfway is not a reading, and handing one back later
+  // as though it were would be worse than doing it again.
+  var readKeep = [];
+
+  function readAhead(ast) {
+    for (var i = 0; i < readKeep.length; i++) {
+      if (readKeep[i].ast === ast) {
+        return { prog: readKeep[i].prog, steps: [] };
+      }
+    }
+    var it = studying(ast);
+    return { prog: it.prog, steps: it.steps.concat([function () {
+      readKeep.unshift({ ast: ast, prog: it.prog });
+      if (readKeep.length > 2) { readKeep.pop(); }
+    }]) };
+  }
+
+  // And the programs already written out, against the chart they came from.
+  // Opening the code a second time -- the same language, the same
+  // one-file-or-several -- is finding it rather than writing it again,
+  // which is the difference between half a second and none.  A new build
+  // is a new chart and throws the lot away by simply not being it.
+  var wroteKeep = { ast: null, by: null, chars: 0 };
+  var WROTE_MOST = 8000000;              // characters kept, over all of them
+
+  function wroteFound(key) {
+    if (wroteKeep.ast !== AST) { wroteKeep = { ast: AST, by: {}, chars: 0 }; }
+    return wroteKeep.by[key] || null;
+  }
+
+  function wroteKept(key, files) {
+    var chars = files.reduce(function (n, one) { return n + one.text.length; }, 0);
+    if (wroteKeep.chars + chars > WROTE_MOST) {
+      wroteKeep = { ast: AST, by: {}, chars: 0 };
+    }
+    wroteKeep.by[key] = files;
+    wroteKeep.chars += chars;
+  }
+
+  // One program, written out, as a run of pieces.  `files` is filled in by
+  // the last of them.
+  function writing(lang, apart) {
+    var key = lang + (apart ? " apart" : " whole");
+    var job = { files: wroteFound(key), left: 0, step: null };
+    if (job.files) { job.step = function () { return false; }; return job; }
+
+    var steps = [], at = 0;
+    steps.push(function () {
+      // A program that is one chart is cut into parts first, where there
+      // is enough of it to be worth cutting; what comes back is a program
+      // with charts in it, which is one this knows how to write out.
+      var cut = apart ? cutUp(AST) : null;
+      var read = readAhead(cut || AST);
+      read.steps.forEach(function (one) { steps.push(one); });
+      steps.push(function () {
+        job.files = writeOut(lang, apart, read.prog);
+        wroteKept(key, job.files);
+      });
+      job.left = steps.length - at;
+    });
+    job.left = 1;
+    job.step = function () {             // one piece; whether any are left
+      if (at >= steps.length) { return false; }
+      steps[at++]();
+      job.left = steps.length - at;
+      return at < steps.length;
+    };
+    return job;
+  }
+
+  // The whole of it, in one go.
+  function written(lang, apart) {
+    var job = writing(lang, apart);
+    while (job.step()) { /* on to the next piece */ }
+    return job.files;
+  }
+
+  // One file, which is what everything that only ever wanted one asks for --
+  // tests/written.py, which runs what this writes in every language it can
+  // find a compiler for, and the screen when it is not asked for several.
   function codeFor(lang) { return written(lang, false)[0]; }
   function filesFor(lang) { return written(lang, true); }
 
@@ -1163,11 +1261,11 @@
   // 24-scroll.js hangs on pre.code still finds the pre it hangs on.
   var WRITE_RATE = 110;                  // lines a second, while it is in view
   var WRITE_MOST = 400;                  // lines in one frame, once it is not
-  var writing = null;                    // the one going on, if one is
+  var filling = null;                    // the one going on, if one is
 
   function stopWriting() {
-    if (writing) { cancelAnimationFrame(writing.frame); }
-    writing = null;
+    if (filling) { cancelAnimationFrame(filling.frame); }
+    filling = null;
   }
 
   function slice(text) {
@@ -1189,6 +1287,28 @@
     job.at = to;
   }
 
+  // The box goes down the page with the writing.  A program longer than
+  // the screen used to fill the first screenful and then carry on out of
+  // sight, which looks exactly like it having stopped -- so the view
+  // follows the last line written, and what is being done is something
+  // anybody can see happening rather than something they are told about.
+  //
+  // It follows only for as long as the box has been left at the end.
+  // Scroll up to read a line again and it stays where it was put, the way
+  // a terminal does: the scroll we set is remembered, and a scroll that is
+  // not the one we set is somebody else's.
+  //
+  // And when there is no more to write it goes back to the top, because
+  // the top is where a program is read from.  Following it down was to
+  // show it being written; it was never where anybody wanted to be left.
+  function follow(job, ended) {
+    var out = el("#code-out");
+    if (!out || !job.follow) { return; }
+    if (out.scrollTop !== job.top) { job.follow = false; return; }
+    out.scrollTop = ended ? 0 : out.scrollHeight;
+    job.top = out.scrollTop;
+  }
+
   function writeIn(nums, code, lines, room) {
     stopWriting();
     // How many lines the box can show at once, and so how much of this is
@@ -1201,15 +1321,15 @@
     var high = parseFloat(getComputedStyle(code).lineHeight) || 22;
     var job = { nums: nums, code: code, lines: lines, at: 0, frame: 0,
                 shown: Math.max(24, Math.ceil((room || 0) / high) + 2),
-                took: 0, last: 0 };
-    writing = job;
+                took: 0, last: 0, follow: true, top: 0 };
+    filling = job;
     function step(now) {
-      if (writing !== job) { return; }
+      if (filling !== job) { return; }
       // Written over, thrown away by a fresh build, or left behind by going
       // back to the run: whatever is being written into is not on the screen
       // any more, and the next program asked for is written out afresh.
       if (!code.isConnected || (el("#code-out") || {}).hidden) {
-        writing = null;
+        filling = null;
         return;
       }
       var gap = job.last ? Math.min(0.1, (now - job.last) / 1000) : 0;
@@ -1222,8 +1342,10 @@
                : Math.max(1, Math.round(WRITE_RATE * gap));
       writeOn(job, many);
       job.took = many;
-      if (job.at < lines.length) { job.frame = requestAnimationFrame(step); }
-      else { writing = null; }
+      var ended = job.at >= lines.length;
+      follow(job, ended);
+      if (!ended) { job.frame = requestAnimationFrame(step); }
+      else { filling = null; }
     }
     job.frame = requestAnimationFrame(step);
   }
@@ -1327,6 +1449,35 @@
     }
   }
 
+  // The screen with nothing on it yet, and a word saying why.  Only for a
+  // program big enough to take a moment: one that is written out before
+  // the page has drawn once would show this and take it away again inside
+  // a frame, which is a flicker rather than a word.
+  function codeWaiting(name) {
+    var out = el("#code-out");
+    if (!out) { return; }
+    stopWriting();
+    out.innerHTML = "";
+    var strip = el("#code-files");
+    if (strip) { strip.innerHTML = ""; strip.hidden = true; }
+    var line = document.createElement("p");
+    line.className = "hint code-waiting";
+    line.textContent = TXT.c_writing;
+    out.appendChild(line);
+    tapeFull(true);
+    tapeShow("code");
+    tapeSays("", name, "");
+  }
+
+  // Whether the screen is up and showing the code rather than the run.
+  function tapeCovered() {
+    var over = el("#tape-over"), out = el("#code-out");
+    if (!over || over.hidden) { return ""; }
+    return out && !out.hidden ? "code" : "run";
+  }
+
+  var penning = null;                    // the writing-out going on, if one is
+
   function showCode(want) {
     var lang = want || nowLang();
     if (!AST || !(AST.main || []).length) {
@@ -1339,20 +1490,52 @@
       talkOnce(TXT.r_pseudo_only, "note");
       return;
     }
-    var made;
-    try { made = wantsApart() ? filesFor(lang) : [codeFor(lang)]; }
-    catch (thrown) {
-      tapeShow("run");
-      talkOnce(thrown.message || String(thrown), "bad");
-      return;
-    }
     // Into its own box, not over the top of the run.  The tape keeps what
     // the program did; this is only what it says.
     // The picker in the bar says what is under it, however the code was
     // asked for -- from the run, from the panel, or by changing it here.
     if (el("#tape-lang")) { el("#tape-lang").hidden = false; }
     if (el("#tape-lang")) { el("#tape-lang").value = lang; }
-    showFiles(made, langName(lang), lang, 0);
+
+    var job = writing(lang, wantsApart());
+    penning = job;
+    function wrong(thrown) {
+      penning = null;
+      tapeShow("run");
+      talkOnce(thrown.message || String(thrown), "bad");
+    }
+    function done() {
+      penning = null;
+      showFiles(job.files, langName(lang), lang, 0);
+    }
+    // A moment's work first, before anything is said about waiting: most
+    // programs are written out inside it and never show the screen empty.
+    var until = performance.now() + 30;
+    try {
+      while (job.step()) {
+        if (performance.now() > until) { break; }
+      }
+    } catch (thrown) { wrong(thrown); return; }
+    if (job.files) { done(); return; }
+
+    // And the rest a piece at a time, with the screen up and saying so.
+    codeWaiting(langName(lang));
+    (function onward() {
+      requestAnimationFrame(function () {
+        // Asked for something else since, or the screen it was going to be
+        // put on has been shut: either way nobody is waiting for this, and
+        // finishing it would throw the screen back up over a page somebody
+        // has gone back to.
+        if (penning !== job || tapeCovered() !== "code") {
+          if (penning === job) { penning = null; }
+          return;
+        }
+        var more;
+        try { more = job.step(); }
+        catch (thrown) { wrong(thrown); return; }
+        if (more) { onward(); } else { done(); }
+      });
+    })();
   }
 
   // And the drawing, written out as the pseudocode it amounts to.

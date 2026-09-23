@@ -208,6 +208,23 @@ single file never had to: which file each chart goes in (`fileName`), how a
 file reaches a name the whole program shares (`sharedName`, and `w.reach` in
 front of it), and how it reaches a module in another file (`reachMod`).
 
+Asking for the code is handed back as a run of pieces rather than done in
+one statement: the reading-ahead is five passes and the writing is one, and
+`writing()` in `ui/js/18-write.js` hands them over for whoever asked to run.
+The page runs one a frame with the screen already up and saying what it is
+doing, so a chart of twenty thousand shapes never stops the page for more
+than a frame or two; `written()` runs the lot in one go, which is what
+`tests/run.py` and anything else with no page to keep answering wants. Both
+go through the same pieces, so there is no second way of writing a program
+out that could drift from the first.
+
+Three things are kept rather than done again: an expression's tree, against
+the text it was parsed from; the reading-ahead, against the program it was
+of; and a program written out, against the chart, the language and whether
+it was asked for as one file or several. Opening the same code twice is the
+second one being found. A new build is a new chart and drops all of it by
+simply not being the chart the last one was of.
+
 A program drawn as a single flow has no charts to make files out of, so
 `cutUp` in `ui/js/18-write.js` makes some: each top-level loop or decision
 with real work in it becomes a part of its own, main keeps the statements

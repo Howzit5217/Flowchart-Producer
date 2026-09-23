@@ -441,6 +441,7 @@ FR = {
     "c_one_chart": "Trop court pour être découpé : il sort en un seul fichier.",
     "c_cut_into": "Sans modules : découpé en {n} parties et ce qu’elles partagent.",
     "c_files": "{n} fichiers", "c_save_all": "Tout enregistrer",
+    "c_writing": "Écriture en cours…",
     "c_zipped": "{n} fichiers, dans un .zip",
     "shape": "Forme",
     "language": "Langue", "key_switch": "Légende", "tint_switch": "Teintes",

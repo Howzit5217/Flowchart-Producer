@@ -21,8 +21,32 @@
   //
   // Nothing in here knows what language is being written.
 
+  // The same handful of expressions are read again and again: working out
+  // what every name holds goes round until nothing changes, placing the
+  // declarations walks the program once for each of them, and then the
+  // writer walks it again for every language asked for.  Every one of
+  // those passes was tokenizing and parsing the same strings from
+  // scratch, which on a program of twenty thousand lines is most of what
+  // the page was doing.  A tree is only ever read, never written to, so
+  // one made for "total + bugs" is the one for every "total + bugs".
+  //
+  // Kept until there are more of them than any program has expressions,
+  // and then let go of all at once: this knows nothing about which program
+  // is being read, and a tree is cheap to make again.
+  var TREES = null, TREE_MOST = 20000;
+
   function tree(src) {                   // an expression, as a little tree
     var text = String(src === undefined || src === null ? "" : src);
+    if (!TREES) { TREES = new Map(); }
+    var had = TREES.get(text);
+    if (had) { return had; }
+    var made = treeOf(text);
+    if (TREES.size >= TREE_MOST) { TREES.clear(); }
+    TREES.set(text, made);
+    return made;
+  }
+
+  function treeOf(text) {
     var ts = tokens(text), at = 0;
     function peek() { return ts[at]; }
     function take() { return ts[at++]; }
@@ -262,7 +286,7 @@
     }).filter(Boolean);
   }
 
-  function studied(ast) {
+  function studying(ast) {
     function scopeFor(items, up, mod) {
       return { names: Object.create(null), up: up, items: items || [], mod: mod || null };
     }
@@ -336,27 +360,49 @@
       });
     });
 
-    learnKinds(prog);
-    guessKinds(prog);
-    learnKinds(prog);
-    prog.scopes.forEach(function (scope) {
-      Object.keys(scope.names).forEach(function (low) {
-        var entry = scope.names[low];
-        // Nothing anywhere says.  Something typed in that is never added
-        // up or compared with a number is words; so is a parameter nobody
-        // passes anything to.
-        if (!entry.kind) { entry.kind = (entry.asked || entry.param) ? "text" : "real"; }
-      });
-    });
-    Object.keys(prog.shared.names).forEach(function (low) {
-      if (!prog.shared.names[low].kind) { prog.shared.names[low].kind = "real"; }
-    });
-    learnKinds(prog);
-    prog.mods.forEach(function (one) {
-      if (one.answers && !one.gives) { one.gives = "real"; }
-    });
-    placeNames(prog);
-    return prog;
+    // What is left is five passes over the program, and on a chart of
+    // twenty thousand shapes they are a quarter of a second between them.
+    // They are handed back rather than run, so that whoever asked can run
+    // them one at a time and let the page draw in between -- studied()
+    // just below runs the lot, which is what everything that has no page
+    // to keep answering wants.
+    return { prog: prog, steps: [
+      function () { learnKinds(prog); },
+      function () { guessKinds(prog); },
+      function () {
+        learnKinds(prog);
+        prog.scopes.forEach(function (scope) {
+          Object.keys(scope.names).forEach(function (low) {
+            var entry = scope.names[low];
+            // Nothing anywhere says.  Something typed in that is never
+            // added up or compared with a number is words; so is a
+            // parameter nobody passes anything to.
+            if (!entry.kind) {
+              entry.kind = (entry.asked || entry.param) ? "text" : "real";
+            }
+          });
+        });
+        Object.keys(prog.shared.names).forEach(function (low) {
+          if (!prog.shared.names[low].kind) {
+            prog.shared.names[low].kind = "real";
+          }
+        });
+      },
+      function () {
+        learnKinds(prog);
+        prog.mods.forEach(function (one) {
+          if (one.answers && !one.gives) { one.gives = "real"; }
+        });
+      },
+      function () { placeNames(prog); }
+    ] };
+  }
+
+  // The whole reading, in one go.
+  function studied(ast) {
+    var it = studying(ast);
+    it.steps.forEach(function (step) { step(); });
+    return it.prog;
   }
 
   // What the program itself says about its names: a name set to a whole
