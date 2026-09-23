@@ -200,6 +200,10 @@ ES = {
     "sv_st_going": "A mitad de una ejecución",
     "sv_st_over": "Ejecución terminada",
     "sv_back": "Sigue donde lo dejaste.",
+    "sv_moved": "Este guardado ya no encaja con el programa, así que no se "
+                "pudo retomar la ejecución.",
+    "sv_lost": "No se pudo leer el programa de este guardado desde el "
+               "almacenamiento del navegador.",
     "sv_no_draw": "El diagrama no se dibujó, así que la ejecución no pudo "
                   "retomarse.",
     "sv_stop_said": "Cargar un guardado sustituye al programa que se está "

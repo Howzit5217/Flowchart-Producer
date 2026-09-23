@@ -201,6 +201,10 @@ DE = {
     "sv_st_going": "Mitten in einem Lauf",
     "sv_st_over": "Lauf beendet",
     "sv_back": "Weiter, wo du aufgehört hast.",
+    "sv_moved": "Dieser Spielstand passt nicht mehr zum Programm, der Lauf "
+                "konnte daher nicht fortgesetzt werden.",
+    "sv_lost": "Das Programm in diesem Spielstand konnte nicht aus dem "
+               "Speicher des Browsers gelesen werden.",
     "sv_no_draw": "Das Diagramm wurde nicht gezeichnet, also konnte der "
                   "Lauf nicht fortgesetzt werden.",
     "sv_stop_said": "Einen Stand zu laden ersetzt das laufende Programm. "

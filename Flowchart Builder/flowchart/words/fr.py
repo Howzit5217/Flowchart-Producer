@@ -202,6 +202,10 @@ FR = {
     "sv_st_going": "En cours d’exécution",
     "sv_st_over": "Exécution terminée",
     "sv_back": "Reprise là où vous en étiez.",
+    "sv_moved": "Cette sauvegarde ne correspond plus au programme : "
+                "l’exécution n’a pas pu reprendre.",
+    "sv_lost": "Le programme de cette sauvegarde n’a pas pu être relu "
+               "depuis le stockage du navigateur.",
     "sv_no_draw": "L’organigramme ne s’est pas dessiné, donc l’exécution "
                   "n’a pas pu reprendre.",
     "sv_stop_said": "Charger une sauvegarde remplace le programme en cours "

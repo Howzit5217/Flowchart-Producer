@@ -33,6 +33,7 @@
   var BREATH = 250;                      // steps between letting the page back in
   var breaths = 0;
   var stepsUsed = 0;                     // steps taken, the whole program over
+  var sinceAsked = 0;                    // and since somebody last answered it
   var callsDeep = 0;                     // how many calls in the run is
   var GLOBALS = {};                      // the names every chart can see
 
@@ -53,10 +54,18 @@
   // program that goes round for ever, and while each call kept a tally of
   // its own it was handed a fresh two hundred thousand steps every time it
   // was called, so the one thing the cap is for never happened.
+  //
+  // What it counts is the steps since somebody last typed an answer into
+  // it.  A loop that never ends never stops to ask anybody anything; a game
+  // does, every turn, and a text adventure played for an evening takes far
+  // more than two hundred thousand steps between them all -- it was being
+  // told it had run too long by the very limit meant for programs that
+  // cannot stop.  Runs that answer their own questions -- a puzzle being
+  // marked -- are not answered by anybody, so they still count the lot.
   async function tick() {
     if (stopping) { throw new Stop(); }
     stepsUsed++;
-    if (stepsUsed > STEP_CAP) { throw new Error(TXT.r_forever); }
+    if (++sinceAsked > STEP_CAP) { throw new Error(TXT.r_forever); }
     if (++breaths >= BREATH) {
       breaths = 0;
       await breathe();
@@ -438,6 +447,7 @@
         row.replaceWith(Object.assign(document.createElement("div"),
                         { className: "said typed", textContent: "> " + typed }));
         waiting = null;
+        sinceAsked = 0;                  // a person is still there (see tick)
         answer(typed);
       }
       // Stopped while it sat here waiting to be typed into.  Nothing else
@@ -564,7 +574,10 @@
   // charts were drawn, and only the first of them was ever really run.
   var R_REF = /^(ref|reference|byref)$/i;
 
-  async function runModule(mod, args, outer, given) {
+  // `kept` is what the module was holding when the run was saved, for a
+  // run being picked up part way through it (29-saves.js): it is gone back
+  // into with those, rather than started afresh with arguments.
+  async function runModule(mod, args, outer, given, kept) {
     var names = [], refs = [];
     String(mod.params || "").split(",").forEach(function (p) {
       var bits = p.trim().split(/\s+/).filter(Boolean);
@@ -578,13 +591,20 @@
     // Counted, rather than quietly filled in.  A module handed one thing
     // when it asks for two used to run with the second one empty, and the
     // blame landed on whichever line inside it used that name first.
-    if (args.length !== names.length) {
+    if (!kept && args.length !== names.length) {
       throw new Error(say("r_args", { name: mod.name + "()",
                                       want: names.length, got: args.length }));
     }
-    var where = { vars: {}, name: mod.name };
-    names.forEach(function (name, i) { where.vars[name] = args[i]; });
     var from = doingNow;                 // the statement that called it
+    // How it was called, for a save made while the run is inside it.  A
+    // Call on a line of its own can be gone back into: when the module is
+    // done, all that is left is the next line.  One called from inside a
+    // sum -- Set x = f(3) + 1 -- cannot: what it hands back is half of a
+    // sum being worked out, and there is no putting that back.
+    var where = { vars: kept || {}, name: mod.name,
+                  call: { mod: mod.name, given: (given || []).slice(),
+                          plain: plainCall(from, mod) } };
+    if (!kept) { names.forEach(function (name, i) { where.vars[name] = args[i]; }); }
     if (++callsDeep > DEEP_CAP) {
       callsDeep--;
       throw new Error(say("r_too_deep", { name: mod.name + "()" }));
@@ -613,6 +633,19 @@
         }
       });
     }
+  }
+
+  // A line that is nothing but a call to this module -- Call greet(name) --
+  // rather than a module called while working out what another is handed:
+  // Call f(g(1)) walks into g first, on the same line, and only then f.
+  // Any second call on the line, even to a built-in, and it is not plain.
+  function plainCall(from, mod) {
+    if (!from || from.op !== "call" ||
+        String(from.name || "").toLowerCase() !== mod.name.toLowerCase()) {
+      return false;
+    }
+    var said = String(from.text || "").replace(/^\s*call\s+/i, "");
+    return (said.match(/[A-Za-z_]\w*\s*\(/g) || []).length === 1;
   }
 
   function pieces(parts) {               // Display "a: ", x  ->  the bits of it
@@ -699,34 +732,80 @@
   // do -- a loop, a Select Case, stopping to be typed into, lighting up the
   // shape it is on -- it can now do anywhere in the program, because there
   // is nowhere in the program it does something else.
+  //
+  // It keeps a trail of where it is: one entry for every list of statements
+  // it is part way down -- the main flow, the body of the loop inside it,
+  // the Then of the If inside that -- saying which statement of the list it
+  // is on and whose names it is using.  That trail, and the names, are
+  // everything a run is (29-saves.js writes them down to keep a run), and
+  // `resumeTo` is one being put back: the walk goes straight down it,
+  // into each loop and branch it names without testing anything on the
+  // way, and starts again at the statement it was standing on.
+  //
+  // A trail entry's `phase` says the run is standing at the statement but
+  // not before it: after a Do's body, waiting to test it, or between a
+  // For's test and its body.
+  var trail = [];
+  var resumeTo = null;                   // { path, at, phase }: see above
+  var runWhere = null;                   // the main flow's names, this run
+
   async function runSteps(items, where) {
-    for (var i = 0; i < items.length; i++) {
-      await tick();
-      var item = items[i];
-      // One box is one step, whatever was written into it.  The declares
-      // at the top of a program are drawn as a single tall box, and so is
-      // a run of Displays, because each is one thing the program does --
-      // but they arrive here as one entry per line, and every line was
-      // being lit and waited on in its own right.  Six declares in one box
-      // meant six waits on a box that never changed: a second and a half
-      // of watching the top of the chart before the program did anything
-      // at all, and the longer the box the longer the wait.  The shape is
-      // what is being followed, so the shape is what is waited on.
-      var inside = i > 0 && item.id && item.id === items[i - 1].id;
-      if (item.id && !inside) { lightUp(item); }
-      if (following() && !inside) { await hold(); }
-      if (stopping) { throw new Stop(); }
-      await doStep(item, where);
-      watchNow(where);                   // and what it is holding now
+    var here = { list: items, i: 0, where: where, phase: "" };
+    trail.push(here);
+    try {
+      var i = 0;
+      if (resumeTo) {
+        var step = resumeTo.path[resumeTo.at++];
+        var into = resumeTo.path[resumeTo.at];   // how items[i] is gone back into
+        i = here.i = step.i;
+        if (into || resumeTo.phase) {
+          var back = into || { phase: resumeTo.phase };
+          if (!into) { resumeTo = null; }        // standing at a Do's test: arrived
+          await doStep(items[i], where, back);
+          watchNow(where);
+          i++;
+        } else {
+          resumeTo = null;               // arrived: items[i] is done afresh, below
+          watchNow(where);               // holding what this chart holds
+        }
+      }
+      for (; i < items.length; i++) {
+        here.i = i;
+        await tick();
+        var item = items[i];
+        // One box is one step, whatever was written into it.  The declares
+        // at the top of a program are drawn as a single tall box, and so is
+        // a run of Displays, because each is one thing the program does --
+        // but they arrive here as one entry per line, and every line was
+        // being lit and waited on in its own right.  Six declares in one
+        // box meant six waits on a box that never changed: a second and a
+        // half of watching the top of the chart before the program did
+        // anything at all, and the longer the box the longer the wait.  The
+        // shape is what is being followed, so the shape is what is waited on.
+        var inside = i > 0 && item.id && item.id === items[i - 1].id;
+        if (item.id && !inside) { lightUp(item); }
+        if (following() && !inside) { await hold(); }
+        if (stopping) { throw new Stop(); }
+        await doStep(item, where);
+        watchNow(where);                 // and what it is holding now
+      }
+    } finally {
+      trail.pop();
     }
   }
 
   // One statement, of whatever kind, in whichever chart it was written in.
-  async function doStep(item, where) {
+  //
+  // `back` is for a run being put back where it was saved: this statement
+  // was already under way, and is gone back into -- the branch it had
+  // taken, the round of the loop it was on, the module it had called --
+  // rather than begun, so nothing already decided is decided again.
+  async function doStep(item, where, back) {
     var was = doingNow;
     doingNow = item;
     try {
-      switch (item.op) {
+      if (back) { await goBackInto(item, where, back); }
+      else switch (item.op) {
         case "declare":
           noteCash(item.var, item.type);
           declareIn(where, item.var,
@@ -771,29 +850,14 @@
           else { await runSteps(item["else"] || [], where); }
           break;
         case "while":
-          while (truthy(await value(item.cond, where)) !== !!item.until) {
-            await tick();
-            lightUp(item);
-            if (following()) { await hold(); }
-            await runSteps(item.body, where);
-          }
+          await roundWhile(item, where);
           break;
         case "dowhile":
-          do {
-            await tick();
-            await runSteps(item.body, where);
-            lightUp(item);
-            if (following()) { await hold(); }
-          } while (truthy(await value(item.cond, where)) !== !!item.until);
+          await roundDo(item, where, false);
           break;
         case "for":
           if (item.init) { await doStep(statementOf(item.init, item), where); }
-          while (!item.cond || truthy(await value(item.cond, where))) {
-            await tick();
-            await runSteps(item.body, where);
-            if (item.step) { await doStep(statementOf(item.step, item), where); }
-            if (!item.step) { break; }
-          }
+          await roundFor(item, where);
           break;
         case "select":
           var pick = await value(item.expr, where), went = false;
@@ -822,6 +886,88 @@
       throw blame(thrown, item);
     } finally {
       doingNow = was;
+    }
+  }
+
+  // The three loops, going round.  Each is the loop from its test onward,
+  // so a loop gone back into part way round (goBackInto) finishes the round
+  // it was on and then carries on here exactly as if it had never stopped.
+  async function roundWhile(item, where) {
+    while (truthy(await value(item.cond, where)) !== !!item.until) {
+      await tick();
+      lightUp(item);
+      if (following()) { await hold(); }
+      await runSteps(item.body, where);
+    }
+  }
+
+  // `tested` is a Do whose body has already been round this time: it goes
+  // straight to the test.
+  async function roundDo(item, where, tested) {
+    do {
+      if (!tested) {
+        await tick();
+        await runSteps(item.body, where);
+      }
+      tested = false;
+      lightUp(item);
+      if (following()) { await standing("dotest", hold); }
+    } while (truthy(await value(item.cond, where)) !== !!item.until);
+  }
+
+  async function roundFor(item, where) {
+    while (!item.cond || truthy(await value(item.cond, where))) {
+      await standing("forbody", tick);
+      await runSteps(item.body, where);
+      if (item.step) { await doStep(statementOf(item.step, item), where); }
+      if (!item.step) { break; }
+    }
+  }
+
+  // A wait at a loop that is not a wait before a statement: the trail says
+  // which, so a save made during it knows where to pick up (see runSteps).
+  async function standing(phase, wait) {
+    var here = trail[trail.length - 1];
+    if (here) { here.phase = phase; }
+    try { await wait(); }
+    finally { if (here) { here.phase = ""; } }
+  }
+
+  // Back into a statement that was under way when the run was saved.
+  // `back.in` names the list it was part way down -- the If's Then or Else,
+  // a loop's body, a Select's case, a Call's module -- and the list itself
+  // takes the next step of the path (runSteps).  A Do or a For stood at
+  // between its body and its test (`back.phase`) goes on from there.
+  async function goBackInto(item, where, back) {
+    switch (item.op) {
+      case "if":
+        await runSteps(back.in === "else" ? item["else"] || [] : item.then, where);
+        return;
+      case "select":
+        await runSteps(item.cases[back.c].body, where);
+        return;
+      case "while":
+        await runSteps(item.body, where);
+        await roundWhile(item, where);
+        return;
+      case "dowhile":
+        if (back.in === "body") { await runSteps(item.body, where); }
+        await roundDo(item, where, true);
+        return;
+      case "for":
+        // The body -- part way down it, or from its top -- then the count,
+        // then round again; the start of the count has long since been done.
+        await runSteps(item.body, where);
+        if (!item.step) { return; }
+        await doStep(statementOf(item.step, item), where);
+        await roundFor(item, where);
+        return;
+      case "call":
+        var mod = (AST.modules || []).filter(function (m) {
+          return m.name.toLowerCase() === String(back.mod).toLowerCase();
+        })[0];
+        await runModule(mod, [], where, back.given || [], back.vars || {});
+        return;
     }
   }
 
@@ -974,10 +1120,16 @@
       return;
     }
     if (!runnable()) { talkOnce(TXT.r_nothing, "bad"); return; }
+    // A run being put back where it was saved (29-saves.js) starts out
+    // holding what it held then, and walks straight back to where it was.
+    var back = resumeTo;
+    resumeTo = null;
     running = true; stopping = false; breaths = 0;
-    stepsUsed = 0; callsDeep = 0;
-    CASH = {};                           // a fresh run, a fresh set of names
-    GLOBALS = {};                        //   and a fresh set of shared ones
+    stepsUsed = 0; sinceAsked = 0; callsDeep = 0;
+    trail = [];
+    CASH = back ? back.cash : {};        // a fresh run, a fresh set of names
+    GLOBALS = back ? back.globals : {};  //   and a fresh set of shared ones
+    if (back) { Object.assign(NUMERIC, back.numeric); }
     stepped = {};
     doingNow = null;
     if (!quiet) {
@@ -988,7 +1140,12 @@
       el("#tape").innerHTML = "";
       watchClear();                      // nothing held yet, this time round
     }
-    var where = { vars: {}, name: "main" };
+    var where = { vars: back ? back.main : {}, name: "main" };
+    if (!quiet) { runWhere = where; }    // a puzzle being marked is not the run
+    if (back) {
+      if (back.start) { back.start(where); }   // what it had said, put back
+      resumeTo = back;
+    }
     var broke = null;
     try {
       if ((AST.main || []).length) {
@@ -997,8 +1154,9 @@
         // Nothing but modules: there is no main flow to start in.  Rather
         // than refuse to run a page somebody has only just written, it
         // walks into the first chart there is, and says that is what it did.
-        talk(say("r_no_main", { name: AST.modules[0].name + "()" }), "warn");
-        await runModule(AST.modules[0], [], where, []);
+        if (!back) { talk(say("r_no_main", { name: AST.modules[0].name + "()" }), "warn"); }
+        await runModule(AST.modules[0], [], where, [],
+                        back ? back.path[0].vars : undefined);
       }
       talk(TXT.r_done, "good");
     } catch (thrown) {
@@ -1007,6 +1165,8 @@
       } else {
         broke = thrown;
       }
+    } finally {
+      resumeTo = null;
     }
     // And the view stays where the program finished -- on the End, for a
     // program that got there -- rather than going back to where it stood

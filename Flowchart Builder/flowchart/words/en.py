@@ -200,6 +200,10 @@ EN = {
     "sv_st_going": "Part way through a run",
     "sv_st_over": "Run finished",
     "sv_back": "Picked up where you left off.",
+    "sv_moved": "This save does not fit the program any more, so the run "
+                "could not be picked up.",
+    "sv_lost": "The program in this save could not be read back from the "
+               "browser's storage.",
     "sv_no_draw": "The chart did not draw, so the run could not be picked "
                   "up again.",
     "sv_stop_said": "Loading a save replaces the program that is running. "
