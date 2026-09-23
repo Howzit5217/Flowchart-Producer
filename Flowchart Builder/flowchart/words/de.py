@@ -420,6 +420,7 @@ DE = {
     "o_for": "For-Schleifen", "o_for_wide": "Ausgeschrieben", "o_for_hex": "Ein Sechseck",
     "o_everyout": "Ein Symbol für jede Ausgabe",
     "o_roomy": "Größere Abstände",
+    "o_tight": "Kompakt: so klein und eng wie möglich",
     "o_columns": "Hohes Diagramm in Spalten umbrechen",
     "o_steady": "Jedes Mal dieselbe Zeichnung",
     "more": "Optionen", "more_tip": "Weitere Diagramm-Optionen",

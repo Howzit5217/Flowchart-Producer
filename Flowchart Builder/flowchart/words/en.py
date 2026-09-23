@@ -422,6 +422,7 @@ EN = {
     "o_for": "For loops", "o_for_wide": "Opened out", "o_for_hex": "One hexagon",
     "o_everyout": "A symbol for every Display",
     "o_roomy": "Roomier spacing",
+    "o_tight": "Compressed: as small and tight as it goes",
     "o_columns": "Wrap a tall chart into columns",
     "o_steady": "The same drawing every time",
     "more": "Options", "more_tip": "More chart options",

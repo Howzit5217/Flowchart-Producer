@@ -123,25 +123,38 @@ def drawn(program, **how):
     text = how.get("text") or io.open(os.path.join(HERE, "programs", program),
                                       encoding="utf-8").read()
     keep = (fb.SHAPE, fb.VARIETY, fb.SHAKE)
+    # Compressed, it is drawn the way the studio draws it: shaken, then
+    # tightened.  What that changes is put back, because some of it -- the
+    # wall round the paper, the gaps between charts -- no shake resets.
+    spacing = {name: getattr(fb, name) for name in fb.TIGHT}
     try:
         fb.SHAPE = how.get("shape", "auto")
         fb.VARIETY = how.get("variety", False)
         fb.SHAKE = None
         if how.get("seed") is not None:
             fb.style_variety(how["seed"])
+        if how.get("tight"):
+            for name, value in fb.TIGHT.items():
+                setattr(fb, name, value)
         return fb.make_flowchart(text, title=how.get("title", "Test"),
                                  max_h=how.get("max_h", 0))
     finally:
         fb.SHAPE, fb.VARIETY, fb.SHAKE = keep
+        for name, value in spacing.items():
+            setattr(fb, name, value)
 
 
 def every_chart():
-    """A good spread of charts: each program, several shapes, several seeds."""
+    """A good spread of charts: each program, several shapes, several seeds,
+    and each of them compressed as well -- the tightest a chart is drawn is
+    where its lines, its words and its heads come closest to one another."""
     for program in PROGRAMS:
         for shape in ("auto", "page", "square", "wide"):
             for seed in (1, 4, 7):
                 yield "%s %s seed %d" % (program[:-4], shape, seed), \
                       drawn(program, shape=shape, seed=seed)
+                yield "%s %s seed %d compressed" % (program[:-4], shape, seed), \
+                      drawn(program, shape=shape, seed=seed, tight=True)
 
 
 # ---------------------------------------------------------- the lines on it --
@@ -193,6 +206,9 @@ def _():
     first = None
     looks = [(name, svg) for name, svg in every_chart()]
     looks += [("short If seed %d" % seed, drawn(None, text=SHORT_IF, seed=seed))
+              for seed in range(1, 61)]
+    looks += [("short If seed %d compressed" % seed,
+               drawn(None, text=SHORT_IF, seed=seed, tight=True))
               for seed in range(1, 61)]
     for name, svg in looks:
         n = charts.crowded_heads(svg)
@@ -272,6 +288,9 @@ def _():
             for seed in (1, 4, 7):
                 looks.append(("labelled at %dpx seed %d" % (size, seed),
                               drawn(None, text=LABELLED, shape="tall", seed=seed)))
+                looks.append(("labelled at %dpx seed %d compressed" % (size, seed),
+                              drawn(None, text=LABELLED, shape="tall", seed=seed,
+                                    tight=True)))
             # and the Else Ifs queued down the page, the For as one hexagon
             fb.CHAIN_LIMIT, fb.FOR_STYLE = 0, "hexagon"
             looks.append(("labelled at %dpx, queued" % size,
@@ -337,11 +356,15 @@ def _():
             fb.CHAIN_LIMIT = chains
             for shape in ("auto", "square", "wide"):
                 for seed in range(1, 31):
-                    n = charts.bare_joins(drawn("", text=FIZZ, shape=shape, seed=seed))
-                    seen += 1
-                    hits += n
-                    if n and first is None:
-                        first = "%s seed %d%s" % (shape, seed, " queued" if not chains else "")
+                    for tight in (False, True):
+                        n = charts.bare_joins(drawn("", text=FIZZ, shape=shape,
+                                                    seed=seed, tight=tight))
+                        seen += 1
+                        hits += n
+                        if n and first is None:
+                            first = "%s seed %d%s%s" % (
+                                shape, seed, " queued" if not chains else "",
+                                " compressed" if tight else "")
     finally:
         fb.CHAIN_LIMIT = keep
     return hits == 0, "%d drawings, %d without a head%s" % (
@@ -381,7 +404,7 @@ def _():
     fb = builder()
     off = seen = 0
     for _, svg in every_chart():
-        a, b = charts.off_the_grid(svg, fb.GRID_STEP)
+        a, b = charts.off_the_grid(svg, charts.grid_step(svg) or fb.GRID_STEP)
         off += a
         seen += b
     share = 0 if not seen else off * 100.0 / seen
@@ -885,7 +908,7 @@ def _():
     out = os.path.join(HERE, "_out.svg")
     flags = [["--lang", c] for c in ("en", "es", "fr", "de")]
     flags += [["--shape", s] for s in ("square", "wide", "page", "1920x1080")]
-    flags += [["--legend"], ["--no-grid"], ["--mono"], ["--color"], ["--roomy"],
+    flags += [["--legend"], ["--no-grid"], ["--mono"], ["--color"], ["--roomy"], ["--tight"],
               ["--no-variety"], ["--for-style", "expand"], ["--for-style", "hexagon"],
               ["--split"], ["--no-page"], ["--chain-limit", "0"],
               ["--columns-height", "900"], ["--seed", "7"]]

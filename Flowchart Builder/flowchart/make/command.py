@@ -46,7 +46,9 @@ def main():
             seed = sum(ord(c) * (i + 7) for i, c in enumerate(str(seed)))
     if settings.VARIETY or seed is not None:
         seed = style_variety(seed)
-    if args.roomy:                      # put the old spacing back
+    if args.tight:                      # as small and tight as it goes
+        vars(settings).update(settings.TIGHT)
+    elif args.roomy:                    # put the old spacing back
         # Into the settings, not into this file: they are the settings'
         # names, and everything that reads them is reading them there.
         vars(settings).update(settings.ROOMY)

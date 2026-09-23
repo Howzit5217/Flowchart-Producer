@@ -102,8 +102,13 @@ def doubles_back(svg):
     """A route that goes one way and then back the other, gaining nothing.
 
     Going round something is fine: the test is whether it travelled far
-    enough across the other way to have been worth the turn.
+    enough across the other way to have been worth the turn -- or whether
+    there is a shape standing inside the turn that it went round.  A loop's
+    way back goes round the whole body of the loop, and a compressed chart
+    can have a body wider than it is tall: judged by how far it went
+    across alone, that read as a line doubling back on itself.
     """
+    boxes = shapes(svg)
     hits = 0
     for pts in paths(svg):
         run = legs(pts)
@@ -114,13 +119,31 @@ def doubles_back(svg):
                 if pair not in ({"left", "right"}, {"down", "up"}):
                     continue
                 across = sum(g[1] for g in run[i + 1:j] if g[0] not in pair)
-                if across < min(run[i][1], run[j][1]) * 0.9:
+                if across < min(run[i][1], run[j][1]) * 0.9 \
+                        and not goes_round(run[i], run[j], boxes):
                     found = True
                     break
             if found:
                 break
         hits += 1 if found else 0
     return hits
+
+
+def goes_round(one, other, boxes):
+    """Whether two legs running opposite ways -- the two arms of a U --
+    have a shape standing between them: the middle of it inside the stretch
+    both arms cover, and between the lines the two of them run along."""
+    flat = one[0] in ("left", "right")
+    at = 1 if flat else 0                        # where each arm runs along
+    along = 0 if flat else 1                     # and which way it runs
+    lo = max(min(one[2][along], one[3][along]), min(other[2][along], other[3][along]))
+    hi = min(max(one[2][along], one[3][along]), max(other[2][along], other[3][along]))
+    near, far = sorted((one[2][at], other[2][at]))
+    for box in boxes:
+        mid = ((box[0] + box[2]) / 2.0, (box[1] + box[3]) / 2.0)
+        if lo < mid[along] < hi and near < mid[at] < far:
+            return True
+    return False
 
 
 def wraps_a_shape(svg):
@@ -385,6 +408,16 @@ def overlapping(svg):
                     and a[1] < b[3] - 2 and b[1] < a[3] - 2:
                 hits += 1
     return hits
+
+
+def grid_step(svg):
+    """How far apart the grid drawn behind the chart is ruled, read off the
+    drawing: its first fine upright line stands one step in from the edge.
+    None where there is no grid drawn to read.  A chart is drawn on a grid
+    of its own -- shaken, or compressed -- so this is the step to measure
+    it against, rather than whatever the last drawing left the settings at."""
+    first = re.search(r'class="grid fine" d="M([\d.]+),[\d.]+V', svg)
+    return float(first.group(1)) if first and float(first.group(1)) > 0 else None
 
 
 def off_the_grid(svg, step):

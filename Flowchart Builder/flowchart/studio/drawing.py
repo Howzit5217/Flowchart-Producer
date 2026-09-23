@@ -12,6 +12,11 @@ from ..words.lookup import apply_language, word
 
 
 # ------------------------------------------------------------- the studio --
+# The spacing as settings.py has it, before any drawing has changed it.
+SPACING = {name: getattr(settings, name)
+           for name in set(settings.TIGHT) | set(settings.ROOMY)}
+
+
 def file_name(title):
     """A title, made safe to save under."""
     clean = re.sub(r'[\\/:*?"<>|]+', " ", title or "").strip()
@@ -33,6 +38,11 @@ def draw_for_studio(ask):
     # program comes out the same every time it is built.
     if not want and ask.get("steady"):
         want = "20260101"
+    # The spacing as it started, before the shake.  The shake sets most of
+    # it afresh, but not the wall round the paper, the room for a title or a
+    # heading, or the gaps between charts and columns -- and without this,
+    # one compressed chart would leave every chart after it compressed too.
+    vars(settings).update(SPACING)
     seed = style_variety(int(want) if want.isdigit() else None)
     shape = str(ask.get("shape") or "auto").lower()
     settings.SHAPE = "" if shape in ("tall", "off", "none", "") else shape
@@ -61,7 +71,9 @@ def draw_for_studio(ask):
     settings.FOR_STYLE = "hexagon" if ask.get("hexfor") else "expand"
     settings.GROUP_OUTPUT = not ask.get("everyout")
     settings.COLUMN_H = float(ask.get("columns") or 0)
-    if ask.get("roomy"):                                # the airier spacing
+    if ask.get("tight"):                                # as tight as it goes
+        vars(settings).update(settings.TIGHT)
+    elif ask.get("roomy"):                              # the airier spacing
         vars(settings).update(settings.ROOMY)
     # A chain of If / Else If forks sideways until it is wider than this,
     # and queues down the page after that.  Nought queues every one of

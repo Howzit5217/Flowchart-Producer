@@ -420,6 +420,7 @@ ES = {
     "o_for": "Bucles For", "o_for_wide": "Desplegado", "o_for_hex": "Un hexágono",
     "o_everyout": "Un símbolo por cada Mostrar",
     "o_roomy": "Más espaciado",
+    "o_tight": "Compacto: lo más pequeño y ajustado posible",
     "o_columns": "Dividir un diagrama alto en columnas",
     "o_steady": "El mismo dibujo siempre",
     "more": "Opciones", "more_tip": "Más opciones del diagrama",

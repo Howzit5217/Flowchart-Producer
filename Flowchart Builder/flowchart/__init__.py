@@ -146,7 +146,8 @@ shares one symbol instead of taking one each.  Together that is about a third
 off the size of the page, with nothing dropped and no lettering shrunk: the
 words are the same size they always were, which is what has to stay readable
 when the chart is scaled down to fit a page.  Pass --roomy for the old
-spacing, --no-group-output to give every Display a symbol of its own.
+spacing, --tight for smaller still, --no-group-output to give every Display
+a symbol of its own.
 
 Behind the chart is a faint grid, like the graph paper the shapes would have
 been drawn on by hand.  It is there to rest the eye on and to show how far
@@ -177,6 +178,8 @@ Options worth knowing:
                     tests queue up down the page instead (900 by default;
                     --shape overrules this while it is looking for a fit)
     --roomy         the older, airier spacing (a chart about a third bigger)
+    --tight         compressed: as small and tight as a chart goes (about
+                    half the area on most programs), the words the same size
     --no-group-output  one symbol per Display, not one for a run of them
     --no-grid       plain white behind the chart, no grid
     --grid-step     how far apart the grid lines sit (20 by default)

@@ -155,6 +155,19 @@ GROUP_MAX = 5                       #   symbol, up to this many lines, the
                                     #   way a run of Declares already does
 ROOMY = dict(VGAP=30, HGAP=30, PAD_Y=11, NODE_MIN_H=38, DIA_MIN_H=60,
              DIA_W=150, LOOP_UP=24)  # the airier old spacing: --roomy
+TIGHT = dict(GRID_STEP=8, VGAP=16, LOOP_UP=16, PAD_Y=5, NODE_MIN_H=24,
+             DIA_MIN_H=40, OVAL_H=26, NODE_W=72, OVAL_W=72, DIA_W=100,
+             HGAP=14, LABEL_PAD=8, SLANT=8, CORNER_R=4, COL_GAP=40,
+             CHART_GAP=32, MARGIN=16, TITLE_H=40, HEADING_H=24)
+                                    # as small and tight as a chart goes and
+                                    #   still reads, the words the size they
+                                    #   were: --tight.  A finer grid is most
+                                    #   of it -- a shape's height is rounded
+                                    #   up to two squares, so on a 20px grid
+                                    #   two lines of words take 80px, on an
+                                    #   8px one 48 -- and every gap, every
+                                    #   box's least size and the wall round
+                                    #   the paper come down with it
 
 GRID = True                         # faint graph-paper grid behind the chart
 GRID_STEP = 20                      # spacing of the fine grid lines, in px

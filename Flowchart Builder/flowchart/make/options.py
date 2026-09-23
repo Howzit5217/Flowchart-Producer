@@ -65,6 +65,10 @@ def options():
     ap.add_argument("--roomy", action="store_true",
                     help="the older, airier spacing: every gap wider and "
                          "every shape taller, so a bigger chart")
+    ap.add_argument("--tight", action="store_true",
+                    help="compressed: the chart as small and tight as it "
+                         "goes -- a finer grid, shorter gaps, snug shapes, "
+                         "the words the size they were")
     ap.add_argument("--no-group-output", action="store_true",
                     help="one symbol per Display, instead of one shared by "
                          "a run of them")

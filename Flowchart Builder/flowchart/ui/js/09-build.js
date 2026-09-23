@@ -955,8 +955,8 @@
   // drawing code could always be told and the studio had no way to say.
   // They are read straight off the page rather than kept in a variable
   // beside it: one place a thing is true is one place it can be wrong.
-  var OPTIONS = ["o-tint", "o-everyout", "o-roomy", "o-chains", "o-columns",
-                 "o-steady"];
+  var OPTIONS = ["o-tint", "o-everyout", "o-roomy", "o-tight", "o-chains",
+                 "o-columns", "o-steady"];
 
   function optionOn(id) {
     var box = el("#" + id);
@@ -984,6 +984,7 @@
       tint: optionOn("o-tint"),
       everyout: optionOn("o-everyout"),
       roomy: optionOn("o-roomy"),
+      tight: optionOn("o-tight"),
       chains: optionOn("o-chains"),
       steady: optionOn("o-steady"),
       columns: optionOn("o-columns") ? 1400 : 0
@@ -1056,6 +1057,17 @@
 
   all("#more-over input[type=\"checkbox\"]").forEach(function (box) {
     box.onchange = optionChanged;
+  });
+  // Roomier and compressed are the two ends of one thing, so turning one
+  // on turns the other off, rather than leaving both ticked and one of
+  // them quietly doing nothing.
+  [["o-roomy", "o-tight"], ["o-tight", "o-roomy"]].forEach(function (pair) {
+    var box = el("#" + pair[0]), other = el("#" + pair[1]);
+    if (!box || !other) { return; }
+    box.onchange = function () {
+      if (box.checked) { other.checked = false; }
+      optionChanged();
+    };
   });
   // The outline the chart aims at is a setting among the others now, so it
   // takes hold the way they all do rather than waiting for the next Build.

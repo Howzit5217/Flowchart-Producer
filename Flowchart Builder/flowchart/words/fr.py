@@ -421,6 +421,7 @@ FR = {
     "o_for": "Boucles For", "o_for_wide": "Dépliée", "o_for_hex": "Un hexagone",
     "o_everyout": "Un symbole pour chaque Afficher",
     "o_roomy": "Espacement plus aéré",
+    "o_tight": "Compact : aussi petit et serré que possible",
     "o_columns": "Répartir un schéma haut en colonnes",
     "o_steady": "Le même dessin à chaque fois",
     "more": "Options", "more_tip": "Plus d’options du schéma",
