@@ -855,9 +855,118 @@
     ]]
   ];
 
+  // ---------------------------------------------------- what it is called --
+  // A new program in the box names itself in the Title box, so a chart is
+  // headed with what it is without anybody stopping to type it.  An example
+  // is called what its button says; a puzzle is only numbered, for the
+  // reason the puzzles give (its name is most of the answer); and anything
+  // else is called by the comment it opens with, or failing that by the
+  // first thing it says.  A title somebody typed is theirs and is never
+  // written over: only an empty one, or one put there by this, is.
+  //
+  // Where the name came from is kept, not the name, so it is said in the
+  // language of the page at each drawing -- and so an example with a line
+  // or two changed is still that example.  Pasting or dropping a program
+  // in, emptying the box, or opening a file lets it go.
+  var titleFrom = null;                 // { key } / { puzzle } / { text }
+  var titlePut = "";                    // what was last written into the box
+
+  function titleOfFrom(from) {
+    if (from.key) { return TXT[from.key] || from.key; }
+    if (from.puzzle) { return say("pz_one", { n: from.puzzle }); }
+    return from.text || "";
+  }
+
+  // The words themselves, when nothing says where they came from.
+  function titleFromWords(code) {
+    var eg = null;
+    STARTS.forEach(function (level) {
+      level[1].forEach(function (pair) { if (pair[1] === code) { eg = pair[0]; } });
+    });
+    if (eg) { return { key: eg }; }
+    if (typeof PUZZLES !== "undefined") {
+      var pz = null;
+      PUZZLES.forEach(function (level) {
+        level[1].forEach(function (one) { if (one.start === code) { pz = one.no; } });
+      });
+      if (pz) { return { puzzle: pz }; }
+    }
+    // Only the top of it is read: a chart of a hundred thousand lines is
+    // named by its first few, like any other.
+    var lines = code.slice(0, 4000).split("\n");
+    var said = "";
+    for (var i = 0; i < lines.length && i < 60; i++) {
+      var line = lines[i].trim();
+      var note = /^(?:\/\/+|\/\*+)\s*(.*?)\s*(?:\*+\/)?$/.exec(line);
+      if (note) {
+        if (note[1] && !said) { return { text: shortTitle(note[1]) }; }
+        continue;
+      }
+      if (!said) {
+        var put = /^(?:display|print|output|write)\b\s*(["'])(.*?)\1/i.exec(line);
+        if (put && put[2].trim()) { said = put[2]; }
+      }
+    }
+    return said ? { text: shortTitle(said.replace(/[\s.:,;!?-]+$/, "")) } : null;
+  }
+
+  function shortTitle(s) {
+    s = String(s).replace(/\s+/g, " ").trim();
+    return s.length > 48 ? s.slice(0, 46).trim() + "…" : s;
+  }
+
+  // Anything but what this put there is somebody's own -- an empty box
+  // they emptied included -- and stays until the program itself changes.
+  function titleOwned() {
+    var box = el("#f-title");
+    return !box || box.value.trim() !== titlePut.trim();
+  }
+
+  // Just before a drawing: the name, if the box is free to take one.
+  function fillTitle(code) {
+    if (titleOwned()) { return; }
+    if (!code.trim()) { titleFrom = null; }
+    var from = titleFrom || (code.trim() ? titleFromWords(code) : null);
+    titleFrom = from;
+    el("#f-title").value = titlePut = from ? titleOfFrom(from) : "";
+  }
+
+  // Told where a name comes from: an example, a puzzle, a file.  That is a
+  // new program, and the title of the one before goes with it.
+  function titleComesFrom(from) {
+    titleFrom = from;
+    if (el("#f-title")) { el("#f-title").value = titlePut = titleOfFrom(from); }
+  }
+
+  // Or that the box holds another program altogether now, name unknown.
+  function newProgram() {
+    titleFrom = null;
+    if (el("#f-title")) { titlePut = el("#f-title").value; }
+  }
+
+  // A title put back from a save is the one it had, whoever gave it.
+  function titleKept() { titleFrom = null; titlePut = ""; }
+
+  // Typing into a program leaves its name alone; pasting or dropping in
+  // most of what is in the box now is a program of its own.
+  if (el("#code")) {
+    var codeWas = 0;
+    el("#code").addEventListener("beforeinput", function () {
+      var c = el("#code");
+      codeWas = c.value.length - Math.abs(c.selectionEnd - c.selectionStart);
+    });
+    el("#code").addEventListener("input", function (ev) {
+      var now = el("#code").value;
+      var pasted = /^insertFrom(Paste|Drop)/.test(ev.inputType || "") &&
+                   now.length - codeWas >= now.length * 0.6;
+      if (!now.trim() || pasted) { newProgram(); }
+    });
+  }
+
   // Put one in the box and draw it.
-  function startFrom(code) {
+  function startFrom(code, name) {
     el("#code").value = code;
+    if (name) { titleComesFrom({ key: name }); }
     showStarts();
     showExamples(false);
     el("#build").click();
@@ -868,7 +977,7 @@
     b.className = "btn small";
     b.textContent = TXT[name] || name;
     b.style.setProperty("--i", i);       // so they arrive one after another
-    b.onclick = function () { startFrom(code); };
+    b.onclick = function () { startFrom(code, name); };
     return b;
   }
 
@@ -1169,6 +1278,7 @@
       says.textContent = TXT.drawing;
       remember();
       var asked = el("#code").value;
+      if (!again) { fillTitle(asked); }
       barBegin(asked);                   // a bar, if it turns out to be a long one
       return askFor(Object.assign(chartOptions(), {
         text: asked,

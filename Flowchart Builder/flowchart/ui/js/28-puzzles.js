@@ -402,6 +402,7 @@
       setMode(false);
       // Where you left it, if you left it anywhere.
       el("#code").value = work[one.key] || one.start;
+      titleComesFrom({ puzzle: one.no });
       showStarts();
       el("#build").click();
     }

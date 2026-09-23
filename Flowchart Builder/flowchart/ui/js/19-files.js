@@ -78,8 +78,13 @@
     if (!String(text).trim()) { fileSays(TXT.f_empty, true); return; }
     el("#code").value = String(text).replace(/\r\n?/g, "\n");
     showStarts();                        // there is pseudocode now: fold the offer away
-    if (el("#f-title") && !el("#f-title").value.trim()) {
-      el("#f-title").value = String(name).replace(/\.[^.]*$/, "");
+    // Called what the file is called, unless it is only called that
+    // because nobody named it: then what it says is a better name.
+    var called = String(name).replace(/\.[^.]*$/, "");
+    if (/^(untitled|new|program|pseudocode|flowchart|document)[\s_-]*\d*$/i.test(called)) {
+      newProgram();
+    } else {
+      titleComesFrom({ text: called });
     }
     // Draw it, rather than put the old paper back: this is a new program,
     // not the one the pseudocode side was looking at before.
@@ -106,6 +111,7 @@
       el("#code").value = was.source.code || "";
       showStarts();
       el("#f-title").value = was.source.title || "";
+      titleKept();
       el("#f-author").value = was.source.author || "";
       if (was.source.shape && el("#f-shape")) {
         el("#f-shape").value = was.source.shape;
