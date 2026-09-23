@@ -7877,14 +7877,45 @@
   // over as long as this stage ought to take, and the frame barToPage waits
   // for is what hands it over.  The number cannot follow it, so it is put
   // away until the end rather than left saying a figure the bar has passed.
+  var COAST = [0.3, 0.55, 0.6, 1];       // the curve it coasts along
   function barCoast(one) {
     if (!one || !one.box || one.stage !== "page") { return; }
     var fill = el(".bb-fill", one.box);
     var to = one.at + (1 - one.at) * 0.96;
-    fill.style.transition = "transform " + Math.round(barTakes(one)) +
-                            "ms cubic-bezier(.3, .55, .6, 1)";
+    var ms = Math.round(barTakes(one));
+    // It sets off from wherever the last slide has got the fill to, which
+    // may well be short of where that slide was going.
+    var was = /^matrix\(([^,]+)/.exec(getComputedStyle(fill).transform);
+    var from = was ? Math.min(one.at, +was[1]) : one.at;
+    fill.style.transition = "transform " + ms + "ms cubic-bezier(" + COAST.join(", ") + ")";
     fill.style.transform = "scaleX(" + to.toFixed(3) + ")";
+    // And with the next frame, which on a busy page is a while coming, and
+    // it has not set off at all if the page got busy first.
+    var coast = one.coast = { from: from, to: to, ms: ms, t0: 0 };
+    requestAnimationFrame(function (frame) { coast.t0 = frame; });
     one.box.classList.add("coasting");
+  }
+
+  // Where the coasting fill has got to on the screen, worked out from the
+  // clock.  The page cannot be asked: its own clock for what it animates
+  // only moves on between frames, and the whole of the coast happens inside
+  // the one long stretch of work that puts the chart on the page -- so to
+  // the page, the fill is still where the coast began.  The last step to the
+  // end was taken from there, and a bar the browser had already carried
+  // nearly to the end on its own jumped back to where the coast began and
+  // filled up all over again.
+  function coastAt(c) {
+    if (!c.t0) { return c.from; }        // never set off (see barCoast)
+    var x = Math.min(1, Math.max(0, (performance.now() - c.t0) / c.ms));
+    function along(a, b, t) {
+      return 3 * a * t * (1 - t) * (1 - t) + 3 * b * t * t * (1 - t) + t * t * t;
+    }
+    var lo = 0, hi = 1;                  // the point on the curve that far across
+    for (var i = 0; i < 30; i++) {
+      if (along(COAST[0], COAST[2], (lo + hi) / 2) < x) { lo = (lo + hi) / 2; }
+      else { hi = (lo + hi) / 2; }
+    }
+    return c.from + (c.to - c.from) * along(COAST[1], COAST[3], (lo + hi) / 2);
   }
 
   // What this drawing's stages really took teaches the next one what to
@@ -7924,8 +7955,16 @@
     var box = was.box;
     if (!box) { return; }
     if (ok) {
+      var fill = el(".bb-fill", box);
+      if (was.coast) {
+        // Set down where the screen shows it, and taken as it stands, so
+        // that the last step starts from there (see coastAt).
+        fill.style.transition = "none";
+        fill.style.transform = "scaleX(" + coastAt(was.coast).toFixed(3) + ")";
+        getComputedStyle(fill).transform;
+      }
       was.at = 1;
-      el(".bb-fill", box).style.transition = "";   // the quick one again, to the end
+      fill.style.transition = "";        // the quick one again, to the end
       box.classList.remove("coasting");
       barPaint(was);
       box.classList.add("full");
