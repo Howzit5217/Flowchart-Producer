@@ -3,7 +3,7 @@ import html
 from bisect import bisect_left
 
 from .. import measure, progress, settings
-from ..draw.grid import grid_lines
+from ..draw.grid import grid_slabs
 from ..draw.outlines import shape_art
 from ..draw.arrows import arrow_head, chain_lines, path_d
 from ..layout.blocks import TABLE_BREAK, label_drop, shift
@@ -111,7 +111,13 @@ def to_svg(elems, title=None, author=None):
         f'<desc>{html.escape(described(elems))}</desc>',
         f'<rect class="sheet" width="100%" height="100%" fill="{settings.SHEET}"/>',
     ]
-    out += grid_lines(width, height)
+    # The ruling, a slab at a time (see grid_slabs).  On a chart drawn in
+    # bands each slab goes in the band it covers, under the routes, so the
+    # page leaves it out with the rest of that band when it is far away.
+    slabs = grid_slabs(width, height)
+    banding = sum(1 for e in elems if e[0] == "shape") > settings.BAND_FROM > 0
+    if not banding:
+        out += [piece for _, _, piece in slabs]
     out += [
         f'<g font-family="{FONT}" font-size="{measure.FONT_SIZE:g}" fill="none" '
         f'stroke="{settings.INK}" stroke-width="1.3" stroke-linecap="round" '
@@ -274,10 +280,11 @@ def to_svg(elems, title=None, author=None):
     # tips after both, so nothing paints over anything it did not before.
     # A chart with fewer shapes is written exactly as it always was.
     tips = []
-    banded = {} if len(boxes) > settings.BAND_FROM > 0 else None
+    banded = {} if banding else None
 
     def put(layer, top, foot, piece):
-        """A piece of the drawing: 0 a route, 1 a shape or a label, 2 a tip."""
+        """A piece of the drawing: -1 the ruling, 0 a route, 1 a shape or a
+        label, 2 a tip."""
         if banded is None:
             (tips if layer == 2 else out).append(piece)
             return
@@ -287,6 +294,10 @@ def to_svg(elems, title=None, author=None):
             band = banded[key] = [top, foot, []]
         band[0], band[1] = min(band[0], top), max(band[1], foot)
         band[2].append(piece)
+
+    if banded is not None:
+        for top, foot, piece in slabs:
+            put(-1, top, foot, piece)
 
     # Routes first, because the shapes and the labels are meant to paint over
     # them.  The tips are held back to the very end: a label carries a patch
