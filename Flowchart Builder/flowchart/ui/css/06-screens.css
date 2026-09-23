@@ -72,14 +72,13 @@
        the foot bar for the words as well */
     #hold-seg .seg-btn span { display: none; }
     #hold-seg .seg-btn { padding: 0 10px; }
-    /* There is no Esc to press on a phone, and the bar wants the width for
-       what the screen is and what can be done to it.  The little mark is
-       decoration; the runner's bar carries four things besides it and was
-       breaking onto a second row to fit them. */
-    .code-esc, .code-bar .mark { display: none; }
-    /* With the count and the Esc chip gone, nothing is left to push Done
-       over to the right, so it pushes itself. */
-    #tape-done, #code-done, #pz-done, #eg-done, #more-done { margin-left: auto; }
+    /* The bar wants the width for what the screen is and what can be done
+       to it.  The little mark is decoration; the runner's bar carries four
+       things besides it and was breaking onto a second row to fit them. */
+    .code-bar .mark { display: none; }
+    /* With the count gone, nothing is left to push the buttons over to the
+       right, so the first of them pushes itself. */
+    #tape-done, #code-done, #pz-done, #print-now { margin-left: auto; }
     /* the bar has five things in it on this screen and room for four, so
        the count goes and the way back says it in one word */
     .code-bar .code-count { display: none; }

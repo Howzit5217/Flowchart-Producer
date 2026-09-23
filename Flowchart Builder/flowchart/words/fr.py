@@ -511,7 +511,7 @@ FR = {
     "p_meadow": "Prairie", "p_sunset": "Couchant", "p_night": "Nuit",
     "pseudocode": "Pseudocode", "title": "Titre", "your_name": "Votre nom",
     "code_big": "Remplir l’écran", "code_small": "Revenir au panneau", "done": "Terminé",
-    "code_esc": "Échap pour fermer", "code_lines": "{n} lignes",
+    "code_lines": "{n} lignes",
     "code_ask": "Entrez {name} : ",
     "code_shares": "ce que le programme partage",
     "c_head": "Code", "c_write": "Écrire le code",

@@ -508,7 +508,7 @@ ES = {
     "p_meadow": "Pradera", "p_sunset": "Ocaso", "p_night": "Noche",
     "pseudocode": "Pseudocódigo", "title": "Título",
     "code_big": "Llenar la pantalla", "code_small": "Volver al panel", "done": "Listo",
-    "code_esc": "Esc para cerrar", "code_lines": "{n} líneas",
+    "code_lines": "{n} líneas",
     "code_ask": "Introduce {name}: ",
     "code_shares": "lo que comparte el programa",
     "c_head": "Código", "c_write": "Escribir el código",

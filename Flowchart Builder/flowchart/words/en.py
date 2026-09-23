@@ -511,7 +511,7 @@ EN = {
     # ---- the studio
     "pseudocode": "Pseudocode", "title": "Title", "your_name": "Your name",
     "code_big": "Fill the screen", "code_small": "Back to the panel", "done": "Done",
-    "code_esc": "Esc to close", "code_lines": "{n} lines",
+    "code_lines": "{n} lines",
     # what written-out code says when it waits for something to be typed
     "code_ask": "Enter {name}: ",
     "code_shares": "what the program shares",

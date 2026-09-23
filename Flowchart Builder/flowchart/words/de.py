@@ -510,7 +510,7 @@ DE = {
     "p_meadow": "Wiese", "p_sunset": "Abendrot", "p_night": "Nacht",
     "pseudocode": "Pseudocode", "title": "Titel", "your_name": "Dein Name",
     "code_big": "Bildschirm füllen", "code_small": "Zurück zum Panel", "done": "Fertig",
-    "code_esc": "Esc zum Schließen", "code_lines": "{n} Zeilen",
+    "code_lines": "{n} Zeilen",
     "code_ask": "{name} eingeben: ",
     "code_shares": "was das Programm teilt",
     "c_head": "Code", "c_write": "Den Code schreiben",

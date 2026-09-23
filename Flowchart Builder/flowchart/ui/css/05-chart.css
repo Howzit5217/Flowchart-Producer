@@ -301,13 +301,11 @@
     margin-left: auto; font-size: 12.5px; color: var(--muted);
     font-variant-numeric: tabular-nums;
   }
-  /* The same box as the small Done button beside it, so the two stand
-     the same height in the bar instead of one a few pixels short. */
-  .code-esc {
-    display: inline-flex; align-items: center; box-sizing: border-box;
-    height: 28px; padding: 0 9px; font-size: 12.5px; color: var(--muted);
-    border: 1px solid var(--line); border-radius: 7px; white-space: nowrap;
-  }
+  /* Done stands at the right-hand end of every bar.  Where a count comes
+     before it, the count is what pushes it there; the sheets with no
+     count -- Options, the examples, the keys -- push it themselves, or it
+     sat in the middle of the bar, straight after the name of the sheet. */
+  #eg-done, #keys-done, #more-done { margin-left: auto; }
 
   /* As tall as the program in it (fitSlot in 24-scroll.js sets the
      height), so Copy and Save it follow its last line; a program taller
