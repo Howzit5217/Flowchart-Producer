@@ -157,6 +157,7 @@
   // from the words as they now are, so it comes after everything else about
   // them has been put on.
   function markUp(g, texts, color) {
+    if (coatLater) { coatLater.push([g, texts, color]); return; }   // freshCoat
     var had = el(".highlights", g);
     if (had) { had.remove(); }
     if (!color || !texts.length) { return; }
@@ -194,7 +195,7 @@
   function putOn(e, slot, color, how) {
     if (e[slot] === color) { return; }
     if (e[slot] === undefined && color === "") { e[slot] = color; return; }
-    if (daubed >= ATONCE) { leftOver = true; return; }
+    if (daubed >= ATONCE && !paintingAll) { leftOver = true; return; }
     how(e, color);
     e[slot] = color;
     daubed += 1;
@@ -281,7 +282,7 @@
         g._dress = dress;
         return;
       }
-      if (daubed >= ATONCE) { leftOver = true; return; }
+      if (daubed >= ATONCE && !paintingAll) { leftOver = true; return; }
       if (g._fill !== fill || g._line !== line) {
         all("ellipse, rect, polygon, path", g).forEach(function (e) {
           // .ghost is the clear pane behind a words-only box: it is there to
@@ -376,17 +377,48 @@
   // of it, handing it to a printer -- asks for this before it looks.  A
   // big chart may be a frame or two from finished when the button is
   // pressed, and a copy taken then would be a copy of a chart caught
-  // half way into its new colors.  Nothing here is scheduled: it goes
-  // round until there is nothing left over, however many rounds that is.
+  // half way into its new colors.  Nothing here is scheduled, and nothing
+  // is held back for a later frame: the frame's allowance is for the eye,
+  // and a copy has no eye, so it is all done in the one pass.  It used to
+  // keep to the allowance and go round again for the rest -- every round
+  // walking the whole chart to find what was left, several hundred rounds
+  // on a big one.
   function paintedThrough() {
     if (paintWaiting) {
       cancelAnimationFrame(paintWaiting);
       paintWaiting = 0;
     }
     paintingAll = true;
-    var rounds = 0;
-    do { paint(); } while (leftOver && ++rounds < 500);
-    paintingAll = false;
+    try {
+      var rounds = 0;
+      do { paint(); } while (leftOver && ++rounds < 500);
+    } finally { paintingAll = false; }
+  }
+
+  // A new drawing, colored in full the moment it is on the page and
+  // before anything on the page has measured it.  It arrives from the
+  // drawing in plain black and white, and a big one used to be recolored
+  // the way a palette change is -- a frame's allowance at a time, starting
+  // wherever the view happened to be -- after the page had already laid it
+  // out.  So for a moment the paper was white under a Night palette, the
+  // arrows black, most of the shapes plain, and the pen was drawing them
+  // like that; then every one of them faded across into its real colors,
+  // because a color that changes on something already laid out is a color
+  // the stylesheet fades.  Colored before it is laid out, the drawing has
+  // no earlier color to fade from: the first frame of it is in the palette.
+  //
+  // The highlighter behind a shape's words is the one thing here that has
+  // to measure, and measuring lays the drawing out, so the highlighters
+  // wait until every color is on.
+  var coatLater = null;                  // highlighters waiting on a fresh coat
+  function freshCoat() {
+    coatLater = [];
+    try { paintedThrough(); }
+    finally {
+      var later = coatLater;
+      coatLater = null;
+      later.forEach(function (m) { markUp(m[0], m[1], m[2]); });
+    }
   }
 
   // ----------------------------------------------------- the panel of it --

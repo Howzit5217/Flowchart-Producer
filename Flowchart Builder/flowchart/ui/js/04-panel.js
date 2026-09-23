@@ -700,5 +700,35 @@
       };
       box.appendChild(b);
     });
+    lightPreset();
+  }
+
+  // The palette the colors are now, lit on its button.  It was only ever
+  // lit by pressing it, so colors that came back any other way -- opening
+  // the page again, opening a file, or the buttons being made afresh in
+  // another language -- left the chart in Night with no palette chosen on
+  // the Style side at all.  Lit by what the colors are, it is right however
+  // they got there; colors changed by hand since are no palette, and light
+  // none.
+  function lightPreset() {
+    var same = function (a, b) { return String(a || "").toLowerCase() === String(b || "").toLowerCase(); };
+    var now = "";
+    PRESETS.forEach(function (pair) {
+      var p = pair[1], kinds = style.kinds || {};
+      if (!same(style.sheet, p.sheet) || !same(style.ink, p.ink) ||
+          !same(style.words, p.words) || !same(style.grid, p.grid)) { return; }
+      var kept = Object.keys(kinds).filter(function (k) {
+        return kinds[k] && (kinds[k].fill || kinds[k].line || kinds[k].text);
+      });
+      if (kept.length !== Object.keys(p.fills).length) { return; }
+      var all6 = Object.keys(p.fills).every(function (k) {
+        return kinds[k] && same(kinds[k].fill, p.fills[k]) &&
+               same(kinds[k].line, p.ink) && !kinds[k].text;
+      });
+      if (all6) { now = pair[0]; }
+    });
+    all("#presets .preset").forEach(function (x) {
+      x.classList.toggle("on", !!now && x.dataset.preset === now);
+    });
   }
 

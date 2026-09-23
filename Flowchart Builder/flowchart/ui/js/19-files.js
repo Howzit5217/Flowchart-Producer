@@ -99,6 +99,7 @@
       style = inPoints(was.style);     // sizes saved as shares, read as points
       style.kinds = style.kinds || {};
       style.nodes = style.nodes || {};
+      lightPreset();                   // its palette, if it is one, lit
     }
     if (was.geom) { geom = was.geom; drawRoles(); }
     if (was.source && el("#code")) {

@@ -58,14 +58,22 @@
     } catch (e) { /* nothing kept, or unreadable: the defaults stand */ }
   }
 
+  // The colors are kept under the name the page opened with.  They were kept
+  // under FILE, which every build with a title renames -- so a palette
+  // chosen while "Bank account" was on the paper was kept as Bank account's,
+  // and the next visit, which opens as plain "flowchart", came back in
+  // whatever had been chosen before that.  The page written beside a saved
+  // .svg opens with that chart's own name and never changes it, so it still
+  // keeps its own colors, as it always did.
+  var KEEP_AS = FILE;
   function keep() {
     try {
-      localStorage.setItem("flowchart-colors:" + FILE, JSON.stringify(style));
+      localStorage.setItem("flowchart-colors:" + KEEP_AS, JSON.stringify(style));
     } catch (e) { /* a private window, or storage turned off: never mind */ }
   }
   function recall() {
     try {
-      var was = JSON.parse(localStorage.getItem("flowchart-colors:" + FILE));
+      var was = JSON.parse(localStorage.getItem("flowchart-colors:" + KEEP_AS));
       if (was && was.kinds) { style = inPoints(was); }   // sizes kept in points
     } catch (e) { /* nothing kept, or unreadable */ }
   }

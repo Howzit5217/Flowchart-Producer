@@ -903,6 +903,10 @@
   // chart jump.
   function putSheet(svg, again) {
     el("#sheet").innerHTML = svg;
+    // In the palette from its first frame, before bind() or anything else
+    // measures it (see freshCoat).  bind() takes it up again after this.
+    chart = el("#sheet svg");
+    if (chart) { chart.id = "chart"; freshCoat(); }
   }
   // Drawing a new chart throws away the program that is on the paper, and a
   // run is a walk through that program.  Carrying on regardless left the
