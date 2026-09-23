@@ -387,7 +387,8 @@
     box.setAttribute("aria-label", TXT.b_about || "");
     box.innerHTML = '<div class="bb-top"><span class="bb-said"></span>' +
                     '<span class="bb-pct"></span></div>' +
-                    '<div class="bb-track"><div class="bb-fill"></div></div>';
+                    '<div class="bb-track"><div class="bb-fill"></div>' +
+                    '<div class="bb-shine"></div></div>';
     // In the frame the stage hangs its slider bars in, which is the
     // stage's own size whatever the stage has scrolled to.
     stage.parentNode.appendChild(box);
@@ -422,6 +423,9 @@
     if (pct !== one.drawn) {
       el(".bb-pct", one.box).textContent = pct + "%";
       el(".bb-fill", one.box).style.transform = "scaleX(" + one.at.toFixed(3) + ")";
+      // the light, cut off where the fill ends (see .bb-shine)
+      el(".bb-shine", one.box).style.clipPath =
+        "inset(0 " + ((1 - one.at) * 100).toFixed(1) + "% 0 0)";
       one.box.setAttribute("aria-valuenow", String(pct));
       one.drawn = pct;
     }

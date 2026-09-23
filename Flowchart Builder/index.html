@@ -1370,8 +1370,10 @@
   /* the number holds its width as it counts, so the words beside it stay */
   .bb-pct { flex: none; color: var(--muted); font-variant-numeric: tabular-nums; }
   .bb-track {
+    position: relative;
     height: 6px; border-radius: 3px; overflow: hidden; background: var(--line-soft);
   }
+  .bb-shine { position: absolute; inset: 0; overflow: hidden; pointer-events: none; }
   .bb-fill {
     height: 100%; border-radius: inherit; background: var(--accent);
     transform: scaleX(0); transform-origin: left center;
@@ -2494,18 +2496,25 @@
   #pz-won:not([hidden]) { animation: pop-in .34s var(--ease-back) backwards; }
   #pz-next:not([hidden]) { animation: swap-in .3s var(--ease) .12s backwards; }
 
-  /* what the build button is doing, said in light as well as in color */
-  .btn.primary.working {
-    background-image: linear-gradient(100deg, transparent 20%,
-                      rgba(255, 255, 255, .3) 50%, transparent 80%);
-    background-size: 220% 100%;
-    animation: sweep 1.1s linear infinite;
+  /* What the build button is doing, said in light as well as in color.
+     The light is the same gloss that crosses the button under the mouse,
+     sent across again and again -- moved, not repainted, so it runs as
+     smoothly beside a page busy putting down a big chart as beside an idle
+     one.  It was a second light, painted into the button's background:
+     pressing the button cut the gloss off wherever it had got to, started
+     the other one from its beginning, and a build over in a third of a
+     second showed a third of it before the green came and it vanished --
+     three lights in half a second, which is a flicker.  So it waits long
+     enough that a quick build never shows it, and the green is plain. */
+  .btn.primary.working::after {
+    transition: none;
+    animation: gloss-run 1.1s linear .35s infinite backwards;
   }
-  .btn.primary.working::after { display: none; }
+  .btn.primary.done::after { transition: none; opacity: 0; }
   .btn.primary.done { animation: done-pop .42s var(--ease-back); }
-  @keyframes sweep {
-    from { background-position: 180% 0; }
-    to { background-position: -120% 0; }
+  @keyframes gloss-run {
+    from { transform: translateX(-130%); }
+    to { transform: translateX(130%); }
   }
   @keyframes done-pop {
     0% { transform: scale(1); }
@@ -2525,12 +2534,30 @@
   #build-bar.going { opacity: 0; transform: translateY(-6px); }
   .bb-fill {
     transition: transform .32s linear, background-color var(--quick) var(--ease-soft);
-    background-image: linear-gradient(100deg, transparent 20%,
-                      rgba(255, 255, 255, .35) 50%, transparent 80%);
-    background-size: 220% 100%;
-    animation: sweep 1.3s linear infinite;
   }
-  #build-bar.full .bb-fill { animation: none; background-image: none; }
+  /* The light is not painted into the fill.  The fill grows by being
+     stretched, and a light painted inside it was stretched too: at a
+     twentieth full, the whole of a sweep was squeezed into a sliver and
+     read as a blink, and every report that stretched the fill further
+     threw the light somewhere new.  It is a layer of its own over the
+     whole track, cut off where the fill ends, crossing at one speed on the
+     screen however full the bar is -- and moved rather than repainted, so
+     a busy page cannot make it stutter. */
+  .bb-shine {
+    clip-path: inset(0 100% 0 0);
+    transition: clip-path .32s linear, opacity .2s var(--ease-soft);
+  }
+  .bb-shine::before {
+    content: ""; position: absolute; top: 0; bottom: 0; left: 0; width: 40%;
+    background: linear-gradient(100deg, transparent,
+                rgba(255, 255, 255, .35) 50%, transparent);
+    animation: shine-run 1.3s linear infinite;
+  }
+  #build-bar.full .bb-shine { opacity: 0; }
+  @keyframes shine-run {
+    from { transform: translateX(-100%); }
+    to { transform: translateX(250%); }
+  }
   @keyframes bar-drop {
     from { opacity: 0; transform: translateY(-8px); }
   }
@@ -5222,6 +5249,36 @@
       };
       box.appendChild(b);
     });
+    lightPreset();
+  }
+
+  // The palette the colors are now, lit on its button.  It was only ever
+  // lit by pressing it, so colors that came back any other way -- opening
+  // the page again, opening a file, or the buttons being made afresh in
+  // another language -- left the chart in Night with no palette chosen on
+  // the Style side at all.  Lit by what the colors are, it is right however
+  // they got there; colors changed by hand since are no palette, and light
+  // none.
+  function lightPreset() {
+    var same = function (a, b) { return String(a || "").toLowerCase() === String(b || "").toLowerCase(); };
+    var now = "";
+    PRESETS.forEach(function (pair) {
+      var p = pair[1], kinds = style.kinds || {};
+      if (!same(style.sheet, p.sheet) || !same(style.ink, p.ink) ||
+          !same(style.words, p.words) || !same(style.grid, p.grid)) { return; }
+      var kept = Object.keys(kinds).filter(function (k) {
+        return kinds[k] && (kinds[k].fill || kinds[k].line || kinds[k].text);
+      });
+      if (kept.length !== Object.keys(p.fills).length) { return; }
+      var all6 = Object.keys(p.fills).every(function (k) {
+        return kinds[k] && same(kinds[k].fill, p.fills[k]) &&
+               same(kinds[k].line, p.ink) && !kinds[k].text;
+      });
+      if (all6) { now = pair[0]; }
+    });
+    all("#presets .preset").forEach(function (x) {
+      x.classList.toggle("on", !!now && x.dataset.preset === now);
+    });
   }
 
   // ------------------------------------------------------ keeping it all --
@@ -5278,14 +5335,22 @@
     } catch (e) { /* nothing kept, or unreadable: the defaults stand */ }
   }
 
+  // The colors are kept under the name the page opened with.  They were kept
+  // under FILE, which every build with a title renames -- so a palette
+  // chosen while "Bank account" was on the paper was kept as Bank account's,
+  // and the next visit, which opens as plain "flowchart", came back in
+  // whatever had been chosen before that.  The page written beside a saved
+  // .svg opens with that chart's own name and never changes it, so it still
+  // keeps its own colors, as it always did.
+  var KEEP_AS = FILE;
   function keep() {
     try {
-      localStorage.setItem("flowchart-colors:" + FILE, JSON.stringify(style));
+      localStorage.setItem("flowchart-colors:" + KEEP_AS, JSON.stringify(style));
     } catch (e) { /* a private window, or storage turned off: never mind */ }
   }
   function recall() {
     try {
-      var was = JSON.parse(localStorage.getItem("flowchart-colors:" + FILE));
+      var was = JSON.parse(localStorage.getItem("flowchart-colors:" + KEEP_AS));
       if (was && was.kinds) { style = inPoints(was); }   // sizes kept in points
     } catch (e) { /* nothing kept, or unreadable */ }
   }
@@ -7181,7 +7246,8 @@
     box.setAttribute("aria-label", TXT.b_about || "");
     box.innerHTML = '<div class="bb-top"><span class="bb-said"></span>' +
                     '<span class="bb-pct"></span></div>' +
-                    '<div class="bb-track"><div class="bb-fill"></div></div>';
+                    '<div class="bb-track"><div class="bb-fill"></div>' +
+                    '<div class="bb-shine"></div></div>';
     // In the frame the stage hangs its slider bars in, which is the
     // stage's own size whatever the stage has scrolled to.
     stage.parentNode.appendChild(box);
@@ -7216,6 +7282,9 @@
     if (pct !== one.drawn) {
       el(".bb-pct", one.box).textContent = pct + "%";
       el(".bb-fill", one.box).style.transform = "scaleX(" + one.at.toFixed(3) + ")";
+      // the light, cut off where the fill ends (see .bb-shine)
+      el(".bb-shine", one.box).style.clipPath =
+        "inset(0 " + ((1 - one.at) * 100).toFixed(1) + "% 0 0)";
       one.box.setAttribute("aria-valuenow", String(pct));
       one.drawn = pct;
     }
@@ -15357,6 +15426,7 @@
       style = inPoints(was.style);     // sizes saved as shares, read as points
       style.kinds = style.kinds || {};
       style.nodes = style.nodes || {};
+      lightPreset();                   // its palette, if it is one, lit
     }
     if (was.geom) { geom = was.geom; drawRoles(); }
     if (was.source && el("#code")) {

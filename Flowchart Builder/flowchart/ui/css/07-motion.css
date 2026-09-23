@@ -476,18 +476,25 @@
   #pz-won:not([hidden]) { animation: pop-in .34s var(--ease-back) backwards; }
   #pz-next:not([hidden]) { animation: swap-in .3s var(--ease) .12s backwards; }
 
-  /* what the build button is doing, said in light as well as in color */
-  .btn.primary.working {
-    background-image: linear-gradient(100deg, transparent 20%,
-                      rgba(255, 255, 255, .3) 50%, transparent 80%);
-    background-size: 220% 100%;
-    animation: sweep 1.1s linear infinite;
+  /* What the build button is doing, said in light as well as in color.
+     The light is the same gloss that crosses the button under the mouse,
+     sent across again and again -- moved, not repainted, so it runs as
+     smoothly beside a page busy putting down a big chart as beside an idle
+     one.  It was a second light, painted into the button's background:
+     pressing the button cut the gloss off wherever it had got to, started
+     the other one from its beginning, and a build over in a third of a
+     second showed a third of it before the green came and it vanished --
+     three lights in half a second, which is a flicker.  So it waits long
+     enough that a quick build never shows it, and the green is plain. */
+  .btn.primary.working::after {
+    transition: none;
+    animation: gloss-run 1.1s linear .35s infinite backwards;
   }
-  .btn.primary.working::after { display: none; }
+  .btn.primary.done::after { transition: none; opacity: 0; }
   .btn.primary.done { animation: done-pop .42s var(--ease-back); }
-  @keyframes sweep {
-    from { background-position: 180% 0; }
-    to { background-position: -120% 0; }
+  @keyframes gloss-run {
+    from { transform: translateX(-130%); }
+    to { transform: translateX(130%); }
   }
   @keyframes done-pop {
     0% { transform: scale(1); }
@@ -507,12 +514,30 @@
   #build-bar.going { opacity: 0; transform: translateY(-6px); }
   .bb-fill {
     transition: transform .32s linear, background-color var(--quick) var(--ease-soft);
-    background-image: linear-gradient(100deg, transparent 20%,
-                      rgba(255, 255, 255, .35) 50%, transparent 80%);
-    background-size: 220% 100%;
-    animation: sweep 1.3s linear infinite;
   }
-  #build-bar.full .bb-fill { animation: none; background-image: none; }
+  /* The light is not painted into the fill.  The fill grows by being
+     stretched, and a light painted inside it was stretched too: at a
+     twentieth full, the whole of a sweep was squeezed into a sliver and
+     read as a blink, and every report that stretched the fill further
+     threw the light somewhere new.  It is a layer of its own over the
+     whole track, cut off where the fill ends, crossing at one speed on the
+     screen however full the bar is -- and moved rather than repainted, so
+     a busy page cannot make it stutter. */
+  .bb-shine {
+    clip-path: inset(0 100% 0 0);
+    transition: clip-path .32s linear, opacity .2s var(--ease-soft);
+  }
+  .bb-shine::before {
+    content: ""; position: absolute; top: 0; bottom: 0; left: 0; width: 40%;
+    background: linear-gradient(100deg, transparent,
+                rgba(255, 255, 255, .35) 50%, transparent);
+    animation: shine-run 1.3s linear infinite;
+  }
+  #build-bar.full .bb-shine { opacity: 0; }
+  @keyframes shine-run {
+    from { transform: translateX(-100%); }
+    to { transform: translateX(250%); }
+  }
   @keyframes bar-drop {
     from { opacity: 0; transform: translateY(-8px); }
   }
