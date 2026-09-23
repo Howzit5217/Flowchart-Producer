@@ -95,6 +95,7 @@ DE = {
     "r_copied": "Kopiert",
     "r_copy_no": "Bitte von Hand kopieren",
     "r_save_code": "Speichern",
+    "r_file": "{name} Ausgabe",
     "r_pseudo_only": "Wähle Python, Java, C# oder JavaScript, um den Code zu sehen.",
     # ---- wo ein Lauf schiefging, und was das Lesen übergehen musste
     "r_at": "Zeile {line}",

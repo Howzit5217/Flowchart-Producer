@@ -102,7 +102,7 @@
     var held = el("#watch");
     if (want && over.hidden) {
       codeFull(false);                   // one screen at a time
-      el("#tape-slot").appendChild(going);
+      el("#tape-slot").insertBefore(going, el("#tape-keep"));
       if (held) { el("#tape-slot").insertBefore(held, going); }
       over.hidden = false;
       document.body.classList.add("tape-full");
@@ -111,6 +111,7 @@
       // line goes again the moment anything real is put there, and is not
       // left behind in the panel afterwards.
       if (!box.firstChild) { talk(TXT.r_hint, "note").classList.add("hint-line"); }
+      if (!el("#tape-keep").hidden) { underLines(el("#tape-keep"), box); }
     } else if (!want && !over.hidden) {
       all(".hint-line", box).forEach(function (line) { line.remove(); });
       // The tape is what goes back to the panel, so the tape is what the
@@ -140,6 +141,85 @@
   function tapeCovers() {
     var over = el("#tape-over");
     return !!over && !over.hidden;
+  }
+
+  // ---------------------------------------------- the run, to copy or keep --
+  // What the run said, as text: each line it printed or was told, the word
+  // it finished on, and what went wrong if something did, in the order the
+  // screen has them.  Not the numbers down the side, which are the page's
+  // count rather than anything the program said; not a question still
+  // waiting for its answer; and not the line saying what the screen is for.
+  function tapeText() {
+    var box = el("#tape"), said = [];
+    if (!box) { return ""; }
+    Array.prototype.forEach.call(box.children, function (one) {
+      if (!tapeKind(one)) { return; }
+      if (one.classList.contains("blame")) {
+        Array.prototype.forEach.call(one.children, function (row) {
+          if (row.tagName !== "BUTTON") { said.push(row.textContent); }
+        });
+        return;
+      }
+      said.push(one.textContent);
+    });
+    return said.join("\n");
+  }
+
+  // A numbered line of the run, a card saying what went wrong, or neither.
+  // The line saying what the screen is for is marked as such the moment it
+  // is written, before anything counting it could look.
+  function tapeKind(node) {
+    if (node.nodeType !== 1 || !node.classList.contains("said") ||
+        node.classList.contains("hint-line")) { return ""; }
+    return node.classList.contains("blame") ? "card" : "line";
+  }
+
+  // How much it has said, kept count of as it is written rather than
+  // counted afresh -- a program printing ten thousand lines would count the
+  // first line ten thousand times.  The count says whether there is
+  // anything for Copy and Save it to take, and how many figures the
+  // numbers down the side run to, which is how wide their column is.
+  var tapeLines = 0, tapeCards = 0, tapeFigures = 0;
+  function tapeTally(node, by) {
+    var kind = tapeKind(node);
+    if (kind === "line") { tapeLines += by; }
+    if (kind === "card") { tapeCards += by; }
+  }
+
+  function tapeCounted() {
+    var box = el("#tape"), keep = el("#tape-keep");
+    var was = keep.hidden;
+    keep.hidden = !(tapeLines || tapeCards);
+    // The numbers' edge, drawn only once there is a number beside it: the
+    // line saying what the screen is for stands alone.
+    if (box.classList.contains("lined") !== tapeLines > 0) {
+      box.classList.toggle("lined", tapeLines > 0);
+    }
+    var figures = String(Math.max(1, tapeLines)).length;
+    var wider = figures !== tapeFigures;
+    if (wider) {
+      tapeFigures = figures;
+      box.style.setProperty("--figures", figures);
+    }
+    if (!keep.hidden && (wider || was) && tapeCovers()) { underLines(keep, box); }
+  }
+
+  if (el("#tape") && el("#tape-keep") && window.MutationObserver) {
+    // Watched rather than told: the tape is written into from half a dozen
+    // places, and only what is put in it or taken out is watched -- never
+    // what this writes back, which is on the tape's style, not its lines.
+    new MutationObserver(function (changes) {
+      changes.forEach(function (change) {
+        Array.prototype.forEach.call(change.addedNodes, function (n) { tapeTally(n, 1); });
+        Array.prototype.forEach.call(change.removedNodes, function (n) { tapeTally(n, -1); });
+      });
+      tapeCounted();
+    }).observe(el("#tape"), { childList: true });
+    copyButton(tapeText, el("#tape-copy"));
+    el("#tape-save").onclick = function () {
+      save(new Blob([tapeText()], { type: "text/plain;charset=utf-8" }),
+           say("r_file", { name: chartFileName() || "flowchart" }) + ".txt");
+    };
   }
 
   if (el("#run-big")) {

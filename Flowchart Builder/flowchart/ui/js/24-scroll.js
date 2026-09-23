@@ -413,6 +413,38 @@
     }
     var says = el("#code-count");
     if (says) { says.textContent = say("code_lines", { n: rows }); }
+    fitSlot(rows);
+  }
+
+  // Full screen, the box is as tall as the program in it, so Copy and Save
+  // it under the box follow its last line.  A program taller than the
+  // sheet is let have only the room there is (05-chart.css), and scrolls
+  // with them at the foot.  Worked out only when the count changes, since
+  // every key pressed comes through here, and on each opening.
+  function fitSlot(rows) {
+    var over = el("#code-over"), slot = el("#code-slot"), box = el("#code");
+    if (!over || over.hidden || !slot || !box) { return; }
+    var fresh = slot._rows === null || slot._rows === undefined;
+    if (!fresh && slot._rows === rows) { return; }
+    var line = getComputedStyle(box), side = getComputedStyle(slot);
+    function add(style, keys) {
+      return keys.reduce(function (sum, key) {
+        return sum + (parseFloat(style[key]) || 0);
+      }, 0);
+    }
+    var edges = ["paddingTop", "paddingBottom", "borderTopWidth", "borderBottomWidth"];
+    // A sideways bar of the machine's own, where there is one -- on a
+    // touch screen ours give way to it -- takes its height from the lines.
+    var bar = Math.max(0, box.offsetHeight - box.clientHeight -
+                          add(line, ["borderTopWidth", "borderBottomWidth"]));
+    slot.style.height = (rows * (parseFloat(line.lineHeight) || 24) +
+                         add(line, edges) + add(side, edges) + bar) + "px";
+    // The numbers' column widens by a figure at 10,000 lines, and the
+    // buttons move in with the lines.
+    var figures = String(rows).length;
+    if (fresh || slot._figures !== figures) { underLines(el("#code-keep"), box); }
+    slot._rows = rows;
+    slot._figures = figures;
   }
 
   function codeFull(want) {
@@ -425,6 +457,7 @@
       over.hidden = false;
       el("#code-slot").appendChild(going);
       document.body.classList.add("code-full");
+      el("#code-slot")._rows = null;     // measured afresh on every opening
       countLines();
     } else {
       over.hidden = true;
@@ -563,6 +596,16 @@
     // saved as plain text under the chart's name, which Files > Open reads
     // straight back into the box.
     copyButton(function () { return el("#code").value; }, el("#code-copy"));
+    // Below a short program is still its page, as it was when the box ran
+    // all the way down the sheet: a press there carries on at the end.
+    var sheet = el("#code-over .code-sheet");
+    sheet.addEventListener("mousedown", function (ev) {
+      if (ev.target !== sheet && ev.target !== el("#code-keep")) { return; }
+      ev.preventDefault();               // or the press takes the caret away
+      var box = el("#code"), end = box.value.length;
+      box.focus();
+      box.setSelectionRange(end, end);
+    });
     el("#code-save").onclick = function () {
       save(new Blob([el("#code").value], { type: "text/plain;charset=utf-8" }),
            (chartFileName() || "flowchart") + ".txt");

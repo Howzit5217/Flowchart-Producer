@@ -1226,6 +1226,34 @@
     return copy;
   }
 
+  // The buttons under a program start where its lines do, not where its
+  // numbers do: in from the row's own edge by as far as the writing is.
+  // The sheet may still be rising into place, a hair smaller than it will
+  // be, so the distance is measured and then put back to full size.
+  //
+  // It may not be laid out yet: the code screen's frame is put away until
+  // the bars have measured it again (24-scroll.js), a frame after the code
+  // arrived.  Then it is lined up the moment it has a size, which is after
+  // the layout and before anything is painted.
+  function underLines(row, text) {
+    if (!row || !text) { return; }
+    if (!row.offsetWidth) {
+      if (!window.ResizeObserver) { return; }
+      var wait = new ResizeObserver(function () {
+        if (!row.offsetWidth) { return; }
+        wait.disconnect();
+        underLines(row, text);
+      });
+      wait.observe(row);
+      return;
+    }
+    var box = row.getBoundingClientRect();
+    var scale = box.width / row.offsetWidth || 1;
+    var at = (text.getBoundingClientRect().left - box.left) / scale +
+             (parseFloat(getComputedStyle(text).paddingLeft) || 0);
+    row.style.paddingLeft = Math.max(0, Math.round(at)) + "px";
+  }
+
   // A file of whatever is on the screen, named after the chart.
   function saveButton(text, named, ext) {
     var down = document.createElement("button");
@@ -1377,9 +1405,11 @@
     page.appendChild(nums);
     page.appendChild(pre);
     out.appendChild(page);
+    // Under the last line while the program is short enough to show whole,
+    // and held at the foot of the screen while a longer one scrolls under
+    // it (05-chart.css), so they are never a scroll to the end away.
     var row = document.createElement("div");
     row.className = "go";
-    row.style.cssText = "display:flex; gap:8px; margin-top:8px";
     // Copying and saving are handed the text, not the page, so they are
     // the whole program from the first frame -- there is nothing to wait
     // for and nothing half-written to be given.
@@ -1389,6 +1419,12 @@
     tapeFull(true);
     tapeShow("code");
     var lines = text.split("\n");
+    // The numbers' column as wide as its last number from the start, so
+    // it does not widen at line 10,000 and leave the buttons out of line.
+    // (The 11px is its padding and rule, which a min-width counts here.)
+    nums.style.minWidth = "max(32px, " + String(lines.length).length +
+                          "ch + 11px)";
+    underLines(row, pre);
     tapeSays("", name, say("code_lines", { n: lines.length }) +
              (files > 1 ? " · " + say("c_files", { n: files }) : ""));
     // The screen is up and the box has its size before the writing starts,

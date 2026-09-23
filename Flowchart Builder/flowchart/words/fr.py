@@ -96,6 +96,7 @@ FR = {
     "r_copied": "Copié",
     "r_copy_no": "À copier à la main",
     "r_save_code": "Enregistrer",
+    "r_file": "{name} sortie",
     "r_pseudo_only": "Choisissez Python, Java, C# ou JavaScript pour voir le code.",
     # ---- où l'exécution a échoué, et ce que la lecture a dû rattraper
     "r_at": "Ligne {line}",

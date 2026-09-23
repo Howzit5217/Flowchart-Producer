@@ -309,8 +309,13 @@
     border: 1px solid var(--line); border-radius: 7px; white-space: nowrap;
   }
 
+  /* As tall as the program in it (fitSlot in 24-scroll.js sets the
+     height), so Copy and Save it follow its last line; a program taller
+     than the sheet gives way to what room there is and scrolls, and they
+     stay at the foot.  The sheet under it is the same ground as the box. */
+  #code-over .code-sheet { background: var(--code-bg); }
   #code-slot {
-    flex: 1; display: flex; min-height: 0; gap: 0;
+    flex: 0 1 auto; display: flex; min-height: 0; gap: 0;
     padding: 14px 16px 16px; background: var(--code-bg);
     border-top: 1px solid var(--line-soft);
   }
@@ -364,7 +369,8 @@
   #code-slot #code:focus { box-shadow: none; border: 0; outline: 0; }
   /* Copy and Save it, on the same ground as the program, the way the code
      screen has them under the code.  The slot's padding above them is
-     where the box's sideways bar runs, so they start straight under it. */
+     where the box's sideways bar runs, so they start straight under it;
+     how far in they start is set by underLines in 18-write.js. */
   #code-keep {
     flex: none; display: flex; gap: 8px; flex-wrap: wrap;
     padding: 0 16px 16px; background: var(--code-bg);
@@ -421,16 +427,62 @@
      to itself a box in a column is at least as tall as its contents, so
      the frame grew to the whole length of the run, ran off the foot of
      the sheet, and the tape inside it -- as tall as the frame -- never
-     had anything to scroll. */
+     had anything to scroll.
+     It is as tall as what the run has said and no taller, so Copy and Save
+     it under it follow the last line; a run too long for the sheet has the
+     room there is and scrolls, and they stay at the foot. */
   #tape-slot > .slide-frame {
-    flex: 1; min-width: 0; min-height: 0; display: flex;
+    flex: 0 1 auto; min-width: 0; min-height: 0; display: flex;
   }
+  /* Numbered and ruled the way the code and the pseudocode are: one line
+     height throughout, a number beside each line the run said and a rule
+     under it.  The numbers are the page's own count -- a CSS counter -- so
+     nothing that writes into the tape has to know about them, and nothing
+     copied from it carries them.  Their column is as wide as the longest
+     of them (--figures, kept by 17-tape.js), and its edge is drawn down the
+     tape itself rather than beside each line, so it runs unbroken past a
+     question being asked or a card saying what went wrong. */
   #tape-slot .tape {
-    display: block; flex: 1; margin: 0; padding: 0 4px; max-height: none;
+    --gutter: max(32px, calc(var(--figures, 1) * 1ch + 11px));
+    display: block; flex: 1; margin: 0; max-height: none;
+    padding: 0 4px 0 calc(var(--gutter) + 14px);
     border: 0; border-radius: 0; background: none; overflow: auto;
-    font-size: 13.5px; line-height: 1.65;
+    font: 13.5px/22px "Cascadia Mono", Consolas, "SF Mono", Menlo, monospace;
+    counter-reset: said;
+  }
+  #tape-slot .tape.lined {
+    background: linear-gradient(var(--num-edge), var(--num-edge)) no-repeat
+                calc(var(--gutter) - 1px) 0 / 1px 100%;
+    background-attachment: local;
+    --num-edge: color-mix(in srgb, var(--line-soft) 55%, transparent);
+  }
+  /* Every line on the one rhythm, whatever it is: the page's .good and
+     .bad set their own size and a gap above, for the places they are a
+     sentence on their own, and here Finished. is just the last line. */
+  #tape-slot .tape > .said:not(.blame):not(.hint-line) {
+    position: relative; counter-increment: said;
+    margin: 0; font-size: inherit;
+  }
+  #tape-slot .tape > .said:not(.blame):not(.hint-line)::before {
+    content: counter(said);
+    position: absolute; top: 0; left: calc(-14px - var(--gutter));
+    width: var(--gutter); padding-right: 11px; text-align: right;
+    color: var(--muted); opacity: .55; font-variant-numeric: tabular-nums;
+    -webkit-user-select: none; user-select: none;
+  }
+  /* the rule, from the numbers' edge across, in the line's last pixel */
+  #tape-slot .tape > .said:not(.blame):not(.hint-line)::after {
+    content: ""; position: absolute; left: -14px; right: 0; bottom: 0;
+    height: 1px; background: var(--code-line);
   }
   #tape-slot .tape .asking { max-width: 560px; margin: 8px 0; }
+  /* The same pair as the code screen's, lined up with the lines by
+     underLines in 18-write.js.  The tape's bars end where the tape does
+     rather than running on down beside them. */
+  #tape-keep {
+    flex: none; display: flex; gap: 8px; flex-wrap: wrap; padding-top: 8px;
+  }
+  #tape-slot > .slide-frame > .slider.y { bottom: 0; }
   /* the line that says what the screen is for, when nothing has been
      put on it yet: a sentence, so it is set to a width a sentence is
      read at rather than dragged across the whole sheet */
@@ -451,7 +503,7 @@
   #code-out {
     flex: 1; min-width: 0;
     display: flex; flex-direction: column; min-height: 0;
-    padding: 14px 16px 16px; overflow: auto;
+    padding: 14px 16px 0; overflow: auto;
     background: var(--code-bg); border-top: 1px solid var(--line-soft);
   }
   #tape-slot[hidden], #code-out[hidden] { display: none !important; }
@@ -478,7 +530,16 @@
       linear-gradient(var(--code-line) 1px, transparent 1px) 0 21px / 100% 22px;
     background-attachment: local;
   }
-  #code-out .go { flex: none; }
+  /* Copy and Save it: under the last line of a short program, and held at
+     the foot of the screen while a long one scrolls up behind them, on
+     ground of their own so the code does not show through.  The foot's
+     room is theirs rather than the box's, so it is below them either way;
+     how far in they start is set by underLines in 18-write.js. */
+  #code-out .go {
+    flex: none; display: flex; gap: 8px; flex-wrap: wrap;
+    position: sticky; bottom: 0; padding: 8px 0 16px;
+    background: var(--code-bg);
+  }
   /* While a big one is being written out.  It stands where the first line
      of the program is about to be, so that the code arrives where the
      waiting was rather than somewhere else. */

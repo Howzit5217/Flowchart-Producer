@@ -95,6 +95,7 @@ EN = {
     "r_copied": "Copied",
     "r_copy_no": "Copy it by hand",
     "r_save_code": "Save it",
+    "r_file": "{name} output",
     "r_pseudo_only": "Pick Python, Java, C# or JavaScript to see the code.",
     # ---- where a run went wrong, and what the reading had to paper over
     "r_at": "Line {line}",

@@ -96,6 +96,7 @@ ES = {
     "r_copied": "Copiado",
     "r_copy_no": "Cópialo a mano",
     "r_save_code": "Guardar",
+    "r_file": "{name} salida",
     "r_pseudo_only": "Elige Python, Java, C# o JavaScript para ver el código.",
     # ---- dónde falló la ejecución, y qué tuvo que disimular la lectura
     "r_at": "Línea {line}",

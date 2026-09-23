@@ -536,7 +536,16 @@ __SVG__
          the second screenful would be a strip nobody could get back to
          without going to the top of the file first. -->
     <div id="code-files" hidden></div>
-    <div id="tape-slot"></div>
+    <!-- The tape is put in here, above Copy and Save it, while the screen
+         is up (17-tape.js).  The buttons are the same pair the code and the
+         pseudocode have, and stand the same way: under the last line, and
+         at the foot once the run is too long to show whole. -->
+    <div id="tape-slot">
+      <div id="tape-keep" hidden>
+        <button class="btn small" id="tape-copy" data-w="r_copy">__W(r_copy)__</button>
+        <button class="btn small" id="tape-save" data-w="r_save_code">__W(r_save_code)__</button>
+      </div>
+    </div>
     <div id="code-out" hidden></div>
   </div>
 </div>
