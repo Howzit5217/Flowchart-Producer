@@ -101,6 +101,11 @@ def fit_shape(charts, spec):
         # program of forty-three thousand lines and came back with every
         # chain forked into lanes, a million and a half pixels wide and no
         # shape that had been asked for.
+        # How far down the program the layout has got fills the whole of its
+        # stage under auto, which keeps a big chart as it stands; a shape
+        # asked for by name may lay a big one out six times, and this is the
+        # first of them.
+        progress.span(0.0, 1.0 if str(spec).strip().lower() == "auto" else 1 / 6.0)
         natural = build(0, keep[0], keep[1])
         if sum(1 for e in natural[0] if e[0] == "shape") > settings.FIT_MOST:
             if str(spec).strip().lower() == "auto":
@@ -213,6 +218,7 @@ def fork_to_fit(lay, natural, target):
     lo, hi = math.log(0.1), math.log(10.0)        # the rates, as logarithms
     for tried in range(5):
         progress.say("lay", (tried + 1) / 6.0)   # the plain one was the first
+        progress.span((tried + 1) / 6.0, (tried + 2) / 6.0)
         mid = (lo + hi) / 2.0
         one = lay(math.exp(mid))
         if score(one) < best_score:

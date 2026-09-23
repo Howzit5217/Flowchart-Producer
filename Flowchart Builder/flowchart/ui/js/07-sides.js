@@ -46,6 +46,7 @@
   function showPanel(open) {
     veil();
     shut = !open;
+    if (shut) { shutColorPopIn(el("#panel")); }
     el("#panel").classList.toggle("hide", shut);
     el("#rail").hidden = !shut;
     document.body.classList.toggle("drawer", !shut);   // room beside it on a

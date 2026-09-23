@@ -15,6 +15,8 @@ EVERY = 0.05             # seconds between two reports from inside one stage
 
 _hear = None
 _last = [0.0, None]      # when the last report went, and from which stage
+_lines = [0]             # how long the program is, for reports made by line
+_span = [0.0, 1.0]       # the share of its stage a report by line fills
 
 
 def listen(fn):
@@ -22,6 +24,33 @@ def listen(fn):
     global _hear
     _hear = fn
     _last[0], _last[1] = 0.0, None
+
+
+def expect(lines):
+    """The program about to be drawn is this many lines long."""
+    _lines[0] = max(0, int(lines))
+    _span[0], _span[1] = 0.0, 1.0
+
+
+def span(lo, hi):
+    """Reports by line fill this share of their stage, from lo to hi.
+
+    Laying the program out is most of a drawing, and a chart asked for in a
+    shape is laid out several times over -- so each time is given its own
+    share, and the lines it has reached count within that share."""
+    _span[0], _span[1] = lo, hi
+
+
+def at_line(stage, line):
+    """The drawing has got as far as this line of the program.
+
+    Laying out said nothing at all between its start and its end: a fifth
+    of the bar that then sat still for most of the wait.  Where it has got
+    to down the program is as good a measure as any, and a stretch it has
+    done before is quicker, so it can only ever run a little ahead."""
+    if _hear is None or not _lines[0] or not line:
+        return
+    say(stage, _span[0] + (_span[1] - _span[0]) * min(1.0, line / float(_lines[0])))
 
 
 def say(stage, part=0.0):

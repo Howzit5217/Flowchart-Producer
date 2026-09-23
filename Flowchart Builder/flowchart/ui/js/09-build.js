@@ -306,71 +306,138 @@
   // drawing arrives.  The last stage is the page's own: a drawing of tens
   // of thousands of shapes takes a moment to be put on the paper, and the
   // page cannot paint while it does that, so the bar says so first.
+  //
+  // The bar says how much of the wait is over.  The stages had fixed
+  // shares of it -- a fifth for laying out, half for drawing -- that were
+  // nothing like the time: laying out, the long part, filled its fifth and
+  // sat at thirty percent; drawing, the short part, leapt from there to
+  // eighty; and putting the chart on the page, as long as the rest put
+  // together on a big one, had the last seventh and stood still for all of
+  // it.  Now it is the time gone over the time gone and the time still to
+  // come (barTick), with how long each stage takes for every line of
+  // pseudocode learnt from the drawings this browser has had, and kept
+  // between visits.
   var BAR_AFTER = 400;                   // ms before anything is shown
-  var BAR_BANDS = {                      // each stage's share of the bar
-    read: [0, 0.12], lay: [0.12, 0.32], draw: [0.32, 0.8],
-    send: [0.8, 0.86], page: [0.86, 1],
-    whole: [0, 0.86]                     // a drawing that says nothing as it goes
-  };
   var BAR_SAID = { boot: "b_boot", read: "b_read", lay: "b_lay",
                    draw: "b_draw", whole: "b_draw", send: "b_draw",
                    page: "b_page" };
-  var drawWait = null;                   // the drawing being waited on
-  // How long a line of pseudocode takes to draw, in milliseconds, learnt
-  // from the drawings this page has had: a first guess until then, from
-  // Python on a computer and Python in a browser, which is some times
-  // slower.  It only paces the creep, so a guess that is out is a bar that
-  // creeps a little fast or slow, never one that is wrong about finishing.
-  var msPerLine = MODE === "web" ? 0.25 : 0.06;
-  var BAR_FIXED = 150;                   // what any drawing costs, however short
+  // The stages, in order.  The served studio's Python answers all at once,
+  // so there reading, laying out and drawing are one stage.
+  var BAR_STAGES = MODE === "web" ? ["read", "lay", "draw", "send", "page"]
+                                  : ["whole", "page"];
+  // Milliseconds for every line of pseudocode, beyond BAR_FIXED -- a first
+  // guess, measured, until this browser has had a drawing of its own to go
+  // by.  A chart asked for in a shape is laid out several times over, so
+  // its laying out is timed apart from the rest (layFit).
+  var barPace = MODE === "web"
+    ? { read: 0.01, lay: 0.015, layFit: 0.08, draw: 0.06, send: 0.02, page: 0.065 }
+    : { whole: 0.03, page: 0.065 };
+  var BAR_PACE_KEY = "flowchart-bar-pace:" + MODE;
+  try {
+    var paceWas = JSON.parse(localStorage.getItem(BAR_PACE_KEY));
+    Object.keys(barPace).forEach(function (k) {
+      if (paceWas && paceWas[k] > 0) { barPace[k] = paceWas[k]; }
+    });
+  } catch (e) { /* nothing kept: the first guess it is */ }
+  var BAR_FIXED = 30;                    // ms any stage costs, however short
   var BOOT_TAKES = 2500;                 // Python starting, give or take
+  var drawWait = null;                   // the drawing being waited on
 
   function barBegin(text) {
     barEnd(false);
-    // Python still starting takes the first half of the bar, and the
-    // drawing the rest: on a first visit, starting is the longer wait.
     var boot = MODE === "web" && pyHand !== false && !pyReady;
     var lines = String(text || "").split("\n").length;
-    drawWait = { boot: boot, stage: null, lo: 0, hi: 0, at: 0, drawn: -1,
+    var shape = el("#f-shape") ? el("#f-shape").value : "auto";
+    var fit = shape !== "auto" && shape !== "tall";
+    drawWait = { boot: boot, stage: null, part: 0, at: 0, drawn: -1,
                  said: "", box: null, show: 0, creep: 0, since: Date.now(),
-                 lines: lines, drew: Date.now(),
-                 expect: BAR_FIXED + lines * msPerLine };
-    barStep(boot ? "boot" : (MODE === "web" ? "read" : "whole"), 0);
+                 t0: Date.now(), lines: lines, fit: fit, began: {},
+                 plan: barPlan(lines, boot, fit) };
+    barStep(boot ? "boot" : BAR_STAGES[0], 0);
     drawWait.show = setTimeout(barShow, BAR_AFTER);
   }
 
-  // How long this stage ought to take, from how long the whole drawing
-  // ought to and the share of the bar the stage has.
-  function barTakes(one) {
-    if (one.stage === "boot") { return BOOT_TAKES; }
-    if (one.stage === "page") { return 400; }
-    var share = (BAR_BANDS[one.stage] || BAR_BANDS.whole);
-    return Math.max(120, one.expect * (share[1] - share[0]) / 0.86);
+  function barKey(stage, fit) { return stage === "lay" && fit ? "layFit" : stage; }
+
+  // How long each stage of this drawing ought to take.  Python starting,
+  // on a first visit, is timed on its own.
+  function barPlan(lines, boot, fit) {
+    var order = (boot ? ["boot"] : []).concat(BAR_STAGES);
+    var ms = {};
+    order.forEach(function (s) {
+      ms[s] = s === "boot" ? BOOT_TAKES : BAR_FIXED + barPace[barKey(s, fit)] * lines;
+    });
+    return { order: order, ms: ms };
   }
 
-  function barBand(stage) {
-    if (stage === "boot") { return [0, 0.5]; }
-    var band = BAR_BANDS[stage] || BAR_BANDS.whole;
-    return drawWait.boot ? [0.5 + band[0] / 2, 0.5 + band[1] / 2] : band;
+  function barTakes(one) { return Math.max(120, one.plan.ms[one.stage] || 400); }
+
+  // How far along the wait it is: the time gone, over the time gone and
+  // the time still to come.  What has gone is measured, not guessed, so
+  // the only thing that can put the bar out is the guess about what is
+  // left -- the rest of this stage and the whole of the ones after it --
+  // and that is put right as each stage finishes.  It was a share of the
+  // bar per stage instead, fixed before anything had happened: a stage
+  // that came in early left the bar short for good, and the last stage
+  // was made to carry all of it.
+  //
+  // What is left of this stage is worked out from how fast it is really
+  // going, once it has said how far it has got; from the clock otherwise,
+  // and never quite nothing while it is still going on.
+  function barLeft(one, now) {
+    var ms = barTakes(one), took = now - one.since, part = one.part;
+    if (part >= 0.15 && took > 60) {
+      return Math.max(took * (1 - part) / part, ms * 0.03);
+    }
+    return Math.max(ms - took, ms * 0.12 * (1 - part));
   }
 
-  // Never backwards: a report from Python still starting that arrives
-  // after the drawing has begun is old news, and is left out.
+  // And the guess about the stages to come is put right by how the ones
+  // already over came out against theirs: a program that has read and
+  // laid out a fifth faster than expected, on this machine, will most
+  // likely draw a fifth faster too.  Only partly trusted, and within
+  // bounds, so that one odd stage cannot throw the rest.
+  function barSpeed(one) {
+    var plan = one.plan, took = 0, meant = 0;
+    plan.order.slice(0, plan.order.indexOf(one.stage)).forEach(function (s, i, done) {
+      if (s === "boot" || !one.began[s]) { return; }
+      var next = i + 1 < done.length ? one.began[done[i + 1]] : one.since;
+      if (!next) { return; }
+      took += next - one.began[s];
+      meant += plan.ms[s];
+    });
+    if (meant < 150 || took <= 0) { return 1; }
+    return Math.min(1.8, Math.max(0.55, Math.pow(took / meant, 0.7)));
+  }
+
+  function barTick(one) {
+    if (!one || !one.stage) { return; }
+    var now = Date.now(), plan = one.plan, after = 0;
+    plan.order.slice(plan.order.indexOf(one.stage) + 1).forEach(function (s) {
+      after += plan.ms[s];
+    });
+    after *= barSpeed(one);
+    var gone = now - one.t0;
+    var at = gone / Math.max(1, gone + barLeft(one, now) + after);
+    one.at = Math.max(one.at, Math.min(0.99, at));
+    barPaint(one);
+  }
+
+  // Never backwards: a report from a stage before the one under way --
+  // Python still starting, heard after the drawing has begun -- is old
+  // news, and is left out.
   function barStep(stage, part) {
     if (!drawWait || !BAR_SAID[stage]) { return; }
-    var band = barBand(stage);
-    var at = band[0] + (band[1] - band[0]) * Math.min(1, Math.max(0, part || 0));
-    if (at < drawWait.at && stage !== drawWait.stage) { return; }
+    var order = drawWait.plan.order, here = order.indexOf(stage);
+    if (here < 0 || here < order.indexOf(drawWait.stage)) { return; }
     if (stage !== drawWait.stage) {
-      // Python has finished starting: the drawing is timed from here
-      if (drawWait.stage === "boot") { drawWait.drew = Date.now(); }
       drawWait.stage = stage;
-      drawWait.lo = band[0];
-      drawWait.hi = band[1];
+      drawWait.part = 0;
       drawWait.since = Date.now();
+      drawWait.began[stage] = drawWait.since;     // what it took, to learn from
     }
-    drawWait.at = Math.max(drawWait.at, at);
-    barPaint(drawWait);
+    drawWait.part = Math.max(drawWait.part, Math.min(1, Math.max(0, part || 0)));
+    barTick(drawWait);
   }
 
   function barShow() {
@@ -394,20 +461,10 @@
     stage.parentNode.appendChild(box);
     drawWait.box = box;
     barPaint(drawWait);
-    // Between reports -- and all the way, where nothing reports -- it
-    // edges on by itself, at the pace the stage ought to go and slower
-    // the nearer it gets to the end of it, so a stage that runs long still
-    // looks like it is moving and never looks finished before it is.
-    drawWait.creep = setInterval(function () {
-      var one = drawWait;
-      if (!one) { return; }
-      var t = (Date.now() - one.since) / (barTakes(one) * 0.6);
-      var due = one.lo + (one.hi - one.lo) * 0.92 * (1 - Math.exp(-t));
-      if (due > one.at) {
-        one.at = due;
-        barPaint(one);
-      }
-    }, 120);
+    // Between reports -- and all the way, where nothing reports -- it is
+    // worked out again as the time goes by (barTick), so it moves on
+    // steadily and never looks finished before it is.
+    drawWait.creep = setInterval(function () { barTick(drawWait); }, 120);
   }
 
   // Only what changed is written: this is called a dozen times a second
@@ -422,10 +479,14 @@
     }
     if (pct !== one.drawn) {
       el(".bb-pct", one.box).textContent = pct + "%";
-      el(".bb-fill", one.box).style.transform = "scaleX(" + one.at.toFixed(3) + ")";
-      // the light, cut off where the fill ends (see .bb-shine)
-      el(".bb-shine", one.box).style.clipPath =
-        "inset(0 " + ((1 - one.at) * 100).toFixed(1) + "% 0 0)";
+      // Not while it coasts (barCoast): the fill is already on its way to
+      // further than this, and would be pulled back to it.
+      if (!one.box.classList.contains("coasting")) {
+        el(".bb-fill", one.box).style.transform = "scaleX(" + one.at.toFixed(3) + ")";
+        // the light, cut off where the fill ends (see .bb-shine)
+        el(".bb-shine", one.box).style.clipPath =
+          "inset(0 " + ((1 - one.at) * 100).toFixed(1) + "% 0 0)";
+      }
       one.box.setAttribute("aria-valuenow", String(pct));
       one.drawn = pct;
     }
@@ -437,17 +498,10 @@
   // first; otherwise nothing waits for it.
   function barToPage(size) {
     if (!drawWait) { return Promise.resolve(); }
-    // What this one took teaches the next one how long to expect -- but
-    // only a program long enough for its lines to be most of the wait.  A
-    // ten-line one is all fixed cost, and learnt from, it would have the
-    // next long one expecting minutes.
-    if (drawWait.stage !== "boot" && drawWait.lines >= 400) {
-      var took = Math.max(0, Date.now() - drawWait.drew - BAR_FIXED) / drawWait.lines;
-      msPerLine = Math.min(5, Math.max(0.01, msPerLine * 0.5 + took * 0.5));
-    }
     if (!drawWait.box && size > 1500000) { clearTimeout(drawWait.show); barShow(); }
+    barStep("page", 0);                  // timed, whether or not it is shown
     if (!drawWait.box) { return Promise.resolve(); }
-    barStep("page", 0);
+    barCoast(drawWait);
     return new Promise(function (go) {
       var gone = false;
       function once() { if (!gone) { gone = true; go(); } }
@@ -456,6 +510,48 @@
       requestAnimationFrame(function () { setTimeout(once, 0); });
       setTimeout(once, 80);
     });
+  }
+
+  // Putting the chart on the page holds the page up from start to finish:
+  // nothing on it moves until the chart is there, the bar included, and on
+  // a big chart that is the longest wait of all.  The one thing a page that
+  // busy can still move is a slide it handed over beforehand -- the
+  // browser runs that on its own -- so the fill is sent on towards the end
+  // over as long as this stage ought to take, and the frame barToPage waits
+  // for is what hands it over.  The number cannot follow it, so it is put
+  // away until the end rather than left saying a figure the bar has passed.
+  function barCoast(one) {
+    if (!one || !one.box || one.stage !== "page") { return; }
+    var fill = el(".bb-fill", one.box);
+    var to = one.at + (1 - one.at) * 0.96;
+    fill.style.transition = "transform " + Math.round(barTakes(one)) +
+                            "ms cubic-bezier(.3, .55, .6, 1)";
+    fill.style.transform = "scaleX(" + to.toFixed(3) + ")";
+    one.box.classList.add("coasting");
+  }
+
+  // What this drawing's stages really took teaches the next one what to
+  // expect -- each stage from when it began to when the next one did, the
+  // last to now.  Only from a program long enough for its lines to be most
+  // of the wait: a ten-line one is all fixed cost, and learnt from, it
+  // would have the next long one expecting minutes.  Half the old guess
+  // and half the new, so one odd drawing does not throw the next.
+  function barLearn(one) {
+    if (one.lines < 200) { return; }
+    var order = one.plan.order, now = Date.now();
+    order.forEach(function (s, i) {
+      if (s === "boot" || !one.began[s]) { return; }
+      var next = null;
+      for (var j = i + 1; j < order.length && next === null; j++) {
+        if (one.began[order[j]]) { next = one.began[order[j]]; }
+      }
+      if (next === null && i < order.length - 1) { return; }  // never saw it end
+      var per = Math.max(0, (next === null ? now : next) - one.began[s] - BAR_FIXED) / one.lines;
+      var key = barKey(s, one.fit);
+      barPace[key] = Math.min(20, Math.max(0.001, barPace[key] * 0.5 + per * 0.5));
+    });
+    try { localStorage.setItem(BAR_PACE_KEY, JSON.stringify(barPace)); }
+    catch (e) { /* storage turned off: it learns again next visit */ }
   }
 
   // Done: filled to the end and then gone.  Not done -- it failed, or it
@@ -467,10 +563,13 @@
     drawWait = null;
     clearTimeout(was.show);
     clearInterval(was.creep);
+    if (ok) { barLearn(was); }
     var box = was.box;
     if (!box) { return; }
     if (ok) {
       was.at = 1;
+      el(".bb-fill", box).style.transition = "";   // the quick one again, to the end
+      box.classList.remove("coasting");
       barPaint(was);
       box.classList.add("full");
       setTimeout(function () { box.classList.add("going"); }, 260);

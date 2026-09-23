@@ -95,6 +95,7 @@ def draw_for_studio(ask):
     #
     # Each stage says so as it starts (see progress.py): the page shows a
     # bar for a drawing that takes long enough to want one.
+    progress.expect(text.count("\n") + 1)          # for reports by line
     progress.say("read")
     charts = parse_program(text)
     progress.say("lay")

@@ -1,6 +1,6 @@
 """Wrapping a chart into columns, and setting several
 charts side by side."""
-from .. import settings
+from .. import progress, settings
 from ..layout.blocks import (
     edge_shape, head_shape, layout_item, shift, tail_shape, wrap)
 from .. import measure
@@ -139,12 +139,21 @@ def forget_layouts():
 def laid_out(items):
     """The blocks for these items, made once while the remembering is on."""
     if _LAID is None:
-        return [layout_item(it) for it in items]
+        return laying(items)
     key = (id(items), settings.CHAIN_LIMIT, settings.FORK_RATE)
     got = _LAID.get(key)
     if got is None:
-        got = _LAID[key] = [layout_item(it) for it in items]
+        got = _LAID[key] = laying(items)
     return got
+
+
+def laying(items):
+    """Each item laid out, saying how far down the program it has got."""
+    out = []
+    for it in items:
+        out.append(layout_item(it))
+        progress.at_line("lay", getattr(it, "line", 0))
+    return out
 
 
 def build_columns(items, max_h):

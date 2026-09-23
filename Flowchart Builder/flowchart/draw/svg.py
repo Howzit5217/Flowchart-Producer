@@ -67,6 +67,10 @@ def described(elems):
 
 
 def to_svg(elems, title=None, author=None):
+    # Drawing starts here, not at the first route: gluing the lines into
+    # routes and working out their heads comes first and is a third of the
+    # work, and said nothing -- so the page counted it as laying out.
+    progress.say("draw")
     minx, miny, maxx, maxy = bbox(elems)
     head_h = settings.TITLE_H if title else 0
     # Set the chart down so that the shapes fall on the ruling.  The nudge is
@@ -290,12 +294,14 @@ def to_svg(elems, title=None, author=None):
     # where a label sat near the end of a route that patch took the point off
     # the arrow with it.  Nothing should ever be painted over a tip.
     # How far through it is goes to progress.py as it goes: on a long
-    # program this is most of the wait.  The routes are about the first
-    # third of the work and the shapes and their words the rest.
+    # program this is most of the wait.  Gluing the routes together and
+    # working out their heads, above, is about the first third of the work,
+    # drawing the routes the next quarter, and the shapes and their words
+    # the rest.
     routes = chain_lines(segs)
     for done, (pts, arrow) in enumerate(routes):
         if not done & 255:
-            progress.say("draw", 0.3 * done / len(routes))
+            progress.say("draw", 0.35 + 0.25 * done / len(routes))
         head = None
         end = pts[-1][1]
         if reaches_a_shape(pts) or joins_a_line(pts):
@@ -314,7 +320,7 @@ def to_svg(elems, title=None, author=None):
 
     for done, e in enumerate(elems):
         if not done & 255:
-            progress.say("draw", 0.3 + 0.7 * done / len(elems))
+            progress.say("draw", 0.6 + 0.4 * done / len(elems))
         if e[0] == "line":
             continue
         elif e[0] == "text":                    # Yes / No / Case labels

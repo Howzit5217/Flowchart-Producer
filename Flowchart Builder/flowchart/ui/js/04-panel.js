@@ -10,14 +10,17 @@
   // into the next, with nothing in it you can point at twice.  This one is
   // squares: a row of grays, then every color from pale to deep, then the
   // colors picked lately -- and under them a slider for how strong the
-  // color is and one for how bright, for anything in between.  The shape
-  // takes the color as it is chosen, square or slider, so what you see is
-  // what you are choosing, and pressing anywhere else is choosing it.
+  // colors are and one for how bright.  The sliders move every square at
+  // once, the chosen one with them, so the squares are always the colors
+  // there are to choose from.  The shape takes the color as it is chosen,
+  // square or slider, so what you see is what you are choosing, and
+  // pressing anywhere else is choosing it.
   var POP_HUES = [0, 22, 42, 62, 100, 145, 175, 195, 215, 240, 270, 315];
   var POP_SHADES = [[.14, 1], [.32, 1], [.58, .97], [.85, .88], [.85, .62],
                     [.85, .38]];                    // how strong, how bright
   var POP_ACROSS = POP_HUES.length;                // squares in a row
   var POP_KEPT = "flowchart-recent-colors";
+  var POP_THUMB = 9;               // half a slider's knob, in pixels (the css)
   var popNow = null;                               // the one that is open
 
   function hsvHex(h, s, v) {
@@ -28,9 +31,7 @@
     }
     return "#" + part(5) + part(3) + part(1);
   }
-  // A gray has no hue of its own, so it keeps the one it was given: the
-  // strength slider pulled up from a gray brings back the color it was
-  // near, not red every time.
+  // A gray has no hue of its own, so it keeps the one it was given.
   function hexHsv(hex, hue) {
     var n = parseInt(hex.slice(1), 16);
     var r = (n >> 16 & 255) / 255, g = (n >> 8 & 255) / 255, b = (n & 255) / 255;
@@ -65,6 +66,12 @@
   function shutColorPop(back) {
     if (popNow) { popNow.shut(back); }
   }
+  // Put away along with the part of the page it was opened from, when
+  // that is put away -- the panel folding shut on a narrow screen -- so it
+  // is not left hanging on to nothing in the middle of the chart.
+  function shutColorPopIn(where) {
+    if (popNow && where && where.contains(popNow.anchor)) { popNow.shut(); }
+  }
 
   // Opened from `anchor`, below it -- or, for a row of the menu on the
   // right button, beside the menu, so the menu is still there to read.
@@ -74,37 +81,68 @@
     shutColorPop();
     var start = fullHex(value) || "#000000";
     var now = start, told = start;
-    var hsv = hexHsv(start, 210);
+    // The color chosen, as it was before the sliders moved it.  Its own
+    // code is kept too, so that a color put back exactly is put back to
+    // the very code it had, not one rounded there and back.
+    var base = hexHsv(start, 210);
+    base.hex = start;
+    // How far the two sliders have moved everything, from -1 to 1.  Down
+    // takes that share of the color or the light away; up goes that share
+    // of the rest of the way to full.  Every square moves in proportion,
+    // so none of them runs into its neighbor on the way, and in the middle
+    // they are the squares as they are drawn.
+    var more = { s: 0, v: 0 };
+    function by(x, t) { return t < 0 ? x * (1 + t) : x + (1 - x) * t; }
+    function strength(c) { return c.s ? by(c.s, more.s) : 0; }  // a gray stays one
+    function shifted(c) {
+      if (!more.s && !more.v && c.hex) { return c.hex; }
+      return hsvHex(c.h, strength(c), by(c.v, more.v));
+    }
     var box = document.createElement("div");
     box.className = "colorpop";
     box.setAttribute("role", "dialog");
     box.setAttribute("aria-label", anchor.getAttribute("aria-label") ||
                      anchor.textContent || TXT.color_of_it);
 
-    var squares = [];
-    function squareRow(colors, extra) {
+    var squares = [];                    // every square, for the arrow keys
+    var moving = [];                     // [square, its color] the sliders move
+    function dye(b, hex) {
+      if (b.dataset.hex === hex) { return; }
+      b.style.background = hex;
+      b.dataset.hex = hex;
+      b.title = hex;
+      b.setAttribute("aria-label", hex);
+    }
+    // The colors picked lately stay exactly as they were picked -- being
+    // the same color again is what they are for -- and choosing one puts
+    // the sliders back in the middle, so what it gives is what it shows.
+    function squareRow(colors, extra, exact) {
       var row = document.createElement("div");
       row.className = "cp-grid" + (extra ? " " + extra : "");
-      colors.forEach(function (hex) {
+      colors.forEach(function (c) {
         var b = document.createElement("button");
         b.type = "button";
         b.className = "cp-sq";
-        b.style.background = hex;
-        b.dataset.hex = hex;
-        b.title = hex;
-        b.setAttribute("aria-label", hex);
         b.tabIndex = -1;
-        b.onclick = function () { choose(hex, true); };
+        dye(b, shifted(c));
+        b.onclick = function () {
+          base = { h: c.s ? c.h : base.h, s: c.s, v: c.v, hex: exact ? c.hex : "" };
+          if (exact) { more.s = more.v = 0; }
+          choose();
+        };
         row.appendChild(b);
         squares.push(b);
+        if (!exact) { moving.push([b, c]); }
       });
       box.appendChild(row);
     }
     var grays = [];
-    for (var g = 0; g < POP_ACROSS; g++) { grays.push(hsvHex(0, 0, 1 - g / (POP_ACROSS - 1))); }
+    for (var g = 0; g < POP_ACROSS; g++) {
+      grays.push({ h: 0, s: 0, v: 1 - g / (POP_ACROSS - 1) });
+    }
     squareRow(grays, "cp-grays");
     POP_SHADES.forEach(function (sv) {
-      squareRow(POP_HUES.map(function (h) { return hsvHex(h, sv[0], sv[1]); }));
+      squareRow(POP_HUES.map(function (h) { return { h: h, s: sv[0], v: sv[1] }; }));
     });
     var recent = recentColors();
     if (recent.length) {
@@ -112,7 +150,11 @@
       head.className = "cp-head";
       head.textContent = TXT.cp_recent;
       box.appendChild(head);
-      squareRow(recent, "cp-recent");
+      squareRow(recent.map(function (hex) {
+        var c = hexHsv(hex, 0);
+        c.hex = hex;
+        return c;
+      }), "cp-recent", true);
     }
     // One stop for the Tab key, and the arrows to go about the squares,
     // the way a grid of anything is gone about.  No key pressed in here is
@@ -139,14 +181,14 @@
       said.textContent = word;
       var range = document.createElement("input");
       range.type = "range";
-      range.min = 0; range.max = 100; range.step = 1;
+      range.min = -100; range.max = 100; range.step = 1;
       range.className = "cp-range";
       range.setAttribute("aria-label", word);
       var num = document.createElement("span");
       num.className = "cp-num";
       range.oninput = function () {
-        hsv[part] = range.value / 100;
-        choose(hsvHex(hsv.h, hsv.s, hsv.v));
+        more[part] = range.value / 100;
+        choose();
       };
       slides.appendChild(said);
       slides.appendChild(range);
@@ -168,7 +210,11 @@
     code.setAttribute("aria-label", TXT.cp_code);
     code.oninput = function () {
       var hex = fullHex(code.value);
-      if (hex) { choose(hex, true, true); }
+      if (!hex) { return; }
+      base = hexHsv(hex, base.h);
+      base.hex = hex;
+      more.s = more.v = 0;               // a code is that color, exactly
+      choose(true);
     };
     code.onkeydown = function (ev) {
       if (ev.key === "Enter") { ev.preventDefault(); shut(true); }
@@ -178,26 +224,41 @@
     foot.appendChild(code);
     box.appendChild(foot);
 
-    // `whole` is a color from outside the sliders -- a square, or typed --
-    // and they are set from it; a slider moving changes only its own part.
-    function choose(hex, whole, typed) {
-      if (whole) { hsv = hexHsv(hex, hsv.h); }
-      now = hex;
+    // Whatever moved -- a square, a slider, a code typed in -- the color is
+    // worked out afresh from where the chosen one started and how far the
+    // sliders have taken everything.  `typed` leaves the code box alone
+    // while it is still being typed into.
+    function choose(typed) {
+      now = shifted(base);
       show(typed);
       if (now !== told) { told = now; onPick(now); }
     }
+    // A slider's bar is painted with what it would give the chosen color,
+    // from one end of the knob's travel to the other: the color under the
+    // middle of the knob is the color it is set to, all the way to the
+    // ends, where the bar carries on in its end color rather than
+    // stopping short of them.
+    function bar(one, left, mid, right) {
+      one.range.style.background = "linear-gradient(to right, " +
+        left + " " + POP_THUMB + "px, " + mid + ", " +
+        right + " calc(100% - " + POP_THUMB + "px))";
+      one.range.style.setProperty("--at", now);
+    }
     function show(typed) {
+      moving.forEach(function (one) { dye(one[0], shifted(one[1])); });
       chip.style.background = now;
       if (!typed) { code.value = now; }
-      [[strong, hsv.s], [bright, hsv.v]].forEach(function (one) {
+      [[strong, more.s], [bright, more.v]].forEach(function (one) {
         var n = Math.round(one[1] * 100);
         if (+one[0].range.value !== n) { one[0].range.value = n; }
-        one[0].num.textContent = n;
+        one[0].num.textContent = n > 0 ? "+" + n : n < 0 ? "−" + -n : "0";
       });
-      strong.range.style.background = "linear-gradient(to right, " +
-        hsvHex(hsv.h, 0, hsv.v) + ", " + hsvHex(hsv.h, 1, hsv.v) + ")";
-      bright.range.style.background = "linear-gradient(to right, #000, " +
-        hsvHex(hsv.h, hsv.s, 1) + ")";
+      // A gray has no strength to take away or add to, so its bar shows
+      // what the slider does to the colors about it, in the gray's own hue.
+      var s = strength(base), v = by(base.v, more.v);
+      bar(strong, hsvHex(base.h, 0, v), hsvHex(base.h, base.s || .5, v),
+          hsvHex(base.h, 1, v));
+      bar(bright, "#000000", hsvHex(base.h, s, base.v), hsvHex(base.h, s, 1));
       // Only a square whose state changes is written to: a class set to
       // what it already was still wakes anything watching the page.
       squares.forEach(function (b) {
@@ -214,9 +275,12 @@
 
     // Its size as laid out, not as drawn: it grows in from a little
     // smaller, and measured mid-grow it would be put a little out of place.
+    // What it was opened from can be taken off the page under it -- a
+    // menu that has gone -- and then it goes too.
     function place() {
       var menu = anchor.closest ? anchor.closest(".menu") : null;
       var from = anchor.getBoundingClientRect();
+      if (!from.width && !from.height) { shut(); return; }
       var room = { width: box.offsetWidth, height: box.offsetHeight };
       var x, y;
       if (menu) {

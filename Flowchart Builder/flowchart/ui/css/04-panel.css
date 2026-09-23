@@ -52,25 +52,33 @@
   .cp-sq:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
   .cp-head { margin: 7px 0 1px; font-size: 11.5px; color: var(--muted); }
   .cp-slides {
-    display: grid; grid-template-columns: max-content 1fr 2.2em;
+    display: grid; grid-template-columns: max-content 1fr 2.8em;
     align-items: center; gap: 9px 10px; margin-top: 11px; font-size: 12.5px;
   }
   .cp-num {
     text-align: right; color: var(--muted); font-variant-numeric: tabular-nums;
   }
+  /* The edge is drawn inside rather than as a border: a painted background
+     repeats under a border, and the far end's color showed through as a
+     sliver at each end.  The knob is filled with the color it gives, and
+     is 18px across -- the script starts and ends the bar's colors half a
+     knob in from each end (POP_THUMB), where the middle of the knob stops. */
   .cp-range {
     -webkit-appearance: none; appearance: none; width: 100%; height: 12px;
-    margin: 0; cursor: pointer; border-radius: 6px;
-    border: 1px solid rgba(128, 128, 128, .3);
+    margin: 0; padding: 0; border: 0; cursor: pointer; border-radius: 6px;
+    box-shadow: inset 0 0 0 1px rgba(128, 128, 128, .3);
   }
   .cp-range::-webkit-slider-thumb {
-    -webkit-appearance: none; width: 16px; height: 16px; border-radius: 50%;
-    background: #fff; box-shadow: 0 0 0 1px rgba(0, 0, 0, .4), 0 1px 4px rgba(0, 0, 0, .35);
+    -webkit-appearance: none; box-sizing: border-box; width: 18px; height: 18px;
+    border: 3px solid #fff; border-radius: 50%; background: var(--at, #fff);
+    box-shadow: 0 0 0 1px rgba(0, 0, 0, .35), 0 1px 4px rgba(0, 0, 0, .35);
   }
   .cp-range::-moz-range-thumb {
-    width: 16px; height: 16px; border: 0; border-radius: 50%;
-    background: #fff; box-shadow: 0 0 0 1px rgba(0, 0, 0, .4), 0 1px 4px rgba(0, 0, 0, .35);
+    box-sizing: border-box; width: 18px; height: 18px;
+    border: 3px solid #fff; border-radius: 50%; background: var(--at, #fff);
+    box-shadow: 0 0 0 1px rgba(0, 0, 0, .35), 0 1px 4px rgba(0, 0, 0, .35);
   }
+  .cp-range::-moz-range-track { background: transparent; }
   .cp-range:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
   .cp-foot { display: flex; align-items: center; gap: 8px; margin-top: 11px; }
   .cp-chip {

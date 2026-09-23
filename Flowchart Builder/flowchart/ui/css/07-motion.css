@@ -551,6 +551,11 @@
     animation: shine-run 1.3s linear infinite;
   }
   #build-bar.full .bb-shine { opacity: 0; }
+  /* Coasting (barCoast in 09-build.js), the page is too busy to move the
+     number or the light's edge with the fill, so both are put away until
+     it is done rather than left standing where the fill has passed. */
+  .bb-pct { transition: opacity .2s var(--ease-soft); }
+  #build-bar.coasting .bb-pct, #build-bar.coasting .bb-shine { opacity: 0; }
   @keyframes shine-run {
     from { transform: translateX(-100%); }
     to { transform: translateX(250%); }
