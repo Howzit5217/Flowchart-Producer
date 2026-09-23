@@ -1627,11 +1627,30 @@
   }
   /* the frame the box's slider bars hang in, which is the box's size */
   #code-slot > .slide-frame { flex: 1; min-width: 0; display: flex; }
-  /* The numbers are not inside that frame and do not lose the strip the
-     bar along the bottom stands in, so they are asked to give it up: a
-     column of numbers that ran one line lower than the words beside it
-     was a line numbered against nothing. */
-  #code-slot:has(> .slide-frame.has-x) > .code-rule { padding-bottom: 25px; }
+  /* Its bars stand on the sheet's own edges: down the right-hand side
+     from the bar across the top to the foot, and along the foot.  The
+     frame sits inside the sheet's margin, and on the frame's edges they
+     floated a margin in from everything, belonging to nothing.  They
+     stand in that margin -- 14px above, 16px beside and below -- so the
+     box keeps all of its room, and the numbers beside it, which are not
+     in the frame, stay level with it.  The run's tape is the same. */
+  :is(#code-slot, #tape-slot) > .slide-frame.room.has-y { padding-right: 0; }
+  :is(#code-slot, #tape-slot) > .slide-frame.room.has-x { padding-bottom: 0; }
+  :is(#code-slot, #tape-slot) > .slide-frame > .slider.y { right: -16px; bottom: -16px; }
+  :is(#code-slot, #tape-slot) > .slide-frame > .slider.x { right: -16px; bottom: -16px; }
+  :is(#code-slot, #tape-slot) > .slide-frame.has-y > .slider.x { right: -1px; }
+  :is(#code-slot, #tape-slot) > .slide-frame.has-x > .slider.y { bottom: -1px; }
+  :is(#code-slot, #tape-slot) > .slide-frame.has-x.has-y::after {
+    right: -16px; bottom: -16px;
+  }
+  /* up to the bar across the top, unless the tape has what the program is
+     holding above it -- a box of its own, with its own bar */
+  #code-slot > .slide-frame > .slider.y,
+  #tape-slot > .slide-frame:first-child > .slider.y,
+  #tape-slot > :is(#watch.shut, #watch[hidden]) + .slide-frame > .slider.y { top: -14px; }
+  /* and along the foot from the sheet's left edge, where nothing stands
+     beside it; the pseudocode's starts where its numbers end */
+  #tape-slot > .slide-frame > .slider.x { left: -16px; }
   #code-slot #code {
     flex: 1; height: auto; min-height: 0; resize: none;
     border: 0; border-radius: 0; box-shadow: none;
@@ -17687,7 +17706,7 @@
   // once, so they keep an eye on what turns up inside them as well.
   [["#code", "room", 0], ["#tape", "room", 1], ["#code-out", "room", 1],
    ["#watch-rows", "room", 0],
-   ["#pz-body", "room", 0], ["#eg-body", "room", 0],
+   ["#pz-body", "room", 0], ["#eg-body", "room", 0], ["#keys-body", "room", 0],
    ["#more-over .more-body", "room", 0],
    [".print-side", "room", 0], ["#print-paper-area", "", 0]]
     .forEach(function (one) {
