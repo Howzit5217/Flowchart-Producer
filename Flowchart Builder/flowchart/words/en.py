@@ -507,6 +507,7 @@ EN = {
     "b_page": "Putting it on the page",
     "ready": "Ready.",
     "boot_failed": "Python could not start in this browser ({err}).",
+    "py_gave_out": "Python in this browser gave out part way through drawing this ({err}).",
 }
 
 speaks("en", "English", EN)

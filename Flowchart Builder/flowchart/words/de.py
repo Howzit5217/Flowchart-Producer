@@ -500,6 +500,7 @@ DE = {
     "b_page": "Kommt auf die Seite",
     "ready": "Fertig.",
     "boot_failed": "Python konnte in diesem Browser nicht starten ({err}).",
+    "py_gave_out": "Python ist in diesem Browser mitten in dieser Zeichnung abgebrochen ({err}).",
 }
 
 speaks("de", "Deutsch", DE)

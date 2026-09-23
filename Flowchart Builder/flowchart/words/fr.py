@@ -501,6 +501,7 @@ FR = {
     "b_page": "Affichage sur la page",
     "ready": "Prêt.",
     "boot_failed": "Python n'a pas pu démarrer dans ce navigateur ({err}).",
+    "py_gave_out": "Python s'est arrêté dans ce navigateur au milieu de ce dessin ({err}).",
 }
 
 speaks("fr", "Français", FR)

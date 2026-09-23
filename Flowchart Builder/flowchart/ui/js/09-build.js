@@ -53,6 +53,11 @@
     function booting(id, part) {
       self.postMessage({ id: id, step: "boot", part: part });
     }
+    // How much memory Python has taken, which it never gives back (see
+    // letPythonGo).
+    function heapOf(py) {
+      try { return py._module.HEAPU8.length; } catch (e) { return 0; }
+    }
     function start(job) {
       if (ready) { return ready; }
       ready = Promise.resolve().then(function () {
@@ -88,6 +93,12 @@
           putThere(py, got);
           // draw_json is handed a function to tell how far each drawing
           // has got (see progress.py), and lets go of it when done.
+          //
+          // What it hands back is bytes, not a string.  Python's string,
+          // made into the browser's, was three seconds and two gigabytes
+          // for the eighty megabytes a program of a hundred thousand lines
+          // draws; the same as bytes is a copy, handed over as it stands
+          // (see the postMessage below) and read on the page in a blink.
           py.runPython([
             "import sys, json, os",
             "sys.path.insert(0, os.getcwd())",
@@ -96,11 +107,13 @@
             "def draw_json(ask, hear=None):",
             "    progress.listen(hear)",
             "    try:",
-            "        return json.dumps(draw_for_studio(json.loads(ask)))",
+            "        out = json.dumps(draw_for_studio(json.loads(ask)))",
             "    except Exception as exc:",
-            "        return json.dumps({'ok': False, 'error': str(exc)})",
+            "        out = json.dumps({'ok': False,",
+            "                          'error': str(exc) or type(exc).__name__})",
             "    finally:",
-            "        progress.listen(None)"
+            "        progress.listen(None)",
+            "    return out.encode()"
           ].join("\n"));
           booting(job.id, 1);
           return py;
@@ -111,19 +124,24 @@
     self.onmessage = function (ev) {
       var job = ev.data;
       var first = !ready;
+      var drawing = false;               // Python up, and drawing this one
       if (first) { self.postMessage({ id: job.id, note: "starting" }); }
       start(job).then(function (py) {
         if (first) { self.postMessage({ id: job.id, note: "ready" }); }
         if (job.warm) { self.postMessage({ id: job.id, out: "" }); return; }
         var fn = py.globals.get("draw_json");
-        var out = fn(job.ask, function (stage, part) {
+        drawing = true;
+        var got = fn(job.ask, function (stage, part) {
           self.postMessage({ id: job.id, step: stage, part: part });
         });
         fn.destroy();
-        self.postMessage({ id: job.id, out: out });
+        var bytes = got.toJs();          // out of Python's memory, once
+        got.destroy();
+        self.postMessage({ id: job.id, bytes: bytes, heap: heapOf(py) },
+                         [bytes.buffer]);
       }).catch(function (err) {
         ready = null;                    // let the next one try again
-        self.postMessage({ id: job.id,
+        self.postMessage({ id: job.id, lost: drawing,
                            error: String((err && err.message) || err) });
       });
     };
@@ -140,22 +158,63 @@
         // bar whichever job it came with: starting is done once, for
         // whichever job happened to be first, and the build waits on it.
         if (ev.data.step) { barStep(ev.data.step, ev.data.part); return; }
-        if (ev.data.note === "ready" || ev.data.out !== undefined) { pyReady = true; }
+        if (ev.data.note === "ready" || ev.data.out !== undefined || ev.data.bytes) {
+          pyReady = true;
+        }
         var job = pyJobs[ev.data.id];
         if (!job) { return; }
         if (ev.data.note) { job.note(ev.data.note); return; }
         delete pyJobs[ev.data.id];
-        if (ev.data.error) { job.no(new Error(ev.data.error)); }
+        pyHeap = Math.max(pyHeap, ev.data.heap || 0);
+        // Let go before the drawing goes onto the page, not after: the two
+        // of them together are what the page could not hold.
+        if (pyHeap > HEAP_MOST && !Object.keys(pyJobs).length) { letPythonGo(); }
+        if (ev.data.error) {
+          var err = new Error(ev.data.error);
+          err.lost = !!ev.data.lost;
+          job.no(err);
+        }
+        else if (ev.data.bytes) { job.go(new TextDecoder().decode(ev.data.bytes)); }
         else { job.go(ev.data.out); }
       };
+      // A worker falling over once Python was up fell over drawing, and
+      // is not one that could not start (see drawAside).
       pyHand.onerror = function () {
-        for (var id in pyJobs) { pyJobs[id].no(new Error("worker")); }
+        for (var id in pyJobs) {
+          var err = new Error("worker");
+          err.lost = pyReady;
+          pyJobs[id].no(err);
+        }
         pyJobs = {};
       };
     } catch (e) {
       pyHand = false;                    // no worker here: the page does it
     }
     return pyHand;
+  }
+
+  // Python never hands back memory it has taken, and its worker lives off
+  // the same allowance as the page.  A program of a hundred thousand lines
+  // left three quarters of a gigabyte in it, held for as long as the page
+  // was open, beside a chart of half a million pieces that needs a good
+  // gigabyte of its own.  So a Python that has had to grow that big is let
+  // go once it has handed its drawing over, and the next build starts a
+  // fresh one -- a second or two, against a drawing of a minute or more.
+  var HEAP_MOST = 512 * 1048576;         // bytes, past which Python is let go
+  var pyHeap = 0;                        // the most this Python has taken
+  function letPythonGo() {
+    if (!pyHand) { return; }
+    pyHand.terminate();
+    pyHand = null;                       // asked for again when next wanted
+    pyReady = false;
+    pyHeap = 0;
+    var left = pyJobs;                   // nothing still waiting on it waits
+    pyJobs = {};                         //   for ever
+    for (var id in left) {
+      var err = new Error("worker");
+      err.lost = true;
+      left[id].no(err);
+    }
   }
 
   // A drawing from the worker, or null where there is no worker to be had.
@@ -177,6 +236,17 @@
     }).then(function (text) {
       return barToPage(text.length).then(function () { return JSON.parse(text); });
     }, function (err) {
+      // Python started and then fell over part way through the drawing --
+      // out of memory, on a very long program.  Drawing it again on the
+      // page's own thread, as below, would fall over the same way and take
+      // the page down with it, so it is said instead, and the next build
+      // gets a fresh Python.
+      if (err && err.lost) {
+        letPythonGo();
+        var said = new Error(say("py_gave_out", { err: err.message }));
+        said.plain = true;
+        throw said;
+      }
       // The worker could not do it at all -- blocked by the page's own
       // rules, or unable to fetch what it needs.  Better a page that
       // stutters than a page with no chart on it, so it is drawn here
@@ -222,9 +292,11 @@
   function drawHere(ask) {               // the slow way: on the page's thread
     return startPython().then(function (py) {
       var fn = py.globals.get("draw_json");
-      var out = JSON.parse(fn(JSON.stringify(ask)));
+      var got = fn(JSON.stringify(ask));  // bytes, as in the worker
       fn.destroy();
-      return out;
+      var text = new TextDecoder().decode(got.toJs());
+      got.destroy();
+      return JSON.parse(text);
     });
   }
 
@@ -260,9 +332,11 @@
           "from flowchart.studio.drawing import draw_for_studio",
           "def draw_json(ask):",
           "    try:",
-          "        return json.dumps(draw_for_studio(json.loads(ask)))",
+          "        out = json.dumps(draw_for_studio(json.loads(ask)))",
           "    except Exception as exc:",
-          "        return json.dumps({'ok': False, 'error': str(exc)})"
+          "        out = json.dumps({'ok': False,",
+          "                          'error': str(exc) or type(exc).__name__})",
+          "    return out.encode()"
         ].join("\n"));
         if (says) { says.textContent = TXT.ready; }
         return py;
@@ -1067,7 +1141,8 @@
         if (!data.ok) {
           barEnd(false);
           says.className = "bad";
-          says.textContent = data.error || TXT.failed;
+          says.textContent = data.error === "MemoryError"
+            ? say("py_gave_out", { err: data.error }) : data.error || TXT.failed;
           showProblems(null);
           return;
         }
@@ -1124,7 +1199,8 @@
           build.classList.remove("working");
         });
         says.className = "bad";
-        says.textContent = say("not_answering", { err: (err && err.message) || err });
+        says.textContent = err && err.plain ? err.message
+          : say("not_answering", { err: (err && err.message) || err });
       });
   }
   if (build) {

@@ -113,9 +113,10 @@ def to_svg(elems, title=None, author=None):
     ]
     # The ruling, a slab at a time (see grid_slabs).  On a chart drawn in
     # bands each slab goes in the band it covers, under the routes, so the
-    # page leaves it out with the rest of that band when it is far away.
-    slabs = grid_slabs(width, height)
+    # page leaves it out with the rest of that band when it is far away, and
+    # its upright lines are combs (see combs), or it outweighs the chart.
     banding = sum(1 for e in elems if e[0] == "shape") > settings.BAND_FROM > 0
+    slabs = grid_slabs(width, height, combed=banding)
     if not banding:
         out += [piece for _, _, piece in slabs]
     out += [

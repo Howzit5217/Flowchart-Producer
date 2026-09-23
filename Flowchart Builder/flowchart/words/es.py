@@ -500,6 +500,7 @@ ES = {
     "b_page": "Poniéndolo en la página",
     "ready": "Listo.",
     "boot_failed": "Python no pudo iniciarse en este navegador ({err}).",
+    "py_gave_out": "Python se detuvo en este navegador a mitad de este dibujo ({err}).",
 }
 
 speaks("es", "Español", ES)
