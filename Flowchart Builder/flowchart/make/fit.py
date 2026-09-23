@@ -2,7 +2,7 @@
 import math
 import re
 
-from .. import settings
+from .. import progress, settings
 from ..draw.arrows import chain_lines
 from ..make.legend import with_legend
 from ..layout.columns import (arrange, bbox, forget_layouts,
@@ -211,7 +211,8 @@ def fork_to_fit(lay, natural, target):
 
     best, best_score = natural, score(natural)
     lo, hi = math.log(0.1), math.log(10.0)        # the rates, as logarithms
-    for _ in range(5):
+    for tried in range(5):
+        progress.say("lay", (tried + 1) / 6.0)   # the plain one was the first
         mid = (lo + hi) / 2.0
         one = lay(math.exp(mid))
         if score(one) < best_score:

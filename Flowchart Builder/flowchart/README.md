@@ -28,6 +28,7 @@ Each folder is one stage of the job.
 | `__main__.py` | `python -m flowchart` |
 | `settings.py` | Every knob, in one place |
 | `measure.py` | How wide words come out, and how tall a line is |
+| `progress.py` | How far along a drawing is, for the bar the page shows while it waits |
 | `shapes.py` | The catalog of shapes, and which kind is drawn as which |
 | `parts.py` | The page's own files, poured together |
 | `page.py` | The page around the chart |
@@ -152,7 +153,7 @@ and writes them into Python's own filesystem, then imports them as any
 program would.
 
 Which modules, it works out by following the imports from
-`studio/drawing.py` — 36 files, about 197 KB — so a module added to the
+`studio/drawing.py` — 37 files, about 310 KB — so a module added to the
 drawing goes to the browser on its own, and one that is only ever used from
 the command line does not. `studio/web.py` does the working out.
 

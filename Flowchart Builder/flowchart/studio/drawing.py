@@ -1,7 +1,7 @@
 """One drawing, from what the studio asked for."""
 import re
 
-from .. import settings
+from .. import progress, settings
 from ..make.chart import make_flowchart
 from ..make.shake import style_variety
 from ..measure import set_type
@@ -92,9 +92,15 @@ def draw_for_studio(ask):
     # Read once, and that one reading both drawn and handed to the runner.
     # It was read twice -- once to draw, once more for the runner -- which
     # on a program of tens of thousands of lines is a quarter of the wait.
+    #
+    # Each stage says so as it starts (see progress.py): the page shows a
+    # bar for a drawing that takes long enough to want one.
+    progress.say("read")
     charts = parse_program(text)
+    progress.say("lay")
     svg = make_flowchart(text, title, author, max_h=settings.COLUMN_H,
                          charts=charts)
+    progress.say("send")
     box = re.search(r'viewBox="0 0 ([\d.]+) ([\d.]+)"', svg)
     ast = program_json(charts)
     return {"ok": True, "svg": svg.split("\n", 1)[1], "seed": seed,

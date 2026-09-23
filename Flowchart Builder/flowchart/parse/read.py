@@ -2,7 +2,7 @@
 import re
 import sys
 
-from .. import settings
+from .. import progress, settings
 from ..parse.clean import join_lines, tidy, unwrap
 from ..parse.nodes import For, If, Loop, Module, Node, Select
 from ..parse.keywords import (
@@ -232,6 +232,8 @@ def parse_program(text):
         return True
 
     for idx, (indent, raw, at_line) in enumerate(lines):
+        if not idx & 511:                 # how far through, for a long one
+            progress.say("read", idx / float(len(lines)))
         here[0] = at_line
         s = tidy(raw)
         if not s:

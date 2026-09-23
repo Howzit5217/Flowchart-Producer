@@ -2,7 +2,7 @@
 import html
 from bisect import bisect_left
 
-from .. import measure, settings
+from .. import measure, progress, settings
 from ..draw.grid import grid_lines
 from ..draw.outlines import shape_art
 from ..draw.arrows import arrow_head, chain_lines, path_d
@@ -270,7 +270,13 @@ def to_svg(elems, title=None, author=None):
     # of blank paper behind it so the line does not run through the word, and
     # where a label sat near the end of a route that patch took the point off
     # the arrow with it.  Nothing should ever be painted over a tip.
-    for pts, arrow in chain_lines(segs):
+    # How far through it is goes to progress.py as it goes: on a long
+    # program this is most of the wait.  The routes are about the first
+    # third of the work and the shapes and their words the rest.
+    routes = chain_lines(segs)
+    for done, (pts, arrow) in enumerate(routes):
+        if not done & 255:
+            progress.say("draw", 0.3 * done / len(routes))
         head = None
         end = pts[-1][1]
         if reaches_a_shape(pts) or joins_a_line(pts):
@@ -287,7 +293,9 @@ def to_svg(elems, title=None, author=None):
                 f'stroke="{settings.INK}" stroke-width="0.6" '
                 'stroke-linejoin="miter"/>')
 
-    for e in elems:
+    for done, e in enumerate(elems):
+        if not done & 255:
+            progress.say("draw", 0.3 + 0.7 * done / len(elems))
         if e[0] == "line":
             continue
         elif e[0] == "text":                    # Yes / No / Case labels

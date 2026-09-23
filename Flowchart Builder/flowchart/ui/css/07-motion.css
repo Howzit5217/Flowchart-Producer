@@ -495,6 +495,28 @@
     100% { transform: scale(1); }
   }
 
+  /* The bar over the stage for a long drawing drops in from under the top
+     edge, fills smoothly between the reports it is given -- which come a
+     few times a second, not every frame -- and, filled, lifts away.  The
+     light running along the fill is what says it is still going while a
+     stage takes a while to report. */
+  #build-bar {
+    animation: bar-drop var(--move) var(--ease) backwards;
+    transition: opacity .24s var(--ease-soft), transform .24s var(--ease-soft);
+  }
+  #build-bar.going { opacity: 0; transform: translateY(-6px); }
+  .bb-fill {
+    transition: transform .32s linear, background-color var(--quick) var(--ease-soft);
+    background-image: linear-gradient(100deg, transparent 20%,
+                      rgba(255, 255, 255, .35) 50%, transparent 80%);
+    background-size: 220% 100%;
+    animation: sweep 1.3s linear infinite;
+  }
+  #build-bar.full .bb-fill { animation: none; background-image: none; }
+  @keyframes bar-drop {
+    from { opacity: 0; transform: translateY(-8px); }
+  }
+
   /* --------------------------------------- the pseudocode, full screen -- */
   #code-over:not([hidden]) { animation: dim-in var(--move) var(--ease-soft) backwards; }
   #code-over:not([hidden]) .code-sheet {
@@ -510,11 +532,12 @@
   #code-home { transition: box-shadow var(--quick) var(--ease-soft); }
 
   /* ------------------------------------------- the settings, over the page -- */
-  #more-over:not([hidden]), #eg-over:not([hidden]), #pz-over:not([hidden]) {
+  #more-over:not([hidden]), #eg-over:not([hidden]), #pz-over:not([hidden]),
+  #keys-over:not([hidden]) {
     animation: dim-in var(--move) var(--ease-soft) backwards;
   }
   #more-over:not([hidden]) .code-sheet, #eg-over:not([hidden]) .code-sheet,
-  #pz-over:not([hidden]) .code-sheet {
+  #pz-over:not([hidden]) .code-sheet, #keys-over:not([hidden]) .code-sheet {
     animation: sheet-rise var(--sheet-t) var(--ease) backwards;
   }
   /* The levels and the names in them fill in the way the examples do. */
@@ -600,12 +623,13 @@
      to be pressed -- a second click landing on a sheet already on its way
      out was a click on a thing nobody could see any more. */
   #more-over.going, #eg-over.going, #pz-over.going, #print-over.going,
-  #sure-over.going, #code-over.going, #tape-over.going { pointer-events: none; }
-  #more-over.going, #eg-over.going, #pz-over.going {
+  #sure-over.going, #code-over.going, #tape-over.going,
+  #keys-over.going { pointer-events: none; }
+  #more-over.going, #eg-over.going, #pz-over.going, #keys-over.going {
     animation: dim-out .19s var(--ease-soft) forwards;
   }
   #more-over.going .code-sheet, #eg-over.going .code-sheet,
-  #pz-over.going .code-sheet {
+  #pz-over.going .code-sheet, #keys-over.going .code-sheet {
     animation: sheet-fall .19s var(--ease-soft) forwards;
   }
   /* The page for printing, the same -- on the screen only.  A printer lays

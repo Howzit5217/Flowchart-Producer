@@ -419,6 +419,7 @@
   showExamples = goingOver("#eg-over", showExamples);
   showPuzzles = goingOver("#pz-over", showPuzzles);
   printFull = goingOver("#print-over", printFull);
+  showKeys = goingOver("#keys-over", showKeys);
 
   // The question asked before anything is thrown away goes the same way,
   // but what it was asked about is done at once rather than after the

@@ -425,8 +425,93 @@
     all(".code-rule").forEach(function (rule) { rule.scrollTop = box.scrollTop; });
   }
 
-  // Tab puts four spaces in rather than jumping out of the box, because
-  // pseudocode is written with indents and this is where it gets written.
+  // ------------------------------------------------ writing with indents --
+  // Pseudocode is written with indents, and this box is where it is written,
+  // so it keeps them the way a code editor does.  Tab puts four spaces in
+  // rather than jumping out of the box; with several lines chosen it moves
+  // all of them in, and Shift+Tab moves them back out.  Enter starts the
+  // next line as far in as this one, and a step further under a line that
+  // opens a block -- an If ... Then, an Else, a loop, a Case, a module.
+  //
+  // Every change goes through typeOver (27-mend.js), which types it in
+  // rather than writing over the box.  Tab used to set the box's value
+  // itself, which quietly emptied the browser's own record of what had been
+  // typed: one Tab and Ctrl+Z could no longer take anything back.  And with
+  // three lines chosen, Tab put four spaces where those three lines had been.
+  var INDENT = "    ";
+  // The same words parse/keywords.py reads a block's opening line by.  An
+  // If with something after its Then is the whole of itself on one line,
+  // and opens nothing.
+  var OPENS_BLOCK = new RegExp("^(?:" + [
+    "(?:if|else\\s*if|elseif|elif|otherwise\\s+if)\\b(?!.*\\bthen\\s+\\S).*",
+    "else", "otherwise", "while\\b.*", "for\\b.*", "do\\b.*", "repeat",
+    "(?:select|switch)\\b.*", "case\\b.*", "default",
+    "(?:module|function|sub|procedure|def|method|subroutine)\\b.*"
+  ].join("|") + ")$", "i");
+
+  // A While straight under a Do, as far in as it, is the Do's test, and
+  // closes the loop rather than opening one.
+  function closesDo(text, from, lead) {
+    var above = text.slice(0, Math.max(0, from - 1)).split("\n");
+    for (var i = above.length - 1; i >= 0; i--) {
+      var line = above[i];
+      if (!line.trim()) { continue; }
+      var its = /^[ \t]*/.exec(line)[0];
+      if (its.length > lead.length) { continue; }
+      return its === lead && /^(do|repeat)$/i.test(line.trim());
+    }
+    return false;
+  }
+
+  // The start of the line `at` is on, and the end of the line `to` is on.
+  function linesAround(text, at, to) {
+    var from = text.lastIndexOf("\n", at - 1) + 1;
+    // a choice that stops at the very start of a line does not take that line
+    if (to > at && text.charAt(to - 1) === "\n") { to -= 1; }
+    var end = text.indexOf("\n", to);
+    return { from: from, to: end < 0 ? text.length : end };
+  }
+
+  function shiftLines(box, out) {
+    var text = box.value;
+    var at = box.selectionStart, to = box.selectionEnd;
+    var span = linesAround(text, at, to);
+    var lines = text.slice(span.from, span.to).split("\n");
+    var firstGone = 0, gone = 0;
+    var moved = lines.map(function (line, i) {
+      if (!out) { return line.trim() ? INDENT + line : line; }
+      var lead = /^( {1,4}|\t)/.exec(line);
+      var cut = lead ? lead[0].length : 0;
+      if (i === 0) { firstGone = cut; }
+      gone += cut;
+      return line.slice(cut);
+    }).join("\n");
+    if (moved === text.slice(span.from, span.to)) { return; }
+    typeOver(box, span.from, span.to, moved);
+    if (at === to && lines.length === 1) {
+      // Just a cursor: it stays with the words it was beside.
+      var by = out ? -Math.min(firstGone, at - span.from) : INDENT.length;
+      box.setSelectionRange(at + by, at + by);
+    } else {
+      box.setSelectionRange(span.from, span.from + moved.length);
+    }
+  }
+
+  function newLineIndented(box) {
+    var text = box.value, at = box.selectionStart;
+    var from = text.lastIndexOf("\n", at - 1) + 1;
+    var before = text.slice(from, at);
+    var lead = /^[ \t]*/.exec(before)[0];
+    // What the line says, without the comment it may end in: the reading
+    // ignores //, # and /* */ comments, and so does this.
+    var said = before.trim().replace(/\s*(\/\/|#|\/\*).*$/, "");
+    if (OPENS_BLOCK.test(said) &&
+        !(/^while\b/i.test(said) && closesDo(text, from, lead))) {
+      lead += INDENT;
+    }
+    typeOver(box, at, box.selectionEnd, "\n" + lead);
+  }
+
   if (el("#code")) {
     countLines();                        // the panel's box is numbered too
     // A program put there by anything other than typing -- one remembered
@@ -436,13 +521,17 @@
     el("#code").addEventListener("input", countLines);
     el("#code").addEventListener("scroll", followRule);
     el("#code").addEventListener("keydown", function (ev) {
-      if (ev.key !== "Tab" || ev.ctrlKey || ev.altKey) { return; }
-      ev.preventDefault();
+      if (ev.ctrlKey || ev.altKey || ev.metaKey || ev.isComposing) { return; }
       var box = el("#code");
-      var from = box.selectionStart, to = box.selectionEnd;
-      box.value = box.value.slice(0, from) + "    " + box.value.slice(to);
-      box.selectionStart = box.selectionEnd = from + 4;
-      countLines();
+      if (ev.key === "Tab") {
+        ev.preventDefault();
+        var many = box.value.slice(box.selectionStart, box.selectionEnd).indexOf("\n") >= 0;
+        if (ev.shiftKey || many) { shiftLines(box, ev.shiftKey); }
+        else { typeOver(box, box.selectionStart, box.selectionEnd, INDENT); }
+      } else if (ev.key === "Enter" && !ev.shiftKey) {
+        ev.preventDefault();
+        newLineIndented(box);
+      }
     });
   }
 

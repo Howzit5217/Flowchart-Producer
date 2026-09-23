@@ -134,6 +134,11 @@ __OPTIONS__
     <button class="icon" id="full" hidden aria-hidden="true" tabindex="-1">
       <svg viewBox="0 0 20 20" id="full-mark"></svg>
     </button>
+    <!-- Every key the page answers to, in one list.  There are twenty-odd
+         of them and nothing on the page said so: Ctrl+Enter to build was
+         something you found by accident or not at all. -->
+    <button class="btn wide" id="keys-open" data-w="k_head"
+            data-w-title="k_tip" title="__W(k_tip)__">__W(k_head)__</button>
   </div>
 </header>
 
@@ -299,6 +304,28 @@ __SVG__
       <button class="btn small primary" id="eg-done" data-w="done">__W(done)__</button>
     </div>
     <div class="more-body" id="eg-body"></div>
+  </div>
+</div>
+
+<!-- The keys, over the page like the examples.  Written out by 25-keys.js
+     each time it opens, so the words are in the page's language and the
+     keys are the ones this computer has: Ctrl, or the Command key. -->
+<div id="keys-over" hidden>
+  <div class="code-sheet more-sheet" role="dialog" aria-labelledby="keys-head">
+    <div class="code-bar">
+      <span class="mark small" aria-hidden="true">
+        <svg viewBox="0 0 24 24">
+          <rect x="7.5" y="1.8" width="9" height="5.4" rx="1.4"/>
+          <path d="M12 7.2v3.1"/>
+          <path d="M12 10.3l4 3.3-4 3.3-4-3.3z"/>
+          <path d="M12 16.9v2.1H4.6v3.2M12 19h7.4v3.2"/>
+        </svg>
+      </span>
+      <strong id="keys-head" data-w="k_head">__W(k_head)__</strong>
+      <span class="code-esc" data-w="code_esc">__W(code_esc)__</span>
+      <button class="btn small primary" id="keys-done" data-w="done">__W(done)__</button>
+    </div>
+    <div class="more-body" id="keys-body"></div>
   </div>
 </div>
 

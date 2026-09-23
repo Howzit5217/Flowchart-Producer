@@ -24,6 +24,7 @@
   // at all, the old way is still there underneath and still draws.
   var pyHand = null;                     // null: not asked yet.  false: no
   var pyJobs = {}, pyNext = 1;           //   worker to be had, do it in here
+  var pyReady = false;                   // Python in the worker has started
 
   // What runs in the worker.  Written as a function and sent as its own
   // source, so that it stays code an editor can read and check rather than
@@ -45,34 +46,55 @@
         py.FS.writeFile(home + "/" + pair[0], pair[1]);
       });
     }
+    // How far Python has got with starting, for the bar a build shows
+    // while it waits on it.  Python itself is most of the wait and says
+    // nothing while it loads, so the fetching of our own files is the only
+    // part counted as it goes.
+    function booting(id, part) {
+      self.postMessage({ id: id, step: "boot", part: part });
+    }
     function start(job) {
       if (ready) { return ready; }
       ready = Promise.resolve().then(function () {
         importScripts(job.where + "pyodide.js");
+        booting(job.id, 0.08);
         return loadPyodide({ indexURL: job.where });
       }).then(function (py) {
+        booting(job.id, 0.75);
         // The package, fetched a module at a time and written into
         // Python's own filesystem, where importing it works exactly as it
         // does on a computer.  They go at once rather than one after the
         // other: two dozen small files over one connection is no wait at
         // all, and it is a fifth of what one joined-up file used to cost.
+        var fetched = 0;
         return Promise.all(job.files.map(function (path) {
           return fetch(job.root + path).then(function (r) {
             if (!r.ok) { throw new Error(path + " (" + r.status + ")"); }
             return r.text();
-          }).then(function (text) { return [path, text]; });
+          }).then(function (text) {
+            fetched += 1;
+            booting(job.id, 0.75 + 0.1 * fetched / job.files.length);
+            return [path, text];
+          });
         })).then(function (got) {
           putThere(py, got);
+          // draw_json is handed a function to tell how far each drawing
+          // has got (see progress.py), and lets go of it when done.
           py.runPython([
             "import sys, json, os",
             "sys.path.insert(0, os.getcwd())",
+            "from flowchart import progress",
             "from flowchart.studio.drawing import draw_for_studio",
-            "def draw_json(ask):",
+            "def draw_json(ask, hear=None):",
+            "    progress.listen(hear)",
             "    try:",
             "        return json.dumps(draw_for_studio(json.loads(ask)))",
             "    except Exception as exc:",
-            "        return json.dumps({'ok': False, 'error': str(exc)})"
+            "        return json.dumps({'ok': False, 'error': str(exc)})",
+            "    finally:",
+            "        progress.listen(None)"
           ].join("\n"));
+          booting(job.id, 1);
           return py;
         });
       });
@@ -86,7 +108,9 @@
         if (first) { self.postMessage({ id: job.id, note: "ready" }); }
         if (job.warm) { self.postMessage({ id: job.id, out: "" }); return; }
         var fn = py.globals.get("draw_json");
-        var out = fn(job.ask);
+        var out = fn(job.ask, function (stage, part) {
+          self.postMessage({ id: job.id, step: stage, part: part });
+        });
         fn.destroy();
         self.postMessage({ id: job.id, out: out });
       }).catch(function (err) {
@@ -104,6 +128,11 @@
                           { type: "text/javascript" });
       pyHand = new Worker(URL.createObjectURL(blob));
       pyHand.onmessage = function (ev) {
+        // How far a drawing has got, or Python with starting, goes to the
+        // bar whichever job it came with: starting is done once, for
+        // whichever job happened to be first, and the build waits on it.
+        if (ev.data.step) { barStep(ev.data.step, ev.data.part); return; }
+        if (ev.data.note === "ready" || ev.data.out !== undefined) { pyReady = true; }
         var job = pyJobs[ev.data.id];
         if (!job) { return; }
         if (ev.data.note) { job.note(ev.data.note); return; }
@@ -138,7 +167,7 @@
                          root: new URL(".", location.href).href,
                          files: PYFILES });
     }).then(function (text) {
-      return JSON.parse(text);
+      return barToPage(text.length).then(function () { return JSON.parse(text); });
     }, function (err) {
       // The worker could not do it at all -- blocked by the page's own
       // rules, or unable to fetch what it needs.  Better a page that
@@ -249,7 +278,194 @@
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(ask)
-    }).then(function (r) { return r.json(); });
+    }).then(function (r) { return r.text(); }).then(function (text) {
+      return barToPage(text.length).then(function () { return JSON.parse(text); });
+    });
+  }
+
+  // ------------------------------------------ how far a drawing has got --
+  // A chart of a few dozen lines is drawn before the button has finished
+  // going red.  One of thousands is seconds of it -- more on the website,
+  // where Python runs in the browser, and more again the first time, when
+  // Python itself has to be started -- and seconds of a button that says
+  // only "Drawing..." are seconds of wondering whether it has stuck.
+  //
+  // So a drawing still going after BAR_AFTER gets a bar over the stage,
+  // saying which stage it is at and how far through.  On the website the
+  // drawing itself says so as it goes (progress.py, through the worker);
+  // the served studio answers all at once, so there the bar creeps on its
+  // own, never quite reaching the end of the stage it is in until the
+  // drawing arrives.  The last stage is the page's own: a drawing of tens
+  // of thousands of shapes takes a moment to be put on the paper, and the
+  // page cannot paint while it does that, so the bar says so first.
+  var BAR_AFTER = 400;                   // ms before anything is shown
+  var BAR_BANDS = {                      // each stage's share of the bar
+    read: [0, 0.12], lay: [0.12, 0.32], draw: [0.32, 0.8],
+    send: [0.8, 0.86], page: [0.86, 1],
+    whole: [0, 0.86]                     // a drawing that says nothing as it goes
+  };
+  var BAR_SAID = { boot: "b_boot", read: "b_read", lay: "b_lay",
+                   draw: "b_draw", whole: "b_draw", send: "b_draw",
+                   page: "b_page" };
+  var drawWait = null;                   // the drawing being waited on
+  // How long a line of pseudocode takes to draw, in milliseconds, learnt
+  // from the drawings this page has had: a first guess until then, from
+  // Python on a computer and Python in a browser, which is some times
+  // slower.  It only paces the creep, so a guess that is out is a bar that
+  // creeps a little fast or slow, never one that is wrong about finishing.
+  var msPerLine = MODE === "web" ? 0.25 : 0.06;
+  var BAR_FIXED = 150;                   // what any drawing costs, however short
+  var BOOT_TAKES = 2500;                 // Python starting, give or take
+
+  function barBegin(text) {
+    barEnd(false);
+    // Python still starting takes the first half of the bar, and the
+    // drawing the rest: on a first visit, starting is the longer wait.
+    var boot = MODE === "web" && pyHand !== false && !pyReady;
+    var lines = String(text || "").split("\n").length;
+    drawWait = { boot: boot, stage: null, lo: 0, hi: 0, at: 0, drawn: -1,
+                 said: "", box: null, show: 0, creep: 0, since: Date.now(),
+                 lines: lines, drew: Date.now(),
+                 expect: BAR_FIXED + lines * msPerLine };
+    barStep(boot ? "boot" : (MODE === "web" ? "read" : "whole"), 0);
+    drawWait.show = setTimeout(barShow, BAR_AFTER);
+  }
+
+  // How long this stage ought to take, from how long the whole drawing
+  // ought to and the share of the bar the stage has.
+  function barTakes(one) {
+    if (one.stage === "boot") { return BOOT_TAKES; }
+    if (one.stage === "page") { return 400; }
+    var share = (BAR_BANDS[one.stage] || BAR_BANDS.whole);
+    return Math.max(120, one.expect * (share[1] - share[0]) / 0.86);
+  }
+
+  function barBand(stage) {
+    if (stage === "boot") { return [0, 0.5]; }
+    var band = BAR_BANDS[stage] || BAR_BANDS.whole;
+    return drawWait.boot ? [0.5 + band[0] / 2, 0.5 + band[1] / 2] : band;
+  }
+
+  // Never backwards: a report from Python still starting that arrives
+  // after the drawing has begun is old news, and is left out.
+  function barStep(stage, part) {
+    if (!drawWait || !BAR_SAID[stage]) { return; }
+    var band = barBand(stage);
+    var at = band[0] + (band[1] - band[0]) * Math.min(1, Math.max(0, part || 0));
+    if (at < drawWait.at && stage !== drawWait.stage) { return; }
+    if (stage !== drawWait.stage) {
+      // Python has finished starting: the drawing is timed from here
+      if (drawWait.stage === "boot") { drawWait.drew = Date.now(); }
+      drawWait.stage = stage;
+      drawWait.lo = band[0];
+      drawWait.hi = band[1];
+      drawWait.since = Date.now();
+    }
+    drawWait.at = Math.max(drawWait.at, at);
+    barPaint(drawWait);
+  }
+
+  function barShow() {
+    if (!drawWait || drawWait.box) { return; }
+    var stage = el("#stage");
+    if (!stage || !stage.parentNode) { return; }
+    var old = el("#build-bar");          // the last one, still on its way out
+    if (old) { old.remove(); }
+    var box = document.createElement("div");
+    box.id = "build-bar";
+    box.setAttribute("role", "progressbar");
+    box.setAttribute("aria-valuemin", "0");
+    box.setAttribute("aria-valuemax", "100");
+    box.setAttribute("aria-label", TXT.b_about || "");
+    box.innerHTML = '<div class="bb-top"><span class="bb-said"></span>' +
+                    '<span class="bb-pct"></span></div>' +
+                    '<div class="bb-track"><div class="bb-fill"></div></div>';
+    // In the frame the stage hangs its slider bars in, which is the
+    // stage's own size whatever the stage has scrolled to.
+    stage.parentNode.appendChild(box);
+    drawWait.box = box;
+    barPaint(drawWait);
+    // Between reports -- and all the way, where nothing reports -- it
+    // edges on by itself, at the pace the stage ought to go and slower
+    // the nearer it gets to the end of it, so a stage that runs long still
+    // looks like it is moving and never looks finished before it is.
+    drawWait.creep = setInterval(function () {
+      var one = drawWait;
+      if (!one) { return; }
+      var t = (Date.now() - one.since) / (barTakes(one) * 0.6);
+      var due = one.lo + (one.hi - one.lo) * 0.92 * (1 - Math.exp(-t));
+      if (due > one.at) {
+        one.at = due;
+        barPaint(one);
+      }
+    }, 120);
+  }
+
+  // Only what changed is written: this is called a dozen times a second
+  // beside a page that may be holding a very large chart.
+  function barPaint(one) {
+    if (!one || !one.box) { return; }
+    var pct = Math.floor(one.at * 100);
+    var said = TXT[BAR_SAID[one.stage]] || "";
+    if (said !== one.said) {
+      el(".bb-said", one.box).textContent = said;
+      one.said = said;
+    }
+    if (pct !== one.drawn) {
+      el(".bb-pct", one.box).textContent = pct + "%";
+      el(".bb-fill", one.box).style.transform = "scaleX(" + one.at.toFixed(3) + ")";
+      one.box.setAttribute("aria-valuenow", String(pct));
+      one.drawn = pct;
+    }
+  }
+
+  // The drawing has come back and is about to go onto the paper, which
+  // holds the page still for as long as it takes.  If the bar is up, or a
+  // drawing this big is sure to want one, it says so and gets painted
+  // first; otherwise nothing waits for it.
+  function barToPage(size) {
+    if (!drawWait) { return Promise.resolve(); }
+    // What this one took teaches the next one how long to expect -- but
+    // only a program long enough for its lines to be most of the wait.  A
+    // ten-line one is all fixed cost, and learnt from, it would have the
+    // next long one expecting minutes.
+    if (drawWait.stage !== "boot" && drawWait.lines >= 400) {
+      var took = Math.max(0, Date.now() - drawWait.drew - BAR_FIXED) / drawWait.lines;
+      msPerLine = Math.min(5, Math.max(0.01, msPerLine * 0.5 + took * 0.5));
+    }
+    if (!drawWait.box && size > 1500000) { clearTimeout(drawWait.show); barShow(); }
+    if (!drawWait.box) { return Promise.resolve(); }
+    barStep("page", 0);
+    return new Promise(function (go) {
+      var gone = false;
+      function once() { if (!gone) { gone = true; go(); } }
+      // A frame, then out of it, so the bar has been painted -- and a
+      // plain timer as well, because a tab out of sight has no frames.
+      requestAnimationFrame(function () { setTimeout(once, 0); });
+      setTimeout(once, 80);
+    });
+  }
+
+  // Done: filled to the end and then gone.  Not done -- it failed, or it
+  // was superseded -- it goes at once, and the note under the button says
+  // what went wrong.
+  function barEnd(ok) {
+    if (!drawWait) { return; }
+    var was = drawWait;
+    drawWait = null;
+    clearTimeout(was.show);
+    clearInterval(was.creep);
+    var box = was.box;
+    if (!box) { return; }
+    if (ok) {
+      was.at = 1;
+      barPaint(was);
+      box.classList.add("full");
+      setTimeout(function () { box.classList.add("going"); }, 260);
+      setTimeout(function () { box.remove(); }, 520);
+    } else {
+      box.remove();
+    }
   }
 
   // What the reading had to paper over, listed under the button that drew
@@ -708,6 +924,7 @@
       says.textContent = TXT.drawing;
       remember();
       var asked = el("#code").value;
+      barBegin(asked);                   // a bar, if it turns out to be a long one
       return askFor(Object.assign(chartOptions(), {
         text: asked,
         title: el("#f-title").value,
@@ -728,6 +945,7 @@
           setTimeout(function () { build.classList.remove("done"); }, 1300);
         });
         if (!data.ok) {
+          barEnd(false);
           says.className = "bad";
           says.textContent = data.error || TXT.failed;
           showProblems(null);
@@ -771,7 +989,9 @@
         // What goes wrong is still said, because nothing else says that.
         says.textContent = "";
         showProblems(data.problems);
+        barEnd(true);
       }).catch(function (err) {
+        barEnd(false);
         afterTheRed(function () {
           build.disabled = false;
           build.classList.remove("working");

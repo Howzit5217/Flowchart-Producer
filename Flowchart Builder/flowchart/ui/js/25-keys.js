@@ -23,6 +23,131 @@
     return ev.shiftKey ? HAND_GRID * 5 : HAND_GRID;
   }
 
+  // ------------------------------------------------------ the list of them --
+  // Every key below, said in one place.  There were twenty-odd and nothing
+  // on the page mentioned any of them, so Ctrl+Enter to build was a thing
+  // you found by accident or not at all.  Each row is the keys -- any one of
+  // the combinations will do -- and the word for what they do; a group can
+  // name the part of the page it needs, and is left out where that is not
+  // there (a chart saved beside its .svg has no pseudocode to write in).
+  var ON_MAC = /Mac|iPhone|iPad|iPod/.test(navigator.platform || navigator.userAgent || "");
+  var KEY_LIST = [
+    ["k_any", "", [
+      [[["ctrl", "enter"]], "k_build", "#build"],
+      [[["ctrl", "Z"], ["ctrl", "Y"]], "k_undo"],
+      [[["ctrl", "S"]], "f_save"],
+      [[["ctrl", "O"]], "f_open"],
+      [[["ctrl", "+"], ["ctrl", "−"], ["ctrl", "0"]], "k_zoom"],
+      [[["Esc"]], "k_close"],
+      [[["?"]], "k_keys"]
+    ]],
+    ["k_code", "#code", [
+      [[["Tab"], ["shift", "Tab"]], "k_indent"],
+      [[["enter"]], "k_enter"]
+    ]],
+    ["k_shape", "", [
+      [[["ctrl", "B"], ["ctrl", "I"], ["ctrl", "U"]], "k_look"],
+      [[["ctrl", "shift", ">"], ["ctrl", "shift", "<"]], "k_size"]
+    ]],
+    ["k_hand", "#tab-hand", [
+      [[["Tab"], ["shift", "Tab"]], "k_next"],
+      [[["← ↑ → ↓"]], "k_nudge"],
+      [[["enter"]], "m_type"],
+      [[["ctrl", "D"]], "m_copy"],
+      [[["del"]], "delete"],
+      [[["Esc"]], "k_drop"]
+    ]]
+  ];
+
+  // The Command key where there is one; the rest by the name the keyboard
+  // in this language gives them.
+  function keyName(key) {
+    if (key === "ctrl") { return ON_MAC ? "⌘" : (TXT.kn_ctrl || "Ctrl"); }
+    var named = { shift: "kn_shift", enter: "kn_enter", del: "kn_del" }[key];
+    return named ? (TXT[named] || key) : key;
+  }
+
+  function writeKeys() {
+    var body = el("#keys-body");
+    if (!body) { return; }
+    body.innerHTML = "";
+    KEY_LIST.forEach(function (group) {
+      if (group[1] && !el(group[1])) { return; }
+      var part = document.createElement("section");
+      part.className = "more-part";
+      var head = document.createElement("h3");
+      head.textContent = TXT[group[0]] || group[0];
+      part.appendChild(head);
+      group[2].forEach(function (row) {
+        if (row[2] && !el(row[2])) { return; }
+        var line = document.createElement("div");
+        line.className = "key-row";
+        var what = document.createElement("span");
+        what.className = "key-what";
+        what.textContent = TXT[row[1]] || row[1];
+        var keys = document.createElement("span");
+        keys.className = "key-keys";
+        // Keys held for every one of them are said once, in front:
+        // Ctrl + B / I / U, rather than Ctrl three times over.
+        var combos = row[0], held = combos[0].slice(0, -1);
+        var shared = combos.length > 1 && held.length && combos.every(function (c) {
+          return c.length === held.length + 1 && c.slice(0, -1).join() === held.join();
+        });
+        if (shared) {
+          combos = combos.map(function (c) { return c.slice(-1); });
+          combos[0] = held.concat(combos[0]);
+        }
+        combos.forEach(function (combo, i) {
+          if (i) {
+            var or = document.createElement("span");
+            or.className = "key-or";
+            or.textContent = "/";
+            keys.appendChild(or);
+          }
+          var together = document.createElement("span");
+          together.className = "key-combo";
+          combo.forEach(function (key, j) {
+            if (j) { together.appendChild(document.createTextNode("+")); }
+            var cap = document.createElement("kbd");
+            cap.textContent = keyName(key);
+            together.appendChild(cap);
+          });
+          keys.appendChild(together);
+        });
+        line.appendChild(what);
+        line.appendChild(keys);
+        part.appendChild(line);
+      });
+      body.appendChild(part);
+    });
+  }
+
+  // Written afresh every time it opens, so it is in whatever language the
+  // page has been changed to since.
+  function showKeys(open) {
+    var over = el("#keys-over");
+    if (!over) { return; }
+    if (open) {
+      writeKeys();
+      shutSheets();                      // the settings it was opened from
+    }
+    over.hidden = !open;
+    if (open && el("#keys-done")) { el("#keys-done").focus(); }
+  }
+
+  if (el("#keys-over")) {
+    if (el("#keys-open")) {
+      el("#keys-open").onclick = function () { showKeys(true); };
+    }
+    el("#keys-done").onclick = function () { showKeys(false); };
+    el("#keys-over").onclick = function (ev) {    // the dim behind it shuts it
+      if (ev.target === el("#keys-over")) { showKeys(false); }
+    };
+    window.addEventListener("keydown", function (ev) {
+      if (ev.key === "Escape" && !el("#keys-over").hidden) { showKeys(false); }
+    });
+  }
+
   window.addEventListener("keydown", function (ev) {
     var ctrl = ev.ctrlKey || ev.metaKey;
 
@@ -61,6 +186,14 @@
     }
 
     if (typingNow()) { return; }         // the rest are for the chart itself
+
+    // The list of them all.  A question mark is what asks for help on
+    // almost every site that has keys at all.
+    if (ev.key === "?" && !ctrl && !ev.altKey) {
+      ev.preventDefault();
+      showKeys(true);
+      return;
+    }
 
     // Stepping back is not by-hand only any more: what it puts back is the
     // colors as well as the design, and the colors are changed in both

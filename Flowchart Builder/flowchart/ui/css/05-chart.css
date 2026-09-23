@@ -101,6 +101,39 @@
   .stage-frame { flex: 1; display: flex; min-width: 0; }
   .stage-frame > #stage { flex: 1; }
 
+  /* ---------------------------------------------- a long drawing, coming -- */
+  /* Over the top of the stage, where the chart is about to be, in the frame
+     rather than the stage so it stays put whatever the stage has scrolled
+     to.  Above the panel as well: on a narrow screen the panel lies over
+     the stage, and the Build button that was pressed is in it.  It is only
+     there to be read, so a press goes straight through it. */
+  #build-bar {
+    position: absolute; z-index: 13; top: 14px; left: 0; right: 0;
+    width: min(340px, calc(100% - 32px)); margin: 0 auto;
+    padding: 10px 14px 12px; border-radius: 12px;
+    background: var(--panel); border: 1px solid var(--line);
+    box-shadow: var(--shadow); pointer-events: none;
+  }
+  .bb-top {
+    display: flex; align-items: baseline; justify-content: space-between;
+    gap: 12px; margin-bottom: 8px; font-size: 12.5px; line-height: 18px;
+  }
+  .bb-said {
+    min-width: 0; color: var(--ink); font-weight: 550;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  /* the number holds its width as it counts, so the words beside it stay */
+  .bb-pct { flex: none; color: var(--muted); font-variant-numeric: tabular-nums; }
+  .bb-track {
+    height: 6px; border-radius: 3px; overflow: hidden; background: var(--line-soft);
+  }
+  .bb-fill {
+    height: 100%; border-radius: inherit; background: var(--accent);
+    transform: scaleX(0); transform-origin: left center;
+  }
+  #build-bar.full .bb-fill { background: var(--good); }
+  @media print { #build-bar { display: none !important; } }
+
   /* ------------------------------------- the pseudocode, filling the screen -- */
   /* Filling the screen does not mean filling the width: a line of pseudocode
      dragged across a wide monitor is worse to read than one in the panel, so
@@ -131,13 +164,13 @@
      but they are switches rather than something written in, so the sheet
      is only as tall as what is in it and never the whole screen.  Past
      that it scrolls, which on a short phone is the only thing it can do. */
-  #more-over, #eg-over, #pz-over {
+  #more-over, #eg-over, #pz-over, #keys-over {
     position: fixed; inset: 0; z-index: 60; display: flex;
     align-items: center; justify-content: center; padding: 26px;
     background: var(--dim);
     -webkit-backdrop-filter: blur(3px); backdrop-filter: blur(3px);
   }
-  #more-over[hidden], #eg-over[hidden], #pz-over[hidden] {
+  #more-over[hidden], #eg-over[hidden], #pz-over[hidden], #keys-over[hidden] {
     display: none !important;
   }
   .more-sheet { width: min(460px, 100%); height: auto; max-height: 100%; }
@@ -180,6 +213,29 @@
     white-space: normal; min-width: 0; align-items: flex-start;
   }
   .eg-row .btn .tick { margin-top: 1px; }
+  /* The keys: what a key does on the left, and the keys that do it on
+     the right, each drawn as a key.  Ruled off from each other like the
+     settings are, because it is one list of one kind of thing. */
+  .key-row {
+    display: flex; align-items: center; justify-content: space-between;
+    gap: 14px; padding: 7px 0; border-top: 1px solid var(--line-soft);
+    font-size: 13px;
+  }
+  .more-part h3 + .key-row { border-top: 0; padding-top: 2px; }
+  .key-what { min-width: 0; color: var(--ink); }
+  .key-keys {
+    flex: none; max-width: 58%; display: inline-flex; flex-wrap: wrap;
+    align-items: center; justify-content: flex-end; gap: 4px 0;
+    color: var(--muted); font-size: 11.5px;
+  }
+  .key-combo { display: inline-flex; align-items: center; gap: 2px; white-space: nowrap; }
+  .key-or { margin: 0 5px; }
+  kbd {
+    display: inline-block; min-width: 22px; padding: 1px 6px;
+    border: 1px solid var(--line); border-bottom-width: 2px; border-radius: 5px;
+    background: var(--field); color: var(--ink); text-align: center;
+    font: 600 11.5px/17px "Cascadia Mono", Consolas, "SF Mono", Menlo, monospace;
+  }
   /* The puzzles are numbers now, so they go in a grid of small squares
      rather than a column of sentences: ten of them take four rows of
      reading as names and two as numbers, and which ones are done is the
