@@ -48,6 +48,46 @@ PNG_FRAMES = ((1920, 1080), (1080, 1080))   # and the fixed picture sizes it
 SHAPE_NAMES = ("auto", "square", "wide", "page", "tall")
 
 
+_SMALL = {"a", "an", "and", "as", "at", "by", "for", "from", "in", "into", "of",
+          "on", "or", "per", "the", "to", "vs", "with"}
+_CAPS = {"bmi", "gpa", "gcd", "lcm", "atm", "id", "pin", "cpu", "gpu", "mph",
+         "kph", "usa", "uk", "hw", "cs", "cis", "csc", "cse", "io", "ui", "pc",
+         "tv", "faq", "diy", "ok", "rgb", "html", "css", "sql", "url", "api",
+         "pdf", "gps", "dna", "vat"}
+
+
+def as_title(name):
+    """A file's name as a heading: tuition_increase is Tuition Increase.
+
+    A chart drawn from tuition_increase.txt with no --title used to be
+    headed with the file's name as it stands, underscores and all.  The
+    joins are made spaces, salesTax is split where its capitals are, and
+    a name all in small letters (or all in capitals) is given a capital
+    to each word.  One somebody wrote with capitals of their own keeps
+    them.  The page's version, for files opened there, is tidyName in
+    ui/js/09-names.js.
+    """
+    s = str(name or "").strip()
+    joined = " " not in s or "_" in s
+    if joined:
+        s = re.sub(r"[_+]+|(?<!\d)[.\-]+|[.\-]+(?!\d)", " ", s)
+        s = re.sub(r"(?<=[a-z])(?=[A-Z])", " ", s)
+        s = re.sub(r"(?<=[A-Z])(?=[A-Z][a-z])", " ", s)
+        s = re.sub(r"(?<=[A-Za-z]{2})(?=\d)", " ", s)      # lab3, but not q4
+    s = " ".join(s.split())
+    shout = not re.search(r"[a-z]", s)
+    if not joined and not shout and re.search(r"[A-Z]", s):
+        return s
+    words = []
+    for n, w in enumerate(s.split(" ")):
+        w = w.lower() if shout else w
+        if w in _CAPS:
+            w = w.upper()
+        elif w == w.lower() and not (n and w in _SMALL):
+            w = w[:1].upper() + w[1:]
+        words.append(w)
+    return " ".join(words)
+
 
 def to_page(svg, title=None, name="flowchart", source=None, seed=None,
             web=False):
@@ -77,7 +117,7 @@ def to_page(svg, title=None, name="flowchart", source=None, seed=None,
     for fw, fh in PNG_FRAMES:
         options.append('      <option value="%dx%d">%d × %d</option>'
                        % (fw, fh, fw, fh))
-    heading = title or name
+    heading = title or as_title(name)
     # The seed is how the same chart is drawn again from the command line;
     # it is of no use to somebody reading the chart, so it is not paraded
     # across the top of it.

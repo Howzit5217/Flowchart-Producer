@@ -589,6 +589,71 @@ def _():
     return not bad, "%d programs named%s" % (seen, "" if not bad else " -- " + "; ".join(bad[:3]))
 
 
+# Programs opened from files, and what the Title box should say: the file's
+# name as a title when it says something, else what the program calls
+# itself, else what it does.  (file name, program, title)
+_TUITION = SHELF["shelf_tuition"][0]
+FILED = [
+    ("tuition_increase.txt", _TUITION, "Tuition Increase"),
+    ("SALES_TAX.txt", _TUITION, "Sales Tax"),
+    ("salesTax - Copy (2).txt", _TUITION, "Sales Tax"),
+    ("BMI-calculator.txt", _TUITION, "BMI Calculator"),
+    ("shipping_charges_v2.txt", _TUITION, "Shipping Charges"),
+    ("Sales tax for 2026.txt", _TUITION, "Sales tax for 2026"),
+    ("hw3.txt", _TUITION, "Tuition Increase"),
+    ("New Text Document (2).txt", _TUITION, "Tuition Increase"),
+    ("Chapter5_Exercise7.txt", _TUITION, "Tuition Increase"),
+    ("lab2.txt", "Set x = 5\n", "Lab 2"),
+    ("tuition.txt", "// Tuition Increase Calculator\n" + _TUITION,
+     "Tuition Increase Calculator"),
+    ("hw3.txt", "// ===== sales_tax =====\n" + _TUITION, "Sales Tax"),
+    ("hw3.txt", "/*\n * Title: tuition_increase.txt\n */\n" + _TUITION, "Tuition Increase"),
+    ("hw3.txt", "// Author: Pat Lee\n// Date: 9/24\n// Declare variables\n" + _TUITION,
+     "Tuition Increase"),
+    ("hw3.txt", "// Name: Pat Lee\n// This program works out the tax; then shows it.\n"
+                "Set x = 5\n", "Works out the tax"),
+]
+
+
+@check("a program opened from a file is called something tidy")
+def _():
+    """Opened from tuition_increase.txt, a program is Tuition Increase, not
+    tuition_increase; from hw3.txt or New Text Document.txt, whose names
+    say nothing about it, it is called what it calls itself (// Sales Tax
+    Calculator) or what it does -- and a comment that is no name (Author:,
+    // Declare variables) is passed over.  The page drawn from the command
+    line, with no --title, heads itself with the file's name the same way."""
+    fb = builder()
+    from flowchart.page import as_title
+    bad = []
+    for name, want in (("tuition_increase", "Tuition Increase"), ("salesTax", "Sales Tax"),
+                       ("SALES_TAX", "Sales Tax"), ("lab3", "Lab 3"),
+                       ("Sales tax 2026", "Sales tax 2026")):
+        if as_title(name) != want:
+            bad.append("as_title(%r) is %r" % (name, as_title(name)))
+    if not node_there():
+        return not bad, "; ".join(bad) or "node is not installed -- only the command line's checked"
+    with tempfile.NamedTemporaryFile("w", suffix=".json", delete=False,
+                                     encoding="utf-8") as words:
+        json.dump(fb.WORDS["en"], words)
+    with tempfile.NamedTemporaryFile("w", suffix=".json", delete=False,
+                                     encoding="utf-8") as files:
+        json.dump([[name, code] for name, code, _ in FILED], files)
+    try:
+        got = subprocess.run(["node", os.path.join(HERE, "names.js"), words.name,
+                              "--files", files.name],
+                             capture_output=True, text=True, encoding="utf-8", timeout=60)
+    finally:
+        os.unlink(words.name)
+        os.unlink(files.name)
+    if got.returncode:
+        return False, got.stderr.strip()[-300:]
+    for (name, code, want), (_, said) in zip(FILED, json.loads(got.stdout)):
+        if said != want:
+            bad.append("%s: %r, not %r" % (name, said, want))
+    return not bad, "%d files named%s" % (len(FILED), "" if not bad else " -- " + "; ".join(bad[:3]))
+
+
 # ------------------------------------------------------------- the shapes --
 @check("every shape is drawn, named and sized")
 def _():

@@ -78,14 +78,13 @@
     if (!String(text).trim()) { fileSays(TXT.f_empty, true); return; }
     el("#code").value = String(text).replace(/\r\n?/g, "\n");
     showStarts();                        // there is pseudocode now: fold the offer away
-    // Called what the file is called, unless it is only called that
-    // because nobody named it: then what it says is a better name.
-    var called = String(name).replace(/\.[^.]*$/, "");
-    if (/^(untitled|new|program|pseudocode|flowchart|document)[\s_-]*\d*$/i.test(called)) {
-      newProgram();
-    } else {
-      titleComesFrom({ text: called });
-    }
+    // Called what the file is called, made into a title (tuition_increase
+    // is Tuition Increase) -- unless the program heads itself with a name,
+    // or the file is called nothing much (New Text Document, hw3): then
+    // what it says it is, or what it does, is the better name (fileTitle,
+    // 09-names.js).
+    var called = fileTitle(name, el("#code").value);
+    if (called) { titleComesFrom({ text: called }); } else { newProgram(); }
     // Draw it, rather than put the old paper back: this is a new program,
     // not the one the pseudocode side was looking at before.
     setMode(false);

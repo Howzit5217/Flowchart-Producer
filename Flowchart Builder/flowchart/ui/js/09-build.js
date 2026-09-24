@@ -859,11 +859,12 @@
   // A new program in the box names itself in the Title box, so a chart is
   // headed with what it is without anybody stopping to type it.  An example
   // is called what its button says; a puzzle is only numbered, for the
-  // reason the puzzles give (its name is most of the answer); and anything
-  // else is called by the comment it opens with, or failing that by what
-  // it does (see 09-names.js), or failing even that by the first thing it
-  // says.  A title somebody typed is theirs and is never written over: only
-  // an empty one, or one put there by this, is.
+  // reason the puzzles give (its name is most of the answer); a file by
+  // its name, tidied, if that says anything; and anything else by the
+  // heading it opens with, or failing that by what it does (see
+  // 09-names.js), or failing even that by what a comment says it does or
+  // the first thing it says.  A title somebody typed is theirs and is
+  // never written over: only an empty one, or one put there by this, is.
   //
   // Where the name came from is kept, not the name, so it is said in the
   // language of the page at each drawing -- and so an example with a line
@@ -895,24 +896,17 @@
       if (pz) { return { puzzle: pz }; }
     }
     // Only the top of it is read: a chart of a hundred thousand lines is
-    // named by its first few, like any other.
-    var lines = code.slice(0, 4000).split("\n");
-    var said = "";
-    for (var i = 0; i < lines.length && i < 60; i++) {
-      var line = lines[i].trim();
-      var note = /^(?:\/\/+|\/\*+)\s*(.*?)\s*(?:\*+\/)?$/.exec(line);
-      if (note) {
-        if (note[1] && !said) { return { text: shortTitle(note[1]), guess: true }; }
-        continue;
-      }
-      if (!said) {
-        var put = /^(?:display|print|output|write)\b\s*(["'])(.*?)\1/i.exec(line);
-        if (put && put[2].trim()) { said = put[2]; }
-      }
-    }
+    // named by its first few, like any other.  A heading it gives itself
+    // comes first (// Sales Tax Calculator, // sales_tax as Sales Tax);
+    // then what it does; and only then what a comment says it does, or
+    // the first thing it shows (topNotes, 09-names.js).  A comment that is
+    // no name -- Author: Pat Lee, // Declare variables -- is passed over.
+    var notes = topNotes(code);
+    if (notes.heading) { return { text: notes.heading, guess: true }; }
     var does = describeProgram(code);
     if (does) { return { text: does, guess: true }; }
-    return said ? { text: shortTitle(said.replace(/[\s.:,;!?-]+$/, "")), guess: true } : null;
+    var last = notes.about || notes.said;
+    return last ? { text: last, guess: true } : null;
   }
 
   function shortTitle(s) {

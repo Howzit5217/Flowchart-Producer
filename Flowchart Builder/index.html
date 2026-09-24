@@ -8559,11 +8559,12 @@
   // A new program in the box names itself in the Title box, so a chart is
   // headed with what it is without anybody stopping to type it.  An example
   // is called what its button says; a puzzle is only numbered, for the
-  // reason the puzzles give (its name is most of the answer); and anything
-  // else is called by the comment it opens with, or failing that by what
-  // it does (see 09-names.js), or failing even that by the first thing it
-  // says.  A title somebody typed is theirs and is never written over: only
-  // an empty one, or one put there by this, is.
+  // reason the puzzles give (its name is most of the answer); a file by
+  // its name, tidied, if that says anything; and anything else by the
+  // heading it opens with, or failing that by what it does (see
+  // 09-names.js), or failing even that by what a comment says it does or
+  // the first thing it says.  A title somebody typed is theirs and is
+  // never written over: only an empty one, or one put there by this, is.
   //
   // Where the name came from is kept, not the name, so it is said in the
   // language of the page at each drawing -- and so an example with a line
@@ -8595,24 +8596,17 @@
       if (pz) { return { puzzle: pz }; }
     }
     // Only the top of it is read: a chart of a hundred thousand lines is
-    // named by its first few, like any other.
-    var lines = code.slice(0, 4000).split("\n");
-    var said = "";
-    for (var i = 0; i < lines.length && i < 60; i++) {
-      var line = lines[i].trim();
-      var note = /^(?:\/\/+|\/\*+)\s*(.*?)\s*(?:\*+\/)?$/.exec(line);
-      if (note) {
-        if (note[1] && !said) { return { text: shortTitle(note[1]), guess: true }; }
-        continue;
-      }
-      if (!said) {
-        var put = /^(?:display|print|output|write)\b\s*(["'])(.*?)\1/i.exec(line);
-        if (put && put[2].trim()) { said = put[2]; }
-      }
-    }
+    // named by its first few, like any other.  A heading it gives itself
+    // comes first (// Sales Tax Calculator, // sales_tax as Sales Tax);
+    // then what it does; and only then what a comment says it does, or
+    // the first thing it shows (topNotes, 09-names.js).  A comment that is
+    // no name -- Author: Pat Lee, // Declare variables -- is passed over.
+    var notes = topNotes(code);
+    if (notes.heading) { return { text: notes.heading, guess: true }; }
     var does = describeProgram(code);
     if (does) { return { text: does, guess: true }; }
-    return said ? { text: shortTitle(said.replace(/[\s.:,;!?-]+$/, "")), guess: true } : null;
+    var last = notes.about || notes.said;
+    return last ? { text: last, guess: true } : null;
   }
 
   function shortTitle(s) {
@@ -9651,6 +9645,165 @@
       return say(avg ? "d_average_of" : "d_total_of", { what: titleWords(words) });
     }
     return "";
+  }
+
+  // ---- a name written the way a file has to be, made into a title ----------
+  // A file is called tuition_increase.txt, salesTax.txt or BMI-CALC.txt
+  // because a file name cannot have much else in it, and a program is headed
+  // // sales_tax for the same reason.  As a title that is Tuition Increase,
+  // Sales Tax, BMI Calc: the joins made spaces, the words given capitals,
+  // and "(2)", "- Copy" and "Copy of" -- which say it was copied, not what
+  // it is -- left off.  A name somebody wrote out with care (Sales tax for
+  // 2026, iPhone Prices) keeps the capitals they gave it.
+  var NAME_SMALL = /^(a|an|and|as|at|by|for|from|in|into|of|on|or|per|the|to|vs|with)$/;
+  var NAME_CAPS = /^(bmi|gpa|gcd|lcm|atm|id|pin|cpu|gpu|mph|kph|usa|uk|hw|cs|cis|csc|cse|io|ui|pc|tv|faq|diy|ok|rgb|html|css|sql|url|api|pdf|gps|dna|vat)$/;
+
+  function tidyName(s) {
+    s = String(s || "").replace(/\s+/g, " ").trim()
+      .replace(/\.(txt|text|md|rtf|docx?|odt|pdf|json|pseudo|psc|pcode|fprg|flo|flow|html?|py|js|java|cpp|c|cs|vb|bas)$/i, "")
+      .replace(/^copy of /i, "").replace(/( ?- ?copy)?( ?\(\d+\))?$/i, "").trim();
+    var joined = !/ /.test(s) || /_/.test(s);        // written as a file or a variable is
+    if (joined) {
+      s = s.replace(/[_+]+/g, " ")
+        // sales-tax, sales.tax -- but Program 3-1 and 2.5 are left whole
+        .replace(/[.\-]+/g, function (m, at, all) {
+          return /\d/.test(all.charAt(at - 1)) && /\d/.test(all.charAt(at + m.length)) ? m : " ";
+        })
+        .replace(/([a-z])([A-Z])/g, "$1 $2")          // salesTax
+        .replace(/([A-Z]+)([A-Z][a-z])/g, "$1 $2")    // BMICalc
+        .replace(/([A-Za-z]{2,})(\d)/g, "$1 $2")      // lab3, but not q4
+        .replace(/(\d)(?!(?:st|nd|rd|th)(?![A-Za-z]))([A-Za-z]{2,})/g, "$1 $2")
+        .replace(/\s+/g, " ").trim();
+      // shipping_charges_v2, tax_final: which copy it is, not what
+      var bare = s.replace(/(?: (?:v|ver|version|rev) ?\d+(?:\.\d+)*| final| draft| backup| bak| old)+$/i, "");
+      if (bare) { s = bare; }
+    }
+    var shout = !/[a-z]/.test(s);                   // SALES_TAX
+    if (!joined && !shout && /[A-Z]/.test(s)) { return shortTitle(s); }
+    return shortTitle(s.split(" ").map(function (w, n) {
+      if (shout) { w = w.toLowerCase(); }
+      if (w !== w.toLowerCase()) { return w; }     // BMI, iPhone: as it was written
+      if (NAME_CAPS.test(w)) { return w.toUpperCase(); }
+      if (n && NAME_SMALL.test(w)) { return w; }
+      return w.charAt(0).toUpperCase() + w.slice(1);
+    }).join(" "));
+  }
+
+  // How much a name says about the program.  0: nothing -- it is the name
+  // a file gets when nobody names it (Untitled, New Text Document, test).
+  // 1: which piece of work it is, not what it does (HW 3, Lab 2 Part B,
+  // Chapter 5 Exercise 7, My Program).  2: something (Tuition Increase).
+  var NAME_NOBODY = /^(untitled|unnamed|new|text|document|doc|file|program|prog|pseudocode|pseudo|code|flowchart|flow|chart|copy|draft|final|test|testing|temp|tmp|\d+|[a-z])$/;
+  var NAME_LABEL = /^(hw|homework|lab|labs|assignment|assign|asgn|asg|project|proj|exercise|exercises|ex|exer|problem|problems|prob|question|q|part|pt|chapter|chap|ch|unit|lesson|week|wk|module|mod|activity|task|quiz|exam|midterm|practice|sample|example|my|the|of|a|and|no|num|number|set|section|sec|period|v|ver|version|rev|main|cs|cis|csc|cse|cop|programming|challenge|\d+[a-z]|[a-z]\d+|\d+(st|nd|rd|th))$/;
+
+  function nameWorth(s) {
+    var words = String(s || "").toLowerCase().match(/[a-z0-9]+/g) || [];
+    if (words.every(function (w) { return NAME_NOBODY.test(w); })) { return 0; }
+    return words.every(function (w) {
+      return NAME_NOBODY.test(w) || NAME_LABEL.test(w);
+    }) ? 1 : 2;
+  }
+
+  // ---- what the comments at the top of a program call it -----------------
+  // A comment at the top is where a program says what it is, but not every
+  // comment there does.  "Title: sales_tax" and a short heading (// Tuition
+  // Increase Calculator) name it.  "This program works out the sales tax"
+  // says what it does -- which, said as a name, is "Works out the sales
+  // tax" -- and so does a comment that starts with what it does (Calculate
+  // the tax).  "Author: Pat Lee", "Date: 9/24" and "Name: ..." say who wrote
+  // it, when and for which class; // Declare variables and // Get the input
+  // are steps of it; and "Chapter 5 Exercise 7" is where it came from.  None
+  // of those is a name.
+  var NOTE_NAMED = /^(?:title|name of (?:the )?program|program(?: name)?|project(?: name)?|file(?: ?name)?)\s*[:=\-–—]\s*(.+)$/i;
+  var NOTE_PURPOSE = /^(?:purpose|description|summary|about|goal|objective|task|what it does)\s*[:\-–—]\s*(.+)$/i;
+  var NOTE_LABEL = /^[A-Za-z][A-Za-z.#']*(?: [A-Za-z.#']+){0,2}\s*:/;
+  var NOTE_THIS = /^(?:(?:this|the|my)\s+(?:program|module|script|code|flowchart|pseudocode|algorithm|app)\s+(?:(?:will|should|is used to|is going to|is meant to)\s+)?|(?:a\s+)?(?:program|module|script|flowchart|pseudocode|algorithm)\s+(?:to|that|which)\s+)(?:(?:lets?|allows?|helps?)\s+(?:the\s+)?user\s+(?:to\s+)?)?(?=[a-z])/i;
+  var NOTE_STEP = /^(declare|declaring|declarations?|variables?|vars?|constants?|named|local|global|globals|initiali[sz]e|initiali[sz]ation|init|setup|get|read|input|inputs|prompt|display|print|output|outputs|show|set|call|main|start|begin|end|stop|return|loop|step|todo|note|notes|header|comments?)\b/i;
+  var NOTE_DOES = /^(calculates?|computes?|determines?|finds?|works?|converts?|checks?|counts?|adds?|sums?|asks?|repeats?|keeps?|updates?|increases?|decreases?|figures?|shows?|displays?|prints?|reads?|gets?|lets?|allows?|uses?|tells?|takes?|makes?|plays?|simulates?|generates?|sorts?|searches?|tracks?|lists?|compares?|decides?|estimates?|predicts?|prompts?|accepts?)\b/i;
+
+  // One comment, read: { text, heading } -- a heading being a name it
+  // was given, the rest what it says it does -- or null for neither.
+  function noteTitle(s) {
+    s = String(s || "").replace(/^[\s*=#~_+\-\/|]+|[\s*=#~_+\-\/|]+$/g, "");
+    if (!s) { return null; }
+    var m = NOTE_NAMED.exec(s);
+    if (m) {
+      var named = tidyName(m[1]);
+      return nameWorth(named) ? { text: named, heading: true } : null;
+    }
+    m = NOTE_PURPOSE.exec(s);
+    if (m) { return aboutNote(m[1]); }
+    if (NOTE_LABEL.test(s)) { return null; }       // who, when, for which class
+    if (NOTE_THIS.test(s)) { return aboutNote(s.replace(NOTE_THIS, "")); }
+    if (NOTE_STEP.test(s)) { return null; }        // a step of it, not its name
+    if (NOTE_DOES.test(s)) { return aboutNote(s); }
+    // "Flowchart for tuition" is a heading for Tuition.
+    s = s.replace(/^(?:(?:the|a|my)\s+)?(?:flowchart|pseudocode|program|algorithm|code)\s+(?:for|of)\s+(?:(?:a|an|the)\s+)?(?=\S)/i, "");
+    var head = tidyName(s);
+    if (s.split(" ").length <= 6 && !/[.?!,;]$/.test(s) && nameWorth(head) === 2) {
+      return { text: head, heading: true };
+    }
+    return nameWorth(s) === 2 ? aboutNote(s) : null;
+  }
+
+  // What a comment says the program does, as far as its first full stop.
+  function aboutNote(s) {
+    s = String(s).split(/[.;!?](?:\s|$)/)[0].replace(/[\s.:,;!?\-]+$/, "").trim();
+    return s ? { text: shortTitle(s.charAt(0).toUpperCase() + s.slice(1)), heading: false }
+             : null;
+  }
+
+  // The top of a program, read for a name: the heading it gives itself, if
+  // it gives one; what its comments say it does; and the first thing it
+  // shows.  Only comments above the first Display count -- one further down
+  // is about that part of it, not the whole -- and a /* block */ is read
+  // line by line like the rest.
+  function topNotes(code) {
+    var lines = String(code || "").slice(0, 4000).split("\n");
+    var got = { heading: "", about: "", said: "" };
+    var inBlock = false;
+    for (var i = 0; i < lines.length && i < 60; i++) {
+      var line = lines[i].trim(), text = null;
+      var block = inBlock ? line : /^\/\*/.test(line) ? line.slice(2) : null;
+      if (block !== null) {
+        inBlock = block.indexOf("*/") < 0;
+        text = block.replace(/\*\/[\s\S]*$/, "").replace(/^[\s*]+/, "");
+      } else if (/^\/\//.test(line)) {
+        text = line.replace(/^\/+\s*/, "");
+      }
+      if (text !== null) {
+        if (got.said || !text) { continue; }
+        var one = noteTitle(text);
+        if (one && one.heading) { got.heading = one.text; return got; }
+        if (one && !got.about) { got.about = one.text; }
+        continue;
+      }
+      if (!got.said) {
+        var put = /^(?:display|print|output|write)\b\s*(["'])(.*?)\1/i.exec(line);
+        if (put && put[2].trim()) {
+          got.said = shortTitle(put[2].replace(/[\s.:,;!?-]+$/, ""));
+        }
+      }
+    }
+    return got;
+  }
+
+  // What a program opened from a file is called: what the file is called,
+  // made into a title, when that says something about it.  Not when the
+  // program heads itself with a name of its own -- that is the better
+  // name -- and not when the file's name only says which piece of work it
+  // is (hw3.txt, Lab 2 Part B.txt) or nothing at all (New Text Document):
+  // then "" is said, and the program is called what it says it is or what
+  // it does, read afresh at every drawing (fillTitle, 09-build.js).  Only
+  // when the program gives nothing to go on is "Lab 2" better than that.
+  function fileTitle(file, code) {
+    var called = tidyName(String(file || "").replace(/\.[A-Za-z][A-Za-z0-9]{0,7}$/, ""));
+    var notes = topNotes(code);
+    if (notes.heading) { return ""; }
+    var worth = nameWorth(called);
+    if (worth === 2) { return called; }
+    if (!worth || notes.about || notes.said || describeProgram(code)) { return ""; }
+    return called;
   }
   // =========================================================== by hand ==
   // Shapes you put where you want them, joined up by hand, and a check that
@@ -17425,14 +17578,13 @@
     if (!String(text).trim()) { fileSays(TXT.f_empty, true); return; }
     el("#code").value = String(text).replace(/\r\n?/g, "\n");
     showStarts();                        // there is pseudocode now: fold the offer away
-    // Called what the file is called, unless it is only called that
-    // because nobody named it: then what it says is a better name.
-    var called = String(name).replace(/\.[^.]*$/, "");
-    if (/^(untitled|new|program|pseudocode|flowchart|document)[\s_-]*\d*$/i.test(called)) {
-      newProgram();
-    } else {
-      titleComesFrom({ text: called });
-    }
+    // Called what the file is called, made into a title (tuition_increase
+    // is Tuition Increase) -- unless the program heads itself with a name,
+    // or the file is called nothing much (New Text Document, hw3): then
+    // what it says it is, or what it does, is the better name (fileTitle,
+    // 09-names.js).
+    var called = fileTitle(name, el("#code").value);
+    if (called) { titleComesFrom({ text: called }); } else { newProgram(); }
     // Draw it, rather than put the old paper back: this is a new program,
     // not the one the pseudocode side was looking at before.
     setMode(false);
@@ -23458,8 +23610,12 @@
           return n.kind === "oval" ? "" : (n.kind === "diamond" ? "If " : "") + n.text;
         })
       : el("#code").value.slice(0, 20000).split("\n");
+    // A heading the program gives itself is its name, as on the Title box.
+    var notes = byHand ? {} : topNotes(el("#code").value);
+    if (notes.heading) { return notes.heading; }
     var does = describeProgram(lines.join("\n"));
     if (does) { return does; }
+    if (notes.about) { return notes.about; }
     for (var i = 0; i < lines.length; i++) {
       var line = String(lines[i] || "").trim();
       if (line && !/^(start|begin|main|stop|end)$/i.test(line)) {

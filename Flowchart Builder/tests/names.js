@@ -5,6 +5,7 @@
 //  straight out of flowchart/ui/js/09-names.js, with the words handed over
 //  by run.py, and asked about every example and every puzzle the page
 //  offers.  What it said comes back as JSON, one [key, name] pair apiece.
+//  With --files it names programs opened from files instead (see below).
 // ---------------------------------------------------------------------------
 var fs = require("fs"), path = require("path");
 
@@ -21,6 +22,20 @@ function shortTitle(s) {                  // as 09-build.js has it
   return s.length > 48 ? s.slice(0, 46).trim() + "…" : s;
 }
 eval(fs.readFileSync(path.join(UI, "09-names.js"), "utf8"));
+
+// Or, given --files, what the Title box says for programs opened from
+// files: [file name, program] pairs in, [file name, title] pairs out --
+// the file's name made a title, or else what the program is read as
+// (titleFromWords in 09-build.js, less the examples and puzzles).
+if (process.argv[3] === "--files") {
+  process.stdout.write(JSON.stringify(
+    JSON.parse(fs.readFileSync(process.argv[4], "utf8")).map(function (one) {
+      var notes = topNotes(one[1]);
+      return [one[0], fileTitle(one[0], one[1]) || notes.heading ||
+                      describeProgram(one[1]) || notes.about || notes.said];
+    })));
+  process.exit(0);
+}
 
 // A list the page writes out as a literal, read the way the page reads it.
 function literal(file, name) {
