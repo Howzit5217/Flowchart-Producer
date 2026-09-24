@@ -149,20 +149,14 @@
   .slide-frame.has-y > .slider.x { right: 15px; }
   .slide-frame.has-x > .slider.y { bottom: 15px; }
   .slider.none { display: none; }
-  /* The panel's bar lies over the panel's own right-hand margin rather
-     than standing in a strip beside it.  Given a strip only while the bar
-     was up, every word in the panel moved over fifteen pixels and back --
-     re-wrapping, and so changing how long the panel was, which is the very
-     thing that says whether the bar is wanted.  Kept for good, the strip
-     was an empty band down the side of a panel with nothing to scroll.
-     Laid over the sixteen pixels every card keeps clear on its right, the
-     same fifteen-pixel bar as everywhere else takes no room at all:
-     nothing moves when it comes, nothing is left when it goes (07-motion.css
-     slides it), and it covers nothing.  It starts under the panel's top bar,
-     which never scrolls and keeps only twelve pixels clear on its right;
-     24-scroll.js measures how tall that is into --top-bar. */
-  #panel.slide-frame.room.has-y { padding-right: 0; }
-  #panel > .slider.y { top: var(--top-bar, 0px); }
+  /* The panel's bar has a strip of its own only while it is up, like any
+     bar over words (.room above): kept for good, the strip was an empty
+     band down the side of a panel with nothing to scroll.  It comes and
+     goes gently rather than at once -- the bar slides in from the edge and
+     the panel slides over to make room for it, both at the one pace
+     (07-motion.css).  That cannot see-saw: narrowing only makes the panel
+     longer, so a bar that was wanted stays wanted, and widening only makes
+     it shorter, so one that was not is still not. */
   .slider-track { position: relative; flex: 1; min-width: 0; min-height: 0; }
   .slider-grip {
     position: absolute; border-radius: 99px; background: var(--line);
@@ -2463,8 +2457,11 @@
      as it is given up.  What is inside keeps its full width while it narrows;
      otherwise every word in it would re-wrap on the way out, which looks like
      the panel falling apart rather than closing. */
+  /* (padding-right is the room its slider bar takes as it slides in: see
+     the panel's bar, further down) */
   #panel {
     transition: width var(--move) var(--ease),
+                padding-right var(--move) var(--ease),
                 opacity .16s var(--ease-soft),
                 border-color var(--quick) var(--ease-soft),
                 visibility 0s;
@@ -2482,6 +2479,7 @@
     display: flex; width: 0; padding: 0; opacity: 0; visibility: hidden;
     border-color: transparent; pointer-events: none;
     transition: width var(--move) var(--ease),
+                padding-right var(--move) var(--ease),
                 opacity .16s var(--ease-soft),
                 border-color var(--quick) var(--ease-soft),
                 visibility 0s linear var(--move);
@@ -3114,8 +3112,11 @@
   }
   .slider-step:active { transform: scale(.88); }
   /* The panel's bar slides in from the edge when there is something to
-     scroll and back out when there is not, in the strip the panel keeps
-     for it (01-base.css), rather than blinking on and off. */
+     scroll and back out when there is not, rather than blinking on and
+     off, and what is in the panel slides over by the same amount at the
+     same pace to make room for it (01-base.css) -- the two move as one.
+     The sliding over is the padding-right in the panel's own transitions,
+     with its closing, above. */
   #panel > .slider.y {
     transition: transform var(--move) var(--ease),
                 opacity var(--quick) var(--ease-soft), visibility 0s;
@@ -18976,18 +18977,7 @@
   // itself: a card folded away changes how far there is to scroll without
   // changing the size of the panel by a pixel.
   if (el("#panel")) {
-    // Its bar lies over the panel's own margin and starts under the top
-    // bar, which does not scroll (01-base.css): measured with the rest.
-    var topBarWas = -1;
-    var underTopBar = function () {
-      var top = el("#panel .panel-top"), tall = top ? top.offsetHeight : 0;
-      if (tall !== topBarWas) {
-        topBarWas = tall;
-        el("#panel").style.setProperty("--top-bar", tall + "px");
-      }
-    };
-    ownSliders(slideIn(el("#panel"), "room"), el("#panel"),
-               { deep: true, after: underTopBar });
+    ownSliders(slideIn(el("#panel"), "room"), el("#panel"), { deep: true });
   }
 
   // And the rest of them, each wrapped where it stands.  "room" is a bar

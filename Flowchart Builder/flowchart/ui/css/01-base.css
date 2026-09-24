@@ -137,20 +137,14 @@
   .slide-frame.has-y > .slider.x { right: 15px; }
   .slide-frame.has-x > .slider.y { bottom: 15px; }
   .slider.none { display: none; }
-  /* The panel's bar lies over the panel's own right-hand margin rather
-     than standing in a strip beside it.  Given a strip only while the bar
-     was up, every word in the panel moved over fifteen pixels and back --
-     re-wrapping, and so changing how long the panel was, which is the very
-     thing that says whether the bar is wanted.  Kept for good, the strip
-     was an empty band down the side of a panel with nothing to scroll.
-     Laid over the sixteen pixels every card keeps clear on its right, the
-     same fifteen-pixel bar as everywhere else takes no room at all:
-     nothing moves when it comes, nothing is left when it goes (07-motion.css
-     slides it), and it covers nothing.  It starts under the panel's top bar,
-     which never scrolls and keeps only twelve pixels clear on its right;
-     24-scroll.js measures how tall that is into --top-bar. */
-  #panel.slide-frame.room.has-y { padding-right: 0; }
-  #panel > .slider.y { top: var(--top-bar, 0px); }
+  /* The panel's bar has a strip of its own only while it is up, like any
+     bar over words (.room above): kept for good, the strip was an empty
+     band down the side of a panel with nothing to scroll.  It comes and
+     goes gently rather than at once -- the bar slides in from the edge and
+     the panel slides over to make room for it, both at the one pace
+     (07-motion.css).  That cannot see-saw: narrowing only makes the panel
+     longer, so a bar that was wanted stays wanted, and widening only makes
+     it shorter, so one that was not is still not. */
   .slider-track { position: relative; flex: 1; min-width: 0; min-height: 0; }
   .slider-grip {
     position: absolute; border-radius: 99px; background: var(--line);
