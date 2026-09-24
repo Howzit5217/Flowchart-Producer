@@ -260,8 +260,8 @@
      as it is given up.  What is inside keeps its full width while it narrows;
      otherwise every word in it would re-wrap on the way out, which looks like
      the panel falling apart rather than closing. */
-  /* (padding-right is the room its slider bar is given as it slides in,
-     which widens the panel: see the panel's bar, further down) */
+  /* (padding-right is the room its slider bar takes as it slides in: see
+     the panel's bar, further down) */
   #panel {
     transition: width var(--move) var(--ease),
                 padding-right var(--move) var(--ease),
@@ -916,9 +916,10 @@
   .slider-step:active { transform: scale(.88); }
   /* The panel's bar slides in from the edge when there is something to
      scroll and back out when there is not, rather than blinking on and
-     off, and the panel widens by the same amount at the same pace to take
-     it (01-base.css) -- the two move as one.  The widening is the
-     padding-right in the panel's own transitions, with its closing, above. */
+     off, and what is in the panel slides over by the same amount at the
+     same pace to make room for it (01-base.css) -- the two move as one.
+     The sliding over is the padding-right in the panel's own transitions,
+     with its closing, above. */
   #panel > .slider.y {
     transition: transform var(--move) var(--ease),
                 opacity var(--quick) var(--ease-soft), visibility 0s;

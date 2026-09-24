@@ -151,18 +151,12 @@
   .slider.none { display: none; }
   /* The panel's bar has a strip of its own only while it is up, like any
      bar over words (.room above): kept for good, the strip was an empty
-     band down the side of a panel with nothing to scroll.  And the strip
-     is added to the panel rather than taken out of what is in it: the
-     panel's width is its contents' width (content-box), so the padding the
-     bar stands in makes the panel fifteen pixels wider and the chart
-     fifteen narrower, and nothing in the panel moves, narrows or re-wraps.
-     The spacing inside stays exactly as it was, the bar slides in from the
-     edge as the panel widens to take it, both at the one pace
-     (07-motion.css), and since the words never move, whether the bar is
-     wanted can never be changed by the bar coming or going.  (The panel's
-     own one-pixel edge now sits outside its width too: a pixel wider than
-     the width it is given, which nothing needs to be told about.) */
-  #panel { box-sizing: content-box; }
+     band down the side of a panel with nothing to scroll.  It comes and
+     goes gently rather than at once -- the bar slides in from the edge and
+     the panel slides over to make room for it, both at the one pace
+     (07-motion.css).  That cannot see-saw: narrowing only makes the panel
+     longer, so a bar that was wanted stays wanted, and widening only makes
+     it shorter, so one that was not is still not. */
   .slider-track { position: relative; flex: 1; min-width: 0; min-height: 0; }
   .slider-grip {
     position: absolute; border-radius: 99px; background: var(--line);
@@ -2525,8 +2519,8 @@
      as it is given up.  What is inside keeps its full width while it narrows;
      otherwise every word in it would re-wrap on the way out, which looks like
      the panel falling apart rather than closing. */
-  /* (padding-right is the room its slider bar is given as it slides in,
-     which widens the panel: see the panel's bar, further down) */
+  /* (padding-right is the room its slider bar takes as it slides in: see
+     the panel's bar, further down) */
   #panel {
     transition: width var(--move) var(--ease),
                 padding-right var(--move) var(--ease),
@@ -3181,9 +3175,10 @@
   .slider-step:active { transform: scale(.88); }
   /* The panel's bar slides in from the edge when there is something to
      scroll and back out when there is not, rather than blinking on and
-     off, and the panel widens by the same amount at the same pace to take
-     it (01-base.css) -- the two move as one.  The widening is the
-     padding-right in the panel's own transitions, with its closing, above. */
+     off, and what is in the panel slides over by the same amount at the
+     same pace to make room for it (01-base.css) -- the two move as one.
+     The sliding over is the padding-right in the panel's own transitions,
+     with its closing, above. */
   #panel > .slider.y {
     transition: transform var(--move) var(--ease),
                 opacity var(--quick) var(--ease-soft), visibility 0s;
