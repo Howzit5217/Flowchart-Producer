@@ -137,14 +137,24 @@
   .slide-frame.has-y > .slider.x { right: 15px; }
   .slide-frame.has-x > .slider.y { bottom: 15px; }
   .slider.none { display: none; }
-  /* The panel keeps the strip its bar stands in whether the bar is up or
-     not.  Given only while the bar was up, the strip came and went with
-     it, and every word in the panel moved over fifteen pixels and back --
+  /* The panel's bar lies over the panel's own right-hand margin rather
+     than standing in a strip beside it.  Given a strip only while the bar
+     was up, every word in the panel moved over fifteen pixels and back --
      re-wrapping, and so changing how long the panel was, which is the very
-     thing that says whether the bar is wanted.  Kept, the bar only ever
-     comes and goes in a space that is already its own (07-motion.css
-     slides it). */
-  #panel.slide-frame.room:not(.hide) { padding-right: 15px; }
+     thing that says whether the bar is wanted.  Kept for good, the strip
+     was an empty band down the side of a panel with nothing to scroll.
+     Laid over the sixteen pixels every card keeps clear on its right, it
+     takes no room at all: nothing moves when it comes, nothing is left
+     when it goes (07-motion.css slides it), and it covers nothing.  So it
+     is slim -- a grip, without the step buttons of the bars that stand in
+     room of their own -- and shows a track only when it is reached for. */
+  #panel.slide-frame.room.has-y { padding-right: 0; }
+  #panel > .slider.y { width: 10px; background: transparent; border-left: 0; }
+  #panel > .slider.y:hover { background: var(--line-soft); }
+  #panel > .slider.y .slider-step { display: none; }
+  #panel > .slider.y .slider-grip { left: 3px; right: 3px; }
+  #panel > .slider.y:hover .slider-grip,
+  #panel > .slider.y .slider-grip.held { left: 2px; right: 2px; }
   .slider-track { position: relative; flex: 1; min-width: 0; min-height: 0; }
   .slider-grip {
     position: absolute; border-radius: 99px; background: var(--line);

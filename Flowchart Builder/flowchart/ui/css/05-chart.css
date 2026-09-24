@@ -312,11 +312,18 @@
      than the sheet gives way to what room there is and scrolls, and they
      stay at the foot.  The sheet under it is the same ground as the box. */
   #code-over .code-sheet { background: var(--code-bg); }
+  /* The room under the box is for its sideways bar, and is only there while
+     a line too long for the sheet has put the bar up: kept for good, it was
+     an empty band between the last line and Copy and Save it.  The height
+     fitSlot sets is the box's alone (content-box), so the room is added
+     under it rather than taken out of it. */
   #code-slot {
     flex: 0 1 auto; display: flex; min-height: 0; gap: 0;
-    padding: 14px 16px 16px; background: var(--code-bg);
+    box-sizing: content-box;
+    padding: 14px 16px 0; background: var(--code-bg);
     border-top: 1px solid var(--line-soft);
   }
+  #code-slot:has(> .slide-frame.has-x) { padding-bottom: 16px; }
   /* the numbers down the side */
   .code-rule {
     flex: none; margin: 0; padding: 10px 10px 10px 0; overflow: hidden;
@@ -342,6 +349,8 @@
   :is(#code-slot, #tape-slot) > .slide-frame > .slider.x { right: -16px; bottom: -16px; }
   :is(#code-slot, #tape-slot) > .slide-frame.has-y > .slider.x { right: -1px; }
   :is(#code-slot, #tape-slot) > .slide-frame.has-x > .slider.y { bottom: -1px; }
+  /* the pseudocode's has room under it only while it has a sideways bar */
+  #code-slot > .slide-frame:not(.has-x) > .slider.y { bottom: 0; }
   :is(#code-slot, #tape-slot) > .slide-frame.has-x.has-y::after {
     right: -16px; bottom: -16px;
   }
@@ -371,7 +380,7 @@
      how far in they start is set by underLines in 18-write.js. */
   #code-keep {
     flex: none; display: flex; gap: 8px; flex-wrap: wrap;
-    padding: 0 16px 16px; background: var(--code-bg);
+    padding: 8px 16px 16px; background: var(--code-bg);
   }
 
   /* ----------------------------------- the run and the code, filling the screen -- */

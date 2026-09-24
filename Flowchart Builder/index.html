@@ -149,14 +149,24 @@
   .slide-frame.has-y > .slider.x { right: 15px; }
   .slide-frame.has-x > .slider.y { bottom: 15px; }
   .slider.none { display: none; }
-  /* The panel keeps the strip its bar stands in whether the bar is up or
-     not.  Given only while the bar was up, the strip came and went with
-     it, and every word in the panel moved over fifteen pixels and back --
+  /* The panel's bar lies over the panel's own right-hand margin rather
+     than standing in a strip beside it.  Given a strip only while the bar
+     was up, every word in the panel moved over fifteen pixels and back --
      re-wrapping, and so changing how long the panel was, which is the very
-     thing that says whether the bar is wanted.  Kept, the bar only ever
-     comes and goes in a space that is already its own (07-motion.css
-     slides it). */
-  #panel.slide-frame.room:not(.hide) { padding-right: 15px; }
+     thing that says whether the bar is wanted.  Kept for good, the strip
+     was an empty band down the side of a panel with nothing to scroll.
+     Laid over the sixteen pixels every card keeps clear on its right, it
+     takes no room at all: nothing moves when it comes, nothing is left
+     when it goes (07-motion.css slides it), and it covers nothing.  So it
+     is slim -- a grip, without the step buttons of the bars that stand in
+     room of their own -- and shows a track only when it is reached for. */
+  #panel.slide-frame.room.has-y { padding-right: 0; }
+  #panel > .slider.y { width: 10px; background: transparent; border-left: 0; }
+  #panel > .slider.y:hover { background: var(--line-soft); }
+  #panel > .slider.y .slider-step { display: none; }
+  #panel > .slider.y .slider-grip { left: 3px; right: 3px; }
+  #panel > .slider.y:hover .slider-grip,
+  #panel > .slider.y .slider-grip.held { left: 2px; right: 2px; }
   .slider-track { position: relative; flex: 1; min-width: 0; min-height: 0; }
   .slider-grip {
     position: absolute; border-radius: 99px; background: var(--line);
@@ -1640,11 +1650,18 @@
      than the sheet gives way to what room there is and scrolls, and they
      stay at the foot.  The sheet under it is the same ground as the box. */
   #code-over .code-sheet { background: var(--code-bg); }
+  /* The room under the box is for its sideways bar, and is only there while
+     a line too long for the sheet has put the bar up: kept for good, it was
+     an empty band between the last line and Copy and Save it.  The height
+     fitSlot sets is the box's alone (content-box), so the room is added
+     under it rather than taken out of it. */
   #code-slot {
     flex: 0 1 auto; display: flex; min-height: 0; gap: 0;
-    padding: 14px 16px 16px; background: var(--code-bg);
+    box-sizing: content-box;
+    padding: 14px 16px 0; background: var(--code-bg);
     border-top: 1px solid var(--line-soft);
   }
+  #code-slot:has(> .slide-frame.has-x) { padding-bottom: 16px; }
   /* the numbers down the side */
   .code-rule {
     flex: none; margin: 0; padding: 10px 10px 10px 0; overflow: hidden;
@@ -1670,6 +1687,8 @@
   :is(#code-slot, #tape-slot) > .slide-frame > .slider.x { right: -16px; bottom: -16px; }
   :is(#code-slot, #tape-slot) > .slide-frame.has-y > .slider.x { right: -1px; }
   :is(#code-slot, #tape-slot) > .slide-frame.has-x > .slider.y { bottom: -1px; }
+  /* the pseudocode's has room under it only while it has a sideways bar */
+  #code-slot > .slide-frame:not(.has-x) > .slider.y { bottom: 0; }
   :is(#code-slot, #tape-slot) > .slide-frame.has-x.has-y::after {
     right: -16px; bottom: -16px;
   }
@@ -1699,7 +1718,7 @@
      how far in they start is set by underLines in 18-write.js. */
   #code-keep {
     flex: none; display: flex; gap: 8px; flex-wrap: wrap;
-    padding: 0 16px 16px; background: var(--code-bg);
+    padding: 8px 16px 16px; background: var(--code-bg);
   }
 
   /* ----------------------------------- the run and the code, filling the screen -- */
@@ -19026,7 +19045,7 @@
     if (!over || over.hidden || !slot || !box) { return; }
     var fresh = slot._rows === null || slot._rows === undefined;
     if (!fresh && slot._rows === rows) { return; }
-    var line = getComputedStyle(box), side = getComputedStyle(slot);
+    var line = getComputedStyle(box);
     function add(style, keys) {
       return keys.reduce(function (sum, key) {
         return sum + (parseFloat(style[key]) || 0);
@@ -19037,8 +19056,10 @@
     // touch screen ours give way to it -- takes its height from the lines.
     var bar = Math.max(0, box.offsetHeight - box.clientHeight -
                           add(line, ["borderTopWidth", "borderBottomWidth"]));
+    // The box's height alone: the slot's own edges, and the room its bar
+    // stands in while there is one, go round it (05-chart.css).
     slot.style.height = (rows * (parseFloat(line.lineHeight) || 24) +
-                         add(line, edges) + add(side, edges) + bar) + "px";
+                         add(line, edges) + bar) + "px";
     // The numbers' column widens by a figure at 10,000 lines, and the
     // buttons move in with the lines.
     var figures = String(rows).length;

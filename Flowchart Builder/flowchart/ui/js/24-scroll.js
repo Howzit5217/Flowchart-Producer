@@ -426,7 +426,7 @@
     if (!over || over.hidden || !slot || !box) { return; }
     var fresh = slot._rows === null || slot._rows === undefined;
     if (!fresh && slot._rows === rows) { return; }
-    var line = getComputedStyle(box), side = getComputedStyle(slot);
+    var line = getComputedStyle(box);
     function add(style, keys) {
       return keys.reduce(function (sum, key) {
         return sum + (parseFloat(style[key]) || 0);
@@ -437,8 +437,10 @@
     // touch screen ours give way to it -- takes its height from the lines.
     var bar = Math.max(0, box.offsetHeight - box.clientHeight -
                           add(line, ["borderTopWidth", "borderBottomWidth"]));
+    // The box's height alone: the slot's own edges, and the room its bar
+    // stands in while there is one, go round it (05-chart.css).
     slot.style.height = (rows * (parseFloat(line.lineHeight) || 24) +
-                         add(line, edges) + add(side, edges) + bar) + "px";
+                         add(line, edges) + bar) + "px";
     // The numbers' column widens by a figure at 10,000 lines, and the
     // buttons move in with the lines.
     var figures = String(rows).length;
