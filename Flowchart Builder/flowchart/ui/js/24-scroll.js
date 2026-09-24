@@ -371,7 +371,11 @@
   // over the box, which is right for the one that holds a sheet of paper.
   // The tape and the code screen are written into rather than laid out
   // once, so they keep an eye on what turns up inside them as well.
+  // The strip of file names over a program written out as several files is
+  // one of them: forty files are far wider than the screen, and a strip
+  // with no bar gave no sign that there were more of them off to the side.
   [["#code", "room", 0], ["#tape", "room", 1], ["#code-out", "room", 1],
+   ["#code-files", "room strip", 0],
    ["#watch-rows", "room", 0],
    ["#pz-body", "room", 0], ["#eg-body", "room", 0], ["#keys-body", "room", 0],
    ["#more-over .more-body", "room", 0],
@@ -380,6 +384,19 @@
       var box = el(one[0]);
       if (box) { ownSliders(box, frameOf(box, one[1]), { inside: !!one[2] }); }
     });
+
+  // And turned by the wheel.  A mouse wheel only goes up and down, and a
+  // strip that only goes sideways would otherwise need the bar or a
+  // shifted wheel to get anywhere: over the file names, down is along.
+  if (el("#code-files")) {
+    el("#code-files").addEventListener("wheel", function (ev) {
+      var strip = ev.currentTarget;
+      if (ev.ctrlKey || Math.abs(ev.deltaX) >= Math.abs(ev.deltaY)) { return; }
+      if (strip.scrollWidth - strip.clientWidth < 2) { return; }
+      strip.scrollLeft += ev.deltaY * (ev.deltaMode === 1 ? 16 : ev.deltaMode === 2 ? strip.clientWidth : 1);
+      ev.preventDefault();
+    }, { passive: false });
+  }
 
   // -------------------------------------------- pseudocode, filling the screen --
   // Anything longer than a few lines is miserable to write in a box the width

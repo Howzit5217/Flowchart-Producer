@@ -554,9 +554,11 @@
 
   /* Which file of the program is on the screen, where it came out as
      several.  A row of tabs above the code, scrolling sideways on its own
-     so that a program of forty files does not stretch the sheet -- and
-     with its own bar put away, because a strip two lines tall is mostly
-     bar. */
+     so that a program of forty files does not stretch the sheet.  When
+     there are more than fit, the page's own bar runs along under them
+     (24-scroll.js hangs it, as it does every other), so that there is
+     something to say there are more and something to take them along by;
+     the machine's own bar stays put away, as everywhere else. */
   #code-files {
     flex: none; display: flex; gap: 6px; align-items: center;
     padding: 10px 16px 0; overflow-x: auto;
@@ -564,6 +566,11 @@
   }
   #code-files::-webkit-scrollbar { display: none; }
   #code-files[hidden] { display: none !important; }
+  /* Its frame is only as tall as the strip -- unlike the others in the
+     sheet, which share out the height -- and the tabs keep a little air
+     between themselves and the bar under them. */
+  #tape-over .code-sheet > .slide-frame.strip { flex: none; display: block; }
+  .slide-frame.strip.has-x > #code-files { padding-bottom: 8px; }
   .code-file {
     flex: none; border: 1px solid var(--line-soft); background: none;
     color: var(--muted); border-radius: 7px; padding: 5px 10px;
