@@ -703,8 +703,10 @@
     if (!box) { return; }
     box.innerHTML = "";
     if (!found || !found.length) { return; }
+    // In the amber of the rows under it: a chart still came out, so these
+    // are warnings, and a red heading over amber rows said they were both.
     var head = document.createElement("p");
-    head.className = "hint bad";
+    head.className = "hint warn";
     head.textContent = say("w_found", { n: found.length });
     box.appendChild(head);
     found.forEach(function (bit) {
@@ -726,6 +728,10 @@
       // not a thing a page may have.
       offerMend(row, box, bit.fix, bit.line);
     });
+    // And all of them at once, first thing under the heading, where there
+    // are two or more it can do.
+    offerMendAll(box, found.map(function (bit) { return [bit.fix, bit.line]; }),
+                 head.nextSibling);
   }
 
   function drawRoles() {                 // which shape draws which kind
@@ -895,18 +901,14 @@
       });
       if (pz) { return { puzzle: pz }; }
     }
-    // Only the top of it is read: a chart of a hundred thousand lines is
-    // named by its first few, like any other.  A heading it gives itself
-    // comes first (// Sales Tax Calculator, // sales_tax as Sales Tax);
-    // then what it does; and only then what a comment says it does, or
-    // the first thing it shows (topNotes, 09-names.js).  A comment that is
-    // no name -- Author: Pat Lee, // Declare variables -- is passed over.
-    var notes = topNotes(code);
-    if (notes.heading) { return { text: notes.heading, guess: true }; }
-    var does = describeProgram(code);
-    if (does) { return { text: does, guess: true }; }
-    var last = notes.about || notes.said;
-    return last ? { text: last, guess: true } : null;
+    // Otherwise the name it gives itself, however it gives it (// Program:
+    // Paint Job Estimator, Display "*** Ocean Levels ***"); then what its
+    // comments say it does, made a name; then what it is read to do -- all
+    // of it written as a title (titleFor, 09-names.js).  Only the top of it
+    // is read: a chart of a hundred thousand lines is named by its first
+    // few, like any other.
+    var named = titleFor(code);
+    return named ? { text: named, guess: true } : null;
   }
 
   function shortTitle(s) {

@@ -682,7 +682,13 @@
     font: inherit; font-size: 11.5px; cursor: pointer; line-height: 1.4;
   }
   .mend:hover, .mend:focus-visible { background: var(--accent); color: #fff; }
-  #build-faults .mend { margin: 5px 0 2px 13px; }
+  #build-faults .mend, #report .mend { margin: 5px 0 2px 13px; }
+  /* Putting every one of them right at once: the same button filled in,
+     first under the heading, as the one press that does the most. */
+  #build-faults .mend-all, #report .mend-all {
+    margin: 6px 0 2px; background: var(--accent); color: #fff; font-weight: 600;
+  }
+  .mend-all:hover, .mend-all:focus-visible { filter: brightness(1.1); }
   .tape .asking { display: flex; gap: 6px; margin: 4px 0; }
   .tape .asking .field { flex: 1; padding: 4px 7px; font-family: inherit; }
   .tape .code { margin: 0; white-space: pre; overflow-x: auto; }
@@ -843,6 +849,33 @@
   /* One shape's dots and corners are about that one shape; while a box is
      being drawn, the shape may be about to be one of several. */
   svg.lassoing .knob, svg.lassoing .grip { display: none; }
+  /* Under the Select tool a drag on the paper draws a box. */
+  body.by-hand.tool-select #chart { cursor: crosshair; }
+  body.by-hand.tool-select #chart .node { cursor: pointer; }
+  /* What can be done to what is taken up, in a row over the foot of the
+     paper (drawSelBar).  It stands still while the chart scrolls under it. */
+  .sel-bar {
+    position: absolute; left: 50%; bottom: 24px; transform: translateX(-50%);
+    z-index: 8; display: flex; gap: 2px; padding: 4px; max-width: calc(100% - 24px);
+    overflow-x: auto; border-radius: 12px; border: 1px solid var(--line);
+    background: var(--panel); box-shadow: var(--shadow);
+  }
+  .sel-bar[hidden], body:not(.by-hand) .sel-bar { display: none; }
+  .sel-bar .bar-btn {
+    flex: none; display: inline-flex; align-items: center; gap: 6px;
+    height: 32px; padding: 0 10px; border: 0; border-radius: 8px;
+    background: transparent; color: var(--ink); font: inherit; font-size: 12.5px;
+    white-space: nowrap; cursor: pointer;
+  }
+  .sel-bar .bar-btn:hover, .sel-bar .bar-btn:focus-visible { background: var(--accent-soft); }
+  .sel-bar svg {
+    width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.6;
+    stroke-linecap: round; stroke-linejoin: round;
+  }
+  @media (pointer: coarse) {
+    .sel-bar .bar-btn { height: 44px; min-width: 44px; justify-content: center; padding: 0 12px; }
+    .sel-bar svg { width: 20px; height: 20px; }
+  }
   /* Space held down: a drag moves about the paper, wherever it starts. */
   #stage.can-pan, #stage.can-pan svg .node, #stage.can-pan svg .link { cursor: grab; }
   #stage.can-pan.grabbing, #stage.can-pan.grabbing * { cursor: grabbing; }

@@ -392,6 +392,10 @@
   // as the pseudocode side is open: drawing by hand shuts it.
   function openPuzzle(one) {
     onPuzzle = lastPuzzle = one;
+    // Its faults are said like any others, but putting them right is the
+    // puzzle, so no button offers to (see mendsOff) -- nor one left over
+    // from the program that was there before it.
+    all("#build-faults .mend, #tape .mend").forEach(function (b) { b.remove(); });
     showPuzzles(false);
     // The brief and the Check button are both in the panel, so a puzzle
     // opened with the panel put away was a chart and nothing saying what

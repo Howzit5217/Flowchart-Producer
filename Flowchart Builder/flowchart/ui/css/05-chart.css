@@ -32,7 +32,7 @@
      than the buttons beside it -- and what that read as was not grouping
      but a row nobody had lined up. */
   footer.bar { --foot-h: 28px; gap: 10px; }
-  footer.bar .btn.small, footer.bar #hold-seg { height: var(--foot-h); }
+  footer.bar .btn.small, footer.bar #hold-seg, footer.bar #tool-seg { height: var(--foot-h); }
   footer.bar .btn.small { padding: 0 11px; }
   /* The two steps are one glyph apiece, so they are square, and the same
      width as each other whatever the font makes of a plus and a minus. */
@@ -53,12 +53,14 @@
      working on one -- shoved aside to read what is under it, or carried off
      past the edge to leave room in front of it -- so it comes off its
      leash here. */
-  #hold-seg { flex: none; gap: 2px; }
-  #hold-seg .seg-btn {
+  #hold-seg, #tool-seg { flex: none; gap: 2px; }
+  #hold-seg .seg-btn, #tool-seg .seg-btn {
     flex: none; display: inline-flex; align-items: center; gap: 6px;
     padding: 0 9px; font-size: 12.5px;
   }
-  #hold-seg .seg-btn svg {
+  /* Move and Select are about drawing by hand, and are there only then. */
+  body:not(.by-hand) #tool-seg { display: none; }
+  #hold-seg .seg-btn svg, #tool-seg .seg-btn svg {
     width: 13px; height: 13px; fill: none; stroke: currentColor;
     stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round;
   }

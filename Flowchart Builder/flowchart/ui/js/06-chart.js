@@ -61,9 +61,13 @@
       select(g);
       if (g) { styleThePicked(); }     // and the side that has its styling
     };
-    if (byHand) { joinDrag(chart); dragging(chart); lasso(chart); }
+    if (byHand) { joinDrag(chart); dragging(chart); lasso(chart); pressHold(chart); }
     chart.oncontextmenu = function (ev) {
       if (!byHand) { return; }
+      // A finger held still: timed already (11-hand-many.js), and the menu
+      // open, or this is that same press and the timing stops here.
+      if (Date.now() - pressMenuAt < 1500) { ev.preventDefault(); return; }
+      pressTaken();
       var g = ev.target.closest ? ev.target.closest(".node") : null;
       var arrow = ev.target.closest ? ev.target.closest(".link") : null;
       ev.preventDefault();
@@ -387,10 +391,11 @@
       var pickedBefore = picked;
       var noted = false;                 // a copy is kept the moment it moves
       // Several taken up (11-hand-many.js): any of them taken hold of
-      // carries them all.  With Shift or Ctrl held a shape joins them as it
+      // carries them all.  With Shift or Ctrl held -- or the Select tool
+      // chosen, which is how a finger says it -- a shape joins them as it
       // is pressed, so a press and a drag adds it and moves the lot; let
       // go without moving, one that was among them already leaves instead.
-      var more = g && (ev.shiftKey || ev.ctrlKey || ev.metaKey);
+      var more = g && (ev.shiftKey || ev.ctrlKey || ev.metaKey || handTool === "select");
       var wasTaken = g && takenIds().indexOf(node.id) >= 0;
       var crowd = null;
       if (more) {
@@ -414,6 +419,7 @@
 
       function move(e) {
         if (pinched) { return; }         // a second finger made it a pinch
+        if (heldLong) { return; }        // held still for its menu: not carried
         at = { x: e.clientX, y: e.clientY };
         carry();
       }
@@ -477,6 +483,8 @@
         shapeCarried = false;
         window.removeEventListener("pointermove", move);
         window.removeEventListener("pointerup", drop);
+        // A long press opened its menu, and the menu is what it was for.
+        if (heldLong && !stirred) { return; }
         // Shift or Ctrl and a click: in, or out again if it was in already.
         if (!stirred && more && !pinched) {
           if (wasTaken) {

@@ -465,7 +465,7 @@
       row.appendChild(go);
       el("#tape").appendChild(row);
       tapeToEnd();
-      field.focus();
+      focusWhenFree(field);              // after any dropdown list open now
       waiting = quit;
     });
   }
@@ -1104,7 +1104,7 @@
     if (!bar) { return; }
     if (!here && document.activeElement === bar) { nextHeld = true; }
     bar.hidden = !here;
-    if (here && nextHeld && tapeCovers()) { bar.focus(); }
+    if (here && nextHeld && tapeCovers()) { focusWhenFree(bar); }
     if (here || !running) { nextHeld = false; }
   }
 
@@ -1119,7 +1119,7 @@
       if (stepOn) { stepOn(); }          // and of a step it is waiting to take
       return;
     }
-    if (!runnable()) { talkOnce(TXT.r_nothing, "bad"); return; }
+    if (!runnable()) { talkOnce(TXT.r_nothing, "warn"); return; }
     // A run being put back where it was saved (29-saves.js) starts out
     // holding what it held then, and walks straight back to where it was.
     var back = resumeTo;

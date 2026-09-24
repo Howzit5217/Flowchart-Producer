@@ -1,16 +1,18 @@
 // ---------------------------------------------------------------------------
 //  names.js -- what the page calls a program nobody named
 //
-//  Run by tests/run.py where node is installed.  describeProgram is lifted
-//  straight out of flowchart/ui/js/09-names.js, with the words handed over
-//  by run.py, and asked about every example and every puzzle the page
-//  offers.  What it said comes back as JSON, one [key, name] pair apiece.
-//  With --files it names programs opened from files instead (see below).
+//  Run by tests/run.py where node is installed.  titleFor is lifted straight
+//  out of flowchart/ui/js/09-names.js, with the words handed over by run.py
+//  (and the language they are in, as NAMES_LANG), and asked about every
+//  example and every puzzle the page offers.  What it said comes back as
+//  JSON, one [key, name] pair apiece.  With --files it names programs
+//  opened from files instead (see below).
 // ---------------------------------------------------------------------------
 var fs = require("fs"), path = require("path");
 
 var UI = path.join(__dirname, "..", "flowchart", "ui", "js");
 var TXT = JSON.parse(fs.readFileSync(process.argv[2], "utf8"));
+var LANG = process.env.NAMES_LANG || "en";   // as 01-start.js has it
 
 function say(key, fill) {                 // as 01-start.js has it
   var out = TXT[key] || key;
@@ -30,9 +32,7 @@ eval(fs.readFileSync(path.join(UI, "09-names.js"), "utf8"));
 if (process.argv[3] === "--files") {
   process.stdout.write(JSON.stringify(
     JSON.parse(fs.readFileSync(process.argv[4], "utf8")).map(function (one) {
-      var notes = topNotes(one[1]);
-      return [one[0], fileTitle(one[0], one[1]) || notes.heading ||
-                      describeProgram(one[1]) || notes.about || notes.said];
+      return [one[0], fileTitle(one[0], one[1]) || titleFor(one[1])];
     })));
   process.exit(0);
 }
@@ -47,15 +47,15 @@ function literal(file, name) {
 
 var out = [];
 literal("09-build.js", "STARTS").forEach(function (level) {
-  level[1].forEach(function (pair) { out.push([pair[0], describeProgram(pair[1])]); });
+  level[1].forEach(function (pair) { out.push([pair[0], titleFor(pair[1])]); });
 });
 literal("28-puzzles.js", "PUZZLES").forEach(function (level) {
-  level[1].forEach(function (one) { out.push([one.key, describeProgram(one.start)]); });
+  level[1].forEach(function (one) { out.push([one.key, titleFor(one.start)]); });
 });
 // And any others run.py hands over, as [key, program] pairs in a file.
 if (process.argv[3]) {
   JSON.parse(fs.readFileSync(process.argv[3], "utf8")).forEach(function (one) {
-    out.push([one[0], describeProgram(one[1])]);
+    out.push([one[0], titleFor(one[1])]);
   });
 }
 process.stdout.write(JSON.stringify(out));

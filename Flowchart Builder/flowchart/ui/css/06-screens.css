@@ -70,8 +70,11 @@
     footer.bar .grow { display: none; }
     /* the two padlocks say which it is on their own; there is no room in
        the foot bar for the words as well */
-    #hold-seg .seg-btn span { display: none; }
-    #hold-seg .seg-btn { padding: 0 10px; }
+    #hold-seg .seg-btn span, #tool-seg .seg-btn span { display: none; }
+    #hold-seg .seg-btn, #tool-seg .seg-btn { padding: 0 10px; }
+    footer.bar { gap: 8px; }
+    /* the bar over the paper says what its buttons are in pictures only */
+    .sel-bar .bar-btn span { display: none; }
     /* The bar wants the width for what the screen is and what can be done
        to it.  The little mark is decoration; the runner's bar carries four
        things besides it and was breaking onto a second row to fit them. */
@@ -86,6 +89,12 @@
     .btn.back .short { display: inline; }
     #tape-over { padding: 0; }
     #tape-over .code-sheet { border: 0; border-radius: 0; }
+  }
+  /* Drawing by hand the foot row has Move and Select in it as well, and on
+     a phone held upright no room left for Actual: it went onto a second
+     row of its own.  Fit, and two fingers, do what it does. */
+  @media (max-width: 439px) {
+    body.by-hand #actual { display: none; }
   }
   /* The smallest phones, while a run stands waiting for its next step: the
      bar has Next step in it as well, and Done was being pushed onto a row

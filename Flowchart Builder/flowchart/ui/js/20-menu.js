@@ -239,6 +239,8 @@
           turnLink(link);
           drawHand(); drawHandPanel(); showReport();
         } },
+      { name: link.pin ? TXT.m_unpin : TXT.m_pin,
+        go: function () { pinLink(link, !link.pin); } },
       "-",
       { name: TXT.delete, go: function () {
           hand.links = hand.links.filter(function (l) { return l !== link; });
@@ -360,13 +362,29 @@
 
   function shutDropList(back) {
     if (!dropOpen) { return; }
-    var box = dropOpen.box;
+    var box = dropOpen.box, after = dropOpen.after;
+    var held = dropOpen.menu.contains(document.activeElement);
     dropOpen.menu.remove();
-    if (dropOpen.watch) { dropOpen.watch.disconnect(); }
+    cancelAnimationFrame(dropOpen.frame);
     dropOpen = null;
     box.classList.remove("drop-down", "drop-up");
     box.setAttribute("aria-expanded", "false");
-    if (back && box.isConnected) { box.focus({ preventScroll: true }); }
+    // Whatever was kept waiting for the keys while the list had them -- a
+    // question the running program asked -- has them now, if it is still
+    // there to be typed into; otherwise the box has them back.
+    if (after && (back || held) && after.getClientRects().length && !after.disabled) {
+      after.focus();
+    } else if (back && box.isConnected) { box.focus({ preventScroll: true }); }
+  }
+
+  // Something that wants the keys while a list is down -- the program being
+  // run stopping to ask a question, or its next step coming back -- waits
+  // for the list to go rather than taking them from under it.  Taken there
+  // and then, the list was left open with nothing moving through it, and
+  // the arrows meant for it went into the answer instead.
+  function focusWhenFree(it) {
+    if (dropOpen) { dropOpen.after = it; return; }
+    it.focus();
   }
 
   // Chosen: said to the <select> the way it says it itself, an input and
@@ -374,7 +392,7 @@
   // was already chosen tells nobody anything.
   function dropPick(box, option) {
     shutDropList(true);
-    if (option.disabled || option.closest("select") !== box) { return; }
+    if (option.disabled || box.disabled || option.closest("select") !== box) { return; }
     if (box.selectedIndex === option.index) { return; }
     box.selectedIndex = option.index;
     box.dispatchEvent(new Event("input", { bubbles: true }));
@@ -447,32 +465,67 @@
     var below = innerHeight - at.bottom - 8, above = at.top - 8;
     var down = menu.offsetHeight <= below || below >= above;
     var edges = menu.offsetHeight - rows.offsetHeight;
-    rows.style.maxHeight = Math.max(90, (down ? below : above) - edges) + "px";
+    function fitRows(at) {
+      var most = Math.max(90, (down ? innerHeight - at.bottom : at.top) - 8 - edges) + "px";
+      if (rows.style.maxHeight !== most) { rows.style.maxHeight = most; }
+    }
+    fitRows(at);
     // A long list scrolls, with the page's own bar like everything else.
     ownSliders(rows, frameOf(rows, "room"), { brief: true });
     // measured to the fraction, or the join is a hairline out
-    var size = menu.getBoundingClientRect(), wide = size.width, high = size.height;
-    var left = Math.max(8, Math.min(at.left, innerWidth - wide - 8));
-    menu.style.left = left + "px";
-    menu.style.top = (down ? at.bottom - 1 : at.top + 1 - high) + "px";
+    function joinTo(at) {
+      menu.style.minWidth = at.width + "px";
+      var size = menu.getBoundingClientRect(), wide = size.width, high = size.height;
+      var left = Math.max(8, Math.min(at.left, innerWidth - wide - 8));
+      menu.style.left = left + "px";
+      menu.style.top = (down ? at.bottom - 1 : at.top + 1 - high) + "px";
+      // Where it runs out past the box, that corner is a corner again.
+      menu.classList.toggle("past-left", left < at.left - 0.5);
+      menu.classList.toggle("past-right", left + wide > at.right + 0.5);
+    }
+    joinTo(at);
     menu.classList.add(down ? "down" : "up");
-    // Where it runs out past the box, that corner is a corner again.
-    menu.classList.toggle("past-left", left < at.left - 0.5);
-    menu.classList.toggle("past-right", left + wide > at.right + 0.5);
     box.classList.add(down ? "drop-down" : "drop-up");
     box.setAttribute("aria-expanded", "true");
-    dropOpen = { box: box, menu: menu };
-    // Nor does it stay joined to a box that changes size under it -- the
-    // panel narrowing as its bar slides in, say -- so then it shuts too.
-    if (window.ResizeObserver) {
-      dropOpen.watch = new ResizeObserver(function () {
-        var now = box.getBoundingClientRect();
-        if (Math.abs(now.width - at.width) > 0.5 || Math.abs(now.height - at.height) > 0.5) {
-          shutDropList();
-        }
-      });
-      dropOpen.watch.observe(box);
+    dropOpen = { box: box, menu: menu, at: at };
+
+    // And joined it stays.  A program running beside it moves the page
+    // about under the list with nobody touching anything -- the tape
+    // filling and pushing the cards under it down, the table of what the
+    // program holds unfolding, the panel's bar sliding in and narrowing
+    // everything -- and a list that shut whenever its box moved or changed
+    // size could not be used while a program ran.  So it is looked at once
+    // a frame and follows its box, and goes only when the box does: taken
+    // off the page, put away, turned off, or moved out of sight.
+    var clips = [];                      // what cuts off what spills out of it
+    for (var outer = box.parentElement; outer && outer !== document.body;
+         outer = outer.parentElement) {
+      var its = getComputedStyle(outer);
+      if (its.overflowX !== "visible" || its.overflowY !== "visible") { clips.push(outer); }
     }
+    function inSight(r) {
+      var x = r.left + r.width / 2, y = r.top + r.height / 2;
+      if (x < 0 || y < 0 || x > innerWidth || y > innerHeight) { return false; }
+      return clips.every(function (clip) {
+        var c = clip.getBoundingClientRect();
+        return x >= c.left && x <= c.right && y >= c.top && y <= c.bottom;
+      });
+    }
+    (function stayJoined() {
+      dropOpen.frame = requestAnimationFrame(function () {
+        if (!dropOpen || dropOpen.menu !== menu) { return; }
+        if (box.disabled || !box.isConnected) { shutDropList(); return; }
+        var now = box.getBoundingClientRect(), was = dropOpen.at;
+        if (now.left !== was.left || now.top !== was.top ||
+            now.width !== was.width || now.height !== was.height) {
+          if (!now.width || !inSight(now)) { shutDropList(); return; }
+          fitRows(now);
+          joinTo(now);
+          dropOpen.at = now;
+        }
+        stayJoined();
+      });
+    })();
 
     // The one chosen is where the list opens, in the middle of it.
     var first = chosen || live()[0];
@@ -600,9 +653,21 @@
     openDropList(box);
   });
   // A list left hanging where its box no longer is would be pointing at
-  // nothing, so it goes when anything under it moves, or the window does.
+  // nothing, so it goes when its box is scrolled away under it, or the
+  // window changes.  Only a scroll that really carries the box off: while
+  // a program runs, the chart following it, the pseudocode showing its line
+  // and the tape keeping to its foot all scroll on every step, and a list
+  // that shut at any scroll at all was gone again before the pointer could
+  // reach it.  Nor does the panel's own scroll count when all it did was
+  // hold the box still while the tape grew above it.
   document.addEventListener("scroll", function (ev) {
-    if (dropOpen && !dropOpen.menu.contains(ev.target)) { shutDropList(); }
+    var moved = ev.target;
+    if (!dropOpen || dropOpen.menu.contains(moved)) { return; }
+    if (moved !== document && !(moved.contains && moved.contains(dropOpen.box))) { return; }
+    var now = dropOpen.box.getBoundingClientRect(), was = dropOpen.at;
+    if (Math.abs(now.left - was.left) > 0.5 || Math.abs(now.top - was.top) > 0.5) {
+      shutDropList();
+    }
   }, true);
   window.addEventListener("resize", function () { shutDropList(); });
   window.addEventListener("blur", function () { shutDropList(); });

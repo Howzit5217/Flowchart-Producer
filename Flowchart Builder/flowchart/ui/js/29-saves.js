@@ -733,12 +733,10 @@
           return n.kind === "oval" ? "" : (n.kind === "diamond" ? "If " : "") + n.text;
         })
       : el("#code").value.slice(0, 20000).split("\n");
-    // A heading the program gives itself is its name, as on the Title box.
-    var notes = byHand ? {} : topNotes(el("#code").value);
-    if (notes.heading) { return notes.heading; }
-    var does = describeProgram(lines.join("\n"));
+    // Named the way the Title box would name it, and written as a title.
+    var does = byHand ? asTitle(describeProgram(lines.join("\n")))
+                      : titleFor(lines.join("\n"));
     if (does) { return does; }
-    if (notes.about) { return notes.about; }
     for (var i = 0; i < lines.length; i++) {
       var line = String(lines[i] || "").trim();
       if (line && !/^(start|begin|main|stop|end)$/i.test(line)) {

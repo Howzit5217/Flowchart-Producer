@@ -53,6 +53,9 @@
     var wasHand = byHand;
     if (toHand && !byHand) { keepCodeSide(); }
     byHand = toHand;
+    // said on the page too, for what only drawing by hand has: the tools in
+    // the foot bar, the bar over the paper, shapes a finger can carry
+    document.body.classList.toggle("by-hand", toHand);
     el("#tab-code").classList.toggle("on", !toHand);
     el("#tab-hand").classList.toggle("on", toHand);
     el("#source").hidden = toHand;

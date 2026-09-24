@@ -2,10 +2,18 @@
    02-bar.css -- the bar along the top
    --------------------------------------------------------------------------- */
   /* ---------------------------------------------------------- top bar -- */
+  /* Above everything in the page under it, at any width.  The bar is a
+     layer of its own -- a z-index on a flex item makes one -- so the Save
+     and Settings sheets that hang down from it can climb no higher than it
+     does, whatever they say for themselves.  At 5 that was under the scroll
+     bars the page hangs round the chart and the panel (6, 01-base.css), and
+     the chart's bar ran straight down through the edge of both sheets.  On
+     a narrow screen it was already put above the drawer for the same
+     reason (06-screens.css); this is that, everywhere. */
   .bar {
     flex: none; background: var(--panel); border-bottom: 1px solid var(--line);
     display: flex; align-items: center; gap: 10px 16px;
-    padding: 10px 16px; flex-wrap: wrap; z-index: 5;
+    padding: 10px 16px; flex-wrap: wrap; z-index: 14;
   }
   /* the mark, at the head of the bar */
   .mark {

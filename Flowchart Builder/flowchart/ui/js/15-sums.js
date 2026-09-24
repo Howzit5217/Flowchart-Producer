@@ -143,6 +143,20 @@
     function word(tok) {
       return tok && tok.t === "name" ? String(tok.v).toLowerCase() : null;
     }
+    // A quote or a bracket left open: shut, where there is one right place
+    // to shut it -- which only the pseudocode box can say, so planRight
+    // decides.  `rest` is whether more was written after the bracket.
+    function shutAtEnd(text, rest) {
+      return { how: "close", bit: String(src), text: text, rest: !!rest };
+    }
+    function bracketsOpen() {
+      var deep = 0;
+      ts.forEach(function (t) {
+        if (t.t === "op" && t.v === "(") { deep++; }
+        if (t.t === "op" && t.v === ")") { deep--; }
+      });
+      return shutAtEnd(new Array(Math.max(1, deep) + 1).join(")"), !!peek());
+    }
     // The words an argument was written as, not only what it came to.  A
     // module handed a variable by reference gives its answer back into that
     // variable, and to do that the call has to remember which one it was.
@@ -152,11 +166,15 @@
     async function primary() {
       var tok = take();
       if (!tok) { throw wrong(say("r_half", { bit: src }), ended()); }
-      if (tok.t === "str" && tok.open) { throw wrong(TXT.r_open_quote, tok); }
+      if (tok.t === "str" && tok.open) {
+        throw wrong(TXT.r_open_quote, tok, "", shutAtEnd(String(src).charAt(tok.from)));
+      }
       if (tok.t === "num" || tok.t === "str") { return tok.v; }
       if (tok.t === "op" && tok.v === "(") {
         var inside = await expr(0);
-        if (!peek() || peek().v !== ")") { throw wrong(TXT.r_open_bracket, tok); }
+        if (!peek() || peek().v !== ")") {
+          throw wrong(TXT.r_open_bracket, tok, "", bracketsOpen());
+        }
         take();
         return inside;
       }
@@ -183,7 +201,9 @@
               given.push(between(from, at));
             }
           }
-          if (!peek() || peek().v !== ")") { throw wrong(TXT.r_open_bracket, opened); }
+          if (!peek() || peek().v !== ")") {
+            throw wrong(TXT.r_open_bracket, opened, "", bracketsOpen());
+          }
           take();
           try {
             return await callOut(name, args, where, given);

@@ -482,19 +482,22 @@ def _():
         fewer, len(PROGRAMS), more, "" if not bad else " -- " + "; ".join(bad[:3]))
 
 
-# What a few of the examples are for, said the way the page should say it.
-# The rest only have to be called something other than their first line.
+# What a few of the examples are for, said the way the page should say it:
+# as a title.  The rest only have to be called something other than their
+# first line.
 CALLED = {
-    "e_add": "Adds two numbers",
-    "e_decide": "Checks whether age >= 18",
-    "e_count": "Counts from 1 to 5",
-    "e_leap": "Checks whether a year is a leap year",
-    "e_fizz": "Plays FizzBuzz",
-    "e_countdown": "Counts down from 10",
-    "e_sumevens": "Adds up the even numbers from 1 to 20",
-    "e_votes": "Counts the votes and names the winner",
-    "e_bank": "Keeps a bank balance, with deposits and withdrawals",
-    "e_rps": "Plays rock, paper, scissors",
+    "e_add": "Add Two Numbers",
+    "e_decide": "Age Check",
+    "e_count": "Count from 1 to 5",
+    "e_leap": "Leap Year Check",
+    "e_fizz": "FizzBuzz",
+    "e_countdown": "Countdown from 10",
+    "e_sumevens": "Sum of Even Numbers from 1 to 20",
+    "e_votes": "Vote Count",
+    "e_bank": "Bank Account",
+    "e_rps": "Rock, Paper, Scissors",
+    "e_area": "Rectangle Area",
+    "e_keepasking": "Input Validation",
 }
 
 # And programs written the way a textbook exercise is, named for what they
@@ -549,6 +552,121 @@ SHELF = {
                            "End For", "Car Value Decrease"),
 }
 
+# From the textbook, with no title written in: named by what they work out.
+SHELF.update({
+    "shelf_paint_job": ("Constant Real SQFT_PER_GALLON = 112\nConstant Real HOURS_PER_GALLON = 8\nInput sqft\nInput pricePerGallon\nSet gallons = sqft / SQFT_PER_GALLON\nSet hours = gallons * HOURS_PER_GALLON\nSet laborCost = hours * 35\nSet paintCost = gallons * pricePerGallon\nSet totalCost = paintCost + laborCost\nDisplay \"Gallons of paint: \", gallons\nDisplay \"Hours of labor: \", hours\nDisplay \"Total cost of the paint job: $\", totalCost",
+        "Paint Job Cost"),
+    "shelf_mpg": ("Display \"Enter the miles driven.\"\nInput miles\nDisplay \"Enter the gallons used.\"\nInput gallons\nSet mpg = miles / gallons\nDisplay \"Your MPG is \", mpg",
+        "Miles per Gallon"),
+    "shelf_test_average": ("Input score1\nInput score2\nInput score3\nSet average = (score1 + score2 + score3) / 3\nDisplay \"Your average test score is \", average",
+        "Average Test Score"),
+    "shelf_circle_area": ("Constant Real PI = 3.14159\nInput radius\nSet area = PI * radius * radius\nDisplay \"The area of the circle is \", area",
+        "Circle Area"),
+    "shelf_stock": ("Set shares = 2000\nSet price = 40\nSet stockCost = shares * price\nSet commission = stockCost * 0.03\nSet total = stockCost + commission\nDisplay \"Amount paid for the stock: $\", stockCost\nDisplay \"Commission: $\", commission\nDisplay \"Total: $\", total",
+        "Stock Cost"),
+    "shelf_magic_date": ("Input month\nInput day\nInput year\nIf month * day == year Then\n  Display \"The date is magic.\"\nElse\n  Display \"The date is not magic.\"\nEnd If",
+        "Magic Date"),
+    "shelf_roman_numerals": ("Input number\nSelect number\n  Case 1:\n    Display \"I\"\n  Case 2:\n    Display \"II\"\n  Case 3:\n    Display \"III\"\n  Default:\n    Display \"Enter 1 to 3\"\nEnd Select",
+        "Roman Numerals"),
+    "shelf_hotel": ("Input floors\nSet totalRooms = 0\nSet occupied = 0\nFor floor = 1 To floors\n  Input rooms\n  Input taken\n  Set totalRooms = totalRooms + rooms\n  Set occupied = occupied + taken\nEnd For\nSet rate = occupied / totalRooms\nDisplay \"Occupancy rate: \", rate",
+        "Occupancy Rate"),
+    "shelf_dice": ("Set die1 = random(1, 6)\nSet die2 = random(1, 6)\nDisplay \"You rolled \", die1, \" and \", die2",
+        "Dice Roll"),
+    "shelf_string_reverse": ("Input word\nSet reversed = \"\"\nFor i = length(word) - 1 To 0 Step -1\n  Set reversed = reversed + substring(word, i, 1)\nEnd For\nDisplay reversed",
+        "Reversed Word"),
+    "shelf_sales_prediction": ("Input sales\nSet profit = sales * 0.23\nDisplay \"The projected profit is $\", profit",
+        "Projected Profit"),
+    "shelf_word_count": ("Input sentence\nSet words = 1\nFor i = 0 To length(sentence) - 1\n  If substring(sentence, i, 1) == \" \" Then\n    Set words = words + 1\n  End If\nEnd For\nDisplay \"Number of words: \", words",
+        "Word Count"),
+})
+
+
+# And programs that say what they are called, the many ways people write it:
+# labeled, behind which exercise it is, on the first line, in a banner, or in
+# a sentence about what it does.  Each is called what it says.
+TITLED = {
+    "titled_label_program": ("// Program: Paint Job Estimator\nInput sqft\nSet gallons = sqft / 112\nDisplay gallons",
+        "Paint Job Estimator"),
+    "titled_label_program_name": ("// Program Name: Stock Transaction\nSet cost = 2000 * 40\nDisplay cost",
+        "Stock Transaction"),
+    "titled_label_program_title": ("// Program Title: Test Average\nInput a\nInput b\nSet avg = (a + b) / 2\nDisplay avg",
+        "Test Average"),
+    "titled_label_title": ("// Title: kinetic_energy\nInput m\nInput v\nSet ke = 0.5 * m * v ^ 2\nDisplay ke",
+        "Kinetic Energy"),
+    "titled_exercise_prefix": ("// Programming Exercise 7: Paint Job Estimator\nInput sqft\nSet gallons = sqft / 112\nDisplay gallons",
+        "Paint Job Estimator"),
+    "titled_chapter_prefix": ("// Chapter 3, Exercise 5 - Sales Tax\nInput purchase\nSet tax = purchase * 0.07\nDisplay tax",
+        "Sales Tax"),
+    "titled_lab_prefix": ("// Lab 4: Miles Per Gallon\nInput miles\nInput gallons\nSet mpg = miles / gallons\nDisplay mpg",
+        "Miles per Gallon"),
+    "titled_suffix_label": ("// Tuition Increase - Chapter 4, Exercise 12\nDeclare Real tuition = 6000\nFor year = 1 To 5\n  Set tuition = tuition * 1.02\n  Display tuition\nEnd For",
+        "Tuition Increase"),
+    "titled_assignment_label": ("// Name: Pat Lee\n// Date: 9/24/2026\n// Assignment: Test Average\nInput a\nInput b\nDisplay (a + b) / 2",
+        "Test Average"),
+    "titled_project_label": ("// Project - Hotel Occupancy\nInput floors\nDisplay floors",
+        "Hotel Occupancy"),
+    "titled_program_number": ("// Program 3-1: Hello World\nDisplay \"Hello world\"",
+        "Hello World"),
+    "titled_heading_with_period": ("// Sales Tax Calculator.\nInput purchase\nSet tax = purchase * 0.07\nDisplay tax",
+        "Sales Tax Calculator"),
+    "titled_long_heading": ("// Monthly Sales Tax And Commission Calculator Program\nInput sales\nSet tax = sales * 0.04\nDisplay tax",
+        "Monthly Sales Tax and Commission Calculator Program"),
+    "titled_all_caps_heading": ("// ===== SALES TAX PROGRAM =====\nInput purchase\nDisplay purchase * 0.07",
+        "Sales Tax Program"),
+    "titled_lowercase_heading": ("// tuition calculator\nDeclare Real tuition = 6000\nDisplay tuition",
+        "Tuition Calculator"),
+    "titled_block_title": ("/*\n * Program: Rainfall Statistics\n * Author: Pat Lee\n */\nDeclare Real total = 0\nFor m = 1 To 12\n  Input rain\n  Set total = total + rain\nEnd For\nDisplay total / 12",
+        "Rainfall Statistics"),
+    "titled_description_this_program": ("// Description: This program calculates the area of a circle.\nInput r\nSet area = 3.14159 * r * r\nDisplay area",
+        "Area of a Circle"),
+    "titled_purpose": ("// Purpose: convert celsius to fahrenheit\nInput c\nSet f = c * 9 / 5 + 32\nDisplay f",
+        "Celsius to Fahrenheit"),
+    "titled_this_program_sentence": ("// This program determines whether a number is even or odd.\nInput n\nIf n MOD 2 == 0 Then\n  Display \"Even\"\nElse\n  Display \"Odd\"\nEnd If",
+        "Even or Odd"),
+    "titled_program_line": ("Program TuitionCalculator\nDeclare Real tuition = 6000\nDisplay tuition",
+        "Tuition Calculator"),
+    "titled_algorithm_line": ("Algorithm: Find the Largest Number\nInput a\nInput b\nIf a > b Then\n  Display a\nElse\n  Display b\nEnd If",
+        "Find the Largest Number"),
+    "titled_start_named": ("Start Sales Tax Program\nInput purchase\nDisplay purchase * 0.07\nEnd",
+        "Sales Tax Program"),
+    "titled_banner_display": ("Display \"Tuition Calculator\"\nDeclare Real tuition = 6000\nFor year = 1 To 5\n  Set tuition = tuition * 1.02\n  Display year, tuition\nEnd For",
+        "Tuition Calculator"),
+    "titled_welcome_banner": ("Display \"Welcome to the Paint Job Estimator!\"\nInput sqft\nSet gallons = sqft / 112\nDisplay \"Gallons: \", gallons",
+        "Paint Job Estimator"),
+    "titled_decorated_banner": ("Display \"*** Ocean Levels ***\"\nDeclare Real level = 0\nFor year = 1 To 25\n  Set level = level + 1.6\n  Display year, level\nEnd For",
+        "Ocean Levels"),
+    "titled_title_after_module": ("Module main()\n    // Hotel Occupancy\n    Input floors\n    Display floors\nEnd Module",
+        "Hotel Occupancy"),
+    "titled_name_then_heading": ("// Name: Jane Doe\n// Class: CS 101\n// Body Mass Index\nInput weight\nInput height\nSet bmi = weight * 703 / (height * height)\nDisplay bmi",
+        "Body Mass Index"),
+    "titled_comment_line_with_dash": ("// Calories Burned -- treadmill\nFor minutes = 10 To 30 Step 5\n  Display minutes * 4.2\nEnd For",
+        "Calories Burned"),
+    "titled_written_by_then_heading": ("// Written by: Sam Ortiz\n// Payroll Calculator\nInput hours\nInput rate\nDisplay hours * rate",
+        "Payroll Calculator"),
+    "titled_course_hw_grade": ("// CS 101 - Homework 3 - Grade Average\nInput a\nInput b\nDisplay (a + b) / 2",
+        "Grade Average"),
+    "titled_program_to_calculate": ("// Program to calculate the gross pay\nInput hours\nInput rate\nSet pay = hours * rate\nDisplay pay",
+        "Gross Pay"),
+    "titled_banner_payroll": ("Display \"Payroll Program\"\nInput hours\nInput rate\nDisplay hours * rate",
+        "Payroll Program"),
+    "titled_display_this_program": ("Display \"This program converts miles to kilometers.\"\nInput miles\nSet km = miles * 1.609\nDisplay km",
+        "Miles to Kilometers"),
+    "titled_project_title_label": ("// Project Title: Lottery Numbers\nFor i = 1 To 7\n  Display random(0, 9)\nEnd For",
+        "Lottery Numbers"),
+    "titled_pseudocode_for": ("// Pseudocode for a Grade Calculator\nInput score\nDisplay score",
+        "Grade Calculator"),
+    "titled_title_in_caps_line": ("TITLE: RAINFALL STATISTICS\nInput rain\nDisplay rain",
+        "Rainfall Statistics"),
+    "titled_begin_line": ("Begin Temperature Conversion\nInput c\nDisplay c * 9 / 5 + 32\nEnd",
+        "Temperature Conversion"),
+    "titled_exercise_hash": ("// Exercise #4: Book Club Points\nInput books\nDisplay books",
+        "Book Club Points"),
+    "titled_problem_paren": ("// Problem 2 - Speeding Ticket\nInput speed\nDisplay speed",
+        "Speeding Ticket"),
+    "titled_block_multi": ("/**\n * Name: Ana Ruiz\n * Class: CIS 150\n * Program: Hotel Occupancy\n */\nInput floors\nDisplay floors",
+        "Hotel Occupancy"),
+}
+
 
 @check("a program nobody named is called what it does")
 def _():
@@ -566,16 +684,7 @@ def _():
                                      encoding="utf-8") as shelf:
         json.dump([[key, pair[0]] for key, pair in SHELF.items()], shelf)
     for lang in sorted(fb.WORDS):
-        with tempfile.NamedTemporaryFile("w", suffix=".json", delete=False,
-                                         encoding="utf-8") as words:
-            json.dump(fb.WORDS[lang], words)
-        try:
-            got = subprocess.run(["node", os.path.join(HERE, "names.js"), words.name,
-                                  shelf.name],
-                                 capture_output=True, text=True, encoding="utf-8",
-                                 timeout=60)
-        finally:
-            os.unlink(words.name)
+        got = _names(fb, lang, shelf.name)
         if got.returncode:
             os.unlink(shelf.name)
             return False, got.stderr.strip()[-300:]
@@ -589,6 +698,46 @@ def _():
     return not bad, "%d programs named%s" % (seen, "" if not bad else " -- " + "; ".join(bad[:3]))
 
 
+def _names(fb, lang, *more):
+    """tests/names.js, in one of the page's languages."""
+    with tempfile.NamedTemporaryFile("w", suffix=".json", delete=False,
+                                     encoding="utf-8") as words:
+        json.dump(fb.WORDS[lang], words)
+    try:
+        return subprocess.run(["node", os.path.join(HERE, "names.js"), words.name] + list(more),
+                              capture_output=True, text=True, encoding="utf-8", timeout=60,
+                              env=dict(os.environ, NAMES_LANG=lang))
+    finally:
+        os.unlink(words.name)
+
+
+@check("a program that says what it is called is called that")
+def _():
+    """A title written into the program itself -- "// Program: Paint Job
+    Estimator", "// Programming Exercise 7: ...", "Program TuitionCalculator",
+    a banner on the first Display, "This program calculates the area of a
+    circle" -- is found and used, whatever else is written round it (who
+    wrote it, when, for which class), and written out as a title.  And a
+    comment or a Display that is not a title is passed over."""
+    if not node_there():
+        return None, "node is not installed -- skipped"
+    fb = builder()
+    with tempfile.NamedTemporaryFile("w", suffix=".json", delete=False,
+                                     encoding="utf-8") as shelf:
+        json.dump([[key, pair[0]] for key, pair in TITLED.items()], shelf)
+    try:
+        got = _names(fb, "en", shelf.name)
+    finally:
+        os.unlink(shelf.name)
+    if got.returncode:
+        return False, got.stderr.strip()[-300:]
+    bad = ["%s: %r, not %r" % (key, name, TITLED[key][1])
+           for key, name in json.loads(got.stdout)
+           if key in TITLED and name != TITLED[key][1]]
+    return not bad, "%d titles found%s" % (len(TITLED) - len(bad),
+                                           "" if not bad else " -- " + "; ".join(bad[:3]))
+
+
 # Programs opened from files, and what the Title box should say: the file's
 # name as a title when it says something, else what the program calls
 # itself, else what it does.  (file name, program, title)
@@ -599,7 +748,7 @@ FILED = [
     ("salesTax - Copy (2).txt", _TUITION, "Sales Tax"),
     ("BMI-calculator.txt", _TUITION, "BMI Calculator"),
     ("shipping_charges_v2.txt", _TUITION, "Shipping Charges"),
-    ("Sales tax for 2026.txt", _TUITION, "Sales tax for 2026"),
+    ("Sales tax for 2026.txt", _TUITION, "Sales Tax for 2026"),
     ("hw3.txt", _TUITION, "Tuition Increase"),
     ("New Text Document (2).txt", _TUITION, "Tuition Increase"),
     ("Chapter5_Exercise7.txt", _TUITION, "Tuition Increase"),
@@ -611,7 +760,7 @@ FILED = [
     ("hw3.txt", "// Author: Pat Lee\n// Date: 9/24\n// Declare variables\n" + _TUITION,
      "Tuition Increase"),
     ("hw3.txt", "// Name: Pat Lee\n// This program works out the tax; then shows it.\n"
-                "Set x = 5\n", "Works out the tax"),
+                "Set x = 5\n", "Tax"),
 ]
 
 

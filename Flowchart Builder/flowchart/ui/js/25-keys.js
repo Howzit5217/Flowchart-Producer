@@ -53,13 +53,13 @@
       [[["Tab"], ["shift", "Tab"]], "k_next"],
       [[["← ↑ → ↓"]], "k_nudge"],
       [[["enter"]], "m_type"],
-      [[["drag"]], "k_lasso"],
+      [[["shift", "drag"]], "k_lasso"],
       [[["shift", "click"], ["ctrl", "click"]], "k_add"],
       [[["ctrl", "A"]], "k_all"],
       [[["ctrl", "C"], ["ctrl", "X"], ["ctrl", "V"]], "k_clip"],
       [[["ctrl", "D"]], "m_copy"],
       [[["del"]], "delete"],
-      [[["space", "drag"]], "k_pan"],
+      [[["drag"], ["space", "drag"]], "k_pan"],
       [[["Esc"]], "k_drop"]
     ]]
   ];

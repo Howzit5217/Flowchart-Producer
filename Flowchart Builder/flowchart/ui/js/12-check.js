@@ -7,26 +7,34 @@
   // ---- does it actually work? -------------------------------------------
   function checkDesign() {
     var found = [];
-    function fault(key, node, fill) {
-      found.push({ text: say(key, fill || {}), id: node ? node.id : null });
+    // `fix`, where there is one, is what would put it right (see the
+    // putting-right part below).
+    function fault(key, node, fill, fix) {
+      found.push({ text: say(key, fill || {}), id: node ? node.id : null,
+                   key: key, warn: !!ONLY_LOOKS[key], fix: fix || null });
     }
     if (!hand.nodes.length) { return found; }
 
     var heads = hand.nodes.filter(function (n) { return !intoOf(n.id).length; });
     if (!heads.length) { fault("p_no_start", null); }
     else if (heads.length > 1) { fault("p_many_starts", null, { n: heads.length }); }
-    else if (heads[0].kind !== "oval") { fault("p_start_kind", heads[0]); }
+    else if (heads[0].kind !== "oval") {
+      fault("p_start_kind", heads[0], null, startAbove(heads[0]));
+    }
 
     var ends = hand.nodes.filter(function (n) {
       return n.kind === "oval" && !outOf(n.id).length;
     });
-    if (!ends.length) { fault("p_no_end", null); }
+    var endFix = ends.length ? null : endBelow();
+    if (!ends.length) { fault("p_no_end", null, null, endFix); }
 
     hand.nodes.forEach(function (n) {
       var outs = outOf(n.id), ins = intoOf(n.id);
-      if (!String(n.text || "").trim()) { fault("p_empty", n); }
-      if (!outs.length && !ins.length) { fault("p_alone", n); }
-      else if (!outs.length && n.kind !== "oval") { fault("p_dead_end", n); }
+      if (!String(n.text || "").trim()) { fault("p_empty", n, null, fillEmpty(n)); }
+      if (!outs.length && !ins.length) { fault("p_alone", n, null, arrowFrom(n)); }
+      else if (!outs.length && n.kind !== "oval") {
+        fault("p_dead_end", n, null, ends.length ? toEnd(n) : endFix);
+      }
       if (n.kind === "diamond" && outs.length !== 2) {
         fault("p_decision_out", n, { n: outs.length });
       }
@@ -35,14 +43,16 @@
       }
       if (n.kind === "diamond" && outs.length === 2) {
         var one = (outs[0].label || "").trim(), two = (outs[1].label || "").trim();
-        if (!one || !two) { fault("p_no_label", n); }
-        else if (one.toLowerCase() === two.toLowerCase()) { fault("p_same_labels", n); }
+        if (!one || !two) { fault("p_no_label", n, null, labelWays(outs)); }
+        else if (one.toLowerCase() === two.toLowerCase()) {
+          fault("p_same_labels", n, null, labelOther(outs));
+        }
       }
       hand.nodes.forEach(function (m) {
         if (m.id <= n.id) { return; }
         if (Math.abs(m.x - n.x) * 2 < m.w + n.w - 8 &&
             Math.abs(m.y - n.y) * 2 < m.h + n.h - 8) {
-          fault("p_overlap", n);
+          fault("p_overlap", n, null, moveApart(m));   // the later of the two
         }
       });
     });
@@ -57,7 +67,10 @@
       hand.nodes.forEach(function (n) {
         if (n.id === a.id || n.id === b.id) { return; }
         for (var i = 0; i < pts.length - 1; i++) {
-          if (throughBox(pts[i], pts[i + 1], n)) { fault("p_line_through", n); return; }
+          if (throughBox(pts[i], pts[i + 1], n)) {
+            fault("p_line_through", n, null, moveOffLine(n));
+            return;
+          }
         }
       });
     });
@@ -117,19 +130,323 @@
       box.innerHTML = '<p class="good">' + TXT.checked_good + "</p>";
       return;
     }
+    // Red where the design does not work, amber where it only reads
+    // badly, and the heading in the worse of the two it is over.
     var head = document.createElement("p");
-    head.className = "hint bad";
+    head.className = "hint " + (found.some(function (bit) { return !bit.warn; })
+                                ? "bad" : "warn");
     head.textContent = say("problems", { n: found.length });
     box.appendChild(head);
     found.forEach(function (bit) {
       var row = document.createElement("button");
-      row.className = "fault";
+      row.className = "fault " + (bit.warn ? "warn" : "bad");
       row.textContent = bit.text;
       row.onclick = function () {
         if (bit.id) { picked = bit.id; drawHand(); drawHandPanel(); }
       };
       box.appendChild(row);
+      if (bit.fix) { offerHandMend(row, box, bit.fix); }
     });
+    var can = found.filter(function (bit) { return bit.fix && bit.fix.auto; });
+    if (can.length > 1) {
+      var every = document.createElement("button");
+      every.className = "mend mend-all";
+      every.type = "button";
+      every.textContent = say("w_mend_all", { n: can.length });
+      every.onclick = function (ev) { ev.stopPropagation(); handMendAll(); };
+      box.insertBefore(every, head.nextSibling);
+    }
+  }
+
+  // ---- putting it right, by hand -----------------------------------------
+  // Most of what the check finds, it has already worked out the answer to.
+  // A decision with no words on its ways out wants True and False (the
+  // page's own words for them, as drawing an arrow gives); a flow that
+  // stops dead wants an End to stop at; a shape sat on another wants moving
+  // off it.  So those carry a button saying what it would do, the way the
+  // warnings on the pseudocode side do (27-mend.js), and pressing it does
+  // it -- one step, which Undo takes back.  Where there is more than one
+  // right answer -- which of two starts is the real one, where a shape
+  // nothing leads to belongs -- nothing is guessed, and the row still takes
+  // you to the shape.  A few have a button that does not do the job but
+  // starts it for you: the typing, or the arrow.  Those are not `auto`, and
+  // putting everything right leaves them for you.
+  //
+  // The two that are only about how it reads are said in amber, and do not
+  // stop the design being run: the program it writes out is the same with
+  // a shape on top of another as without.
+  var ONLY_LOOKS = { p_overlap: true, p_line_through: true };
+  var CLEAR = 20;                        // room kept round a shape put right
+
+  function isYes(word) {
+    word = String(word || "").trim();
+    return R_YES.test(word) || word.toLowerCase() === String(TXT.yes || "").toLowerCase();
+  }
+  function isNo(word) {
+    word = String(word || "").trim();
+    return R_NO.test(word) || word.toLowerCase() === String(TXT.no || "").toLowerCase();
+  }
+
+  // An arrow, worded the way drawing one by hand words it (see joinUp).
+  function joinOn(from, to) {
+    var tag = "";
+    if (from.kind === "diamond") { tag = outOf(from.id).length ? TXT.no : TXT.yes; }
+    hand.links.push({ from: from.id, to: to.id, label: tag });
+  }
+
+  // Would a shape standing here be too near another?
+  function crowds(node, x, y) {
+    return hand.nodes.some(function (m) {
+      return m !== node && Math.abs(m.x - x) * 2 < m.w + node.w + CLEAR * 2 &&
+             Math.abs(m.y - y) * 2 < m.h + node.h + CLEAR * 2;
+    });
+  }
+
+  // The nearest place a shape can stand clear of every other, looked for in
+  // rings round where it is -- down and to the right first, the way a chart
+  // is read.  `ok` can turn a place down for reasons of its own.
+  function freeSpot(node, rings, ok) {
+    var step = HAND_GRID * 4;
+    var ways = [[0, 1], [1, 0], [0, -1], [-1, 0], [1, 1], [-1, 1], [1, -1], [-1, -1]];
+    for (var r = 1; r <= rings; r++) {
+      for (var k = 0; k < ways.length; k++) {
+        var x = node.x + ways[k][0] * r * step, y = node.y + ways[k][1] * r * step;
+        if (x - node.w / 2 < 20 || y - node.h / 2 < 20) { continue; }
+        if (crowds(node, x, y)) { continue; }
+        if (ok && !ok(x, y)) { continue; }
+        return { x: x, y: y };
+      }
+    }
+    return null;
+  }
+
+  // A new shape, sized for its words, on the grid, and moved on down past
+  // anything already standing where it would go.
+  function newShape(kind, text, x, y) {
+    var node = { id: hand.next++, kind: kind, text: text, x: x, y: y, w: 140, h: 46 };
+    measure(node);
+    node.x = Math.round(node.x / HAND_GRID) * HAND_GRID;
+    node.y = Math.round(node.y / HAND_GRID) * HAND_GRID;
+    for (var i = 0; i < 200 && crowds(node, node.x, node.y); i++) { node.y += HAND_GRID * 4; }
+    hand.nodes.push(node);
+    return node;
+  }
+
+  // The first shape is not an oval: a Start above it, joined on.  With no
+  // room above, the whole drawing goes down to make some.
+  function startAbove(head) {
+    var id = head.id;
+    return { auto: true, says: TXT.hf_start, go: function () {
+      var first = nodeById(id);
+      if (!first) { return; }
+      var start = { id: hand.next++, kind: "oval", text: TXT.start, x: first.x, y: 0,
+                    w: 140, h: 46 };
+      measure(start);
+      var y = first.y - first.h / 2 - 70;
+      for (var i = 0; i < 200 && crowds(start, first.x, y); i++) { y -= HAND_GRID * 4; }
+      var short = start.h / 2 + 20 - y;
+      if (short > 0) {
+        var by = Math.ceil(short / HAND_GRID) * HAND_GRID;
+        hand.nodes.forEach(function (n) { n.y += by; });
+        y += by;
+      }
+      start.x = Math.round(first.x / HAND_GRID) * HAND_GRID;
+      start.y = Math.round(y / HAND_GRID) * HAND_GRID;
+      hand.nodes.push(start);
+      joinOn(start, first);
+    } };
+  }
+
+  // The shapes the flow stops dead at, that are not an End.
+  function deadEnds() {
+    return hand.nodes.filter(function (n) {
+      return n.kind !== "oval" && !outOf(n.id).length && intoOf(n.id).length;
+    });
+  }
+
+  // No End anywhere: one under the lowest of the shapes the flow stops at,
+  // and every one of them joined on to it.
+  function endBelow() {
+    if (!deadEnds().length) { return null; }
+    return { auto: true, says: TXT.hf_end, go: function () {
+      var loose = deadEnds();
+      if (!loose.length) { return; }
+      var low = loose.reduce(function (a, b) {
+        return b.y + b.h / 2 > a.y + a.h / 2 ? b : a;
+      });
+      var end = newShape("oval", TXT.end, low.x, low.y + low.h / 2 + 70);
+      loose.forEach(function (n) { joinOn(n, end); });
+    } };
+  }
+
+  // A shape the flow stops dead at, with an End to go to: joined on to the
+  // nearest one -- one that something already leads to, where there is.
+  function toEnd(node) {
+    var id = node.id;
+    return { auto: true, says: TXT.hf_to_end, go: function () {
+      var from = nodeById(id);
+      if (!from) { return; }
+      var ends = hand.nodes.filter(function (n) {
+        return n.kind === "oval" && !outOf(n.id).length && n.id !== id;
+      });
+      var used = ends.filter(function (n) { return intoOf(n.id).length; });
+      if (used.length) { ends = used; }
+      if (!ends.length) { return; }
+      var near = ends.reduce(function (a, b) {
+        return Math.hypot(b.x - from.x, b.y - from.y) < Math.hypot(a.x - from.x, a.y - from.y)
+               ? b : a;
+      });
+      joinOn(from, near);
+    } };
+  }
+
+  // An oval with nothing in it says Start where the flow starts and End
+  // where it stops.  Anything else is yours to write, so the button only
+  // opens the shape to be typed into.
+  function fillEmpty(node) {
+    var id = node.id;
+    if (node.kind === "oval") {
+      var word = !intoOf(id).length ? TXT.start : (!outOf(id).length ? TXT.end : "");
+      if (word) {
+        return { auto: true, says: say("hf_write", { word: word }), go: function () {
+          var n = nodeById(id);
+          if (n) { n.text = word; }        // sized to it on the redraw
+        } };
+      }
+    }
+    return { auto: false, says: TXT.hf_type, go: function () {
+      picked = id; chosen = null;
+      drawHand(); drawHandPanel();
+      var g = el('.node[data-i="h' + id + '"]', chart);
+      if (g) { typeInto(g); }
+    } };
+  }
+
+  // A shape on its own: where its arrow goes is yours to say, so this only
+  // starts the arrow -- press the shape it should go to next.
+  function arrowFrom(node) {
+    var id = node.id;
+    return { auto: false, says: TXT.hf_arrow, go: function () {
+      picked = id; chosen = null; joining = true; joinFrom = null;
+      drawHand(); drawHandPanel();
+    } };
+  }
+
+  // Words on a decision's two ways out: Yes and No, or, where one of them
+  // already says one, the other.  A way out already saying something else
+  // -- "over 18" -- says what the other should be no more than anybody
+  // else does, so that is left alone.
+  function labelWays(outs) {
+    var a = String(outs[0].label || "").trim(), b = String(outs[1].label || "").trim();
+    var wantA = a || (isYes(b) ? TXT.no : isNo(b) ? TXT.yes : (b ? "" : TXT.yes));
+    var wantB = b || (isYes(a) ? TXT.no : isNo(a) ? TXT.yes : (a ? "" : TXT.no));
+    if (!wantA || !wantB) { return null; }
+    var one = outs[0], two = outs[1];
+    return { auto: true,
+             says: !a && !b ? say("hf_yes_no", { yes: TXT.yes, no: TXT.no })
+                            : say("hf_label", { word: a ? wantB : wantA }),
+             go: function () { one.label = wantA; two.label = wantB; } };
+  }
+
+  // Both ways out saying Yes, or both No: the second says the other.
+  function labelOther(outs) {
+    var a = String(outs[0].label || "").trim();
+    var want = isYes(a) ? TXT.no : isNo(a) ? TXT.yes : "";
+    if (!want) { return null; }
+    var two = outs[1];
+    return { auto: true, says: say("hf_relabel", { word: want }),
+             go: function () { two.label = want; } };
+  }
+
+  // A shape on top of another: the later of the two, moved to the nearest
+  // place clear of everything.
+  function moveApart(node) {
+    var id = node.id;
+    return { auto: true, says: TXT.hf_apart, go: function () {
+      var n = nodeById(id);
+      var spot = n && freeSpot(n, 40);
+      if (spot) { n.x = spot.x; n.y = spot.y; }
+    } };
+  }
+
+  // How many times, all told, an arrow runs through a shape on its way past.
+  function crossings() {
+    var routes = routeAll(), count = 0;
+    hand.links.forEach(function (link, li) {
+      var pts = routes[li];
+      if (!pts) { return; }
+      hand.nodes.forEach(function (n) {
+        if (n.id === link.from || n.id === link.to) { return; }
+        for (var i = 0; i < pts.length - 1; i++) {
+          if (throughBox(pts[i], pts[i + 1], n)) { count++; return; }
+        }
+      });
+    });
+    return count;
+  }
+
+  // A line through a shape: the shape, moved to the nearest clear place
+  // where fewer lines run through anything than did before.  The arrows
+  // find their ways again for every place tried, so it looks no further
+  // than a dozen steps out.
+  function moveOffLine(node) {
+    var id = node.id;
+    return { auto: true, says: TXT.hf_clear, go: function () {
+      var n = nodeById(id);
+      if (!n) { return; }
+      var was = { x: n.x, y: n.y }, before = crossings();
+      var spot = freeSpot(n, 12, function (x, y) {
+        n.x = x; n.y = y;
+        var now = crossings();
+        n.x = was.x; n.y = was.y;
+        return now < before;
+      });
+      if (spot) { n.x = spot.x; n.y = spot.y; }
+    } };
+  }
+
+  // One of them, pressed: done, and the drawing and the list drawn again.
+  function handMendNow(fix) {
+    if (!byHand || !fix) { return; }
+    if (!fix.auto) { fix.go(); return; }
+    keepUndo();
+    fix.go();
+    drawHand(); drawHandPanel(); showReport();
+  }
+
+  function offerHandMend(row, box, fix) {
+    var button = document.createElement("button");
+    button.className = "mend";
+    button.type = "button";
+    button.textContent = fix.says;
+    button.onclick = function (ev) { ev.stopPropagation(); handMendNow(fix); };
+    box.appendChild(button);
+    if (fix.auto) {
+      row.ondblclick = function () { handMendNow(fix); };
+      row.title = TXT.w_mend_tip || "";
+    }
+    return button;
+  }
+
+  // All of them: put right one at a time, looking again after each, since
+  // one fix can settle another -- an End put in stops every shape that was
+  // stopping dead -- and one step for Undo to take back.  A fix that turns
+  // out to change nothing is not tried twice, and the whole of it gives up
+  // after a second and a half rather than keep the page.
+  function handMendAll() {
+    if (!byHand) { return; }
+    keepUndo();
+    var tried = {}, began = Date.now();
+    for (var turn = 0; turn < 60 && Date.now() - began < 1500; turn++) {
+      var next = checkDesign().filter(function (bit) {
+        return bit.fix && bit.fix.auto && !tried[bit.key + ":" + bit.id + ":" + bit.fix.says];
+      })[0];
+      if (!next) { break; }
+      var was = JSON.stringify(hand);
+      next.fix.go();
+      if (JSON.stringify(hand) === was) { tried[next.key + ":" + next.id + ":" + next.fix.says] = true; }
+    }
+    drawHand(); drawHandPanel(); showReport();
   }
 
   // ---- the design, written out as a program -----------------------------
@@ -287,7 +604,10 @@
     if (!byHand) { return; }
     forgetProgram();
     handWas = null;
-    if (!hand.nodes.length || checkDesign().length) { return; }
+    // Only what stops it working stops it: a shape overlapping another is
+    // said in amber and runs the same.
+    if (!hand.nodes.length ||
+        checkDesign().some(function (bit) { return !bit.warn; })) { return; }
     var text;
     try { text = handAsPseudocode(); }
     catch (thrown) { handSays(thrown.message || String(thrown), true); return; }

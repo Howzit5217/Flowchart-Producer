@@ -242,7 +242,7 @@ var bad = [];
 
 // ---- and an arrow left to find its own way keeps off a side in use -----
 // Two answers out of one decision, to two boxes below it: the second does
-// not come out of the foot the first is already using, and one drawn from
+// not come out of the foot the first is already using, and one pinned to
 // the foot on purpose moves the other one off it.
 (function () {
   var d = { id: 1, x: 500, y: 200, w: 190, h: 84, kind: "diamond", turn: 0 };
@@ -255,7 +255,7 @@ var bad = [];
   hand.nodes = [d, yes, no];
   hand.links = [{ from: 1, to: 3 }, { from: 1, to: 2 }];
   var free = routeAll();
-  hand.links = [{ from: 1, to: 3 }, { from: 1, to: 2, fromSide: "foot" }];
+  hand.links = [{ from: 1, to: 3 }, { from: 1, to: 2, fromSide: "foot", pin: true }];
   var kept = routeAll();
   hand.links = [];
   var ok = free[0].sides[0] !== free[1].sides[0] &&
@@ -264,6 +264,106 @@ var bad = [];
   console.log("two answers out of one decision: " + PORT_SIDES[free[0].sides[0]] +
               " and " + PORT_SIDES[free[1].sides[0]] + "; with the foot kept, " +
               PORT_SIDES[kept[0].sides[0]] + " and " + PORT_SIDES[kept[1].sides[0]]);
+})();
+
+// ---- the sides an arrow was drawn between are where it leans, not a rule --
+// Drawn out of the right of a box to one below and to the right, it keeps
+// to the right while nothing is the worse for it.  Two drawn out of the one
+// dot do not run down one line: one of them moves.  And moved round to the
+// other side, the shape it points at is not reached the long way round.
+(function () {
+  function box(id, x, y) { return { id: id, x: x, y: y, w: 170, h: 58, kind: "rect", turn: 0 }; }
+  var a = box(1, 400, 200), b = box(2, 700, 400), c = box(3, 100, 400);
+  hand.nodes = [a, b, c];
+  hand.links = [{ from: 1, to: 2, fromSide: "right" }];
+  var leant = routeAll()[0].sides[0] === 3;
+  hand.links = [{ from: 1, to: 2, fromSide: "foot" }, { from: 1, to: 3, fromSide: "foot" }];
+  var two = routeAll();
+  // off different sides, or off the one side at two points of it
+  var parted = two[0].sides[0] !== two[1].sides[0] ||
+               Math.abs(two[0][0][0] - two[1][0][0]) > 8;
+  // drawn out of the right to b, then b carried round to the far left
+  b.x = 60; b.y = 200; c.x = 400; c.y = 500;
+  hand.links = [{ from: 1, to: 2, fromSide: "right", toSide: "left" }];
+  var moved = routeAll()[0];
+  var near = moved.sides[0] === 2 && moved.sides[1] === 3;
+  hand.links = [];
+  if (!leant) bad.push("an arrow drawn out of the right did not keep to it");
+  if (!parted) bad.push("two arrows drawn from one dot still share it");
+  if (!near) bad.push("an arrow went the long way round to keep its drawn sides");
+  console.log("drawn sides leant on: " + (leant ? "kept" : "lost") + " while free, " +
+              (parted ? "parted" : "shared") + " when two share a dot, " +
+              (near ? "given up" : "kept") + " when the shape moves round");
+})();
+
+// ---- arrows at one side of a shape meet it apart, and in order -----------
+// Three small boxes over one wide one, each joined to it: the three come
+// straight down into its top, at three points, left to right as the boxes
+// stand, and none lies on another -- in either direction, out of the top
+// of the wide one as well as into it.
+(function () {
+  var tried = 0, wrong = 0;
+  [false, true].forEach(function (up) {
+    var wide = { id: 9, x: 500, y: 460, w: 600, h: 58, kind: "rect", turn: 0 };
+    hand.nodes = [{ id: 1, x: 360, y: 200, w: 80, h: 40, kind: "rect", turn: 0 },
+                  { id: 2, x: 500, y: 200, w: 80, h: 40, kind: "rect", turn: 0 },
+                  { id: 3, x: 640, y: 200, w: 80, h: 40, kind: "rect", turn: 0 }, wide];
+    hand.links = [2, 1, 3].map(function (id) {
+      return up ? { from: 9, to: id } : { from: id, to: 9 };
+    });
+    var routes = routeAll();
+    tried++;
+    var tips = routes.map(function (pts) { return up ? pts[0] : pts[pts.length - 1]; });
+    var top = routes.every(function (pts) { return pts.sides[up ? 0 : 1] === 0; });
+    var order = tips[1][0] < tips[0][0] && tips[0][0] < tips[2][0];
+    var onIt = tips.every(function (p) { return Math.abs(p[1] - (wide.y - wide.h / 2)) < 0.6; });
+    var ways = {}, over = 0;
+    routes.forEach(function (pts) { over += overlapsIn(pts, ways); waysAdd(ways, pts); });
+    if (!(top && order && onIt && !over)) { wrong++; }
+  });
+  hand.links = [];
+  if (wrong) bad.push(wrong + " of " + tried + " wide boxes took three arrows at one point");
+  console.log("three arrows at one side of a box, both ways: " +
+              (wrong ? wrong + " wrong" : "apart, in order"));
+
+  // and moved along a diamond's slopes or an oval's curve, a meeting point
+  // is still on the outline, on all four sides
+  var off = 0;
+  ["diamond", "oval"].forEach(function (kind) {
+    var n = { id: 1, x: 300, y: 300, w: 190, h: 84, kind: kind, turn: 0 };
+    for (var side = 0; side < 4; side++) {
+      var room = spreadRoom(n, side);
+      [-room, -room / 2, room / 2, room].forEach(function (by) {
+        var p = portAlong(n, side, by);
+        var u = (p.x - n.x) / (n.w / 2), v = (p.y - n.y) / (n.h / 2);
+        var on = kind === "diamond" ? Math.abs(u) + Math.abs(v) : Math.hypot(u, v);
+        if (Math.abs(on - 1) > 0.01) { off++; }
+      });
+    }
+  });
+  if (off) bad.push(off + " spread meeting points off the outline");
+  console.log("spread meeting points on a diamond and an oval: " + off + " off the outline");
+})();
+
+// ---- no arrow lies along another where it has room not to ----------------
+// Two arrows crossing the same gap between two rows, their spans side by
+// side: the halfway line through the gap is where both would go.
+(function () {
+  function box(id, x, y) { return { id: id, x: x, y: y, w: 170, h: 58, kind: "rect", turn: 0 }; }
+  var tried = 0, lying = 0;
+  // each of these, routed as if the other arrow were not there, lies along it
+  [[100, 400, 500, 200], [100, 600, 700, 100], [100, 500, 400, 200]].forEach(function (xs) {
+    hand.nodes = [box(1, xs[0], 150), box(2, xs[1], 400), box(3, xs[2], 150), box(4, xs[3], 400)];
+    hand.links = [{ from: 1, to: 2 }, { from: 3, to: 4 }];
+    var routes = routeAll();
+    var ways = {};
+    waysAdd(ways, routes[0]);
+    tried++;
+    if (overlapsIn(routes[1], ways)) { lying++; }
+  });
+  hand.links = [];
+  if (lying) bad.push(lying + " of " + tried + " arrows lie along another");
+  console.log(tried + " pairs of arrows across one gap: " + lying + " lying along each other");
 })();
 
 if (bad.length) {

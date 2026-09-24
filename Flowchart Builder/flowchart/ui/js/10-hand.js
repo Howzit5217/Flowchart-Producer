@@ -375,8 +375,9 @@
 
   // The four sides of a shape, in the order ports() gives them.  An arrow
   // drawn from one of the dots on a shape to one of the dots on another
-  // keeps those two sides for good (link.fromSide, link.toSide), however
-  // the shapes are moved about afterwards: it was put there on purpose.
+  // notes those two sides (link.fromSide, link.toSide) and leans to them
+  // from then on; pinned (link.pin), it keeps them however the shapes are
+  // moved about.  See routeAll.
   var PORT_SIDES = ["top", "foot", "left", "right"];
   // What it costs a line to use a side another line already uses.  Less
   // than running through a shape, which is harder still to follow, but a
@@ -384,11 +385,22 @@
   // as one arrow, and nobody can tell which way either of them goes.
   var CROWD = 3000;
 
-  function linkPath(a, b, link, taken) {  // corners only, never a diagonal
+  // `link` holds the arrow to the sides it names (fromSide, toSide), where
+  // it was pinned to them.  The rest are for routeAll: `taken`, the sides
+  // other arrows are on; `lean`, the sides it was drawn between, which it
+  // keeps to while that costs it little (LEAN); `ways`, the runs of the
+  // arrows already routed, which it keeps off (OVERLAP); and `shift`, how
+  // far along its two sides from their middles it meets them.
+  function linkPath(a, b, link, taken, lean, ways, shift) {  // corners only, never a diagonal
     var outs = ports(a), ins = ports(b);
     var best = null, bestPrice = Infinity, bestOut = 0, bestIn = 0;
+    var bestBase = Infinity, bestOver = 0;
     var outOnly = link ? PORT_SIDES.indexOf(link.fromSide) : -1;
     var inOnly = link ? PORT_SIDES.indexOf(link.toSide) : -1;
+    if (shift) {
+      if (outOnly >= 0 && shift.from) { outs[outOnly] = portAlong(a, outOnly, shift.from); }
+      if (inOnly >= 0 && shift.to) { ins[inOnly] = portAlong(b, inOnly, shift.to); }
+    }
 
     // `taken` says how many other lines are on each side of each shape.
     function crowd(id, side) {
@@ -400,9 +412,20 @@
       // reads, so it wins any tie
       var price = priceOf(pts, a, b) - (i === 1 && j === 0 ? 1 : 0);
       if (!outward(pts, outs[i], ins[j], outOnly >= 0, inOnly >= 0)) { price += 10000; }
-      if (outOnly < 0) { price += CROWD * crowd(a.id, i); }
-      if (inOnly < 0) { price += CROWD * crowd(b.id, j); }
-      if (price < bestPrice) { best = pts; bestPrice = price; bestOut = i; bestIn = j; }
+      if (outOnly < 0) { price += crowdCost(a, i) * crowd(a.id, i); }
+      if (inOnly < 0) { price += crowdCost(b, j) * crowd(b.id, j); }
+      // What it is blocked by is judged before what it would rather: a
+      // side it leans to never makes a way through a shape look clear.
+      var base = price;
+      if (lean && lean.from === i) { price -= LEAN; }
+      if (lean && lean.to === j) { price -= LEAN; }
+      if (price >= bestPrice) { return; }   // lying on nothing, it still loses
+      var over = ways ? overlapsIn(pts, ways) : 0;
+      price += OVERLAP * over;
+      if (price < bestPrice) {
+        best = pts; bestPrice = price; bestOut = i; bestIn = j;
+        bestBase = base; bestOver = over;
+      }
     }
     function tryJoin(i, j, lane) {        // unless a side it has to keep says no
       if ((outOnly >= 0 && i !== outOnly) || (inOnly >= 0 && j !== inOnly)) { return; }
@@ -418,7 +441,8 @@
         tryJoin(i, j);
       }
     }
-    if (bestPrice < 10000) { return done(); }   // nothing in the way: done
+    // nothing in the way, and on top of no other arrow: done
+    if (bestBase < 10000 && !bestOver) { return done(); }
 
     // Something is in the way of every straight join, so look for a lane to
     // go round by -- just clear of each shape's own edges, which is where a
@@ -452,14 +476,38 @@
       }).slice(0, NEAREST);
     }
     var allY = lanesY.slice(), allX = lanesX.slice();
-    lanesY = closest(lanesY, (a.y + b.y) / 2);
-    lanesX = closest(lanesX, (a.x + b.x) / 2);
+    // Here only because the way it would take lies along another arrow,
+    // with nothing in its way: the halfway line between the two shapes is
+    // where every arrow crossing that gap goes, so it is tried a little
+    // either side of halfway, and the few lanes nearest -- no more, since
+    // this is asked of arrow after arrow on every frame of a drag.
+    var clear = bestBase < 10000;
+    lanesY = closest(lanesY, (a.y + b.y) / 2).slice(0, clear ? 3 : NEAREST);
+    lanesX = closest(lanesX, (a.x + b.x) / 2).slice(0, clear ? 3 : NEAREST);
+    if (bestOver) {
+      var ga = turned(a), gb = turned(b);
+      var gapY = gapMiddle(ga.y, ga.h, gb.y, gb.h), gapX = gapMiddle(ga.x, ga.w, gb.x, gb.w);
+      [-20, -10, 10, 20].forEach(function (by) {
+        lanesY.push(gapY + by);
+        lanesX.push(gapX + by);
+      });
+    }
+    // Clear of every shape, the sides it found are good ones: it is only
+    // the run across the middle that wants moving off the other arrow, so
+    // only that is moved.
+    if (clear) {
+      var keepOut = bestOut, keepIn = bestIn;
+      (keepOut < 2 ? lanesY : lanesX).forEach(function (lane) {
+        tryJoin(keepOut, keepIn, lane);
+      });
+      return done();
+    }
     // A line held to a side wants the lanes just outside that side as well,
     // and those can be further off than half way: the one lane that gets a
     // line from the right of a decision round to a box below and to its
     // left is the one just right of the decision.
     var endsY = [], endsX = [];
-    if (outOnly >= 0 || inOnly >= 0) {
+    if ((outOnly >= 0 || inOnly >= 0) && !clear) {
       var p0 = outOnly >= 0 ? outs[outOnly] : { x: a.x, y: a.y, dx: 0, dy: 0 };
       var q0 = inOnly >= 0 ? ins[inOnly] : { x: b.x, y: b.y, dx: 0, dy: 0 };
       // and the lanes just clear of both shapes at once, which is the way
@@ -494,7 +542,7 @@
         tryJoin(m, m, lanesX[k]);
       }
     }
-    if (bestPrice < 10000 || (outOnly < 0 && inOnly < 0)) { return done(); }
+    if (bestBase < 10000 || (outOnly < 0 && inOnly < 0)) { return done(); }
 
     // A line held to its sides may have none of those ways open to it: out
     // of the foot and into a side, or back up to the top of a shape above.
@@ -506,7 +554,7 @@
     for (k = 0; k < lanesX.length; k++) {
       for (i = 2; i < 4; i++) { tryJoin(i, 0, lanesX[k]); tryJoin(i, 1, lanesX[k]); }
     }
-    if (bestPrice < 10000) { return done(); }
+    if (bestBase < 10000) { return done(); }
     for (i = 0; i < 4; i++) {             // round a corner, near its two ends
       for (j = 0; j < 4; j++) {
         if ((outOnly >= 0 && i !== outOnly) || (inOnly >= 0 && j !== inOnly)) { continue; }
@@ -525,10 +573,10 @@
   }
 
   // Every arrow on the paper, routed in the order they were drawn, so that
-  // each one knows which sides the others have used.  A side an arrow was
-  // drawn to keeps is spoken for before anything is routed at all; every
-  // other arrow finds its own way, and stays off a side some other arrow is
-  // already on wherever it has a free one to take instead.
+  // each one knows which sides the others have used.  The sides an arrow
+  // was drawn between are spoken for before anything is routed at all;
+  // every other arrow finds its own way, and stays off a side some other
+  // arrow is already on wherever it has a free one to take instead.
   //
   // It used to be that every arrow found its way as if it were the only
   // one there, so the cheapest side for one was the cheapest for the next:
@@ -537,24 +585,227 @@
   // swap to the foot, where another already was, the moment a shape moved.
   // Everything that asks where an arrow goes asks here, so that what is
   // clicked, typed on and checked is the arrow that is drawn.
+  //
+  // And the sides an arrow was drawn between used to be its sides for good,
+  // wherever the shapes were moved afterwards -- so two drawn from one dot
+  // ran down one line for ever, and one drawn from the right-hand side of a
+  // shape still went out of the right after the shape it pointed at had been
+  // moved round to the left, the long way round.  Now they are the sides it
+  // leans to (LEAN): kept while keeping them costs little, and given up to
+  // stay off another arrow's side or out of its way.  Only an arrow pinned
+  // to its sides (link.pin, from the arrow's menu or panel) keeps them.
+  var LEAN = 300;                         // an end kept on the side it was drawn to
+  var OVERLAP = 2500;                     // a run lying along another arrow's
   function routeAll() {
     var taken = {};
-    function note(id, side) {
-      (taken[id] = taken[id] || [0, 0, 0, 0])[side]++;
+    function note(id, side, by) {
+      (taken[id] = taken[id] || [0, 0, 0, 0])[side] += by || 1;
     }
     hand.links.forEach(function (link) {
       var i = PORT_SIDES.indexOf(link.fromSide), j = PORT_SIDES.indexOf(link.toSide);
       if (i >= 0) { note(link.from, i); }
       if (j >= 0) { note(link.to, j); }
     });
-    return hand.links.map(function (link) {
+    var ways = {};
+    var routes = hand.links.map(function (link) {
       var a = nodeById(link.from), b = nodeById(link.to);
       if (!a || !b) { return null; }
-      var pts = linkPath(a, b, link, taken);
-      if (PORT_SIDES.indexOf(link.fromSide) < 0) { note(link.from, pts.sides[0]); }
-      if (PORT_SIDES.indexOf(link.toSide) < 0) { note(link.to, pts.sides[1]); }
+      var i = PORT_SIDES.indexOf(link.fromSide), j = PORT_SIDES.indexOf(link.toSide);
+      var lean = link.pin ? null : { from: i, to: j };
+      // Its own sides are not another arrow's to keep off.
+      if (lean && i >= 0) { note(link.from, i, -1); }
+      if (lean && j >= 0) { note(link.to, j, -1); }
+      var pts = linkPath(a, b, link.pin ? link : null, taken, lean, ways);
+      if (lean || i < 0) { note(link.from, pts.sides[0]); }
+      if (lean || j < 0) { note(link.to, pts.sides[1]); }
+      waysAdd(ways, pts);
       return pts;
     });
+    return spreadEnds(routes);
+  }
+
+  // Two or more arrows at one side of a shape meet it at points spread along
+  // that side, rather than all at its middle, where they ran into each other
+  // and could not be told apart -- in the order they come in from, so they
+  // do not cross on the way.  Each is slid along the side it has, not
+  // routed again: its first run slides with its end, and the corner at the
+  // top of that run with it, so every run stays square and the rest of the
+  // way is the way it was.
+  var SPREAD = 18;                        // at most this far apart
+  function spreadEnds(routes) {
+    var at = {};
+    hand.links.forEach(function (link, li) {
+      var pts = routes[li];
+      if (!pts) { return; }
+      var last = pts.length - 1;
+      [[link.from, pts.sides[0], "from", pts[2] || pts[last]],
+       [link.to, pts.sides[1], "to", pts[last - 2] || pts[0]]].forEach(function (end) {
+        var key = end[0] + ":" + end[1];
+        (at[key] = at[key] || []).push({ li: li, id: end[0], side: end[1],
+                                         end: end[2], toward: end[3] });
+      });
+    });
+    var shift = {};
+    Object.keys(at).forEach(function (key) {
+      var ends = at[key];
+      if (ends.length < 2) { return; }
+      var node = nodeById(ends[0].id), side = ends[0].side;
+      var room = node ? spreadRoom(node, side) : 0;
+      if (room <= 0) { return; }
+      var axis = side < 2 ? 0 : 1;          // along the top or foot, or down a side
+      ends.sort(function (p, q) {
+        return (p.toward[axis] - q.toward[axis]) || (p.li - q.li);
+      });
+      var step = Math.min(SPREAD, 2 * room / (ends.length - 1));
+      ends.forEach(function (e, n) {
+        (shift[e.li] = shift[e.li] || {})[e.end] = (n - (ends.length - 1) / 2) * step;
+      });
+    });
+    hand.links.forEach(function (link, li) {
+      if (!routes[li] || !shift[li]) { return; }
+      routes[li] = slidEnds(routes[li], nodeById(link.from), nodeById(link.to), shift[li]);
+    });
+    return routes;
+  }
+
+  // A route with its two ends moved along their sides by `by.from` and
+  // `by.to`.  A straight route whose two ends move by different amounts is
+  // given a step halfway along, rather than being tipped over.
+  function slidEnds(pts, a, b, by) {
+    var sides = pts.sides, out = pts.map(function (p) { return p.slice(); });
+    var last = out.length - 1;
+    var p = portAlong(a, sides[0], by.from || 0), q = portAlong(b, sides[1], by.to || 0);
+    var ax = sides[0] < 2 ? 0 : 1, bx = sides[1] < 2 ? 0 : 1;   // the axis each slides on
+    if (out.length === 2) {
+      var d0 = [p.x, p.y][ax] - out[0][ax], d1 = [q.x, q.y][bx] - out[1][bx];
+      if (ax === bx && Math.abs(d0 - d1) > 0.5) {
+        var cross = 1 - ax, mid = (out[0][cross] + out[1][cross]) / 2;
+        var bend0 = [], bend1 = [];
+        bend0[ax] = p[ax ? "y" : "x"]; bend0[cross] = mid;
+        bend1[ax] = q[ax ? "y" : "x"]; bend1[cross] = mid;
+        out = [[p.x, p.y], bend0, bend1, [q.x, q.y]];
+        out.sides = sides;
+        return out;
+      }
+    }
+    // the first run and the corner it reaches go with the end
+    out[1][ax] += [p.x, p.y][ax] - out[0][ax];
+    out[0] = [p.x, p.y];
+    out[last - 1][bx] += [q.x, q.y][bx] - out[last][bx];
+    out[last] = [q.x, q.y];
+    out.sides = sides;
+    return out;
+  }
+
+  // How far either way from the middle of one of its sides a shape will
+  // take an arrow: along the whole of a straight side, clear of its corners;
+  // some way along the slopes of a diamond and the curve of an oval; and
+  // not at all where the side is a point, a notch or a wave, which an arrow
+  // meets properly only in the middle.  A shape turned round is only trusted
+  // this far where it is the same shape every way up.
+  var SPREAD_ALL = { rect: 1, roundrect: 1, sub: 1, text: 1, table: 1, note: 1,
+                     card: 1, loop: 1, parallel: 1 };
+  var SPREAD_SOME = { io: [0, 1], io_back: [0, 1], trap: [0, 1], hex: [0, 1],
+                      step: [0, 1], doc: [0], docs: [0], delay: [0, 1, 2],
+                      screen: [0, 1], stored: [0, 1], store: [2, 3],
+                      manual: [1, 2, 3], offpage: [0, 2, 3], callout: [0, 2, 3],
+                      cube: [1, 2] };
+  function spreadRoom(node, side) {
+    var n = turned(node), along = side < 2 ? n.w : n.h;
+    var upright = !(Math.round(((node.turn || 0) % 360) / 90) % 4);
+    if (n.kind === "diamond") { return along * 0.2; }
+    if (n.kind === "oval" || n.kind === "circle") { return along * 0.28; }
+    if (SPREAD_ALL[n.kind] ||
+        (upright && SPREAD_SOME[n.kind] && SPREAD_SOME[n.kind].indexOf(side) >= 0)) {
+      return Math.max(0, along / 2 - 16);
+    }
+    return 0;
+  }
+
+  // Where an arrow meets a side `off` from its middle: along a straight side
+  // just that; up the slope of a diamond, or round an oval, as far as the
+  // outline has fallen back by then.
+  function portAlong(node, side, off) {
+    var p = ports(node)[side];
+    if (!off) { return p; }
+    var n = turned(node), hw = n.w / 2, hh = n.h / 2;
+    var q = { x: p.x, y: p.y, dx: p.dx, dy: p.dy };
+    if (side < 2) { q.x += off; } else { q.y += off; }
+    if (n.kind === "diamond") {
+      if (side < 2) { q.y = n.y + p.dy * (hh - Math.abs(off) * hh / hw); }
+      else { q.x = n.x + p.dx * (hw - Math.abs(off) * hw / hh); }
+    } else if (n.kind === "oval" || n.kind === "circle") {
+      if (side < 2) { q.y = n.y + p.dy * hh * Math.sqrt(Math.max(0, 1 - off * off / (hw * hw))); }
+      else { q.x = n.x + p.dx * hw * Math.sqrt(Math.max(0, 1 - off * off / (hh * hh))); }
+    }
+    return q;
+  }
+
+  // What sharing a side with another arrow costs.  Where the side is long
+  // and straight the two meet it apart (spreadEnds), so sharing it is a
+  // small thing -- three arrows from above come straight down into the top
+  // of a box rather than two of them going round to its sides.  The point
+  // of a diamond, or the end of an oval, still costs what it always did:
+  // two answers leave a decision from two of its points.
+  var CROWD_SHARED = 150;
+  function crowdCost(node, side) {
+    var kind = node.kind;
+    if (kind === "diamond" || kind === "oval" || kind === "circle") { return CROWD; }
+    return spreadRoom(node, side) >= SPREAD ? CROWD_SHARED : CROWD;
+  }
+
+  // Halfway across the gap between two shapes, along one axis; or halfway
+  // between their middles, where they overlap along it.
+  function gapMiddle(c1, s1, c2, s2) {
+    var lo = c1 < c2 ? [c1, s1] : [c2, s2], hi = c1 < c2 ? [c2, s2] : [c1, s1];
+    var from = lo[0] + lo[1] / 2, to = hi[0] - hi[1] / 2;
+    return from < to ? (from + to) / 2 : (c1 + c2) / 2;
+  }
+
+  // The runs of the arrows routed so far, filed by the line each lies on --
+  // one across at y = 120 under ways.h[120] -- so a new run is checked only
+  // against those it could be lying on top of.  Nearer than WAY_NEAR, two
+  // runs are one line to anyone looking at them.  `ways` starts as {}.
+  var WAY_NEAR = 3;
+  function waysAdd(ways, pts) {
+    var across = ways.h = ways.h || {}, down = ways.v = ways.v || {};
+    for (var i = 1; pts && i < pts.length; i++) {
+      var p = pts[i - 1], q = pts[i], at;
+      if (Math.abs(p[1] - q[1]) < 0.5 && Math.abs(p[0] - q[0]) >= 0.5) {
+        at = Math.round(p[1]);
+        (across[at] = across[at] || []).push([Math.min(p[0], q[0]), Math.max(p[0], q[0])]);
+      } else if (Math.abs(p[0] - q[0]) < 0.5 && Math.abs(p[1] - q[1]) >= 0.5) {
+        at = Math.round(p[0]);
+        (down[at] = down[at] || []).push([Math.min(p[1], q[1]), Math.max(p[1], q[1])]);
+      }
+    }
+  }
+
+  // How many of this route's runs lie along one already there.  The stand-
+  // off at either end is left out: two arrows at one side of a shape meet
+  // it apart once they are spread (spreadEnds), and it is the side they
+  // share that says what that costs (crowdCost), not this.
+  function overlapsIn(pts, ways) {
+    var count = 0, last = pts.length - 1;
+    if (!ways.h) { return 0; }             // nothing routed yet
+    for (var i = 1; i < pts.length; i++) {
+      var p = pts[i - 1], q = pts[i], flat = Math.abs(p[1] - q[1]) < 0.5;
+      if (!flat && Math.abs(p[0] - q[0]) >= 0.5) { continue; }
+      var at = Math.round(flat ? p[1] : p[0]);
+      var s = flat ? p[0] : p[1], e = flat ? q[0] : q[1], way = e > s ? 1 : -1;
+      if (i === 1) { s += way * STAND; }
+      if (i === last) { e -= way * STAND; }
+      if ((e - s) * way < 0.5) { continue; }
+      var lo = Math.min(s, e), hi = Math.max(s, e);
+      var file = flat ? ways.h : ways.v;
+      for (var k = at - WAY_NEAR; k <= at + WAY_NEAR; k++) {
+        var runs = file[k];
+        for (var r = 0; runs && r < runs.length; r++) {
+          if (Math.min(hi, runs[r][1]) - Math.max(lo, runs[r][0]) > 2) { count++; }
+        }
+      }
+    }
+    return count;
   }
 
   // How far a point is from a line between two points.  Used to work out
@@ -921,8 +1172,10 @@
       var lit = chosen === link.id || (inMany(link.from) && inMany(link.to));
       out.push('<g class="link' + (lit ? " on" : "") +
                '" data-link="' + link.id + '">');
+      // A band either side of the line to take hold of it by: a fingertip
+      // wide on a touch screen, where a line is a lot to ask a finger to hit.
       out.push('<path class="grab" d="' + d + '" fill="none" stroke="transparent" ' +
-               'stroke-width="20" pointer-events="stroke" ' +
+               'stroke-width="' + (COARSE ? 32 : 20) + '" pointer-events="stroke" ' +
                'stroke-linecap="round" stroke-linejoin="round"/>');
       out.push('<path class="flow" d="' + d + '" fill="none"' + look + "/>");
       if (link.head !== false) {
@@ -1004,14 +1257,16 @@
                    '" fill="#14427c" stroke="#ffffff" stroke-width="1.5"/>');
         });
         // a corner at every corner, each one anchored to the one opposite,
-        // so a shape grows and shrinks from whichever you take hold of
+        // so a shape grows and shrinks from whichever you take hold of --
+        // bigger under a finger, as the dots are
+        var GRIP = COARSE ? 16 : 9;
         [["nw", -1, -1], ["ne", 1, -1], ["sw", -1, 1], ["se", 1, 1]]
           .forEach(function (corner) {
             out.push('<rect class="grip" data-i="' + n.id +
                      '" data-corner="' + corner[0] + '" x="' +
-                     (moved.x + corner[1] * about.w / 2 - 4.5) + '" y="' +
-                     (moved.y + corner[2] * about.h / 2 - 4.5) +
-                     '" width="9" height="9" rx="2" fill="#ffffff" ' +
+                     (moved.x + corner[1] * about.w / 2 - GRIP / 2) + '" y="' +
+                     (moved.y + corner[2] * about.h / 2 - GRIP / 2) +
+                     '" width="' + GRIP + '" height="' + GRIP + '" rx="2" fill="#ffffff" ' +
                      'stroke="#14427c" stroke-width="1.6"/>');
           });
       }

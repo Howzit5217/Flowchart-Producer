@@ -58,14 +58,19 @@
   // Shift or Ctrl is held.  A press let go where it was is still a click on
   // the paper (or on the arrow under it), and does what a click did.
   //
-  // A finger is left to scroll, as it always was: a touch screen has no
-  // other way to move about the paper, and two fingers already zoom.
+  // Which drag this is depends on the tool in the foot bar.  With Move --
+  // how the page starts -- a drag on bare paper moves about it, as it always
+  // did, and only Shift or Ctrl makes it a box.  With Select, a plain drag
+  // is a box, a finger's too; a touch screen has no Shift to hold.
   var lassoDone = false;                 // the click that ends a box is no click
 
   function lasso(svg) {
     svg.addEventListener("pointerdown", function (ev) {
       lassoDone = false;
-      if (ev.button || ev.pointerType === "touch" || pinched) { return; }
+      if (ev.button || pinched) { return; }
+      var boxing = handTool === "select";
+      if (!boxing && (ev.pointerType === "touch" ||
+                      !(ev.shiftKey || ev.ctrlKey || ev.metaKey))) { return; }
       if (ev.target.closest && ev.target.closest(".node, .knob, .spot, .grip")) { return; }
       var from = onPaper(ev);
       if (!from) { return; }
@@ -108,12 +113,13 @@
         });
       }
       function move(e) {
-        if (pinched) { return; }
+        if (pinched || heldLong || e.pointerId !== ev.pointerId) { return; }
         at = { x: e.clientX, y: e.clientY };
         reach();
         if (frame) { chase(at, reach); }   // out past the edge, the view follows
       }
-      function drop() {
+      function drop(e) {
+        if (e && e.pointerId !== ev.pointerId) { return; }
         chaseStop();
         window.removeEventListener("pointermove", move);
         window.removeEventListener("pointerup", drop);
@@ -122,6 +128,8 @@
         frame.remove();
         svg.classList.remove("lassoing");
         lassoDone = true;
+        // A second finger made it a pinch, and a pinch chooses nothing.
+        if (pinched || heldLong) { drawHand(); return; }
         takeUp(had.concat(inside));
         drawHand();
         drawHandPanel();
@@ -231,6 +239,8 @@
       drawHand();
       drawHandPanel();
       showReport();
+    } else {
+      drawSelBar();                      // it has something to paste now
     }
     return true;
   }
@@ -403,13 +413,42 @@
     box.appendChild(go);
   }
 
+  // ------------------------------------------------------------ two tools --
+  // Move and Select, side by side in the foot bar while drawing by hand.
+  // A drag across bare paper can only be one thing: moving about the paper,
+  // which is what it always was and what the page starts with, or drawing a
+  // box to take shapes up.  With a mouse, Shift or Ctrl makes a box under
+  // Move, so the tool hardly matters; on a touch screen it is the only way
+  // to choose, so it is said in the page rather than kept in a key.  Under
+  // Select a tap on a shape adds it to those taken up, or lets it go,
+  // which is what Shift and a click do with a mouse.
+  var handTool = "move";
+  try { if (localStorage.getItem("flowchart-tool") === "select") { handTool = "select"; } }
+  catch (e) { /* storage turned off: Move, as the page starts */ }
+
+  function setTool(which) {
+    handTool = which === "select" ? "select" : "move";
+    document.body.classList.toggle("tool-select", handTool === "select");
+    [["#tool-move", "move"], ["#tool-select", "select"]].forEach(function (pair) {
+      var b = el(pair[0]);
+      if (!b) { return; }
+      b.classList.toggle("on", handTool === pair[1]);
+      b.setAttribute("aria-pressed", handTool === pair[1] ? "true" : "false");
+    });
+    try { localStorage.setItem("flowchart-tool", handTool); } catch (e) { /* fine */ }
+  }
+  if (el("#tool-move")) {
+    el("#tool-move").onclick = function () { setTool("move"); };
+    el("#tool-select").onclick = function () { setTool("select"); };
+    setTool(handTool);
+  }
+
   // ------------------------------------------------ moving about the paper --
-  // Dragging across bare paper draws a box now, where it used to scroll the
-  // view.  So moving about is done as it is in every drawing program: hold
+  // Besides a plain drag under Move, the way every drawing program has: hold
   // the Space bar and drag, or drag with the wheel pressed in -- anywhere,
-  // shapes included.  Dragging the stage round the paper still scrolls, and
-  // so do the wheel and the bars.  Only by hand: from pseudocode a plain
-  // drag has always moved about, and still does.
+  // shapes included, and under either tool.  Dragging the stage round the
+  // paper scrolls too, and so do the wheel and the bars.  Only by hand: from
+  // pseudocode a plain drag has always moved about, and still does.
   var spaceHeld = false;
 
   // Space means this only with nothing else to press: in a box it is a
@@ -471,3 +510,262 @@
       if (byHand && ev.button === 1) { ev.preventDefault(); }
     }, true);
   })();
+
+  // A press that turned out to be something else -- a drag about the paper,
+  // a long press for a menu -- can still end in a click where it lifts,
+  // which would pick or let go of whatever is under it.  That one click is
+  // eaten -- only that one: a click from a press or a finger, straight
+  // after, and never one made by a key or by the page itself, which no
+  // press comes before to call the eating off.
+  var clickEaten = 0;                    // when it was asked for
+  function eatClick() { clickEaten = Date.now(); }
+  document.addEventListener("pointerdown", function () { clickEaten = 0; }, true);
+  document.addEventListener("click", function (ev) {
+    var due = clickEaten && Date.now() - clickEaten < 800;
+    clickEaten = 0;
+    if (!due || !ev.isTrusted || !ev.detail) { return; }
+    if (ev.target.closest && ev.target.closest(".menu, .colorpop")) { return; }
+    ev.stopPropagation();
+    ev.preventDefault();
+  }, true);
+
+  // ------------------------------------------- one finger on a touch screen --
+  // The chart takes every touch on it for itself (touch-action: none), so a
+  // finger can carry a shape and two can zoom -- which left one finger on
+  // bare paper doing nothing at all: on a phone, the only way about a chart
+  // was with two.  Now one finger anywhere on the paper that is not taking
+  // hold of something moves about it, from pseudocode too; and a flick
+  // carries on a little way after the finger lifts, the way everything else
+  // on a phone does.  Under Select, one finger draws a box instead, and two
+  // move about.  Unlocked, a finger already carries the chart (06-chart.js).
+  (function () {
+    var stage = el("#stage");
+    if (!stage) { return; }
+    var coast = 0;
+    stage.addEventListener("pointerdown", function (ev) {
+      if (coast) { cancelAnimationFrame(coast); coast = 0; }   // a finger stops it
+      if (ev.pointerType !== "touch" || ev.button || pinched || loose) { return; }
+      var paper = el("#chart");
+      if (!paper || !paper.contains(ev.target)) { return; }   // round it, the stage scrolls
+      if (byHand && (handTool === "select" ||
+                     (ev.target.closest && ev.target.closest(".node, .knob, .spot, .grip")))) {
+        return;
+      }
+      glideStop();
+      var fromX = ev.clientX, fromY = ev.clientY;
+      var wasL = stage.scrollLeft, wasT = stage.scrollTop;
+      var going = false, trail = [];
+      function place(dx, dy) {
+        stage.scrollLeft = wasL - dx;
+        stage.scrollTop = wasT - dy;
+      }
+      function move(e) {
+        if (e.pointerId !== ev.pointerId) { return; }
+        if (pinched || heldLong) { done(); return; }   // a pinch, or a menu, took it
+        var dx = e.clientX - fromX, dy = e.clientY - fromY;
+        if (!going && Math.abs(dx) + Math.abs(dy) < 8) { return; }
+        going = true;
+        place(dx, dy);
+        trail.push([performance.now(), dx, dy]);
+        if (trail.length > 6) { trail.shift(); }
+      }
+      function done(e) {
+        if (e && e.pointerId !== ev.pointerId) { return; }
+        window.removeEventListener("pointermove", move);
+        window.removeEventListener("pointerup", done);
+        window.removeEventListener("pointercancel", done);
+        if (!going) { return; }
+        eatClick();                      // the lift after a drag is not a tap
+        var a = trail[0], b = trail[trail.length - 1];
+        var dt = b && a ? b[0] - a[0] : 0;
+        if (!e || e.type !== "pointerup" || pinched || STILL || dt <= 0 ||
+            performance.now() - b[0] > 80) { return; }
+        var vx = (b[1] - a[1]) / dt, vy = (b[2] - a[2]) / dt;   // pixels a millisecond
+        var dx = b[1], dy = b[2], last = performance.now();
+        (function glide(now) {
+          var step = Math.min(40, (now || performance.now()) - last);
+          last = now || performance.now();
+          vx *= Math.pow(0.994, step);
+          vy *= Math.pow(0.994, step);
+          if (Math.abs(vx) + Math.abs(vy) < 0.02) { coast = 0; return; }
+          dx += vx * step;
+          dy += vy * step;
+          place(dx, dy);
+          coast = requestAnimationFrame(glide);
+        })(last);
+      }
+      window.addEventListener("pointermove", move);
+      window.addEventListener("pointerup", done);
+      window.addEventListener("pointercancel", done);
+    });
+  })();
+
+  // ------------------------------------------------------- a long press --
+  // What the right button does with a mouse, a finger held still does on a
+  // touch screen: the menu for the shape, the arrow or the paper under it.
+  // Some phones say a long press is a right click and some say nothing, so
+  // it is timed here; where the phone says so as well (chart.oncontextmenu),
+  // that is taken as this same press, not a second one.
+  var heldLong = false;                  // this press opened a menu: it is done
+  var pressTimer = 0, pressMenuAt = 0, touchIsDown = false;
+  var HOLD_MS = 520;
+
+  function pressHold(svg) {
+    svg.addEventListener("pointerdown", function (ev) {
+      heldLong = false;
+      clearTimeout(pressTimer);
+      if (ev.pointerType !== "touch" || ev.button) { return; }
+      if (ev.target.closest && ev.target.closest(".knob, .spot, .grip")) { return; }
+      touchIsDown = true;
+      var x = ev.clientX, y = ev.clientY, under = ev.target;
+      function stop(e) {
+        if (e && e.pointerId !== ev.pointerId) { return; }
+        clearTimeout(pressTimer);
+        window.removeEventListener("pointermove", moved);
+        window.removeEventListener("pointerup", stop);
+        window.removeEventListener("pointercancel", stop);
+        touchIsDown = false;
+        if (heldLong) { eatClick(); }      // however long it was held, the lift is no tap
+      }
+      function moved(e) {
+        if (e.pointerId !== ev.pointerId) { return; }
+        if (pinched || Math.abs(e.clientX - x) + Math.abs(e.clientY - y) > 10) {
+          clearTimeout(pressTimer);
+        }
+      }
+      pressTimer = setTimeout(function () {
+        if (pinched) { return; }
+        heldLong = true;
+        eatClick();
+        pressMenuAt = Date.now();
+        menuAt(under, x, y);
+      }, HOLD_MS);
+      window.addEventListener("pointermove", moved);
+      window.addEventListener("pointerup", stop);
+      window.addEventListener("pointercancel", stop);
+    });
+  }
+
+  // The phone's own long press, heard as a right click: the same press as
+  // the one being timed, so it is not timed any further.
+  function pressTaken() {
+    if (!touchIsDown) { return; }
+    clearTimeout(pressTimer);
+    heldLong = true;
+    eatClick();
+    pressMenuAt = Date.now();
+  }
+
+  // The menu for whatever is at a point: a shape, an arrow (or near enough
+  // to one), or the bare paper.
+  function menuAt(under, x, y) {
+    var g = under && under.closest ? under.closest(".node") : null;
+    var arrow = under && under.closest ? under.closest(".link") : null;
+    if (g) {
+      var node = nodeById(+g.dataset.i.slice(1));
+      if (node) { shapeMenu(node, x, y); }
+      return;
+    }
+    var link = arrow ? linkById(+arrow.dataset.link) : null;
+    if (!link) {
+      var spot = onPaper({ clientX: x, clientY: y });
+      link = spot && linkNear(spot.x, spot.y, 24);
+    }
+    if (link) { arrowMenu(link, x, y); } else { paperMenu(x, y); }
+  }
+
+  // ---------------------------------------------------------- the bar --
+  // What can be done to what is taken up, in a row of buttons over the foot
+  // of the paper.  With a mouse and a keyboard all of it is on the right
+  // button and the keys as well; on a phone there are no keys and no right
+  // button, and the panel that has the rest lies over the very chart it is
+  // about.  So the things done most -- write in it, join it up, copy, cut,
+  // paste, another like it, delete -- are here, where the thumb is.
+  var TOUCHY = (function () {
+    try { return matchMedia("(any-pointer: coarse)").matches; }
+    catch (e) { return false; }
+  })();
+  var BAR_ICONS = {
+    type: '<path d="M4 16l.9-3.6 8.4-8.4 2.7 2.7-8.4 8.4z"/><path d="M11.6 5.7l2.7 2.7"/>',
+    join: '<circle cx="4.5" cy="10" r="2"/><path d="M6.5 10h9M12.5 7l3 3-3 3"/>',
+    copy: '<rect x="7" y="7" width="9" height="9" rx="1.5"/>' +
+          '<path d="M4.5 12.5v-7a1.5 1.5 0 0 1 1.5-1.5h7"/>',
+    cut: '<circle cx="6" cy="14.5" r="2.2"/><circle cx="14" cy="14.5" r="2.2"/>' +
+         '<path d="M7.4 12.8 14 4M12.6 12.8 6 4"/>',
+    paste: '<rect x="4.5" y="4.5" width="11" height="12" rx="1.5"/>' +
+           '<path d="M7.5 4.5V3.2h5v1.3M7.5 9h5M7.5 12h3"/>',
+    another: '<rect x="3.5" y="3.5" width="13" height="13" rx="2"/><path d="M10 7v6M7 10h6"/>',
+    drop: '<path d="M4 6h12M8 6V4h4v2M5.8 6l.9 10h6.6l.9-10"/>',
+    all: '<rect x="3" y="3" width="14" height="14" rx="1.5" stroke-dasharray="2.4 2"/>',
+    turn: '<path d="M4 7.5h11l-3-3M16 12.5H5l3 3"/>'
+  };
+
+  function drawSelBar() {
+    var stage = el("#stage");
+    if (!stage) { return; }
+    var bar = el("#sel-bar");
+    if (!bar) {
+      bar = document.createElement("div");
+      bar.id = "sel-bar";
+      bar.className = "sel-bar";
+      bar.setAttribute("role", "toolbar");
+      stage.parentNode.appendChild(bar);   // over the stage, not scrolled with it
+    }
+    bar.setAttribute("aria-label", TXT.sel_bar || "");
+    var items = [];
+    function add(icon, name, go) { items.push([icon, name, go]); }
+    var lot = byHand ? takenIds() : [], link = byHand ? linkById(chosen) : null;
+    var canPaste = byHand && !!clipNow();
+    if (link) {
+      add("type", TXT.m_type, function () { typeOnLink(link); });
+      add("turn", TXT.turn_it_round, function () {
+        keepUndo();
+        turnLink(link);
+        drawHand(); drawHandPanel(); showReport();
+      });
+      add("drop", TXT.delete, function () {
+        keepUndo();
+        hand.links = hand.links.filter(function (l) { return l !== link; });
+        chosen = null;
+        drawHand(); drawHandPanel(); showReport();
+      });
+    } else if (lot.length) {
+      if (lot.length === 1) {
+        add("type", TXT.m_type, function () {
+          var g = el('.node[data-i="h' + lot[0] + '"]', el("#chart"));
+          if (g) { typeInto(g); }
+        });
+        add("join", TXT.connect, function () {
+          joining = true; joinFrom = null;
+          drawHand(); drawHandPanel();
+        });
+      }
+      add("copy", TXT.m_clip_copy, function () { copyShapes(lot); });
+      add("cut", TXT.m_clip_cut, function () { copyShapes(lot, true); });
+      if (canPaste) { add("paste", TXT.m_clip_paste, function () { pasteShapes(); }); }
+      add("another", TXT.m_copy, function () { duplicateShapes(lot); });
+      add("drop", TXT.delete, function () {
+        keepUndo();
+        dropShapes(lot);
+        drawHand(); drawHandPanel(); showReport();
+      });
+    } else if (canPaste && TOUCHY) {
+      // nothing taken up, but something copied, on a screen with no keys
+      add("paste", TXT.m_clip_paste, function () { pasteShapes(); });
+      add("all", TXT.m_all, selectAll);
+    }
+    bar.hidden = !items.length;
+    bar.innerHTML = "";
+    items.forEach(function (item) {
+      var b = document.createElement("button");
+      b.type = "button";
+      b.className = "bar-btn";
+      b.title = item[1];
+      b.setAttribute("aria-label", item[1]);
+      b.innerHTML = '<svg viewBox="0 0 20 20" aria-hidden="true">' + BAR_ICONS[item[0]] +
+                    "</svg><span></span>";
+      b.lastChild.textContent = item[1];
+      b.onclick = function (ev) { ev.stopPropagation(); item[2](); };
+      bar.appendChild(b);
+    });
+  }

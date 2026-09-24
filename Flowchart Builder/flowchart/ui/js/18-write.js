@@ -1162,7 +1162,7 @@
   function askWhichCode() {
     if (!AST || !(AST.main || []).length) {
       tapeShow("run");                   // it is said in the tape, so show it
-      talkOnce(TXT.r_nothing, "bad");
+      talkOnce(TXT.r_nothing, "warn");
       return;
     }
     showCode(nowLang());
@@ -1548,7 +1548,7 @@
     var lang = want || nowLang();
     if (!AST || !(AST.main || []).length) {
       tapeShow("run");
-      talkOnce(TXT.r_nothing, "bad");
+      talkOnce(TXT.r_nothing, "warn");
       return;
     }
     if (lang === "pseudo" || !LANGS[lang]) {

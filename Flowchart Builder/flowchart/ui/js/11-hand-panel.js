@@ -109,6 +109,7 @@
 
   function drawHandPanel() {
     drawSelection();                     // the Style side is about it as well
+    drawSelBar();                        // and the bar over the paper (11-hand-many.js)
     var box = el("#hand-sel");
     if (!box) { return; }
     box.innerHTML = "";
@@ -314,6 +315,23 @@
   function linkById(id) {
     return hand.links.filter(function (l) { return l.id === id; })[0] || null;
   }
+
+  // Held to the two sides it is on now -- or let go to find its own again.
+  function pinLink(link, on) {
+    keepUndo();
+    if (on) {
+      var pts = routeAll()[hand.links.indexOf(link)];
+      if (pts && pts.sides) {
+        link.fromSide = PORT_SIDES[pts.sides[0]];
+        link.toSide = PORT_SIDES[pts.sides[1]];
+      }
+      link.pin = true;
+    } else {
+      delete link.pin;
+    }
+    drawHand();
+    drawHandPanel();
+  }
   function pickLink(id) {
     chosen = id;
     picked = null;
@@ -382,6 +400,17 @@
       one.appendChild(document.createTextNode(item[0]));
       switches.appendChild(one);
     });
+    // Pinned, it keeps the two sides it is on now however the shapes are
+    // moved; otherwise it finds its own way, clear of the others (routeAll).
+    var pin = document.createElement("label");
+    pin.className = "switch";
+    var held = document.createElement("input");
+    held.type = "checkbox";
+    held.checked = !!link.pin;
+    held.onchange = function () { pinLink(link, held.checked); };
+    pin.appendChild(held);
+    pin.appendChild(document.createTextNode(TXT.m_pin));
+    switches.appendChild(pin);
     box.appendChild(switches);
 
     var go = document.createElement("div");
