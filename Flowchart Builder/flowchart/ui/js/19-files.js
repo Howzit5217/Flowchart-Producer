@@ -122,6 +122,7 @@
     }
     if (was.hand && was.hand.nodes) { hand = was.hand; }
     picked = chosen = null;
+    many = [];                           // numbers that mean other shapes now
     // What was open before this file is not behind it: stepping back into
     // another piece of work's colors and shapes would be a stranger thing
     // to be handed than having nothing to step back to.

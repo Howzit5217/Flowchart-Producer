@@ -176,6 +176,8 @@
   }
 
   function shapeMenu(node, x, y) {
+    // One of several taken up: what is done is done to them all.
+    if (inMany(node.id)) { groupMenu(x, y); return; }
     picked = node.id;
     chosen = null;
     drawHand();
@@ -188,15 +190,10 @@
       { name: TXT.connect, go: function () {
           joining = true; joinFrom = null; drawHandPanel();
         } },
-      { name: TXT.m_copy, go: function () {
-          keepUndo();
-          var twin = JSON.parse(JSON.stringify(node));
-          twin.id = hand.next++;
-          twin.x += 30; twin.y += 30;
-          hand.nodes.push(twin);
-          picked = twin.id;
-          drawHand(); drawHandPanel();
-        } },
+      // Another like it -- colors and all, which it used to leave behind.
+      { name: TXT.m_copy, go: function () { duplicateShapes([node.id]); } },
+      { name: TXT.m_clip_copy, go: function () { copyShapes([node.id]); } },
+      { name: TXT.m_clip_cut, go: function () { copyShapes([node.id], true); } },
       { name: TXT.m_turn, go: function () {
           keepUndo();
           node.turn = ((node.turn || 0) + 90) % 360;
@@ -253,11 +250,17 @@
 
   function paperMenu(x, y) {
     var spots = ["rect", "oval", "io", "diamond", "text"];
+    // Pasted from here, it goes where the menu was opened.
+    var here = onPaper({ clientX: x, clientY: y });
+    var after = [];
+    if (clipNow()) {
+      after.push({ name: TXT.m_clip_paste, go: function () { pasteShapes(here); } });
+    }
+    if (hand.nodes.length) { after.push({ name: TXT.m_all, go: selectAll }); }
     openMenu(x, y, spots.map(function (kind) {
       return { mark: keyMark(kind), name: kindName(kind),
                go: function () { addNode(kind); } };
-    }).concat([
-      "-",
+    }).concat(["-"], after, after.length ? ["-"] : [], [
       { name: TXT.m_fit, go: function () { el("#fit").click(); } }
     ]));
   }

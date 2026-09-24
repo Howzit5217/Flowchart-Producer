@@ -43,6 +43,7 @@
     chart.onclick = function (ev) {
       var g = ev.target.closest ? ev.target.closest(".node") : null;
       if (byHand) {
+        if (lassoDone) { lassoDone = false; return; }   // a box was drawn, not a click
         var arrow = ev.target.closest ? ev.target.closest(".link") : null;
         var spot = ev.target.closest ? ev.target.closest(".spot") : null;
         if (spot) { handClick(+spot.dataset.i, +spot.dataset.side); return; }
@@ -52,7 +53,7 @@
           var spot = onPaper(ev);        // near enough to an arrow to count?
           var meant = spot && linkNear(spot.x, spot.y, 16);
           if (meant) { pickLink(meant.id); return; }
-          picked = chosen = null; joining = false;
+          picked = chosen = null; many = []; joining = false;
           drawHand(); drawHandPanel();
         }
         return;
@@ -60,7 +61,7 @@
       select(g);
       if (g) { styleThePicked(); }     // and the side that has its styling
     };
-    if (byHand) { joinDrag(chart); dragging(chart); }
+    if (byHand) { joinDrag(chart); dragging(chart); lasso(chart); }
     chart.oncontextmenu = function (ev) {
       if (!byHand) { return; }
       var g = ev.target.closest ? ev.target.closest(".node") : null;
@@ -385,7 +386,19 @@
       try { svg.setPointerCapture(ev.pointerId); } catch (e) { /* mouse: fine */ }
       var pickedBefore = picked;
       var noted = false;                 // a copy is kept the moment it moves
-      if (g) { picked = node.id; chosen = null; }
+      // Several taken up (11-hand-many.js): any of them taken hold of
+      // carries them all.  With Shift or Ctrl held a shape joins them as it
+      // is pressed, so a press and a drag adds it and moves the lot; let
+      // go without moving, one that was among them already leaves instead.
+      var more = g && (ev.shiftKey || ev.ctrlKey || ev.metaKey);
+      var wasTaken = g && takenIds().indexOf(node.id) >= 0;
+      var crowd = null;
+      if (more) {
+        if (!wasTaken) { takeUp(takenIds().concat([node.id])); }
+        if (many.length > 1) { crowd = crowdOf(many); }
+      } else if (g && inMany(node.id)) {
+        crowd = crowdOf(many);
+      } else if (g) { picked = node.id; chosen = null; }
 
       function paint() {
         if (waiting) { return; }
@@ -449,6 +462,8 @@
           node.x = heldX + ax * node.w / 2;
           node.y = heldY + ay * node.h / 2;
           node.own = true;               // a size set by hand, so keep it
+        } else if (crowd) {
+          carryCrowd(crowd, node, wasX, wasY, dx, dy);
         } else {
           node.x = Math.round((wasX + dx) / HAND_GRID) * HAND_GRID;
           node.y = Math.round((wasY + dy) / HAND_GRID) * HAND_GRID;
@@ -462,6 +477,16 @@
         shapeCarried = false;
         window.removeEventListener("pointermove", move);
         window.removeEventListener("pointerup", drop);
+        // Shift or Ctrl and a click: in, or out again if it was in already.
+        if (!stirred && more && !pinched) {
+          if (wasTaken) {
+            takeUp(takenIds().filter(function (id) { return id !== node.id; }));
+          }
+          drawHand(); drawHandPanel();
+          return;
+        }
+        // One of several clicked, not carried: that one alone, as anywhere.
+        if (!stirred && crowd && !pinched) { handClick(node.id); return; }
         // A pinch begun on a shape leaves it taken up, but never typing.
         if (!stirred && g && !pinched) {
           // Clicking a shape that is already the one in hand starts typing

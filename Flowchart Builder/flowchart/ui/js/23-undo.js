@@ -68,6 +68,7 @@
     hand = back.hand;
     style = back.style;
     picked = chosen = null;
+    many = [];
     // The two switches that say whether the ruling shows are showing a
     // part of what has just been put back, so they are put back with it.
     if (el("#grid-on")) { el("#grid-on").checked = !style.gridOff; }

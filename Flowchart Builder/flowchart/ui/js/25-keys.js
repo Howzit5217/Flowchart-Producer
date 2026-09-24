@@ -53,8 +53,13 @@
       [[["Tab"], ["shift", "Tab"]], "k_next"],
       [[["← ↑ → ↓"]], "k_nudge"],
       [[["enter"]], "m_type"],
+      [[["drag"]], "k_lasso"],
+      [[["shift", "click"], ["ctrl", "click"]], "k_add"],
+      [[["ctrl", "A"]], "k_all"],
+      [[["ctrl", "C"], ["ctrl", "X"], ["ctrl", "V"]], "k_clip"],
       [[["ctrl", "D"]], "m_copy"],
       [[["del"]], "delete"],
+      [[["space", "drag"]], "k_pan"],
       [[["Esc"]], "k_drop"]
     ]]
   ];
@@ -63,7 +68,8 @@
   // in this language gives them.
   function keyName(key) {
     if (key === "ctrl") { return ON_MAC ? "⌘" : (TXT.kn_ctrl || "Ctrl"); }
-    var named = { shift: "kn_shift", enter: "kn_enter", del: "kn_del" }[key];
+    var named = { shift: "kn_shift", enter: "kn_enter", del: "kn_del",
+                  space: "kn_space", click: "kn_click", drag: "kn_drag" }[key];
     return named ? (TXT[named] || key) : key;
   }
 
@@ -236,22 +242,44 @@
     if (!byHand) { return; }
 
     var node = nodeById(picked), link = linkById(chosen);
+    // Whatever shapes are taken up, one or several (11-hand-many.js).
+    var lot = takenIds(), key = String(ev.key).toLowerCase();
 
-    if (ctrl && (ev.key === "d" || ev.key === "D") && node) {
-      ev.preventDefault();               // another one like this one
-      keepUndo();
-      var twin = JSON.parse(JSON.stringify(node));
-      twin.id = hand.next++;
-      twin.x += 30;
-      twin.y += 30;
-      hand.nodes.push(twin);
-      picked = twin.id;
-      drawHand();
-      drawHandPanel();
+    if (ctrl && !ev.altKey && key === "a") {     // every shape on the paper
+      if (!hand.nodes.length) { return; }
+      ev.preventDefault();
+      selectAll();
+      return;
+    }
+    // Copy and cut are the shapes' only when shapes are taken up and no
+    // words on the page are: words picked out with the mouse are copied
+    // the way they always were.
+    if (ctrl && !ev.altKey && (key === "c" || key === "x") && lot.length &&
+        !String(window.getSelection ? window.getSelection() : "")) {
+      ev.preventDefault();
+      copyShapes(lot, key === "x");
+      return;
+    }
+    if (ctrl && !ev.altKey && key === "v") {
+      if (pasteShapes()) { ev.preventDefault(); }
+      return;
+    }
+    if (ctrl && key === "d" && lot.length) {
+      ev.preventDefault();               // another one like each of these
+      duplicateShapes(lot);
       return;
     }
 
     if (ev.key === "Delete" || ev.key === "Backspace") {
+      if (many.length > 1) {
+        ev.preventDefault();
+        keepUndo();
+        dropShapes(many.slice());
+        drawHand();
+        drawHandPanel();
+        showReport();
+        return;
+      }
       if (!node && !link) { return; }
       ev.preventDefault();
       keepUndo();
@@ -284,6 +312,7 @@
     }
     if (ev.key === "Escape") {
       picked = chosen = null;
+      many = [];
       joining = false;
       drawHand();
       drawHandPanel();
@@ -304,6 +333,14 @@
 
     var WAYS = { ArrowLeft: [-1, 0], ArrowRight: [1, 0],
                  ArrowUp: [0, -1], ArrowDown: [0, 1] };
+    if (WAYS[ev.key] && many.length > 1) {
+      ev.preventDefault();
+      keepUndo();
+      nudgeMany(many, WAYS[ev.key][0] * keyStep(ev), WAYS[ev.key][1] * keyStep(ev));
+      drawHand();
+      drawHandPanel();
+      return;
+    }
     if (WAYS[ev.key] && node) {
       ev.preventDefault();
       keepUndo();

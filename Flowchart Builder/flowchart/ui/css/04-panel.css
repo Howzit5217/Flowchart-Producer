@@ -832,6 +832,20 @@
   }
   svg .node { cursor: move; }
   svg .band { pointer-events: none; }
+  /* The box dragged across the paper to take several shapes up.  In fixed
+     colors rather than the page's accent: the paper is white in either
+     theme, and the accent is a pale blue in the dark one.  One pixel at
+     any zoom, like a box drawn over the chart rather than part of it. */
+  svg .lasso-box {
+    fill: rgba(47, 111, 196, .10); stroke: #2f6fc4; stroke-width: 1;
+    vector-effect: non-scaling-stroke; pointer-events: none;
+  }
+  /* One shape's dots and corners are about that one shape; while a box is
+     being drawn, the shape may be about to be one of several. */
+  svg.lassoing .knob, svg.lassoing .grip { display: none; }
+  /* Space held down: a drag moves about the paper, wherever it starts. */
+  #stage.can-pan, #stage.can-pan svg .node, #stage.can-pan svg .link { cursor: grab; }
+  #stage.can-pan.grabbing, #stage.can-pan.grabbing * { cursor: grabbing; }
   svg .band-line { stroke: var(--accent); stroke-width: 2; stroke-linecap: round; }
   svg .band-tip { fill: var(--accent); stroke: var(--accent); stroke-width: .6;
                   stroke-linejoin: miter; }

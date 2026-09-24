@@ -114,6 +114,7 @@
     box.innerHTML = "";
     var link = linkById(chosen);
     if (link) { return arrowPanel(box, link); }
+    if (many.length > 1) { return groupPanel(box); }   // 11-hand-many.js
     var node = nodeById(picked);
     if (!node) {
       box.innerHTML = '<p class="hint">' + TXT.pick_shape + "</p>";

@@ -20,6 +20,11 @@
   var HAND_GRID = HAND_RULE / 4;         // what shapes settle on
   var picked = null, chosen = null, joining = false;
   var joinFrom = null;                   // the dot a line being joined leaves by
+  // Several shapes taken up at once -- by a box dragged round them, Shift
+  // and a click, or Ctrl+A -- to be moved, copied or deleted together
+  // (11-hand-many.js).  Only ever two or more, and only while no one shape
+  // is picked and no arrow chosen: picking either is letting the lot go.
+  var many = [];
 
   // Lining things up.  While a shape is being carried, its middle is watched
   // against the middle of every other shape; come within reach of one and it
@@ -31,11 +36,13 @@
   var GUIDE_REACH = 7;                   // how near counts as lined up
   var guides = [];                       // [vertical?, where, from, to]
 
-  function lineUp(node) {
+  // `skip`: the shapes being carried with it, which line up with nothing --
+  // they are going wherever it goes.
+  function lineUp(node, skip) {
     guides = [];
     var about = turned(node);
     hand.nodes.forEach(function (other) {
-      if (other.id === node.id) { return; }
+      if (other.id === node.id || (skip && skip.indexOf(other.id) >= 0)) { return; }
       var its = turned(other);
       if (Math.abs(node.x - other.x) <= GUIDE_REACH) {
         node.x = other.x;
@@ -837,6 +844,7 @@
   }
 
   function drawHand() {
+    tidyMany();                          // only shapes still on the paper
     var pad = 40, maxx = 520, maxy = 280, ox = 0, oy = 0, least = Infinity;
     hand.nodes.forEach(function (n) {
       measure(n);
@@ -909,7 +917,9 @@
       var look = (link.dash ? ' stroke-dasharray="7 5"' : "") +
                  (link.wide ? ' stroke-width="' + link.wide + '"' : "") +
                  (link.color ? ' stroke="' + link.color + '"' : "");
-      out.push('<g class="link' + (chosen === link.id ? " on" : "") +
+      // An arrow between two shapes taken up together goes with them.
+      var lit = chosen === link.id || (inMany(link.from) && inMany(link.to));
+      out.push('<g class="link' + (lit ? " on" : "") +
                '" data-link="' + link.id + '">');
       out.push('<path class="grab" d="' + d + '" fill="none" stroke="transparent" ' +
                'stroke-width="20" pointer-events="stroke" ' +
@@ -950,7 +960,7 @@
     hand.nodes.forEach(function (n) {
       var moved = { kind: n.kind, x: n.x + ox, y: n.y + oy, w: n.w, h: n.h };
       var about = turned(n);           // what it takes up, once turned
-      out.push('<g class="node' + (picked === n.id ? " on" : "") +
+      out.push('<g class="node' + (picked === n.id || inMany(n.id) ? " on" : "") +
                '" data-kind="' + n.kind + '" data-i="h' + n.id + '"' +
                (n.turn ? ' transform="rotate(' + n.turn + " " + moved.x + " " +
                          moved.y + ')"' : "") + ">");
