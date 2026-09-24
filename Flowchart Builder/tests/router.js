@@ -366,6 +366,51 @@ var bad = [];
   console.log(tried + " pairs of arrows across one gap: " + lying + " lying along each other");
 })();
 
+// ---- two arrows into one side come in without crossing ------------------
+// A Start and an End stacked below and to the right of a box, both joined
+// to its foot -- free, leaning to the foot, and pinned to it.  The lower
+// arrow used to go the long way round and cross the other twice: before
+// the two were spread along the foot, it was taken to be lying along the
+// other one.  It goes straight across and up now, in one bend.
+(function () {
+  function shape(id, kind, x, y, w, h) {
+    return { id: id, x: x, y: y, w: w, h: h, kind: kind, turn: 0 };
+  }
+  // runs of one route through runs of the other, part way along both
+  function crossings(one, two) {
+    var n = 0;
+    for (var i = 1; i < one.length; i++) {
+      for (var j = 1; j < two.length; j++) {
+        var s = [one[i - 1], one[i]], t = [two[j - 1], two[j]];
+        var sFlat = Math.abs(s[0][1] - s[1][1]) < 0.5, tFlat = Math.abs(t[0][1] - t[1][1]) < 0.5;
+        if (sFlat === tFlat) continue;
+        var h = sFlat ? s : t, v = sFlat ? t : s, x = v[0][0], y = h[0][1];
+        if (x > Math.min(h[0][0], h[1][0]) + 1 && x < Math.max(h[0][0], h[1][0]) - 1 &&
+            y > Math.min(v[0][1], v[1][1]) + 1 && y < Math.max(v[0][1], v[1][1]) - 1) n++;
+      }
+    }
+    return n;
+  }
+  hand.nodes = [shape(1, "rect", 260, 100, 170, 60), shape(2, "oval", 375, 210, 130, 50),
+                shape(3, "oval", 375, 305, 130, 50)];
+  var ways = [[{}, {}], [{ toSide: "foot" }, { toSide: "foot" }],
+              [{ fromSide: "top", toSide: "foot", pin: true },
+               { fromSide: "left", toSide: "foot", pin: true }]];
+  var crossed = 0, roundabout = 0;
+  ways.forEach(function (sides) {
+    hand.links = [Object.assign({ from: 2, to: 1 }, sides[0]),
+                  Object.assign({ from: 3, to: 1 }, sides[1])];
+    var routes = routeAll();
+    crossed += crossings(routes[0], routes[1]);
+    if (routes[1].length > 3) roundabout++;
+  });
+  hand.links = [];
+  if (crossed) bad.push(crossed + " crossings between two arrows into one foot");
+  if (roundabout) bad.push(roundabout + " of " + ways.length + " arrows went the long way round");
+  console.log("two arrows into one foot, " + ways.length + " ways: " + crossed + " crossings, " +
+              roundabout + " the long way round");
+})();
+
 if (bad.length) {
   console.error(bad.join("; "));
   process.exit(1);

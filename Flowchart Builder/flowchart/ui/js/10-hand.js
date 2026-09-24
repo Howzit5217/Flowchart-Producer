@@ -394,7 +394,7 @@
   function linkPath(a, b, link, taken, lean, ways, shift) {  // corners only, never a diagonal
     var outs = ports(a), ins = ports(b);
     var best = null, bestPrice = Infinity, bestOut = 0, bestIn = 0;
-    var bestBase = Infinity, bestOver = 0;
+    var bestBase = Infinity, bestOver = 0, bestCross = 0;
     var outOnly = link ? PORT_SIDES.indexOf(link.fromSide) : -1;
     var inOnly = link ? PORT_SIDES.indexOf(link.toSide) : -1;
     if (shift) {
@@ -420,11 +420,12 @@
       if (lean && lean.from === i) { price -= LEAN; }
       if (lean && lean.to === j) { price -= LEAN; }
       if (price >= bestPrice) { return; }   // lying on nothing, it still loses
-      var over = ways ? overlapsIn(pts, ways) : 0;
-      price += OVERLAP * over;
+      var over = ways ? overlapsIn(pts, ways, sideKey(a, i), sideKey(b, j)) : 0;
+      var cross = ways ? crossesIn(pts, ways) : 0;
+      price += OVERLAP * over + CROSS * cross;
       if (price < bestPrice) {
         best = pts; bestPrice = price; bestOut = i; bestIn = j;
-        bestBase = base; bestOver = over;
+        bestBase = base; bestOver = over; bestCross = cross;
       }
     }
     function tryJoin(i, j, lane) {        // unless a side it has to keep says no
@@ -441,8 +442,8 @@
         tryJoin(i, j);
       }
     }
-    // nothing in the way, and on top of no other arrow: done
-    if (bestBase < 10000 && !bestOver) { return done(); }
+    // nothing in the way, on top of no other arrow and across none: done
+    if (bestBase < 10000 && !bestOver && !bestCross) { return done(); }
 
     // Something is in the way of every straight join, so look for a lane to
     // go round by -- just clear of each shape's own edges, which is where a
@@ -484,7 +485,7 @@
     var clear = bestBase < 10000;
     lanesY = closest(lanesY, (a.y + b.y) / 2).slice(0, clear ? 3 : NEAREST);
     lanesX = closest(lanesX, (a.x + b.x) / 2).slice(0, clear ? 3 : NEAREST);
-    if (bestOver) {
+    if (bestOver || bestCross) {
       var ga = turned(a), gb = turned(b);
       var gapY = gapMiddle(ga.y, ga.h, gb.y, gb.h), gapX = gapMiddle(ga.x, ga.w, gb.x, gb.w);
       [-20, -10, 10, 20].forEach(function (by) {
@@ -596,6 +597,14 @@
   // to its sides (link.pin, from the arrow's menu or panel) keeps them.
   var LEAN = 300;                         // an end kept on the side it was drawn to
   var OVERLAP = 2500;                     // a run lying along another arrow's
+  // A run across another arrow's.  Far less than lying along one, which
+  // makes two arrows one: a crossing can still be followed, and a chart
+  // with loops in it cannot always do without them.  But worth a few
+  // corners or a longer way round, and more than an end kept to the side it
+  // was drawn to (LEAN).  Tried on two thousand drawings, this is where the
+  // fewest crossings came without more lines through shapes or along each
+  // other; much higher and those started to rise.
+  var CROSS = 600;
   function routeAll() {
     var taken = {};
     function note(id, side, by) {
@@ -618,7 +627,7 @@
       var pts = linkPath(a, b, link.pin ? link : null, taken, lean, ways);
       if (lean || i < 0) { note(link.from, pts.sides[0]); }
       if (lean || j < 0) { note(link.to, pts.sides[1]); }
-      waysAdd(ways, pts);
+      waysAdd(ways, pts, sideKey(a, pts.sides[0]), sideKey(b, pts.sides[1]));
       return pts;
     });
     return spreadEnds(routes);
@@ -657,6 +666,7 @@
         return (p.toward[axis] - q.toward[axis]) || (p.li - q.li);
       });
       var step = Math.min(SPREAD, 2 * room / (ends.length - 1));
+      ends = leastCrossed(ends, step, routes);
       ends.forEach(function (e, n) {
         (shift[e.li] = shift[e.li] || {})[e.end] = (n - (ends.length - 1) / 2) * step;
       });
@@ -666,6 +676,48 @@
       routes[li] = slidEnds(routes[li], nodeById(link.from), nodeById(link.to), shift[li]);
     });
     return routes;
+  }
+
+  // The order the ends at one side go along it in.  The order they come in
+  // from is nearly always right, and is kept whenever none of them cross.
+  // Where it is not -- two arrows into the foot of a box that both come in
+  // from the same side of it, one from further off and one from nearer,
+  // turning in across each other -- every other order is tried, as long as
+  // there are few enough ends for that to be quick, and the one crossing
+  // least is taken; of equals, the first.
+  var ORDER_MOST = 5;
+  function leastCrossed(ends, step, routes) {
+    if (ends.length > ORDER_MOST) { return ends; }
+    var seen = {};
+    for (var k = 0; k < ends.length; k++) {   // an arrow round to its own side
+      if (seen[ends[k].li]) { return ends; }
+      seen[ends[k].li] = true;
+    }
+    function crossings(order) {
+      var slid = order.map(function (e, n) {
+        var by = {}, link = hand.links[e.li];
+        by[e.end] = (n - (order.length - 1) / 2) * step;
+        return slidEnds(routes[e.li], nodeById(link.from), nodeById(link.to), by);
+      });
+      var count = 0;
+      for (var p = 0; p < slid.length; p++) {
+        for (var q = p + 1; q < slid.length; q++) { count += routesCross(slid[p], slid[q]); }
+      }
+      return count;
+    }
+    var best = ends, least = crossings(ends);
+    (function each(done, left) {
+      if (!least) { return; }
+      if (!left.length) {
+        var count = crossings(done);
+        if (count < least) { least = count; best = done; }
+        return;
+      }
+      for (var i = 0; i < left.length; i++) {
+        each(done.concat([left[i]]), left.slice(0, i).concat(left.slice(i + 1)));
+      }
+    })([], ends);
+    return best;
   }
 
   // A route with its two ends moved along their sides by `by.from` and
@@ -767,25 +819,49 @@
   // against those it could be lying on top of.  Nearer than WAY_NEAR, two
   // runs are one line to anyone looking at them.  `ways` starts as {}.
   var WAY_NEAR = 3;
-  function waysAdd(ways, pts) {
+  // `fromEnd` and `toEnd` name the sides the route meets its two shapes at
+  // (sideKey), and are written on its first and last runs.  Every run goes
+  // on a plain list as well, for finding where one arrow crosses another.
+  function waysAdd(ways, pts, fromEnd, toEnd) {
     var across = ways.h = ways.h || {}, down = ways.v = ways.v || {};
+    var flatList = ways.hl = ways.hl || [], downList = ways.vl = ways.vl || [];
+    var last = pts ? pts.length - 1 : 0;
     for (var i = 1; pts && i < pts.length; i++) {
       var p = pts[i - 1], q = pts[i], at;
+      var one = i === 1 ? fromEnd || null : null, two = i === last ? toEnd || null : null;
       if (Math.abs(p[1] - q[1]) < 0.5 && Math.abs(p[0] - q[0]) >= 0.5) {
         at = Math.round(p[1]);
-        (across[at] = across[at] || []).push([Math.min(p[0], q[0]), Math.max(p[0], q[0])]);
+        (across[at] = across[at] || []).push([Math.min(p[0], q[0]), Math.max(p[0], q[0]),
+                                              one, two]);
+        flatList.push([p[1], Math.min(p[0], q[0]), Math.max(p[0], q[0])]);
       } else if (Math.abs(p[0] - q[0]) < 0.5 && Math.abs(p[1] - q[1]) >= 0.5) {
         at = Math.round(p[0]);
-        (down[at] = down[at] || []).push([Math.min(p[1], q[1]), Math.max(p[1], q[1])]);
+        (down[at] = down[at] || []).push([Math.min(p[1], q[1]), Math.max(p[1], q[1]),
+                                          one, two]);
+        downList.push([p[0], Math.min(p[1], q[1]), Math.max(p[1], q[1])]);
       }
     }
+  }
+
+  // The side of a shape an arrow meets it at, as a name -- where it is a
+  // side that arrows sharing it are spread along (spreadEnds), and null
+  // where it is a point every arrow meets in the one place.
+  function sideKey(node, side) {
+    return node && spreadRoom(node, side) > 0 ? node.id + ":" + side : null;
   }
 
   // How many of this route's runs lie along one already there.  The stand-
   // off at either end is left out: two arrows at one side of a shape meet
   // it apart once they are spread (spreadEnds), and it is the side they
   // share that says what that costs (crowdCost), not this.
-  function overlapsIn(pts, ways) {
+  //
+  // Nor, for the same reason, does its last run count as lying along the
+  // last run of another arrow into the same side -- the whole of each run
+  // slides apart with its end.  Before the spreading, two arrows into the
+  // foot of a box both came in at its middle, one down a long way and one
+  // a short way, and the long one was taken to be lying along the other:
+  // it went the long way round to keep off it, crossing it twice to do so.
+  function overlapsIn(pts, ways, fromEnd, toEnd) {
     var count = 0, last = pts.length - 1;
     if (!ways.h) { return 0; }             // nothing routed yet
     for (var i = 1; i < pts.length; i++) {
@@ -798,14 +874,83 @@
       if ((e - s) * way < 0.5) { continue; }
       var lo = Math.min(s, e), hi = Math.max(s, e);
       var file = flat ? ways.h : ways.v;
+      var mine = [i === 1 ? fromEnd : null, i === last ? toEnd : null];
       for (var k = at - WAY_NEAR; k <= at + WAY_NEAR; k++) {
         var runs = file[k];
         for (var r = 0; runs && r < runs.length; r++) {
-          if (Math.min(hi, runs[r][1]) - Math.max(lo, runs[r][0]) > 2) { count++; }
+          var run = runs[r];
+          if (sharedEnd(mine, run)) { continue; }
+          if (Math.min(hi, run[1]) - Math.max(lo, run[0]) > 2) { count++; }
         }
       }
     }
     return count;
+  }
+
+  // Whether a run and one already there both end at the same spread side.
+  function sharedEnd(mine, run) {
+    for (var m = 0; m < 2; m++) {
+      if (mine[m] && (run[2] === mine[m] || run[3] === mine[m])) { return true; }
+    }
+    return false;
+  }
+
+  // How many times this route crosses one already there: a run of it
+  // through a run of another, part way along both -- not where either
+  // ends, which is two arrows meeting at a shape rather than crossing.
+  function crossesIn(pts, ways) {
+    var count = 0, flatList = ways.hl, downList = ways.vl;
+    if (!flatList) { return 0; }
+    for (var i = 1; i < pts.length; i++) {
+      var p = pts[i - 1], q = pts[i], k;
+      if (Math.abs(p[1] - q[1]) < 0.5) {
+        var y = p[1], x0 = Math.min(p[0], q[0]), x1 = Math.max(p[0], q[0]);
+        for (k = 0; k < downList.length; k++) {
+          var v = downList[k];
+          if (v[0] > x0 + 1 && v[0] < x1 - 1 && y > v[1] + 1 && y < v[2] - 1) { count++; }
+        }
+      } else if (Math.abs(p[0] - q[0]) < 0.5) {
+        var x = p[0], y0 = Math.min(p[1], q[1]), y1 = Math.max(p[1], q[1]);
+        for (k = 0; k < flatList.length; k++) {
+          var h = flatList[k];
+          if (h[0] > y0 + 1 && h[0] < y1 - 1 && x > h[1] + 1 && x < h[2] - 1) { count++; }
+        }
+      }
+    }
+    return count;
+  }
+
+  // The same between two finished routes, for putting the ends along a
+  // side in the order that crosses least (spreadEnds).
+  function routesCross(one, two) {
+    var ways = {};
+    waysAdd(ways, two);
+    return crossesIn(one, ways);
+  }
+
+  // An arrow's line with its corners eased off, the way a chart built from
+  // pseudocode draws them (draw/arrows.py, path_d): it used to turn every
+  // corner square, so the same flowchart drawn by hand looked stiffer than
+  // it did built, and a short step between two corners read as a notch.
+  // Each corner is rounded by at most CORNER_R, and never by more than half
+  // the run either side of it.  The last point is written exactly as the
+  // arrowhead's is, after an L, which is how the motion layer finds the
+  // head that goes with a line (26-motion.js, headOf).
+  var CORNER_R = 7;
+  function easedPath(pts) {
+    function at(x, y) { return +x.toFixed(2) + "," + +y.toFixed(2); }
+    var d = "M" + pts[0][0] + "," + pts[0][1];
+    for (var i = 1; i < pts.length - 1; i++) {
+      var a = pts[i - 1], b = pts[i], c = pts[i + 1];
+      var d1 = Math.hypot(b[0] - a[0], b[1] - a[1]), d2 = Math.hypot(c[0] - b[0], c[1] - b[1]);
+      var r = Math.min(CORNER_R, d1 / 2, d2 / 2);
+      if (r < 0.5) { d += "L" + b[0] + "," + b[1]; continue; }
+      d += "L" + at(b[0] - (b[0] - a[0]) / d1 * r, b[1] - (b[1] - a[1]) / d1 * r) +
+           "Q" + b[0] + "," + b[1] + " " +
+           at(b[0] + (c[0] - b[0]) / d2 * r, b[1] + (c[1] - b[1]) / d2 * r);
+    }
+    var end = pts[pts.length - 1];
+    return d + "L" + end[0] + "," + end[1];
   }
 
   // How far a point is from a line between two points.  Used to work out
@@ -1164,7 +1309,7 @@
       var run = Math.hypot(last[0] - prev[0], last[1] - prev[1]) || 1;
       var ux = (last[0] - prev[0]) / run, uy = (last[1] - prev[1]) / run;
       var cx = last[0] - ux * 10, cy = last[1] - uy * 10;
-      var d = "M" + pts.map(function (p) { return p[0] + "," + p[1]; }).join("L");
+      var d = easedPath(pts);
       var look = (link.dash ? ' stroke-dasharray="7 5"' : "") +
                  (link.wide ? ' stroke-width="' + link.wide + '"' : "") +
                  (link.color ? ' stroke="' + link.color + '"' : "");
