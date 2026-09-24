@@ -465,57 +465,35 @@
   .sheet-menu #fd-where { margin-top: 0; }
 
   /* ----------------------------------------------- the Files half of it -- */
-  /* A list of things to do rather than a stack of boxed buttons: each a
-     row with an icon, lit when the pointer is over it, in two short groups
-     under a small heading each.  Eight buttons of the same size, outline
-     and weight in a column read as a wall; the icon says what kind of
-     thing each one is before its words are read. */
-  #files-out > h3 { margin: 14px 0 4px 8px; }
+  /* Two short groups under a small heading each, of the page's own buttons
+     -- the same outline, fill and lift as every other button -- each with
+     an icon beside its words that says what kind of thing it does before
+     the words are read. */
+  #files-out > h3 { margin: 16px 0 0; }
   #files-out > h3:first-child { margin-top: 10px; }
-  #files-out .file-row {
-    display: flex; align-items: center; gap: 10px; width: 100%;
-    margin: 1px 0; padding: 7px 8px; border: 0; border-radius: 8px;
-    background: none; color: var(--ink); font: inherit; font-size: 13.5px;
-    line-height: 1.35; text-align: left; text-decoration: none; cursor: pointer;
-    transition: background-color var(--quick, .17s);
-  }
-  #files-out .file-row:hover { background: var(--line-soft); }
-  #files-out .file-row:active { background: var(--line); }
-  #files-out .file-row:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
-  #files-out .file-row[disabled] { opacity: .5; cursor: default; background: none; }
-  #files-out .file-row[hidden] { display: none; }
-  /* The icon is painted rather than put in the row, because the scripts
-     write over some rows' words while they work ("Rendering...",
-     "Copied") and would take an icon inside the row away with them. */
-  #files-out .file-row::before {
-    content: ""; flex: none; width: 18px; height: 18px;
-    background-color: var(--muted);
+  #files-out .file-btn { margin-top: 6px; }
+  /* The icon is painted rather than put in the button, because the scripts
+     write over some buttons' words while they work ("Rendering...",
+     "Copied") and would take an icon inside with them. */
+  #files-out .file-btn::before {
+    content: ""; flex: none; width: 16px; height: 16px;
+    background-color: currentColor; opacity: .8;
     -webkit-mask: var(--icon) center / contain no-repeat;
     mask: var(--icon) center / contain no-repeat;
-    transition: background-color var(--quick, .17s);
   }
-  #files-out .file-row:not([disabled]):hover::before { background-color: var(--accent); }
-  /* How big the PNG comes out: one short line under its row, lined up with
-     the row's words. */
-  #files-out .file-size {
-    display: flex; align-items: center; gap: 8px;
-    margin: 0 0 4px; padding-left: 36px; font-size: 12px; color: var(--muted);
-  }
-  #files-out .file-size select { flex: 1; min-width: 0; }
-  /* what a row just did, or why it could not, under it and lined up */
-  #files-out .hint { margin: 2px 8px 6px 36px; }
+  /* How big the PNG comes out: the page's own picker, under its button and
+     no further from it than the buttons are from each other. */
+  #files-out .pick { margin-top: 6px; }
+  /* what a button just did, or why it could not, under it */
+  #files-out .hint { margin: 6px 2px 0; }
   /* Where it all goes is a setting rather than something to do, so it sits
      apart at the foot, on a ground of its own. */
   #files-out .file-where {
-    margin-top: 12px; padding: 8px 4px 4px; border-radius: 10px;
+    margin-top: 14px; padding: 10px; border-radius: 10px;
     background: var(--line-soft);
   }
-  #files-out .file-where h3 { margin: 2px 0 2px 8px; }
-  #files-out .file-where #fd-where { margin: 0 8px 4px; }
-  #files-out .file-where .file-row:hover { background: var(--line); }
-  @media (pointer: coarse) {
-    #files-out .file-row { padding: 10px 8px; }
-  }
+  #files-out .file-where h3 { margin: 0 0 2px; }
+  #files-out .file-where #fd-where { margin: 0; }
   #svg-link { --icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20' fill='none' stroke='black' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M10 3.5v8.5M6.5 8.5 10 12l3.5-3.5'/%3E%3Cpath d='M4 14.5v1.5a1 1 0 0 0 1 1h10a1 1 0 0 0 1-1v-1.5'/%3E%3C/svg%3E"); }
   #png { --icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20' fill='none' stroke='black' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='3' y='4' width='14' height='12' rx='2'/%3E%3Ccircle cx='7.5' cy='8.5' r='1.4'/%3E%3Cpath d='m3.5 14.5 4-3.5 3 2.5 2.5-2 3.5 3'/%3E%3C/svg%3E"); }
   #png-copy { --icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20' fill='none' stroke='black' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='7' y='7' width='9.5' height='9.5' rx='1.8'/%3E%3Cpath d='M13 7V5.3a1.8 1.8 0 0 0-1.8-1.8H5.3a1.8 1.8 0 0 0-1.8 1.8v5.9a1.8 1.8 0 0 0 1.8 1.8H7'/%3E%3C/svg%3E"); }
@@ -3312,19 +3290,19 @@
     </div>
     <!-- Two short lists: the chart taken away as a picture, and the work
          itself -- kept in a file, opened again, sent as a link, printed.
-         Rows with an icon each rather than a stack of boxed buttons, so
-         the menu reads as a list of things to do; the icons are drawn by
-         03-layout.css, because the scripts write over some of these rows'
-         words while they work ("Rendering...", "Copied"). -->
+         The page's own buttons, each with an icon beside its words; the
+         icons are drawn by 03-layout.css, because the scripts write over
+         some of these buttons' words while they work ("Rendering...",
+         "Copied"). -->
     <div id="files-out" role="tabpanel" aria-labelledby="files-tab-out">
     <h3 id="save-title" data-w="download">Download</h3>
-    <a class="file-row" id="svg-link" data-w="dl_svg"
+    <a class="btn wide file-btn" id="svg-link" data-w="dl_svg"
        download="flowchart.svg" href="#">Download SVG</a>
-    <button class="file-row" id="png" data-w="dl_png">Download PNG</button>
-    <!-- How big the PNG comes out, under the row it is for. -->
-    <div class="file-size">
+    <button class="btn wide file-btn" id="png" data-w="dl_png">Download PNG</button>
+    <!-- How big the PNG comes out, under the button it is for. -->
+    <div class="pick">
       <label for="scale" data-w="dl_size">Size</label>
-      <select class="btn small" id="scale" data-w-title="png_tip" title="How big the PNG comes out">
+      <select class="btn" id="scale" data-w-title="png_tip" title="How big the PNG comes out">
       <option value="1">1×</option>
       <option value="2">2×</option>
       <option value="3">3×</option>
@@ -3339,18 +3317,18 @@
          it and then going and inserting the file is three steps where the
          thing anybody actually wants -- the chart, in the document they
          are writing -- is one. -->
-    <button class="file-row" id="png-copy" data-w="dl_copy">Copy the chart</button>
+    <button class="btn wide file-btn" id="png-copy" data-w="dl_copy">Copy the chart</button>
     <p class="hint" id="note"></p>
     <h3 data-w="f_work_head">Your work</h3>
-    <button class="file-row" id="save-file" data-w="f_save">Save this to a file</button>
-    <button class="file-row" id="open-file" data-w="f_open">Open a document</button>
+    <button class="btn wide file-btn" id="save-file" data-w="f_save">Save this to a file</button>
+    <button class="btn wide file-btn" id="open-file" data-w="f_open">Open a document</button>
     <p class="hint" id="file-note"></p>
     <!-- The whole program in a link.  There is no server here to keep
          anything on, so the link carries the work itself: send it and
          whoever opens it is looking at the same chart. -->
-    <button class="file-row" id="link-copy" data-w="l_copy">Copy a link to this</button>
+    <button class="btn wide file-btn" id="link-copy" data-w="l_copy">Copy a link to this</button>
     <p class="hint" id="link-note"></p>
-    <button class="file-row" id="print-open" data-w="print_it">Print the chart</button>
+    <button class="btn wide file-btn" id="print-open" data-w="print_it">Print the chart</button>
     <input type="file" id="file-in" hidden
            accept=".json,.txt,.text,.md,.pseudo,.flowchart,application/json,text/plain">
     <!-- Where all of the above goes: the browser's downloads, or a folder
@@ -3360,9 +3338,9 @@
     <div class="file-where">
       <h3 data-w="fd_head">Where saves go</h3>
       <p class="hint" id="fd-where"></p>
-      <button class="file-row" id="fd-pick" data-w="fd_pick"
+      <button class="btn wide file-btn" id="fd-pick" data-w="fd_pick"
               data-w-title="fd_pick_tip" title="Pick a folder, or make a new one in the window that opens. Everything saved from here then goes straight into it.">Choose a folder</button>
-      <button class="file-row" id="fd-off" data-w="fd_off" hidden>Back to downloads</button>
+      <button class="btn wide file-btn" id="fd-off" data-w="fd_off" hidden>Back to downloads</button>
     </div>
     </div>
     <div id="files-kept" role="tabpanel" aria-labelledby="files-tab-kept" hidden>

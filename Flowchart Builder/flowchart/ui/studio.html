@@ -75,19 +75,19 @@
     </div>
     <!-- Two short lists: the chart taken away as a picture, and the work
          itself -- kept in a file, opened again, sent as a link, printed.
-         Rows with an icon each rather than a stack of boxed buttons, so
-         the menu reads as a list of things to do; the icons are drawn by
-         03-layout.css, because the scripts write over some of these rows'
-         words while they work ("Rendering...", "Copied"). -->
+         The page's own buttons, each with an icon beside its words; the
+         icons are drawn by 03-layout.css, because the scripts write over
+         some of these buttons' words while they work ("Rendering...",
+         "Copied"). -->
     <div id="files-out" role="tabpanel" aria-labelledby="files-tab-out">
     <h3 id="save-title" data-w="download">__W(download)__</h3>
-    <a class="file-row" id="svg-link" data-w="dl_svg"
+    <a class="btn wide file-btn" id="svg-link" data-w="dl_svg"
        download="__FILE__.svg" href="#">__W(dl_svg)__</a>
-    <button class="file-row" id="png" data-w="dl_png">__W(dl_png)__</button>
-    <!-- How big the PNG comes out, under the row it is for. -->
-    <div class="file-size">
+    <button class="btn wide file-btn" id="png" data-w="dl_png">__W(dl_png)__</button>
+    <!-- How big the PNG comes out, under the button it is for. -->
+    <div class="pick">
       <label for="scale" data-w="dl_size">__W(dl_size)__</label>
-      <select class="btn small" id="scale" data-w-title="png_tip" title="__W(png_tip)__">
+      <select class="btn" id="scale" data-w-title="png_tip" title="__W(png_tip)__">
 __OPTIONS__
       </select>
     </div>
@@ -95,18 +95,18 @@ __OPTIONS__
          it and then going and inserting the file is three steps where the
          thing anybody actually wants -- the chart, in the document they
          are writing -- is one. -->
-    <button class="file-row" id="png-copy" data-w="dl_copy">__W(dl_copy)__</button>
+    <button class="btn wide file-btn" id="png-copy" data-w="dl_copy">__W(dl_copy)__</button>
     <p class="hint" id="note"></p>
     <h3 data-w="f_work_head">__W(f_work_head)__</h3>
-    <button class="file-row" id="save-file" data-w="f_save">__W(f_save)__</button>
-    <button class="file-row" id="open-file" data-w="f_open">__W(f_open)__</button>
+    <button class="btn wide file-btn" id="save-file" data-w="f_save">__W(f_save)__</button>
+    <button class="btn wide file-btn" id="open-file" data-w="f_open">__W(f_open)__</button>
     <p class="hint" id="file-note"></p>
     <!-- The whole program in a link.  There is no server here to keep
          anything on, so the link carries the work itself: send it and
          whoever opens it is looking at the same chart. -->
-    <button class="file-row" id="link-copy" data-w="l_copy">__W(l_copy)__</button>
+    <button class="btn wide file-btn" id="link-copy" data-w="l_copy">__W(l_copy)__</button>
     <p class="hint" id="link-note"></p>
-    <button class="file-row" id="print-open" data-w="print_it">__W(print_it)__</button>
+    <button class="btn wide file-btn" id="print-open" data-w="print_it">__W(print_it)__</button>
     <input type="file" id="file-in" hidden
            accept=".json,.txt,.text,.md,.pseudo,.flowchart,application/json,text/plain">
     <!-- Where all of the above goes: the browser's downloads, or a folder
@@ -116,9 +116,9 @@ __OPTIONS__
     <div class="file-where">
       <h3 data-w="fd_head">__W(fd_head)__</h3>
       <p class="hint" id="fd-where"></p>
-      <button class="file-row" id="fd-pick" data-w="fd_pick"
+      <button class="btn wide file-btn" id="fd-pick" data-w="fd_pick"
               data-w-title="fd_pick_tip" title="__W(fd_pick_tip)__">__W(fd_pick)__</button>
-      <button class="file-row" id="fd-off" data-w="fd_off" hidden>__W(fd_off)__</button>
+      <button class="btn wide file-btn" id="fd-off" data-w="fd_off" hidden>__W(fd_off)__</button>
     </div>
     </div>
     <div id="files-kept" role="tabpanel" aria-labelledby="files-tab-kept" hidden>
