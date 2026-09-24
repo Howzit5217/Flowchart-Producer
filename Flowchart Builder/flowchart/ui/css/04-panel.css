@@ -718,6 +718,55 @@
   }
   .menu button:hover { background: var(--accent-soft); }
   .menu hr { border: 0; border-top: 1px solid var(--line-soft); margin: 4px 2px; }
+  /* The same menu as the list a dropdown opens (20-menu.js), joined on to
+     the box: at least as wide as it, lit round the edge as the box is, a
+     faint seam where the two meet, and square at the join -- except where
+     a list wider than its box runs on past it, where that corner is a
+     corner again.  Its words start where the box's words start and the
+     tick stands under the box's arrow; 20-menu.js measures both. */
+  .menu.picks {
+    min-width: 0; padding: 4px; font-size: 13px;
+    border-color: var(--accent); border-radius: var(--pick-round, 8px);
+  }
+  .menu.picks.down {
+    border-top-color: var(--line-soft);
+    border-top-left-radius: 0; border-top-right-radius: 0;
+  }
+  .menu.picks.up {
+    border-bottom-color: var(--line-soft);
+    border-bottom-left-radius: 0; border-bottom-right-radius: 0;
+  }
+  .menu.picks.down.past-left { border-top-left-radius: var(--pick-round, 8px); }
+  .menu.picks.down.past-right { border-top-right-radius: var(--pick-round, 8px); }
+  .menu.picks.up.past-left { border-bottom-left-radius: var(--pick-round, 8px); }
+  .menu.picks.up.past-right { border-bottom-right-radius: var(--pick-round, 8px); }
+  .menu.picks .pick-rows { overflow-y: auto; overscroll-behavior: contain; }
+  .pick-rows > button {
+    position: relative; font-size: inherit;
+    padding: 6px var(--pick-end, 24px) 6px var(--pick-in, 5px);
+  }
+  .pick-rows .pick-words {
+    flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  /* in the room the box keeps for its arrow, as the arrow is */
+  .pick-rows > button > .tick {
+    position: absolute; top: 50%; right: var(--pick-out, 6px); margin-top: -7.5px;
+  }
+  .pick-rows > button.on { color: var(--accent); }
+  /* One highlight, which the pointer and the arrow keys both move. */
+  .menu .pick-rows > button:focus {
+    outline: 0; box-shadow: none; background: var(--accent-soft);
+  }
+  .menu .pick-rows > button:hover:not(:focus) { background: none; }
+  .pick-rows > button[disabled] { opacity: .45; cursor: default; }
+  .menu .pick-rows > button[disabled]:hover { background: none; transform: none; }
+  .menu.picks h4 { margin: 7px var(--pick-in, 5px) 3px; }
+  /* A long list's bar is the page's bar, not another row of the menu. */
+  .menu .slider-step {
+    width: 15px; padding: 0; gap: 0; border-radius: 0; justify-content: center;
+  }
+  .menu .slider-step:hover { background: var(--line); transform: none; }
   /* B, I, U, S and the two sizes, side by side on one line of the menu.
      They are menu buttons as well, so what every menu row is given has to
      be taken back off them: a row's full width, its left-hand words, and

@@ -305,6 +305,7 @@
         tip.style.display = run > back + 2 ? "" : "none";
       }
       function move(e) {
+        if (pinched) { return; }         // a second finger made it a pinch
         at = { x: e.clientX, y: e.clientY };
         chase(at, reach);
         reach();
@@ -315,6 +316,9 @@
         window.removeEventListener("pointerup", drop);
         band.remove();
         aims.remove();
+        // Pinched, it was never aimed anywhere: nothing is joined, and the
+        // shape it came off stays the one in hand.
+        if (pinched) { picked = from.id; drawHand(); drawHandPanel(); return; }
         var went = Math.abs(e.clientX - ev.clientX) + Math.abs(e.clientY - ev.clientY);
         if (went < 5) {
           // Pressed and let go on the spot: take it as a click, and wait for
@@ -396,6 +400,7 @@
       var pressed = onPaper(ev);         // where on the design it was taken up
 
       function move(e) {
+        if (pinched) { return; }         // a second finger made it a pinch
         at = { x: e.clientX, y: e.clientY };
         carry();
       }
@@ -457,7 +462,8 @@
         shapeCarried = false;
         window.removeEventListener("pointermove", move);
         window.removeEventListener("pointerup", drop);
-        if (!stirred && g) {
+        // A pinch begun on a shape leaves it taken up, but never typing.
+        if (!stirred && g && !pinched) {
           // Clicking a shape that is already the one in hand starts typing
           // in it, the way it does everywhere else -- one press to take it
           // up, another to write in it.  A double-click still works too.
@@ -892,6 +898,7 @@
       try { stage.setPointerCapture(ev.pointerId); } catch (e) { /* mouse: fine */ }
       stage.classList.add("grabbing");
       function move(e) {
+        if (pinched) { return; }         // two fingers carry it themselves
         holdX = wasX + (e.clientX - fromX);
         holdY = wasY + (e.clientY - fromY);
         holdClamp();
@@ -930,5 +937,82 @@
       ev.preventDefault();
       glideStop();
       holdBy(-ev.deltaX * by, -ev.deltaY * by);
+    }, { passive: false });
+  })();
+
+  // Two fingers, on a touch screen: spread them to zoom in, pinch them to
+  // zoom out, and move them together to carry the chart about.  The spot
+  // between them stays between them, the way the wheel keeps the spot under
+  // the mouse.  The browser's own pinch, which blew up the whole page --
+  // bars, panel and all -- is turned away over the stage for this (see
+  // #stage in 05-chart.css).
+  //
+  // The first finger was down before the second, and has already begun
+  // whatever one finger does: taking up a shape, drawing a line off a dot,
+  // carrying a loose chart.  None of it may carry on under a pinch, so
+  // `pinched` says a second finger came, and those hold still for it.  It
+  // lasts until every finger is up, or the one left behind would pick up
+  // where it was and jump the shape to it.
+  var pinched = false;
+  (function () {
+    var stage = el("#stage");
+    if (!stage) { return; }
+    var fingers = [];                    // pointers pressed on the stage
+    window.addEventListener("pointerdown", function (ev) {
+      if (!fingers.length) { pinched = false; }
+      if (ev.pointerType !== "touch" || !stage.contains(ev.target)) { return; }
+      fingers.push(ev.pointerId);
+      if (fingers.length < 2) { return; }
+      pinched = true;                    // and nothing else hears of this one
+      ev.stopImmediatePropagation();
+      chaseStop();
+      glideStop();
+    }, true);
+    function up(ev) {
+      var at = fingers.indexOf(ev.pointerId);
+      if (at >= 0) { fingers.splice(at, 1); }
+    }
+    window.addEventListener("pointerup", up, true);
+    window.addEventListener("pointercancel", up, true);
+    // A finger whose pointerup went astray would turn every later touch
+    // into half a pinch; no fingers on the glass at all is certain.
+    window.addEventListener("touchend", function (ev) {
+      if (!ev.touches.length) { fingers = []; }
+    }, true);
+
+    // Where the two are, measured from the touches rather than the
+    // pointers: a pointer the browser has taken for scrolling is cancelled
+    // and heard of no more, while its touch goes on reporting.
+    function pair(ev) {
+      var two = [];
+      for (var i = 0; i < ev.touches.length && two.length < 2; i++) {
+        if (stage.contains(ev.touches[i].target)) { two.push(ev.touches[i]); }
+      }
+      if (two.length < 2) { return null; }
+      var a = two[0], b = two[1];
+      return { x: (a.clientX + b.clientX) / 2, y: (a.clientY + b.clientY) / 2,
+               gap: Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY) };
+    }
+    var was = null;                      // the two of them, a moment ago
+    function again(ev) { was = pinched ? pair(ev) : null; }
+    stage.addEventListener("touchstart", again);
+    stage.addEventListener("touchend", again);
+    stage.addEventListener("touchcancel", again);
+    stage.addEventListener("touchmove", function (ev) {
+      var now = pinched ? pair(ev) : null;
+      // Already scrolling when the second finger came, the browser keeps
+      // it, and the fingers are left to scroll.
+      if (!now || !ev.cancelable) { was = null; return; }
+      ev.preventDefault();
+      if (was) {
+        // Carried first, so the spot that was between them is between
+        // them again, and then zoomed about that spot.
+        var dx = now.x - was.x, dy = now.y - was.y;
+        if (loose) { holdBy(dx, dy); }
+        else { stage.scrollLeft -= dx; stage.scrollTop -= dy; }
+        var want = was.gap > 0 ? zoomLands(zoom * now.gap / was.gap) : zoom;
+        if (want !== zoom) { zoomAt(now.x, now.y, want); }
+      }
+      was = now;
     }, { passive: false });
   })();

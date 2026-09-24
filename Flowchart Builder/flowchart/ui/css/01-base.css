@@ -221,13 +221,11 @@
      with a gap in front of them instead of starting where every other
      field's words start.
 
-     So the shut box is drawn here.  The list that drops out of it is the
-     machine's own and is left alone -- it cannot be styled honestly, and
-     it is the one part of this page nobody has to be taught to use.  What
-     is set here is only what the shut box looks like: the same chevron as
-     the rest of the page, in the same ink, with room set aside on the
-     right so the two never meet, and the words left-aligned like the
-     words in the boxes beside them.
+     So the shut box is drawn here: the same chevron as the rest of the
+     page, in the same ink, with room set aside on the right so the two
+     never meet, and the words left-aligned like the words in the boxes
+     beside them.  The list that drops out of it is drawn by 20-menu.js,
+     out of the page's own menu, and joined on to the box (below).
 
      Room is set aside per place rather than here, because every one of
      these also sets `padding` in full, and a shorthand would wipe it. */
@@ -241,12 +239,25 @@
     background-size: 14px 14px;
   }
   select::-ms-expand { display: none; }
-  /* The list itself is still the machine's own -- it cannot be styled
-     honestly and it is the one part of this page nobody has to be taught
-     to use -- but what it is painted in can be said, and where that is
-     listened to the list comes up in the page's own paper and ink rather
-     than the system's default white.  Where it is not listened to, the
-     list is exactly what it always was. */
+  /* Open, the box and its list are one piece: the corners where they meet
+     go square, and the box is lit round the edge the way the list is.  The
+     ring a box has while it is being used is left off, since it would ring
+     the box and not the list hanging from it.  Said over the top of each
+     place's own corners, which are set in full, several of them by id. */
+  select.drop-down {
+    border-bottom-left-radius: 0 !important; border-bottom-right-radius: 0 !important;
+  }
+  select.drop-up {
+    border-top-left-radius: 0 !important; border-top-right-radius: 0 !important;
+  }
+  select:is(.drop-down, .drop-up) {
+    border-color: var(--accent); background-image: var(--pick-arrow-lit);
+    box-shadow: none;
+  }
+  /* The list a finger opens is still the machine's own (20-menu.js says
+     why), but what it is painted in can be said, and where that is
+     listened to it comes up in the page's own paper and ink rather than
+     the system's default white. */
   select option {
     background-color: var(--panel);
     color: var(--ink);

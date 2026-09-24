@@ -245,6 +245,12 @@
     animation-delay: calc(min(var(--i, 0), 8) * 16ms);
   }
   .menu button:hover { transform: translateX(2px); }
+  /* A dropdown's list unfolds out of its box rather than growing out of a
+     corner: uncovered from the join outward, it is joined the whole way. */
+  .menu.picks.in { animation: pick-drop .18s var(--ease) backwards; }
+  .menu.picks.up.in { animation-name: pick-rise; }
+  @keyframes pick-drop { from { clip-path: inset(0 0 100% 0); } }
+  @keyframes pick-rise { from { clip-path: inset(100% 0 0 0); } }
   /* The dot that says one of the settings behind the button has been moved
      springs in rather than blinking on, which is the difference between a
      change and a glitch. */

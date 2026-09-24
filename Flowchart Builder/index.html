@@ -233,13 +233,11 @@
      with a gap in front of them instead of starting where every other
      field's words start.
 
-     So the shut box is drawn here.  The list that drops out of it is the
-     machine's own and is left alone -- it cannot be styled honestly, and
-     it is the one part of this page nobody has to be taught to use.  What
-     is set here is only what the shut box looks like: the same chevron as
-     the rest of the page, in the same ink, with room set aside on the
-     right so the two never meet, and the words left-aligned like the
-     words in the boxes beside them.
+     So the shut box is drawn here: the same chevron as the rest of the
+     page, in the same ink, with room set aside on the right so the two
+     never meet, and the words left-aligned like the words in the boxes
+     beside them.  The list that drops out of it is drawn by 20-menu.js,
+     out of the page's own menu, and joined on to the box (below).
 
      Room is set aside per place rather than here, because every one of
      these also sets `padding` in full, and a shorthand would wipe it. */
@@ -253,12 +251,25 @@
     background-size: 14px 14px;
   }
   select::-ms-expand { display: none; }
-  /* The list itself is still the machine's own -- it cannot be styled
-     honestly and it is the one part of this page nobody has to be taught
-     to use -- but what it is painted in can be said, and where that is
-     listened to the list comes up in the page's own paper and ink rather
-     than the system's default white.  Where it is not listened to, the
-     list is exactly what it always was. */
+  /* Open, the box and its list are one piece: the corners where they meet
+     go square, and the box is lit round the edge the way the list is.  The
+     ring a box has while it is being used is left off, since it would ring
+     the box and not the list hanging from it.  Said over the top of each
+     place's own corners, which are set in full, several of them by id. */
+  select.drop-down {
+    border-bottom-left-radius: 0 !important; border-bottom-right-radius: 0 !important;
+  }
+  select.drop-up {
+    border-top-left-radius: 0 !important; border-top-right-radius: 0 !important;
+  }
+  select:is(.drop-down, .drop-up) {
+    border-color: var(--accent); background-image: var(--pick-arrow-lit);
+    box-shadow: none;
+  }
+  /* The list a finger opens is still the machine's own (20-menu.js says
+     why), but what it is painted in can be said, and where that is
+     listened to it comes up in the page's own paper and ink rather than
+     the system's default white. */
   select option {
     background-color: var(--panel);
     color: var(--ink);
@@ -1277,6 +1288,55 @@
   }
   .menu button:hover { background: var(--accent-soft); }
   .menu hr { border: 0; border-top: 1px solid var(--line-soft); margin: 4px 2px; }
+  /* The same menu as the list a dropdown opens (20-menu.js), joined on to
+     the box: at least as wide as it, lit round the edge as the box is, a
+     faint seam where the two meet, and square at the join -- except where
+     a list wider than its box runs on past it, where that corner is a
+     corner again.  Its words start where the box's words start and the
+     tick stands under the box's arrow; 20-menu.js measures both. */
+  .menu.picks {
+    min-width: 0; padding: 4px; font-size: 13px;
+    border-color: var(--accent); border-radius: var(--pick-round, 8px);
+  }
+  .menu.picks.down {
+    border-top-color: var(--line-soft);
+    border-top-left-radius: 0; border-top-right-radius: 0;
+  }
+  .menu.picks.up {
+    border-bottom-color: var(--line-soft);
+    border-bottom-left-radius: 0; border-bottom-right-radius: 0;
+  }
+  .menu.picks.down.past-left { border-top-left-radius: var(--pick-round, 8px); }
+  .menu.picks.down.past-right { border-top-right-radius: var(--pick-round, 8px); }
+  .menu.picks.up.past-left { border-bottom-left-radius: var(--pick-round, 8px); }
+  .menu.picks.up.past-right { border-bottom-right-radius: var(--pick-round, 8px); }
+  .menu.picks .pick-rows { overflow-y: auto; overscroll-behavior: contain; }
+  .pick-rows > button {
+    position: relative; font-size: inherit;
+    padding: 6px var(--pick-end, 24px) 6px var(--pick-in, 5px);
+  }
+  .pick-rows .pick-words {
+    flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  /* in the room the box keeps for its arrow, as the arrow is */
+  .pick-rows > button > .tick {
+    position: absolute; top: 50%; right: var(--pick-out, 6px); margin-top: -7.5px;
+  }
+  .pick-rows > button.on { color: var(--accent); }
+  /* One highlight, which the pointer and the arrow keys both move. */
+  .menu .pick-rows > button:focus {
+    outline: 0; box-shadow: none; background: var(--accent-soft);
+  }
+  .menu .pick-rows > button:hover:not(:focus) { background: none; }
+  .pick-rows > button[disabled] { opacity: .45; cursor: default; }
+  .menu .pick-rows > button[disabled]:hover { background: none; transform: none; }
+  .menu.picks h4 { margin: 7px var(--pick-in, 5px) 3px; }
+  /* A long list's bar is the page's bar, not another row of the menu. */
+  .menu .slider-step {
+    width: 15px; padding: 0; gap: 0; border-radius: 0; justify-content: center;
+  }
+  .menu .slider-step:hover { background: var(--line); transform: none; }
   /* B, I, U, S and the two sizes, side by side on one line of the menu.
      They are menu buttons as well, so what every menu row is given has to
      be taken back off them: a row's full width, its left-hand words, and
@@ -1430,6 +1490,9 @@
     width: 13px; height: 13px; fill: none; stroke: currentColor;
     stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round;
   }
+  /* One finger still scrolls the stage; two zoom the chart rather than the
+     browser zooming the whole page, bars and all (06-chart.js). */
+  #stage { touch-action: pan-x pan-y; }
   /* Loose, the chart is carried by a translation rather than by scrolling,
      so the stage does none: its own bars would have nothing left to say,
      and the browser's would fight the dragging for the same pixels. */
@@ -2507,6 +2570,12 @@
     animation-delay: calc(min(var(--i, 0), 8) * 16ms);
   }
   .menu button:hover { transform: translateX(2px); }
+  /* A dropdown's list unfolds out of its box rather than growing out of a
+     corner: uncovered from the join outward, it is joined the whole way. */
+  .menu.picks.in { animation: pick-drop .18s var(--ease) backwards; }
+  .menu.picks.up.in { animation-name: pick-rise; }
+  @keyframes pick-drop { from { clip-path: inset(0 0 100% 0); } }
+  @keyframes pick-rise { from { clip-path: inset(100% 0 0 0); } }
   /* The dot that says one of the settings behind the button has been moved
      springs in rather than blinking on, which is the difference between a
      change and a glitch. */
@@ -6343,6 +6412,7 @@
         tip.style.display = run > back + 2 ? "" : "none";
       }
       function move(e) {
+        if (pinched) { return; }         // a second finger made it a pinch
         at = { x: e.clientX, y: e.clientY };
         chase(at, reach);
         reach();
@@ -6353,6 +6423,9 @@
         window.removeEventListener("pointerup", drop);
         band.remove();
         aims.remove();
+        // Pinched, it was never aimed anywhere: nothing is joined, and the
+        // shape it came off stays the one in hand.
+        if (pinched) { picked = from.id; drawHand(); drawHandPanel(); return; }
         var went = Math.abs(e.clientX - ev.clientX) + Math.abs(e.clientY - ev.clientY);
         if (went < 5) {
           // Pressed and let go on the spot: take it as a click, and wait for
@@ -6434,6 +6507,7 @@
       var pressed = onPaper(ev);         // where on the design it was taken up
 
       function move(e) {
+        if (pinched) { return; }         // a second finger made it a pinch
         at = { x: e.clientX, y: e.clientY };
         carry();
       }
@@ -6495,7 +6569,8 @@
         shapeCarried = false;
         window.removeEventListener("pointermove", move);
         window.removeEventListener("pointerup", drop);
-        if (!stirred && g) {
+        // A pinch begun on a shape leaves it taken up, but never typing.
+        if (!stirred && g && !pinched) {
           // Clicking a shape that is already the one in hand starts typing
           // in it, the way it does everywhere else -- one press to take it
           // up, another to write in it.  A double-click still works too.
@@ -6930,6 +7005,7 @@
       try { stage.setPointerCapture(ev.pointerId); } catch (e) { /* mouse: fine */ }
       stage.classList.add("grabbing");
       function move(e) {
+        if (pinched) { return; }         // two fingers carry it themselves
         holdX = wasX + (e.clientX - fromX);
         holdY = wasY + (e.clientY - fromY);
         holdClamp();
@@ -6968,6 +7044,83 @@
       ev.preventDefault();
       glideStop();
       holdBy(-ev.deltaX * by, -ev.deltaY * by);
+    }, { passive: false });
+  })();
+
+  // Two fingers, on a touch screen: spread them to zoom in, pinch them to
+  // zoom out, and move them together to carry the chart about.  The spot
+  // between them stays between them, the way the wheel keeps the spot under
+  // the mouse.  The browser's own pinch, which blew up the whole page --
+  // bars, panel and all -- is turned away over the stage for this (see
+  // #stage in 05-chart.css).
+  //
+  // The first finger was down before the second, and has already begun
+  // whatever one finger does: taking up a shape, drawing a line off a dot,
+  // carrying a loose chart.  None of it may carry on under a pinch, so
+  // `pinched` says a second finger came, and those hold still for it.  It
+  // lasts until every finger is up, or the one left behind would pick up
+  // where it was and jump the shape to it.
+  var pinched = false;
+  (function () {
+    var stage = el("#stage");
+    if (!stage) { return; }
+    var fingers = [];                    // pointers pressed on the stage
+    window.addEventListener("pointerdown", function (ev) {
+      if (!fingers.length) { pinched = false; }
+      if (ev.pointerType !== "touch" || !stage.contains(ev.target)) { return; }
+      fingers.push(ev.pointerId);
+      if (fingers.length < 2) { return; }
+      pinched = true;                    // and nothing else hears of this one
+      ev.stopImmediatePropagation();
+      chaseStop();
+      glideStop();
+    }, true);
+    function up(ev) {
+      var at = fingers.indexOf(ev.pointerId);
+      if (at >= 0) { fingers.splice(at, 1); }
+    }
+    window.addEventListener("pointerup", up, true);
+    window.addEventListener("pointercancel", up, true);
+    // A finger whose pointerup went astray would turn every later touch
+    // into half a pinch; no fingers on the glass at all is certain.
+    window.addEventListener("touchend", function (ev) {
+      if (!ev.touches.length) { fingers = []; }
+    }, true);
+
+    // Where the two are, measured from the touches rather than the
+    // pointers: a pointer the browser has taken for scrolling is cancelled
+    // and heard of no more, while its touch goes on reporting.
+    function pair(ev) {
+      var two = [];
+      for (var i = 0; i < ev.touches.length && two.length < 2; i++) {
+        if (stage.contains(ev.touches[i].target)) { two.push(ev.touches[i]); }
+      }
+      if (two.length < 2) { return null; }
+      var a = two[0], b = two[1];
+      return { x: (a.clientX + b.clientX) / 2, y: (a.clientY + b.clientY) / 2,
+               gap: Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY) };
+    }
+    var was = null;                      // the two of them, a moment ago
+    function again(ev) { was = pinched ? pair(ev) : null; }
+    stage.addEventListener("touchstart", again);
+    stage.addEventListener("touchend", again);
+    stage.addEventListener("touchcancel", again);
+    stage.addEventListener("touchmove", function (ev) {
+      var now = pinched ? pair(ev) : null;
+      // Already scrolling when the second finger came, the browser keeps
+      // it, and the fingers are left to scroll.
+      if (!now || !ev.cancelable) { was = null; return; }
+      ev.preventDefault();
+      if (was) {
+        // Carried first, so the spot that was between them is between
+        // them again, and then zoomed about that spot.
+        var dx = now.x - was.x, dy = now.y - was.y;
+        if (loose) { holdBy(dx, dy); }
+        else { stage.scrollLeft -= dx; stage.scrollTop -= dy; }
+        var want = was.gap > 0 ? zoomLands(zoom * now.gap / was.gap) : zoom;
+        if (want !== zoom) { zoomAt(now.x, now.y, want); }
+      }
+      was = now;
     }, { passive: false });
   })();
   // ------------------------------------------------------------- panel --
@@ -17735,6 +17888,7 @@
     all('[aria-expanded="true"]').forEach(function (b) {
       if (b.id === "more") { b.setAttribute("aria-expanded", "false"); }
     });
+    shutDropList();                      // and a dropdown's list, at once
   }
 
   function closeMenu() {
@@ -18053,6 +18207,274 @@
       })();
     });
   }
+
+  // ---------------------------------------------------- the dropdown lists --
+  // The shut box of a dropdown has been drawn here for a long while
+  // (01-base.css), but the list that fell out of it was still the
+  // machine's: a system list in its own font, its own blue and its own
+  // square corners, hanging under a box drawn in this page's.  So the list
+  // is drawn here as well, out of the same menu the right button opens,
+  // and joined on to the box it falls from -- the box's bottom corners go
+  // square and the list carries straight on down from them, one piece with
+  // rounded corners only at the far end.  With no room below, it opens
+  // upward and the join is the other way up.
+  //
+  // The <select> is still the <select>: whatever reads its value, sets it
+  // or listens for it changing goes on exactly as before, and the list is
+  // only a way of choosing.  A finger keeps the machine's own list, which
+  // on a phone is a sheet the size of the screen, far easier to hit than
+  // rows cut to the size of a mouse pointer.
+  var dropOpen = null;                   // { box, menu } while a list is down
+  var lastPointer = "mouse";
+
+  function shutDropList(back) {
+    if (!dropOpen) { return; }
+    var box = dropOpen.box;
+    dropOpen.menu.remove();
+    if (dropOpen.watch) { dropOpen.watch.disconnect(); }
+    dropOpen = null;
+    box.classList.remove("drop-down", "drop-up");
+    box.setAttribute("aria-expanded", "false");
+    if (back && box.isConnected) { box.focus({ preventScroll: true }); }
+  }
+
+  // Chosen: said to the <select> the way it says it itself, an input and
+  // then a change, and only when it is a change -- choosing the one that
+  // was already chosen tells nobody anything.
+  function dropPick(box, option) {
+    shutDropList(true);
+    if (option.disabled || option.closest("select") !== box) { return; }
+    if (box.selectedIndex === option.index) { return; }
+    box.selectedIndex = option.index;
+    box.dispatchEvent(new Event("input", { bubbles: true }));
+    box.dispatchEvent(new Event("change", { bubbles: true }));
+  }
+
+  function openDropList(box) {
+    closeMenu();                         // any other menu, and any other list
+    var look = getComputedStyle(box);
+    var menu = document.createElement("div");
+    menu.className = "menu picks";
+    menu.setAttribute("role", "listbox");
+    var rows = document.createElement("div");
+    rows.className = "pick-rows";
+    menu.appendChild(rows);
+    // A press anywhere in it -- on its scroll bar as much as on a row -- is
+    // not a press somewhere else: the Files menu and the options shut on
+    // any click that reaches the page, and the list hangs outside them.
+    menu.addEventListener("click", function (ev) { ev.stopPropagation(); });
+    var chosen = null, n = 0;
+    function addRow(option) {
+      if (option.tagName !== "OPTION" || option.hidden) { return; }
+      var row = document.createElement("button");
+      row.type = "button";
+      row.tabIndex = -1;
+      row.setAttribute("role", "option");
+      row.setAttribute("aria-selected", option.selected ? "true" : "false");
+      var words = document.createElement("span");
+      words.className = "pick-words";
+      words.textContent = option.textContent;
+      row.appendChild(words);
+      // the tick stands where the box's own arrow does
+      row.insertAdjacentHTML("beforeend", option.selected ? tickArt()
+                                                          : '<span class="tick"></span>');
+      if (option.selected) { row.classList.add("on"); chosen = row; }
+      row.disabled = option.disabled ||
+                     !!(option.parentNode && option.parentNode.disabled);
+      row.style.setProperty("--i", n++);
+      row.onclick = function (ev) {
+        ev.stopPropagation();
+        dropPick(box, option);
+      };
+      rows.appendChild(row);
+    }
+    Array.prototype.forEach.call(box.children, function (kid) {
+      if (kid.tagName !== "OPTGROUP") { addRow(kid); return; }
+      var head = document.createElement("h4");
+      head.textContent = kid.label;
+      rows.appendChild(head);
+      Array.prototype.forEach.call(kid.children, addRow);
+    });
+
+    // Its words start where the box's words start and stop where the box
+    // keeps room for its arrow, its tick sits under the arrow, and its
+    // corners are the box's corners -- so a list of words the box was made
+    // wide enough for is exactly as wide as the box.
+    function px(v) { return parseFloat(v) || 0; }
+    var arrow = /(\d+(?:\.\d+)?)px/.exec(look.backgroundPositionX || "");
+    menu.style.fontSize = look.fontSize;
+    menu.style.setProperty("--pick-in", Math.max(4, px(look.paddingLeft) - 4) + "px");
+    menu.style.setProperty("--pick-end", Math.max(20, px(look.paddingRight) - 4) + "px");
+    menu.style.setProperty("--pick-out", Math.max(3, (arrow ? +arrow[1] : 11) - 4.5) + "px");
+    menu.style.setProperty("--pick-round", look.borderBottomLeftRadius);
+    document.body.appendChild(menu);
+
+    // Below the box if it fits there or there is more room there than
+    // above; as long as its rows, or as long as there is room for.
+    var at = box.getBoundingClientRect();
+    menu.style.minWidth = at.width + "px";
+    var below = innerHeight - at.bottom - 8, above = at.top - 8;
+    var down = menu.offsetHeight <= below || below >= above;
+    var edges = menu.offsetHeight - rows.offsetHeight;
+    rows.style.maxHeight = Math.max(90, (down ? below : above) - edges) + "px";
+    // A long list scrolls, with the page's own bar like everything else.
+    ownSliders(rows, frameOf(rows, "room"), { brief: true });
+    // measured to the fraction, or the join is a hairline out
+    var size = menu.getBoundingClientRect(), wide = size.width, high = size.height;
+    var left = Math.max(8, Math.min(at.left, innerWidth - wide - 8));
+    menu.style.left = left + "px";
+    menu.style.top = (down ? at.bottom - 1 : at.top + 1 - high) + "px";
+    menu.classList.add(down ? "down" : "up");
+    // Where it runs out past the box, that corner is a corner again.
+    menu.classList.toggle("past-left", left < at.left - 0.5);
+    menu.classList.toggle("past-right", left + wide > at.right + 0.5);
+    box.classList.add(down ? "drop-down" : "drop-up");
+    box.setAttribute("aria-expanded", "true");
+    dropOpen = { box: box, menu: menu };
+    // Nor does it stay joined to a box that changes size under it -- the
+    // panel narrowing as its bar slides in, say -- so then it shuts too.
+    if (window.ResizeObserver) {
+      dropOpen.watch = new ResizeObserver(function () {
+        var now = box.getBoundingClientRect();
+        if (Math.abs(now.width - at.width) > 0.5 || Math.abs(now.height - at.height) > 0.5) {
+          shutDropList();
+        }
+      });
+      dropOpen.watch.observe(box);
+    }
+
+    // The one chosen is where the list opens, in the middle of it.
+    var first = chosen || live()[0];
+    if (first) {
+      var gap = first.getBoundingClientRect().top - rows.getBoundingClientRect().top;
+      rows.scrollTop = gap - (rows.clientHeight - first.offsetHeight) / 2;
+      first.focus({ preventScroll: true });
+    }
+    void menu.offsetWidth;
+    menu.classList.add("in");            // 07-motion.css unfolds it
+
+    function live() {
+      return all("button", rows).filter(function (row) { return !row.disabled; });
+    }
+    function goTo(row) {
+      if (!row) { return; }
+      row.focus({ preventScroll: true });
+      var r = row.getBoundingClientRect(), s = rows.getBoundingClientRect();
+      if (r.top < s.top) { rows.scrollTop -= s.top - r.top; }
+      else if (r.bottom > s.bottom) { rows.scrollTop += r.bottom - s.bottom; }
+    }
+    // The pointer and the keys move one highlight between them, as they
+    // do in the machine's list, rather than one each.
+    rows.addEventListener("pointermove", function (ev) {
+      var row = ev.target.closest && ev.target.closest("button");
+      if (row && !row.disabled && document.activeElement !== row) {
+        row.focus({ preventScroll: true });
+      }
+    });
+    var typed = "", typedAt = 0;
+    menu.addEventListener("keydown", function (ev) {
+      var list = live(), at = list.indexOf(document.activeElement);
+      var page = Math.max(1, Math.floor(rows.clientHeight / 30));
+      var to = null;
+      // The keys are the list's while it is open, as they are the machine's
+      // list's: a letter typed to find a row is not a shortcut for the
+      // chart, and Escape shuts the list, not the screen behind it.
+      if (!ev.ctrlKey && !ev.metaKey) { ev.stopPropagation(); }
+      if (ev.key === "Escape") {
+        ev.preventDefault();
+        shutDropList(true);
+        return;
+      }
+      if (ev.key === "Tab") { shutDropList(true); return; }
+      if (ev.altKey && (ev.key === "ArrowDown" || ev.key === "ArrowUp")) {
+        ev.preventDefault();
+        if (at >= 0) { list[at].click(); } else { shutDropList(true); }
+        return;
+      }
+      if (ev.key === "ArrowDown") { to = list[Math.min(list.length - 1, at + 1)]; }
+      else if (ev.key === "ArrowUp") { to = list[Math.max(0, at - 1)]; }
+      else if (ev.key === "Home") { to = list[0]; }
+      else if (ev.key === "End") { to = list[list.length - 1]; }
+      else if (ev.key === "PageDown") { to = list[Math.min(list.length - 1, at + page)]; }
+      else if (ev.key === "PageUp") { to = list[Math.max(0, at - page)]; }
+      else if (ev.key.length === 1 && ev.key !== " " &&
+               !ev.ctrlKey && !ev.metaKey && !ev.altKey) {
+        // Typing the start of one goes to it; the same letter again goes
+        // on to the next that starts with it.
+        var now = Date.now();
+        typed = (now - typedAt > 700 ? "" : typed) + ev.key.toLowerCase();
+        typedAt = now;
+        var from = typed.length === 1 ? at + 1 : Math.max(0, at);
+        for (var k = 0; k < list.length; k++) {
+          var row = list[(from + k) % list.length];
+          if (row.textContent.trim().toLowerCase().indexOf(typed) === 0) { to = row; break; }
+        }
+        if (!to) { return; }
+      } else { return; }
+      ev.preventDefault();
+      goTo(to);
+    });
+  }
+
+  // Opened by a press of the mouse, the way the machine's is, and shut by
+  // another press on the box.  The press itself is kept from opening the
+  // machine's list, and from taking the focus with it, so the box is given
+  // the focus by hand; the list is opened on the click that follows, once
+  // that click is over.  It is caught on its way down rather than on its
+  // way back up, because a box inside the Files menu never sends it back
+  // up (that menu keeps its clicks to itself, or it would shut), and it is
+  // acted on afterwards, so that the page shutting whatever menu was open
+  // before does not shut this one along with it.
+  document.addEventListener("pointerdown", function (ev) {
+    lastPointer = ev.pointerType || "mouse";
+    if (dropOpen && !dropOpen.menu.contains(ev.target) && ev.target !== dropOpen.box) {
+      shutDropList();
+    }
+  }, true);
+  function dropBox(ev) {
+    var box = ev.target;
+    if (!box || box.tagName !== "SELECT" || box.disabled || box.multiple ||
+        box.size > 1) { return null; }
+    return box;
+  }
+  document.addEventListener("mousedown", function (ev) {
+    var box = dropBox(ev);
+    if (!box || ev.button !== 0 || lastPointer === "touch") { return; }
+    ev.preventDefault();
+    box._dropWasOpen = !!(dropOpen && dropOpen.box === box);
+    box._dropPressed = true;
+    box.focus({ preventScroll: true });
+  });
+  document.addEventListener("click", function (ev) {
+    var box = dropBox(ev);
+    if (!box || !box._dropPressed) { return; }
+    box._dropPressed = false;
+    var wasOpen = box._dropWasOpen;
+    box._dropWasOpen = false;
+    setTimeout(function () {
+      if (wasOpen) { shutDropList(true); }
+      else if (box.isConnected && !box.disabled) { openDropList(box); }
+    }, 0);
+  }, true);
+  // And from the keys that open the machine's: Space, Enter, F4 and Alt
+  // with an arrow.  The arrows on their own still step through the choices
+  // without opening anything, as they always have.
+  document.addEventListener("keydown", function (ev) {
+    var box = dropBox(ev);
+    if (!box || ev.ctrlKey || ev.metaKey) { return; }
+    var opens = ev.key === " " || ev.key === "Enter" || ev.key === "F4" ||
+                (ev.altKey && (ev.key === "ArrowDown" || ev.key === "ArrowUp"));
+    if (!opens) { return; }
+    ev.preventDefault();
+    openDropList(box);
+  });
+  // A list left hanging where its box no longer is would be pointing at
+  // nothing, so it goes when anything under it moves, or the window does.
+  document.addEventListener("scroll", function (ev) {
+    if (dropOpen && !dropOpen.menu.contains(ev.target)) { shutDropList(); }
+  }, true);
+  window.addEventListener("resize", function () { shutDropList(); });
+  window.addEventListener("blur", function () { shutDropList(); });
   // ---------------------------------------------- typing straight into it --
   // Double-click a shape and the words in it are there to be typed over:
   // in a chart you drew by hand, in the shape itself; in one built from

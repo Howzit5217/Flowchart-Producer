@@ -16,6 +16,7 @@
     all('[aria-expanded="true"]').forEach(function (b) {
       if (b.id === "more") { b.setAttribute("aria-expanded", "false"); }
     });
+    shutDropList();                      // and a dropdown's list, at once
   }
 
   function closeMenu() {
@@ -334,3 +335,271 @@
       })();
     });
   }
+
+  // ---------------------------------------------------- the dropdown lists --
+  // The shut box of a dropdown has been drawn here for a long while
+  // (01-base.css), but the list that fell out of it was still the
+  // machine's: a system list in its own font, its own blue and its own
+  // square corners, hanging under a box drawn in this page's.  So the list
+  // is drawn here as well, out of the same menu the right button opens,
+  // and joined on to the box it falls from -- the box's bottom corners go
+  // square and the list carries straight on down from them, one piece with
+  // rounded corners only at the far end.  With no room below, it opens
+  // upward and the join is the other way up.
+  //
+  // The <select> is still the <select>: whatever reads its value, sets it
+  // or listens for it changing goes on exactly as before, and the list is
+  // only a way of choosing.  A finger keeps the machine's own list, which
+  // on a phone is a sheet the size of the screen, far easier to hit than
+  // rows cut to the size of a mouse pointer.
+  var dropOpen = null;                   // { box, menu } while a list is down
+  var lastPointer = "mouse";
+
+  function shutDropList(back) {
+    if (!dropOpen) { return; }
+    var box = dropOpen.box;
+    dropOpen.menu.remove();
+    if (dropOpen.watch) { dropOpen.watch.disconnect(); }
+    dropOpen = null;
+    box.classList.remove("drop-down", "drop-up");
+    box.setAttribute("aria-expanded", "false");
+    if (back && box.isConnected) { box.focus({ preventScroll: true }); }
+  }
+
+  // Chosen: said to the <select> the way it says it itself, an input and
+  // then a change, and only when it is a change -- choosing the one that
+  // was already chosen tells nobody anything.
+  function dropPick(box, option) {
+    shutDropList(true);
+    if (option.disabled || option.closest("select") !== box) { return; }
+    if (box.selectedIndex === option.index) { return; }
+    box.selectedIndex = option.index;
+    box.dispatchEvent(new Event("input", { bubbles: true }));
+    box.dispatchEvent(new Event("change", { bubbles: true }));
+  }
+
+  function openDropList(box) {
+    closeMenu();                         // any other menu, and any other list
+    var look = getComputedStyle(box);
+    var menu = document.createElement("div");
+    menu.className = "menu picks";
+    menu.setAttribute("role", "listbox");
+    var rows = document.createElement("div");
+    rows.className = "pick-rows";
+    menu.appendChild(rows);
+    // A press anywhere in it -- on its scroll bar as much as on a row -- is
+    // not a press somewhere else: the Files menu and the options shut on
+    // any click that reaches the page, and the list hangs outside them.
+    menu.addEventListener("click", function (ev) { ev.stopPropagation(); });
+    var chosen = null, n = 0;
+    function addRow(option) {
+      if (option.tagName !== "OPTION" || option.hidden) { return; }
+      var row = document.createElement("button");
+      row.type = "button";
+      row.tabIndex = -1;
+      row.setAttribute("role", "option");
+      row.setAttribute("aria-selected", option.selected ? "true" : "false");
+      var words = document.createElement("span");
+      words.className = "pick-words";
+      words.textContent = option.textContent;
+      row.appendChild(words);
+      // the tick stands where the box's own arrow does
+      row.insertAdjacentHTML("beforeend", option.selected ? tickArt()
+                                                          : '<span class="tick"></span>');
+      if (option.selected) { row.classList.add("on"); chosen = row; }
+      row.disabled = option.disabled ||
+                     !!(option.parentNode && option.parentNode.disabled);
+      row.style.setProperty("--i", n++);
+      row.onclick = function (ev) {
+        ev.stopPropagation();
+        dropPick(box, option);
+      };
+      rows.appendChild(row);
+    }
+    Array.prototype.forEach.call(box.children, function (kid) {
+      if (kid.tagName !== "OPTGROUP") { addRow(kid); return; }
+      var head = document.createElement("h4");
+      head.textContent = kid.label;
+      rows.appendChild(head);
+      Array.prototype.forEach.call(kid.children, addRow);
+    });
+
+    // Its words start where the box's words start and stop where the box
+    // keeps room for its arrow, its tick sits under the arrow, and its
+    // corners are the box's corners -- so a list of words the box was made
+    // wide enough for is exactly as wide as the box.
+    function px(v) { return parseFloat(v) || 0; }
+    var arrow = /(\d+(?:\.\d+)?)px/.exec(look.backgroundPositionX || "");
+    menu.style.fontSize = look.fontSize;
+    menu.style.setProperty("--pick-in", Math.max(4, px(look.paddingLeft) - 4) + "px");
+    menu.style.setProperty("--pick-end", Math.max(20, px(look.paddingRight) - 4) + "px");
+    menu.style.setProperty("--pick-out", Math.max(3, (arrow ? +arrow[1] : 11) - 4.5) + "px");
+    menu.style.setProperty("--pick-round", look.borderBottomLeftRadius);
+    document.body.appendChild(menu);
+
+    // Below the box if it fits there or there is more room there than
+    // above; as long as its rows, or as long as there is room for.
+    var at = box.getBoundingClientRect();
+    menu.style.minWidth = at.width + "px";
+    var below = innerHeight - at.bottom - 8, above = at.top - 8;
+    var down = menu.offsetHeight <= below || below >= above;
+    var edges = menu.offsetHeight - rows.offsetHeight;
+    rows.style.maxHeight = Math.max(90, (down ? below : above) - edges) + "px";
+    // A long list scrolls, with the page's own bar like everything else.
+    ownSliders(rows, frameOf(rows, "room"), { brief: true });
+    // measured to the fraction, or the join is a hairline out
+    var size = menu.getBoundingClientRect(), wide = size.width, high = size.height;
+    var left = Math.max(8, Math.min(at.left, innerWidth - wide - 8));
+    menu.style.left = left + "px";
+    menu.style.top = (down ? at.bottom - 1 : at.top + 1 - high) + "px";
+    menu.classList.add(down ? "down" : "up");
+    // Where it runs out past the box, that corner is a corner again.
+    menu.classList.toggle("past-left", left < at.left - 0.5);
+    menu.classList.toggle("past-right", left + wide > at.right + 0.5);
+    box.classList.add(down ? "drop-down" : "drop-up");
+    box.setAttribute("aria-expanded", "true");
+    dropOpen = { box: box, menu: menu };
+    // Nor does it stay joined to a box that changes size under it -- the
+    // panel narrowing as its bar slides in, say -- so then it shuts too.
+    if (window.ResizeObserver) {
+      dropOpen.watch = new ResizeObserver(function () {
+        var now = box.getBoundingClientRect();
+        if (Math.abs(now.width - at.width) > 0.5 || Math.abs(now.height - at.height) > 0.5) {
+          shutDropList();
+        }
+      });
+      dropOpen.watch.observe(box);
+    }
+
+    // The one chosen is where the list opens, in the middle of it.
+    var first = chosen || live()[0];
+    if (first) {
+      var gap = first.getBoundingClientRect().top - rows.getBoundingClientRect().top;
+      rows.scrollTop = gap - (rows.clientHeight - first.offsetHeight) / 2;
+      first.focus({ preventScroll: true });
+    }
+    void menu.offsetWidth;
+    menu.classList.add("in");            // 07-motion.css unfolds it
+
+    function live() {
+      return all("button", rows).filter(function (row) { return !row.disabled; });
+    }
+    function goTo(row) {
+      if (!row) { return; }
+      row.focus({ preventScroll: true });
+      var r = row.getBoundingClientRect(), s = rows.getBoundingClientRect();
+      if (r.top < s.top) { rows.scrollTop -= s.top - r.top; }
+      else if (r.bottom > s.bottom) { rows.scrollTop += r.bottom - s.bottom; }
+    }
+    // The pointer and the keys move one highlight between them, as they
+    // do in the machine's list, rather than one each.
+    rows.addEventListener("pointermove", function (ev) {
+      var row = ev.target.closest && ev.target.closest("button");
+      if (row && !row.disabled && document.activeElement !== row) {
+        row.focus({ preventScroll: true });
+      }
+    });
+    var typed = "", typedAt = 0;
+    menu.addEventListener("keydown", function (ev) {
+      var list = live(), at = list.indexOf(document.activeElement);
+      var page = Math.max(1, Math.floor(rows.clientHeight / 30));
+      var to = null;
+      // The keys are the list's while it is open, as they are the machine's
+      // list's: a letter typed to find a row is not a shortcut for the
+      // chart, and Escape shuts the list, not the screen behind it.
+      if (!ev.ctrlKey && !ev.metaKey) { ev.stopPropagation(); }
+      if (ev.key === "Escape") {
+        ev.preventDefault();
+        shutDropList(true);
+        return;
+      }
+      if (ev.key === "Tab") { shutDropList(true); return; }
+      if (ev.altKey && (ev.key === "ArrowDown" || ev.key === "ArrowUp")) {
+        ev.preventDefault();
+        if (at >= 0) { list[at].click(); } else { shutDropList(true); }
+        return;
+      }
+      if (ev.key === "ArrowDown") { to = list[Math.min(list.length - 1, at + 1)]; }
+      else if (ev.key === "ArrowUp") { to = list[Math.max(0, at - 1)]; }
+      else if (ev.key === "Home") { to = list[0]; }
+      else if (ev.key === "End") { to = list[list.length - 1]; }
+      else if (ev.key === "PageDown") { to = list[Math.min(list.length - 1, at + page)]; }
+      else if (ev.key === "PageUp") { to = list[Math.max(0, at - page)]; }
+      else if (ev.key.length === 1 && ev.key !== " " &&
+               !ev.ctrlKey && !ev.metaKey && !ev.altKey) {
+        // Typing the start of one goes to it; the same letter again goes
+        // on to the next that starts with it.
+        var now = Date.now();
+        typed = (now - typedAt > 700 ? "" : typed) + ev.key.toLowerCase();
+        typedAt = now;
+        var from = typed.length === 1 ? at + 1 : Math.max(0, at);
+        for (var k = 0; k < list.length; k++) {
+          var row = list[(from + k) % list.length];
+          if (row.textContent.trim().toLowerCase().indexOf(typed) === 0) { to = row; break; }
+        }
+        if (!to) { return; }
+      } else { return; }
+      ev.preventDefault();
+      goTo(to);
+    });
+  }
+
+  // Opened by a press of the mouse, the way the machine's is, and shut by
+  // another press on the box.  The press itself is kept from opening the
+  // machine's list, and from taking the focus with it, so the box is given
+  // the focus by hand; the list is opened on the click that follows, once
+  // that click is over.  It is caught on its way down rather than on its
+  // way back up, because a box inside the Files menu never sends it back
+  // up (that menu keeps its clicks to itself, or it would shut), and it is
+  // acted on afterwards, so that the page shutting whatever menu was open
+  // before does not shut this one along with it.
+  document.addEventListener("pointerdown", function (ev) {
+    lastPointer = ev.pointerType || "mouse";
+    if (dropOpen && !dropOpen.menu.contains(ev.target) && ev.target !== dropOpen.box) {
+      shutDropList();
+    }
+  }, true);
+  function dropBox(ev) {
+    var box = ev.target;
+    if (!box || box.tagName !== "SELECT" || box.disabled || box.multiple ||
+        box.size > 1) { return null; }
+    return box;
+  }
+  document.addEventListener("mousedown", function (ev) {
+    var box = dropBox(ev);
+    if (!box || ev.button !== 0 || lastPointer === "touch") { return; }
+    ev.preventDefault();
+    box._dropWasOpen = !!(dropOpen && dropOpen.box === box);
+    box._dropPressed = true;
+    box.focus({ preventScroll: true });
+  });
+  document.addEventListener("click", function (ev) {
+    var box = dropBox(ev);
+    if (!box || !box._dropPressed) { return; }
+    box._dropPressed = false;
+    var wasOpen = box._dropWasOpen;
+    box._dropWasOpen = false;
+    setTimeout(function () {
+      if (wasOpen) { shutDropList(true); }
+      else if (box.isConnected && !box.disabled) { openDropList(box); }
+    }, 0);
+  }, true);
+  // And from the keys that open the machine's: Space, Enter, F4 and Alt
+  // with an arrow.  The arrows on their own still step through the choices
+  // without opening anything, as they always have.
+  document.addEventListener("keydown", function (ev) {
+    var box = dropBox(ev);
+    if (!box || ev.ctrlKey || ev.metaKey) { return; }
+    var opens = ev.key === " " || ev.key === "Enter" || ev.key === "F4" ||
+                (ev.altKey && (ev.key === "ArrowDown" || ev.key === "ArrowUp"));
+    if (!opens) { return; }
+    ev.preventDefault();
+    openDropList(box);
+  });
+  // A list left hanging where its box no longer is would be pointing at
+  // nothing, so it goes when anything under it moves, or the window does.
+  document.addEventListener("scroll", function (ev) {
+    if (dropOpen && !dropOpen.menu.contains(ev.target)) { shutDropList(); }
+  }, true);
+  window.addEventListener("resize", function () { shutDropList(); });
+  window.addEventListener("blur", function () { shutDropList(); });
