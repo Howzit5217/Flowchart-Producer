@@ -139,12 +139,18 @@
   .slider.none { display: none; }
   /* The panel's bar has a strip of its own only while it is up, like any
      bar over words (.room above): kept for good, the strip was an empty
-     band down the side of a panel with nothing to scroll.  It comes and
-     goes gently rather than at once -- the bar slides in from the edge and
-     the panel slides over to make room for it, both at the one pace
-     (07-motion.css).  That cannot see-saw: narrowing only makes the panel
-     longer, so a bar that was wanted stays wanted, and widening only makes
-     it shorter, so one that was not is still not. */
+     band down the side of a panel with nothing to scroll.  And the strip
+     is added to the panel rather than taken out of what is in it: the
+     panel's width is its contents' width (content-box), so the padding the
+     bar stands in makes the panel fifteen pixels wider and the chart
+     fifteen narrower, and nothing in the panel moves, narrows or re-wraps.
+     The spacing inside stays exactly as it was, the bar slides in from the
+     edge as the panel widens to take it, both at the one pace
+     (07-motion.css), and since the words never move, whether the bar is
+     wanted can never be changed by the bar coming or going.  (The panel's
+     own one-pixel edge now sits outside its width too: a pixel wider than
+     the width it is given, which nothing needs to be told about.) */
+  #panel { box-sizing: content-box; }
   .slider-track { position: relative; flex: 1; min-width: 0; min-height: 0; }
   .slider-grip {
     position: absolute; border-radius: 99px; background: var(--line);
