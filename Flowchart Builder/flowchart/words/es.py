@@ -33,7 +33,7 @@ ES = {
     "show_grid": "Mostrar la cuadrícula",
     "lines": "Líneas y flechas", "reset": "Restaurar todo el estilo",
     "download": "Descargar", "dl_size": "Tamaño",
-    "files": "Archivos", "import_head": "Importar",
+    "files": "Archivos", "f_work_head": "Tu trabajo",
     "dl_svg": "Descargar SVG", "dl_png": "Descargar PNG", "panel": "Panel",
     "print_it": "Imprimir el diagrama",
     "print_head": "Imprimir",

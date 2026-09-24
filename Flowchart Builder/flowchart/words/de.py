@@ -32,7 +32,7 @@ DE = {
     "paper": "Papier", "grid": "Raster", "show_grid": "Raster anzeigen",
     "lines": "Linien und Pfeile", "reset": "Den ganzen Stil zurücksetzen",
     "download": "Herunterladen", "dl_size": "Größe",
-    "files": "Dateien", "import_head": "Importieren",
+    "files": "Dateien", "f_work_head": "Deine Arbeit",
     "dl_svg": "SVG herunterladen", "dl_png": "PNG herunterladen",
     "print_it": "Diagramm drucken",
     "print_head": "Drucken",

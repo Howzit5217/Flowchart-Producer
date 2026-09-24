@@ -32,7 +32,7 @@ FR = {
     "paper": "Papier", "grid": "Grille", "show_grid": "Afficher la grille",
     "lines": "Lignes et flèches", "reset": "Rétablir tout le style",
     "download": "Télécharger", "dl_size": "Taille",
-    "files": "Fichiers", "import_head": "Importer",
+    "files": "Fichiers", "f_work_head": "Ton travail",
     "dl_svg": "Télécharger le SVG", "dl_png": "Télécharger le PNG",
     "print_it": "Imprimer le schéma",
     "print_head": "Imprimer",

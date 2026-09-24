@@ -34,7 +34,7 @@ EN = {
     "paper": "Paper", "grid": "Grid", "show_grid": "Show the grid",
     "lines": "Lines and arrows", "reset": "Put every style back",
     "download": "Download", "dl_size": "Size",
-    "files": "Files", "import_head": "Import",
+    "files": "Files", "f_work_head": "Your work",
     "dl_svg": "Download SVG", "dl_png": "Download PNG", "panel": "Panel",
     "print_it": "Print the chart",
     "print_head": "Print",
