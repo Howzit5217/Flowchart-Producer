@@ -155,18 +155,14 @@
      re-wrapping, and so changing how long the panel was, which is the very
      thing that says whether the bar is wanted.  Kept for good, the strip
      was an empty band down the side of a panel with nothing to scroll.
-     Laid over the sixteen pixels every card keeps clear on its right, it
-     takes no room at all: nothing moves when it comes, nothing is left
-     when it goes (07-motion.css slides it), and it covers nothing.  So it
-     is slim -- a grip, without the step buttons of the bars that stand in
-     room of their own -- and shows a track only when it is reached for. */
+     Laid over the sixteen pixels every card keeps clear on its right, the
+     same fifteen-pixel bar as everywhere else takes no room at all:
+     nothing moves when it comes, nothing is left when it goes (07-motion.css
+     slides it), and it covers nothing.  It starts under the panel's top bar,
+     which never scrolls and keeps only twelve pixels clear on its right;
+     24-scroll.js measures how tall that is into --top-bar. */
   #panel.slide-frame.room.has-y { padding-right: 0; }
-  #panel > .slider.y { width: 10px; background: transparent; border-left: 0; }
-  #panel > .slider.y:hover { background: var(--line-soft); }
-  #panel > .slider.y .slider-step { display: none; }
-  #panel > .slider.y .slider-grip { left: 3px; right: 3px; }
-  #panel > .slider.y:hover .slider-grip,
-  #panel > .slider.y .slider-grip.held { left: 2px; right: 2px; }
+  #panel > .slider.y { top: var(--top-bar, 0px); }
   .slider-track { position: relative; flex: 1; min-width: 0; min-height: 0; }
   .slider-grip {
     position: absolute; border-radius: 99px; background: var(--line);
@@ -18980,7 +18976,18 @@
   // itself: a card folded away changes how far there is to scroll without
   // changing the size of the panel by a pixel.
   if (el("#panel")) {
-    ownSliders(slideIn(el("#panel"), "room"), el("#panel"), { deep: true });
+    // Its bar lies over the panel's own margin and starts under the top
+    // bar, which does not scroll (01-base.css): measured with the rest.
+    var topBarWas = -1;
+    var underTopBar = function () {
+      var top = el("#panel .panel-top"), tall = top ? top.offsetHeight : 0;
+      if (tall !== topBarWas) {
+        topBarWas = tall;
+        el("#panel").style.setProperty("--top-bar", tall + "px");
+      }
+    };
+    ownSliders(slideIn(el("#panel"), "room"), el("#panel"),
+               { deep: true, after: underTopBar });
   }
 
   // And the rest of them, each wrapped where it stands.  "room" is a bar

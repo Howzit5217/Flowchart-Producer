@@ -361,7 +361,18 @@
   // itself: a card folded away changes how far there is to scroll without
   // changing the size of the panel by a pixel.
   if (el("#panel")) {
-    ownSliders(slideIn(el("#panel"), "room"), el("#panel"), { deep: true });
+    // Its bar lies over the panel's own margin and starts under the top
+    // bar, which does not scroll (01-base.css): measured with the rest.
+    var topBarWas = -1;
+    var underTopBar = function () {
+      var top = el("#panel .panel-top"), tall = top ? top.offsetHeight : 0;
+      if (tall !== topBarWas) {
+        topBarWas = tall;
+        el("#panel").style.setProperty("--top-bar", tall + "px");
+      }
+    };
+    ownSliders(slideIn(el("#panel"), "room"), el("#panel"),
+               { deep: true, after: underTopBar });
   }
 
   // And the rest of them, each wrapped where it stands.  "room" is a bar
