@@ -99,6 +99,11 @@
     if (works) { return works; }
     if (has(/\bprice\b/)) { return said("d_price"); }
     if (has(/kilomet|kilogram|centimet/)) { return said("d_convert"); }
+    // A converter that knows Kelvin too goes whichever way it is asked, so
+    // it is not called one that goes from Celsius to Fahrenheit.
+    if (has(/\*\s*9\s*\/\s*5\s*\+\s*32|fahrenheit|celsius/) && has(/kelvin|273\.15/)) {
+      return said("d_temps_any");
+    }
     if (has(/\*\s*9\s*\/\s*5\s*\+\s*32|fahrenheit|celsius/)) { return said("d_temps"); }
     if (has(/lowest|smallest/) && has(/highest|largest|biggest/)) { return said("d_minmax"); }
     if (has(/biggest|largest|highest|\bmax\b/)) { return said("d_biggest"); }
