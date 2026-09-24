@@ -1889,6 +1889,24 @@
   /* the code itself keeps its own bar along the foot of it, in a frame
      that stands where the code stood */
   .code-page > .slide-frame { flex: 1; min-width: 0; display: flex; }
+  /* That bar is held at the foot of the screen, just over Copy and Save it,
+     while a long program scrolls up behind it: at the foot of the code it
+     was a scroll to the very end away, just when a line too long to read
+     wanted sliding along.  Under a short program it is still straight
+     under the last line.  So it stands in the frame's flow instead of over
+     a padding at its foot, and the numbers going under it are covered the
+     way the buttons cover them -- all but the rule down their edge.  How
+     tall that row of buttons is, which is two rows on a narrow screen, is
+     kept in --go-high by codePage (18-write.js). */
+  #code-out .code-page > .slide-frame { display: block; }
+  #code-out .code-page > .slide-frame.room.has-x { padding-bottom: 0; }
+  #code-out .code-page > .slide-frame > .slider.x {
+    position: sticky; left: auto; right: auto; bottom: var(--go-high, 54px);
+  }
+  #code-out .code-page > .slide-frame > .slider.x::before {
+    content: ""; position: absolute; top: -1px; bottom: 0;
+    right: calc(100% + 1px); width: 200px; background: var(--code-bg);
+  }
   #code-out .code-nums {
     flex: none; margin: 0; padding: 0 10px 0 0; min-width: 32px;
     border-right: 1px solid var(--line-soft);
@@ -16918,6 +16936,27 @@
     job.frame = requestAnimationFrame(step);
   }
 
+  // One watcher for the row of buttons under the code, handed each new row
+  // as the page is written again, so the old ones are not kept watched.
+  // Made the first time it is wanted, since this part is also read where
+  // there is no page at all.
+  var goRowHigh = null;
+  function watchGoRow(row) {
+    if (!goRowHigh) {
+      if (!window.ResizeObserver) { return; }
+      goRowHigh = new ResizeObserver(function (seen) {
+        seen.forEach(function (one) {
+          var at = one.target, out = at.parentNode;
+          if (out && at.offsetHeight) {
+            out.style.setProperty("--go-high", at.offsetHeight + "px");
+          }
+        });
+      });
+    }
+    goRowHigh.disconnect();
+    goRowHigh.observe(row);
+  }
+
   // Numbered down the side and ruled under each line, the way the
   // pseudocode box is.  The numbers are a column of their own, so a long
   // line takes the program sideways and leaves them where they are.
@@ -16951,6 +16990,10 @@
     row.appendChild(copyButton(text));
     (more || []).forEach(function (one) { row.appendChild(one); });
     out.appendChild(row);
+    // The code's sideways bar is held just above this row (05-chart.css),
+    // so it is told how tall the row is -- more than one line of buttons on
+    // a narrow screen, and a different one again in another language.
+    watchGoRow(row);
     tapeFull(true);
     tapeShow("code");
     var lines = text.split("\n");

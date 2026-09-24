@@ -521,6 +521,24 @@
   /* the code itself keeps its own bar along the foot of it, in a frame
      that stands where the code stood */
   .code-page > .slide-frame { flex: 1; min-width: 0; display: flex; }
+  /* That bar is held at the foot of the screen, just over Copy and Save it,
+     while a long program scrolls up behind it: at the foot of the code it
+     was a scroll to the very end away, just when a line too long to read
+     wanted sliding along.  Under a short program it is still straight
+     under the last line.  So it stands in the frame's flow instead of over
+     a padding at its foot, and the numbers going under it are covered the
+     way the buttons cover them -- all but the rule down their edge.  How
+     tall that row of buttons is, which is two rows on a narrow screen, is
+     kept in --go-high by codePage (18-write.js). */
+  #code-out .code-page > .slide-frame { display: block; }
+  #code-out .code-page > .slide-frame.room.has-x { padding-bottom: 0; }
+  #code-out .code-page > .slide-frame > .slider.x {
+    position: sticky; left: auto; right: auto; bottom: var(--go-high, 54px);
+  }
+  #code-out .code-page > .slide-frame > .slider.x::before {
+    content: ""; position: absolute; top: -1px; bottom: 0;
+    right: calc(100% + 1px); width: 200px; background: var(--code-bg);
+  }
   #code-out .code-nums {
     flex: none; margin: 0; padding: 0 10px 0 0; min-width: 32px;
     border-right: 1px solid var(--line-soft);

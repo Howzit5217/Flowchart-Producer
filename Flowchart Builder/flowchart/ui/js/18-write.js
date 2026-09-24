@@ -1383,6 +1383,27 @@
     job.frame = requestAnimationFrame(step);
   }
 
+  // One watcher for the row of buttons under the code, handed each new row
+  // as the page is written again, so the old ones are not kept watched.
+  // Made the first time it is wanted, since this part is also read where
+  // there is no page at all.
+  var goRowHigh = null;
+  function watchGoRow(row) {
+    if (!goRowHigh) {
+      if (!window.ResizeObserver) { return; }
+      goRowHigh = new ResizeObserver(function (seen) {
+        seen.forEach(function (one) {
+          var at = one.target, out = at.parentNode;
+          if (out && at.offsetHeight) {
+            out.style.setProperty("--go-high", at.offsetHeight + "px");
+          }
+        });
+      });
+    }
+    goRowHigh.disconnect();
+    goRowHigh.observe(row);
+  }
+
   // Numbered down the side and ruled under each line, the way the
   // pseudocode box is.  The numbers are a column of their own, so a long
   // line takes the program sideways and leaves them where they are.
@@ -1416,6 +1437,10 @@
     row.appendChild(copyButton(text));
     (more || []).forEach(function (one) { row.appendChild(one); });
     out.appendChild(row);
+    // The code's sideways bar is held just above this row (05-chart.css),
+    // so it is told how tall the row is -- more than one line of buttons on
+    // a narrow screen, and a different one again in another language.
+    watchGoRow(row);
     tapeFull(true);
     tapeShow("code");
     var lines = text.split("\n");
