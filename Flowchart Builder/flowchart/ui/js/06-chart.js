@@ -505,7 +505,13 @@
           handClick(id);
           if (was === id) {
             var now = el('.node[data-i="h' + id + '"]', el("#chart"));
-            if (now) { typeInto(now); }
+            if (now) {
+              typeInto(now);
+              // A finger's click comes after it lifts, on the shape as it
+              // is now, and it picked the shape again -- pouring the chart
+              // afresh and taking the typing away as soon as it opened.
+              eatClick();
+            }
           }
         }
         else { drawHand(); drawHandPanel(); letGo(); }

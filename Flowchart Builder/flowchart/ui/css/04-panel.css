@@ -872,14 +872,27 @@
     pointer-events: none; shape-rendering: crispEdges;
   }
   svg .ghost { fill: none !important; stroke: none !important; }
-  /* writing straight into a shape */
-  .writing {
+  /* Writing straight into a shape (typeInto, 21-typing.js).  The room is
+     wide and tall and takes no presses; the words sit in the middle of it,
+     as wide as their longest line and a line tall at the least, so an
+     empty shape still has somewhere in its middle for the cursor to be.
+     Every line is set in the middle and none is wrapped -- the drawing
+     starts a line only where one was started.  The chart itself is not
+     for selecting, so the words say they are, or a phone will not let
+     anything be typed into them at all. */
+  svg .typing-here { overflow: visible; pointer-events: none; }
+  .writing-room {
     width: 100%; height: 100%; display: flex; align-items: center;
-    justify-content: center; text-align: center; outline: 0;
-    font: 12.5px/1.2 Arial, Helvetica, sans-serif; overflow: hidden;
-    caret-color: var(--accent); word-break: break-word;
+    justify-content: center; pointer-events: none;
   }
-  svg .typing-here { overflow: visible; }
+  .writing {
+    flex: none; min-width: 2px; min-height: 1.2em; outline: 0;
+    white-space: pre-wrap; text-align: center; pointer-events: auto;
+    font: 12.5px/1.2 Arial, Helvetica, sans-serif;
+    caret-color: #14427c; cursor: text;
+    -webkit-user-select: text; user-select: text; -webkit-touch-callout: default;
+  }
+  .writing::selection { background: rgba(47, 111, 196, .28); }
   svg .node[data-kind="text"]:hover .ghost {
     stroke: var(--line) !important; stroke-dasharray: 4 3;
   }
