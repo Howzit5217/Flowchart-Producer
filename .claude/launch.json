@@ -209,6 +209,18 @@
         "C:/Users/origa/Downloads/GitHub/Flowchart-Producer/Flowchart Builder"
       ],
       "port": 8903
+    },
+    {
+      "name": "hand-help-site",
+      "runtimeExecutable": "python",
+      "runtimeArgs": [
+        "-m",
+        "http.server",
+        "8917",
+        "--directory",
+        "C:/Users/origa/Downloads/GitHub/Flowchart-Producer/Flowchart Builder"
+      ],
+      "port": 8917
     }
   ]
 }

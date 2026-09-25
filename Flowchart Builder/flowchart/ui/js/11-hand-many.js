@@ -372,6 +372,8 @@
       { name: TXT.m_clip_cut, go: function () { copyShapes(ids, true); } },
       { name: TXT.m_copy, go: function () { duplicateShapes(ids); } },
       "-",
+      { head: TXT.hl_head }, lineUpTools(ids),   // 13-hand-more.js
+      "-",
       allPaint("fill", TXT.c_fill || "Fill", "#ffffff"),
       allPaint("line", TXT.c_line || "Border", style.ink || "#000000"),
       allPaint("text", TXT.c_words || "Words", style.words || style.ink || "#000000"),
@@ -391,10 +393,6 @@
     head.style.cssText = "font-weight:600; margin:10px 0 6px";
     head.textContent = say("many_head", { n: many.length });
     box.appendChild(head);
-    var hint = document.createElement("p");
-    hint.className = "hint";
-    hint.textContent = TXT.many_hint;
-    box.appendChild(hint);
     var go = document.createElement("div");
     go.style.cssText = "display:flex; gap:8px; margin-top:10px; flex-wrap:wrap";
     [[TXT.m_clip_copy, function () { copyShapes(many.slice()); }],
@@ -411,6 +409,7 @@
       go.appendChild(b);
     });
     box.appendChild(go);
+    box.appendChild(lineUpRow(many.slice()));   // 13-hand-more.js
   }
 
   // ------------------------------------------------------------ two tools --

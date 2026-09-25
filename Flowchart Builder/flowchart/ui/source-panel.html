@@ -39,7 +39,16 @@
     </section>
 
     <section class="card" id="hand" hidden>
-      <h2 data-w="add_shape">__W(add_shape)__</h2>
+      <!-- How drawing by hand is worked -- what a click, a drag, a dot and
+           each key do -- is behind the i rather than written under the
+           shapes: read once, a paragraph there was only in the way of the
+           panel it sat on (25-keys.js opens it). -->
+      <h2><span data-w="add_shape">__W(add_shape)__</span>
+        <button class="icon small" id="hand-info" data-w-title="h_info"
+                title="__W(h_info)__" aria-haspopup="dialog" aria-expanded="false">
+          <svg viewBox="0 0 20 20"><circle cx="10" cy="10" r="7.5"/><path d="M10 9.2v4.6"/><circle cx="10" cy="6.4" r="1.05" fill="currentColor" stroke="none"/></svg>
+        </button>
+      </h2>
       <div class="adders" id="adders"></div>
       <div id="hand-sel"></div>
       <div id="hand-switches"></div>

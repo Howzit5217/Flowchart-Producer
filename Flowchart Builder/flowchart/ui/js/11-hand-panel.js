@@ -117,10 +117,9 @@
     if (link) { return arrowPanel(box, link); }
     if (many.length > 1) { return groupPanel(box); }   // 11-hand-many.js
     var node = nodeById(picked);
-    if (!node) {
-      box.innerHTML = '<p class="hint">' + TXT.pick_shape + "</p>";
-      return;
-    }
+    // Nothing picked, nothing said: how to go about it is behind the i
+    // beside Add a shape (handHelp, 25-keys.js), not written under it.
+    if (!node) { return; }
     var name = kindName(node.kind);
     var head = document.createElement("div");
     head.className = "what";

@@ -816,6 +816,25 @@
     svg .spot { animation: none; fill-opacity: .4; }
   }
   svg .grip { cursor: nwse-resize; }
+  /* A block of a chart built from pseudocode can be picked up and moved
+     (30-blocks.js): a hand says so, and a closed one while it is carried. */
+  body:not(.by-hand) #chart .node { cursor: grab; }
+  body.carrying-block, body.carrying-block * { cursor: grabbing !important; user-select: none; }
+  /* The + under the picked shape, for what comes next (13-hand-more.js):
+     it answers being pointed at the way the dots do. */
+  svg .plus { cursor: pointer; }
+  svg .plus:hover circle { r: 11; fill: #2f6fc4; }
+  svg.lassoing .plus { display: none; }
+  /* Lining several shapes up: eight small drawings in a row under the
+     buttons for the lot, and the same in their menu. */
+  .line-up { margin-top: 12px; }
+  .line-up-head { font-size: 12px; color: var(--muted); margin-bottom: 5px; }
+  .line-up-row { display: grid; grid-template-columns: repeat(8, 1fr); gap: 4px; }
+  .line-up-row .icon.small {
+    margin-left: 0; width: auto; height: 30px; border-color: var(--line);
+    background: var(--panel);
+  }
+  .line-up-row .icon.small svg, .menu .menu-tools .tog svg { width: 16px; height: 16px; }
   /* the line that says what you have lined a shape up with */
   svg .guide {
     stroke: #e01020; stroke-width: 1.4; stroke-dasharray: 7 4;

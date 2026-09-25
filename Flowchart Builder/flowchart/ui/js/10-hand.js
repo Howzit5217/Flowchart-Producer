@@ -355,6 +355,21 @@
     return tidy(pts);
   }
 
+  // The last run of a line is where its arrowhead sits, and the head is
+  // ten long: on a shorter run it hung back past the corner, and the line
+  // ran up into the side of it instead of its base.  That happened when
+  // the shape a line left stood almost level with the side it went into --
+  // a Start just left of a box, going up and in at the box's left side --
+  // so the run in was squeezed to a few units.  A run in shorter than a
+  // stand-off is priced as a fault: below anything through a shape, far
+  // above any clean way round, such as out of the Start's side and up
+  // into the box's foot.
+  var HEAD_ROOM = 16, SHORT_END = 5000;
+  function lastRun(pts) {
+    var z = pts[pts.length - 1], y = pts[pts.length - 2];
+    return y ? Math.abs(z[0] - y[0]) + Math.abs(z[1] - y[1]) : Infinity;
+  }
+
   // Whether a line leaves its shape the way the side it leaves by faces,
   // and comes in to the other the way that side faces.  Out of the right
   // side and then straight back left again is out and back through the
@@ -394,7 +409,10 @@
   function linkPath(a, b, link, taken, lean, ways, shift) {  // corners only, never a diagonal
     var outs = ports(a), ins = ports(b);
     var best = null, bestPrice = Infinity, bestOut = 0, bestIn = 0;
-    var bestBase = Infinity, bestOver = 0, bestCross = 0;
+    var bestBase = Infinity, bestOver = 0, bestCross = 0, bestShort = false;
+    // Found a way that is clear of every shape, and whose arrowhead has the
+    // room it needs: where one is not, the ways round are looked at too.
+    function good() { return bestBase < 10000 && !bestShort; }
     var outOnly = link ? PORT_SIDES.indexOf(link.fromSide) : -1;
     var inOnly = link ? PORT_SIDES.indexOf(link.toSide) : -1;
     if (shift) {
@@ -412,6 +430,8 @@
       // reads, so it wins any tie
       var price = priceOf(pts, a, b) - (i === 1 && j === 0 ? 1 : 0);
       if (!outward(pts, outs[i], ins[j], outOnly >= 0, inOnly >= 0)) { price += 10000; }
+      var squeezed = lastRun(pts) < HEAD_ROOM - 0.5;
+      if (squeezed) { price += SHORT_END; }
       if (outOnly < 0) { price += crowdCost(a, i) * crowd(a.id, i); }
       if (inOnly < 0) { price += crowdCost(b, j) * crowd(b.id, j); }
       // What it is blocked by is judged before what it would rather: a
@@ -420,12 +440,13 @@
       if (lean && lean.from === i) { price -= LEAN; }
       if (lean && lean.to === j) { price -= LEAN; }
       if (price >= bestPrice) { return; }   // lying on nothing, it still loses
-      var over = ways ? overlapsIn(pts, ways, sideKey(a, i), sideKey(b, j)) : 0;
+      var over = ways ? overlapsIn(pts, ways, a.meet ? MEET : sideKey(a, i),
+                                   b.meet ? MEET : sideKey(b, j)) : 0;
       var cross = ways ? crossesIn(pts, ways) : 0;
       price += OVERLAP * over + CROSS * cross;
       if (price < bestPrice) {
         best = pts; bestPrice = price; bestOut = i; bestIn = j;
-        bestBase = base; bestOver = over; bestCross = cross;
+        bestBase = base; bestOver = over; bestCross = cross; bestShort = squeezed;
       }
     }
     function tryJoin(i, j, lane) {        // unless a side it has to keep says no
@@ -443,7 +464,7 @@
       }
     }
     // nothing in the way, on top of no other arrow and across none: done
-    if (bestBase < 10000 && !bestOver && !bestCross) { return done(); }
+    if (good() && !bestOver && !bestCross) { return done(); }
 
     // Something is in the way of every straight join, so look for a lane to
     // go round by -- just clear of each shape's own edges, which is where a
@@ -482,7 +503,7 @@
     // where every arrow crossing that gap goes, so it is tried a little
     // either side of halfway, and the few lanes nearest -- no more, since
     // this is asked of arrow after arrow on every frame of a drag.
-    var clear = bestBase < 10000;
+    var clear = good();
     lanesY = closest(lanesY, (a.y + b.y) / 2).slice(0, clear ? 3 : NEAREST);
     lanesX = closest(lanesX, (a.x + b.x) / 2).slice(0, clear ? 3 : NEAREST);
     if (bestOver || bestCross) {
@@ -543,7 +564,7 @@
         tryJoin(m, m, lanesX[k]);
       }
     }
-    if (bestBase < 10000 || (outOnly < 0 && inOnly < 0)) { return done(); }
+    if (good() || (outOnly < 0 && inOnly < 0)) { return done(); }
 
     // A line held to its sides may have none of those ways open to it: out
     // of the foot and into a side, or back up to the top of a shape above.
@@ -555,7 +576,7 @@
     for (k = 0; k < lanesX.length; k++) {
       for (i = 2; i < 4; i++) { tryJoin(i, 0, lanesX[k]); tryJoin(i, 1, lanesX[k]); }
     }
-    if (bestBase < 10000) { return done(); }
+    if (good()) { return done(); }
     for (i = 0; i < 4; i++) {             // round a corner, near its two ends
       for (j = 0; j < 4; j++) {
         if ((outOnly >= 0 && i !== outOnly) || (inOnly >= 0 && j !== inOnly)) { continue; }
@@ -869,8 +890,8 @@
       if (!flat && Math.abs(p[0] - q[0]) >= 0.5) { continue; }
       var at = Math.round(flat ? p[1] : p[0]);
       var s = flat ? p[0] : p[1], e = flat ? q[0] : q[1], way = e > s ? 1 : -1;
-      if (i === 1) { s += way * STAND; }
-      if (i === last) { e -= way * STAND; }
+      if (i === 1 && fromEnd !== MEET) { s += way * STAND; }
+      if (i === last && toEnd !== MEET) { e -= way * STAND; }
       if ((e - s) * way < 0.5) { continue; }
       var lo = Math.min(s, e), hi = Math.max(s, e);
       var file = flat ? ways.h : ways.v;
@@ -887,10 +908,16 @@
     return count;
   }
 
+  // An end that is a point where lines meet -- on a chart built from
+  // pseudocode, a branch joining the line it came back to (30-blocks.js).
+  // Its stand-off is not left out: the other lines at that point are
+  // exactly where it is, and coming in along one of them is lying on it.
+  var MEET = "meet";
+
   // Whether a run and one already there both end at the same spread side.
   function sharedEnd(mine, run) {
     for (var m = 0; m < 2; m++) {
-      if (mine[m] && (run[2] === mine[m] || run[3] === mine[m])) { return true; }
+      if (mine[m] && mine[m] !== MEET && (run[2] === mine[m] || run[3] === mine[m])) { return true; }
     }
     return false;
   }
@@ -1414,6 +1441,7 @@
                      '" width="' + GRIP + '" height="' + GRIP + '" rx="2" fill="#ffffff" ' +
                      'stroke="#14427c" stroke-width="1.6"/>');
           });
+        out.push(plusMarks(n, moved, about));   // and what comes next (13-hand-more.js)
       }
     });
     out.push('<g class="tips">' + tips.join("") + "</g>");

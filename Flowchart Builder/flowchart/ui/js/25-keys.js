@@ -69,8 +69,53 @@
   function keyName(key) {
     if (key === "ctrl") { return ON_MAC ? "⌘" : (TXT.kn_ctrl || "Ctrl"); }
     var named = { shift: "kn_shift", enter: "kn_enter", del: "kn_del",
-                  space: "kn_space", click: "kn_click", drag: "kn_drag" }[key];
+                  space: "kn_space", click: "kn_click", drag: "kn_drag",
+                  dblclick: "kn_dblclick", rclick: "kn_rclick", hold: "kn_hold",
+                  wheel: "kn_wheel", pinch: "kn_pinch", corner: "kn_corner",
+                  dot: "kn_dot" }[key];
     return named ? (TXT[named] || key) : key;
+  }
+
+  // One row of a list: what it does on the left, and the keys that do it
+  // on the right, each drawn as a key.
+  function keyLine(row) {
+    var line = document.createElement("div");
+    line.className = "key-row";
+    var what = document.createElement("span");
+    what.className = "key-what";
+    what.textContent = TXT[row[1]] || row[1];
+    var keys = document.createElement("span");
+    keys.className = "key-keys";
+    // Keys held for every one of them are said once, in front:
+    // Ctrl + B / I / U, rather than Ctrl three times over.
+    var combos = row[0], held = combos[0].slice(0, -1);
+    var shared = combos.length > 1 && held.length && combos.every(function (c) {
+      return c.length === held.length + 1 && c.slice(0, -1).join() === held.join();
+    });
+    if (shared) {
+      combos = combos.map(function (c) { return c.slice(-1); });
+      combos[0] = held.concat(combos[0]);
+    }
+    combos.forEach(function (combo, i) {
+      if (i) {
+        var or = document.createElement("span");
+        or.className = "key-or";
+        or.textContent = "/";
+        keys.appendChild(or);
+      }
+      var together = document.createElement("span");
+      together.className = "key-combo";
+      combo.forEach(function (key, j) {
+        if (j) { together.appendChild(document.createTextNode("+")); }
+        var cap = document.createElement("kbd");
+        cap.textContent = keyName(key);
+        together.appendChild(cap);
+      });
+      keys.appendChild(together);
+    });
+    line.appendChild(what);
+    line.appendChild(keys);
+    return line;
   }
 
   function writeKeys() {
@@ -86,43 +131,7 @@
       part.appendChild(head);
       group[2].forEach(function (row) {
         if (row[2] && !el(row[2])) { return; }
-        var line = document.createElement("div");
-        line.className = "key-row";
-        var what = document.createElement("span");
-        what.className = "key-what";
-        what.textContent = TXT[row[1]] || row[1];
-        var keys = document.createElement("span");
-        keys.className = "key-keys";
-        // Keys held for every one of them are said once, in front:
-        // Ctrl + B / I / U, rather than Ctrl three times over.
-        var combos = row[0], held = combos[0].slice(0, -1);
-        var shared = combos.length > 1 && held.length && combos.every(function (c) {
-          return c.length === held.length + 1 && c.slice(0, -1).join() === held.join();
-        });
-        if (shared) {
-          combos = combos.map(function (c) { return c.slice(-1); });
-          combos[0] = held.concat(combos[0]);
-        }
-        combos.forEach(function (combo, i) {
-          if (i) {
-            var or = document.createElement("span");
-            or.className = "key-or";
-            or.textContent = "/";
-            keys.appendChild(or);
-          }
-          var together = document.createElement("span");
-          together.className = "key-combo";
-          combo.forEach(function (key, j) {
-            if (j) { together.appendChild(document.createTextNode("+")); }
-            var cap = document.createElement("kbd");
-            cap.textContent = keyName(key);
-            together.appendChild(cap);
-          });
-          keys.appendChild(together);
-        });
-        line.appendChild(what);
-        line.appendChild(keys);
-        part.appendChild(line);
+        part.appendChild(keyLine(row));
       });
       body.appendChild(part);
     });
@@ -154,6 +163,113 @@
     });
   }
 
+  // ----------------------------------------------- the i by Add a shape --
+  // How drawing by hand is worked, one press away instead of a paragraph
+  // under the shapes.  What the mouse and a finger do on one side, the
+  // keys on the other, and the way on to every key the page has under
+  // both.  A menu, so it shuts the way every other one does: a press
+  // anywhere else, Escape, or the i again.  A word on its own is that row
+  // of KEY_LIST -- a click or a drag with a key held is still the mouse's
+  // -- and it is left off the keys side for being here.
+  var HAND_HOW = [
+    [[["click"]], "hm_pick"],
+    "k_add",
+    [[["drag"]], "hm_move"],
+    "k_lasso",
+    "k_pan",
+    [[["corner"]], "hm_size"],
+    [[["dot"]], "hm_join"],
+    [[["dblclick"]], "hm_type"],
+    [[["rclick"], ["hold"]], "hm_menu"],
+    [[["ctrl", "wheel"], ["pinch"]], "hm_zoom"]
+  ];
+
+  function handHelp(button) {
+    if (el(".menu.hand-help:not(.out)")) { closeMenu(); return; }
+    var listed = {};
+    KEY_LIST.forEach(function (group) {
+      group[2].forEach(function (row) { listed[row[1]] = row; });
+    });
+    function said(text, kind) {
+      var p = document.createElement("p");
+      p.className = kind;
+      p.textContent = text;
+      return p;
+    }
+    function part(head, list, note) {
+      var box = document.createElement("section");
+      box.className = "help-part";
+      var h = document.createElement("h4");
+      h.textContent = head;
+      box.appendChild(h);
+      list.forEach(function (row) { if (row) { box.appendChild(keyLine(row)); } });
+      if (note) { box.appendChild(said(note, "help-note")); }
+      return box;
+    }
+    var mouse = HAND_HOW.map(function (row) {
+      return typeof row === "string" ? listed[row] : row;
+    });
+    // Undo is not a drawing key, but it is the one a drawing wants most.
+    var keys = [listed.k_undo];
+    KEY_LIST.forEach(function (group) {
+      if (group[0] !== "k_hand") { return; }
+      group[2].forEach(function (row) {
+        if (HAND_HOW.indexOf(row[1]) < 0) { keys.push(row); }
+      });
+    });
+    // Its name, and a way out of it that is not a press somewhere else:
+    // on a phone the menu is most of the screen, and somewhere else is an
+    // edge a few pixels wide.
+    var top = document.createElement("div");
+    top.className = "help-top";
+    var name = document.createElement("strong");
+    name.textContent = TXT.h_info;
+    var shut = document.createElement("button");
+    shut.type = "button";
+    shut.className = "icon small";
+    shut.title = TXT.done;
+    shut.setAttribute("aria-label", TXT.done);
+    shut.innerHTML = '<svg viewBox="0 0 20 20"><path d="M5 5l10 10M15 5L5 15"/></svg>';
+    shut.onclick = function (ev) {
+      ev.stopPropagation();
+      closeMenu();
+      button.focus();
+    };
+    top.appendChild(name);
+    top.appendChild(shut);
+    var both = document.createElement("div");
+    both.className = "help-cols";
+    both.appendChild(part(TXT.h_mouse, mouse, TXT.hm_select));
+    both.appendChild(part(TXT.h_keys, keys));
+    // Beside the panel, over the paper, so the shapes it talks about are
+    // still in sight; under the i where there is no room beside it.
+    var room = button.getBoundingClientRect();
+    var card = (button.closest("section") || button).getBoundingClientRect();
+    var wide = Math.min(720, innerWidth - 16);
+    var side = card.right + 8 + wide <= innerWidth - 8;
+    openMenu(side ? card.right + 8 : room.left,
+             side ? Math.max(8, room.top - 10) : room.bottom + 6, [
+      { bit: top },
+      { bit: said(TXT.h_add_how, "help-say") },
+      { bit: both },
+      "-",
+      { name: TXT.h_all_keys, go: function () { showKeys(true); } }
+    ], "hand-help");
+    var menu = el(".menu.hand-help:not(.out)");
+    if (menu) {
+      menu.setAttribute("role", "dialog");
+      menu.setAttribute("aria-label", TXT.h_info);
+    }
+    button.setAttribute("aria-expanded", "true");
+  }
+
+  if (el("#hand-info")) {
+    el("#hand-info").onclick = function (ev) {
+      ev.stopPropagation();              // or the click that opened it shuts it
+      handHelp(el("#hand-info"));
+    };
+  }
+
   window.addEventListener("keydown", function (ev) {
     var ctrl = ev.ctrlKey || ev.metaKey;
 
@@ -161,7 +277,7 @@
     // box, which is exactly where you want it.
     if (ctrl && ev.key === "Enter") {
       ev.preventDefault();
-      if (el("#build") && !byHand) { el("#build").click(); }
+      if (el("#build") && !byHand) { buildAsked(); }   // asks first if blocks were moved
       else if (el("#check")) { el("#check").click(); }
       return;
     }

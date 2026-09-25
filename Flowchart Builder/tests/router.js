@@ -411,6 +411,29 @@ var bad = [];
               roundabout + " the long way round");
 })();
 
+// ---- an arrowhead has a run to sit on ------------------------------------
+// A Start just left of a box and below it, joined to it -- free, drawn from
+// the Start's top to the box's left, and pinned there.  The run into the
+// box used to be five long, and the head, ten long, hung back past the
+// corner with the line running up into its side.
+(function () {
+  var box = { id: 1, x: 400, y: 100, w: 170, h: 60, kind: "rect", turn: 0 };
+  var start = { id: 2, x: 310, y: 225, w: 130, h: 50, kind: "oval", turn: 0 };
+  hand.nodes = [box, start];
+  var ways = [{}, { fromSide: "top", toSide: "left" },
+              { fromSide: "top", toSide: "left", pin: true }];
+  var cramped = 0;
+  ways.forEach(function (sides) {
+    hand.links = [Object.assign({ from: 2, to: 1 }, sides)];
+    var pts = routeAll()[0], z = pts[pts.length - 1], y = pts[pts.length - 2];
+    if (Math.abs(z[0] - y[0]) + Math.abs(z[1] - y[1]) < STAND - 0.5) cramped++;
+  });
+  hand.links = [];
+  if (cramped) bad.push(cramped + " of " + ways.length + " arrowheads with no room to sit on");
+  console.log("a Start just under a box's corner, " + ways.length + " ways: " + cramped +
+              " arrowheads cramped");
+})();
+
 if (bad.length) {
   console.error(bad.join("; "));
   process.exit(1);

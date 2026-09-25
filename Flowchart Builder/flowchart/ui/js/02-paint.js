@@ -181,7 +181,12 @@
       r.setAttribute("stroke", "none");
       pen.appendChild(r);
     });
-    g.insertBefore(pen, texts[0]);
+    // Measured where the words are drawn, so drawn where they are: a block
+    // moved on a built chart has each of its pieces moved (30-blocks.js),
+    // the words included, and the marks go with them.
+    var shifted = texts[0].getAttribute("transform");
+    if (shifted) { pen.setAttribute("transform", shifted); }
+    texts[0].parentNode.insertBefore(pen, texts[0]);
   }
 
   // One color, on one element, unless it is already wearing it.  The slot

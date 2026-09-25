@@ -14,7 +14,9 @@
   // is the button that opened it.
   function letGoOfMenus() {
     all('[aria-expanded="true"]').forEach(function (b) {
-      if (b.id === "more") { b.setAttribute("aria-expanded", "false"); }
+      if (b.id === "more" || b.id === "hand-info") {
+        b.setAttribute("aria-expanded", "false");
+      }
     });
     shutDropList();                      // and a dropdown's list, at once
   }
@@ -53,6 +55,12 @@
         menu.appendChild(said);
         return;
       }
+      // Something that is to be read rather than pressed -- a few words, a
+      // list of keys -- put in as it comes (the i by Add a shape).
+      if (item.bit) {
+        menu.appendChild(item.bit);
+        return;
+      }
       // A row of small buttons side by side -- B, I, U and the like -- that
       // leave the menu open, so that bold and bigger are two presses in one
       // menu rather than a menu each.  One that is a switch lights while on.
@@ -63,7 +71,8 @@
           var b = document.createElement("button");
           b.type = "button";
           b.className = "tog" + (tool.on ? " on" : "");
-          b.textContent = tool.mark;
+          if (tool.art) { b.innerHTML = tool.art; }   // a drawing, where a letter will not do
+          else { b.textContent = tool.mark; }
           b.title = tool.name;
           b.setAttribute("aria-label", tool.name);
           if (tool.on !== undefined) {
@@ -190,6 +199,8 @@
       { name: TXT.connect, go: function () {
           joining = true; joinFrom = null; drawHandPanel();
         } },
+      // what the + under it does (13-hand-more.js)
+      { name: TXT.hp_next, go: function () { plusMenu(node.id, "foot", x, y); } },
       // Another like it -- colors and all, which it used to leave behind.
       { name: TXT.m_copy, go: function () { duplicateShapes([node.id]); } },
       { name: TXT.m_clip_copy, go: function () { copyShapes([node.id]); } },
@@ -241,6 +252,8 @@
         } },
       { name: link.pin ? TXT.m_unpin : TXT.m_pin,
         go: function () { pinLink(link, !link.pin); } },
+      // a shape between its two ends (13-hand-more.js)
+      { name: TXT.hp_into, go: function () { stepMenu(link.id, x, y); } },
       "-",
       { name: TXT.delete, go: function () {
           hand.links = hand.links.filter(function (l) { return l !== link; });

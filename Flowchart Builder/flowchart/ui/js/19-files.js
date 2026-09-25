@@ -25,7 +25,8 @@
         legend: el("#f-legend").checked, grid: el("#f-grid").checked,
         options: chartOptions()
       } : null,
-      style: style, geom: geom
+      style: style, geom: geom,
+      moves: movesNow()                  // blocks moved on the built chart (30-blocks.js)
     };
   }
 
@@ -129,7 +130,9 @@
     forgetUndo();
     setMode(was.mode === "hand");
     // Same again: the chart in the file is not the one that was on the
-    // paper, so it is drawn.
+    // paper, so it is drawn -- from the seed its moved blocks were moved
+    // on, where it has any, so they go back on it (30-blocks.js).
+    pendingMoves = was.moves || null;
     if (was.mode !== "hand" && el("#code").value.trim()) {
       el("#build").click();
     }

@@ -269,8 +269,7 @@
     if (!at) { return; }
     tapeFull(false);                     // out of the full screen, if it is up
     pickLine(0, at);
-    var build = el("#build");
-    if (build && !build.disabled) { build.click(); }
+    buildAsked();                        // asks first if blocks were moved
   }
 
   // Both places that show a warning hang it on the same two things: a button
@@ -321,8 +320,7 @@
     if (!first) { return; }
     tapeFull(false);
     pickLine(0, first);
-    var build = el("#build");
-    if (build && !build.disabled) { build.click(); }
+    buildAsked();                        // asks first if blocks were moved
   }
 
   // The button for it, over the list, where there are two or more that it

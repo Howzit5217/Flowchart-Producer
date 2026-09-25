@@ -1286,7 +1286,7 @@
         title: el("#f-title").value,
         author: el("#f-author").value,
         shape: el("#f-shape").value,
-        seed: again ? lastLaid.seed : "",   // fresh each time, unless drawn again
+        seed: seedFor(again),   // fresh each time, unless drawn again (30-blocks.js)
         lang: tongue ? tongue.value : "",
         legend: el("#f-legend").checked,
         grid: el("#f-grid").checked,
@@ -1340,6 +1340,7 @@
         if (!again) { freshTape(); }   // a new program: nothing of the old one
         if (again) { opening = true; } // the same chart, not a new one rising
         bind();
+        blocksLanded();                  // blocks moved on it, put back (30-blocks.js)
         if (keepSel) {
           sel = el('.node[data-i="' + keepSel + '"]', chart);
           if (sel) { sel.classList.add("on"); }
