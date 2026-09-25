@@ -24,11 +24,19 @@
     overflow-y: auto; overflow-x: hidden;
   }
   #panel.hide { display: none; }
+  /* Above what scrolls up under it, bars and all.  A box in the panel --
+     the pseudocode, the tape -- carries a bar of its own at z 6 (01-base
+     .slider), and at 3 this strip was under it: scrolled up, the box went
+     behind Chart and Style but its bar ran on over the top of them. */
   .panel-top {
-    position: sticky; top: 0; z-index: 3; background: var(--panel);
+    position: sticky; top: 0; z-index: 7; background: var(--panel);
     border-bottom: 1px solid var(--line); padding: 10px 12px;
     display: flex; gap: 8px; align-items: center;
   }
+  /* And the panel's own bar starts under it rather than beside it: the
+     strip never scrolls, so the bar has nothing to say about the room it
+     stands in.  How tall the strip is, 24-scroll.js keeps in --top-keep. */
+  #panel > .slider.y { top: var(--top-keep, 0px); }
   .seg {
     flex: 1; display: flex; gap: 2px; padding: 2px; border-radius: 9px;
     background: var(--line-soft);

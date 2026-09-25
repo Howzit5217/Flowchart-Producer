@@ -363,11 +363,19 @@
     overflow-y: auto; overflow-x: hidden;
   }
   #panel.hide { display: none; }
+  /* Above what scrolls up under it, bars and all.  A box in the panel --
+     the pseudocode, the tape -- carries a bar of its own at z 6 (01-base
+     .slider), and at 3 this strip was under it: scrolled up, the box went
+     behind Chart and Style but its bar ran on over the top of them. */
   .panel-top {
-    position: sticky; top: 0; z-index: 3; background: var(--panel);
+    position: sticky; top: 0; z-index: 7; background: var(--panel);
     border-bottom: 1px solid var(--line); padding: 10px 12px;
     display: flex; gap: 8px; align-items: center;
   }
+  /* And the panel's own bar starts under it rather than beside it: the
+     strip never scrolls, so the bar has nothing to say about the room it
+     stands in.  How tall the strip is, 24-scroll.js keeps in --top-keep. */
+  #panel > .slider.y { top: var(--top-keep, 0px); }
   .seg {
     flex: 1; display: flex; gap: 2px; padding: 2px; border-radius: 9px;
     background: var(--line-soft);
@@ -1398,7 +1406,9 @@
   /* A block of a chart built from pseudocode can be picked up and moved
      (30-blocks.js): a hand says so, and a closed one while it is carried. */
   body:not(.by-hand) #chart .node { cursor: grab; }
-  body.carrying-block, body.carrying-block * { cursor: grabbing !important; user-select: none; }
+  body.carrying-block, body.carrying-block * {
+    cursor: grabbing !important; -webkit-user-select: none; user-select: none;
+  }
   /* The + under the picked shape, for what comes next (13-hand-more.js):
      it answers being pointed at the way the dots do. */
   svg .plus { cursor: pointer; }
@@ -22117,6 +22127,19 @@
   // changing the size of the panel by a pixel.
   if (el("#panel")) {
     ownSliders(slideIn(el("#panel"), "room"), el("#panel"), { deep: true });
+    // Its bar starts under the strip with Chart and Style in it (03-layout
+    // .panel-top), however tall that strip comes out -- words bigger or
+    // smaller, a narrow screen -- so it is measured, and again whenever it
+    // changes size.  Written on the panel, which the strip is inside of and
+    // which does not change the strip's size, so this cannot set itself off.
+    (function () {
+      var strip = el("#panel .panel-top");
+      function keepTop() {
+        el("#panel").style.setProperty("--top-keep", (strip ? strip.offsetHeight : 0) + "px");
+      }
+      keepTop();
+      if (strip && window.ResizeObserver) { new ResizeObserver(keepTop).observe(strip); }
+    })();
   }
 
   // And the rest of them, each wrapped where it stands.  "room" is a bar

@@ -362,6 +362,19 @@
   // changing the size of the panel by a pixel.
   if (el("#panel")) {
     ownSliders(slideIn(el("#panel"), "room"), el("#panel"), { deep: true });
+    // Its bar starts under the strip with Chart and Style in it (03-layout
+    // .panel-top), however tall that strip comes out -- words bigger or
+    // smaller, a narrow screen -- so it is measured, and again whenever it
+    // changes size.  Written on the panel, which the strip is inside of and
+    // which does not change the strip's size, so this cannot set itself off.
+    (function () {
+      var strip = el("#panel .panel-top");
+      function keepTop() {
+        el("#panel").style.setProperty("--top-keep", (strip ? strip.offsetHeight : 0) + "px");
+      }
+      keepTop();
+      if (strip && window.ResizeObserver) { new ResizeObserver(keepTop).observe(strip); }
+    })();
   }
 
   // And the rest of them, each wrapped where it stands.  "room" is a bar

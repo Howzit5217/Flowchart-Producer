@@ -819,7 +819,9 @@
   /* A block of a chart built from pseudocode can be picked up and moved
      (30-blocks.js): a hand says so, and a closed one while it is carried. */
   body:not(.by-hand) #chart .node { cursor: grab; }
-  body.carrying-block, body.carrying-block * { cursor: grabbing !important; user-select: none; }
+  body.carrying-block, body.carrying-block * {
+    cursor: grabbing !important; -webkit-user-select: none; user-select: none;
+  }
   /* The + under the picked shape, for what comes next (13-hand-more.js):
      it answers being pointed at the way the dots do. */
   svg .plus { cursor: pointer; }
