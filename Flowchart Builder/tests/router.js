@@ -55,14 +55,32 @@ var bad = [];
               (wrong ? wrong + " wrong" : "ok"));
 })();
 
-// ---- no line cuts through a shape, and every end is on a side's middle --
+// Whether a line cuts through a shape, its own two included: the leg that
+// leaves a shape is let off for that shape, and the leg that arrives at one
+// for that one -- and for no other.  Letting the first leg off for both let
+// a line leave a box straight down through the End it was going to.
+function throughAny(pts, a, b) {
+  return hand.nodes.some(function (n) {
+    var first = n.id === a.id ? 2 : 1;
+    var last = n.id === b.id ? pts.length - 2 : pts.length - 1;
+    return first <= last && cutsThrough(pts, n, first, last);
+  });
+}
+
+// Whether a point is on side `side` of a shape, within the stretch of it an
+// arrow may meet: the middle, or along it as far as spreadRoom allows (a
+// straight line across to a shape set to one side meets it off the middle).
+function onSideAt(n, side, p) {
+  var t = turned(n), room = Math.max(0, spreadRoom(n, side));
+  var off = side < 2 ? p[0] - t.x : p[1] - t.y;
+  if (Math.abs(off) > room + 0.6) return false;
+  var q = portAlong(n, side, off);
+  return Math.abs(q.x - p[0]) < 0.6 && Math.abs(q.y - p[1]) < 0.6;
+}
+
+// ---- no line cuts through a shape, and every end is on one of its sides --
 (function () {
-  function middled(n, p) {
-    var t = turned(n);
-    var l = t.x - t.w / 2, r = t.x + t.w / 2;
-    var onSide = Math.abs(p[0] - l) < t.w * 0.25 || Math.abs(p[0] - r) < t.w * 0.25;
-    return onSide ? Math.abs(p[1] - t.y) < 1.5 : Math.abs(p[0] - t.x) < 1.5;
-  }
+  function middled(n, p, side) { return onSideAt(n, side, p); }
   var tried = 0, through = 0, off = 0;
   for (var si = 0; si < SIZES.length; si++)
   for (var ti = 0; ti < TURNS.length; ti++)
@@ -79,19 +97,14 @@ var bad = [];
     hand.nodes = [a, b, c];
     var pts = linkPath(a, b);
     tried++;
-    var hit = false;
-    hand.nodes.forEach(function (n) {
-      if (n.id === 1 || n.id === 2) {
-        if (pts.length > 3 && cutsThrough(pts, n, 2, pts.length - 2)) hit = true;
-      } else if (cutsThrough(pts, n)) { hit = true; }
-    });
-    if (hit) through++;
-    if (!middled(a, pts[0]) || !middled(b, pts[pts.length - 1])) off++;
+    if (throughAny(pts, a, b)) through++;
+    if (!middled(a, pts[0], pts.sides[0]) ||
+        !middled(b, pts[pts.length - 1], pts.sides[1])) off++;
   }
   if (through) bad.push(through + " lines cut through a shape");
-  if (off) bad.push(off + " line ends off a side's middle");
+  if (off) bad.push(off + " line ends off their sides");
   console.log(tried + " arrangements: " + through + " through a shape, " +
-              off + " ends off center");
+              off + " ends off their sides");
 })();
 
 // ---- the word on an arrow stays off every shape, where there is room ----
@@ -206,9 +219,8 @@ var bad = [];
 // out and straight back over its own shape, and never goes diagonal.
 (function () {
   function sideAt(n, p) {
-    var ps = ports(n);
     for (var i = 0; i < 4; i++) {
-      if (Math.abs(ps[i].x - p[0]) < 0.6 && Math.abs(ps[i].y - p[1]) < 0.6) return i;
+      if (onSideAt(n, i, p)) return i;
     }
     return -1;
   }
@@ -225,8 +237,7 @@ var bad = [];
     tried++;
     if (sideAt(a, pts[0]) !== fi || sideAt(b, pts[pts.length - 1]) !== ti) wrong++;
     if (!outward(pts, ports(a)[fi], ports(b)[ti], true, true)) back++;
-    if (pts.length > 3 && (cutsThrough(pts, a, 2, pts.length - 2) ||
-                           cutsThrough(pts, b, 2, pts.length - 2))) through++;
+    if (throughAny(pts, a, b)) through++;
     for (var i = 1; i < pts.length; i++) {
       if (Math.abs(pts[i][0] - pts[i - 1][0]) > 0.5 &&
           Math.abs(pts[i][1] - pts[i - 1][1]) > 0.5) { slant++; break; }
@@ -432,6 +443,36 @@ var bad = [];
   if (cramped) bad.push(cramped + " of " + ways.length + " arrowheads with no room to sit on");
   console.log("a Start just under a box's corner, " + ways.length + " ways: " + cramped +
               " arrowheads cramped");
+})();
+
+// ---- straight down, and never through the shape it goes to --------------
+// The drawing the user sent on 2026-09-25: a Start, a wide Display set a
+// little to the right of it, and an End close under the Display (its words
+// had made it taller, and it grew down towards the End).  The arrow into
+// the End left the Display straight down through the End and came back up
+// into its foot; the one into the Display stepped sideways halfway down.
+// Both are straight lines now, every way the arrows were drawn.
+(function () {
+  var start = { id: 1, kind: "oval", x: 265, y: 45, w: 130, h: 50, turn: 0 };
+  var show = { id: 2, kind: "io", x: 310, y: 150, w: 280, h: 80, turn: 0 };
+  var end = { id: 3, kind: "oval", x: 265, y: 230, w: 130, h: 50, turn: 0 };
+  hand.nodes = [start, show, end];
+  var ways = [{}, { fromSide: "foot", toSide: "top" }];
+  var through = 0, bent = 0, tried = 0;
+  ways.forEach(function (sides) {
+    hand.links = [Object.assign({ from: 1, to: 2 }, sides), Object.assign({ from: 2, to: 3 }, sides)];
+    routeAll().forEach(function (pts, li) {
+      tried++;
+      var link = hand.links[li];
+      if (throughAny(pts, nodeById(link.from), nodeById(link.to))) through++;
+      if (pts.length > 2) bent++;
+    });
+  });
+  hand.links = [];
+  if (through) bad.push(through + " arrows through the End or the Display");
+  if (bent) bad.push(bent + " arrows between overlapping shapes not straight");
+  console.log("Start, Display and End, " + tried + " arrows: " + through + " through a shape, " +
+              bent + " with corners");
 })();
 
 if (bad.length) {

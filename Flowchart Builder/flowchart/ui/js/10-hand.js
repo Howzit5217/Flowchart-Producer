@@ -319,10 +319,16 @@
           t.y + t.h / 2 < y0 || t.y - t.h / 2 > y1) { return; }
       if (n.id === a.id || n.id === b.id) {
         // A line's own two shapes count too -- it should leave one and
-        // arrive at the other without cutting back over either.  The legs
-        // that touch their edges on the way out and in are the exception,
-        // since that is the line meeting the shape, not running through it.
-        if (pts.length > 3 && cutsThrough(pts, n, 2, pts.length - 2)) { through++; }
+        // arrive at the other without cutting back over either.  The leg
+        // that touches a shape's edge on the way out of it, or in to it, is
+        // the exception for that shape, since that is the line meeting the
+        // shape, not running through it -- but only for that shape.  The
+        // first leg was let off for both, so a line could leave a box
+        // straight down through the End it was going to, and come back up
+        // into the End's foot from underneath.
+        var first = n.id === a.id ? 2 : 1;
+        var last = n.id === b.id ? pts.length - 2 : pts.length - 1;
+        if (first <= last && cutsThrough(pts, n, first, last)) { through++; }
         return;
       }
       if (cutsThrough(pts, n)) { through++; }
@@ -368,6 +374,14 @@
   function lastRun(pts) {
     var z = pts[pts.length - 1], y = pts[pts.length - 2];
     return y ? Math.abs(z[0] - y[0]) + Math.abs(z[1] - y[1]) : Infinity;
+  }
+  // A straight line has no corner for its head to hang back past, so it
+  // needs only the head and a little of the line: two shapes stacked close
+  // together are joined straight across the gap, rather than the arrow
+  // going the long way round one side to have a stand-off's length to end on.
+  var STRAIGHT_LEAST = 12;
+  function squeezedEnd(pts) {
+    return lastRun(pts) < (pts.length > 2 ? HEAD_ROOM - 0.5 : STRAIGHT_LEAST);
   }
 
   // Whether a line leaves its shape the way the side it leaves by faces,
@@ -430,7 +444,7 @@
       // reads, so it wins any tie
       var price = priceOf(pts, a, b) - (i === 1 && j === 0 ? 1 : 0);
       if (!outward(pts, outs[i], ins[j], outOnly >= 0, inOnly >= 0)) { price += 10000; }
-      var squeezed = lastRun(pts) < HEAD_ROOM - 0.5;
+      var squeezed = squeezedEnd(pts);
       if (squeezed) { price += SHORT_END; }
       if (outOnly < 0) { price += crowdCost(a, i) * crowd(a.id, i); }
       if (inOnly < 0) { price += crowdCost(b, j) * crowd(b.id, j); }
@@ -458,11 +472,37 @@
       return best;
     }
 
+    // Straight across, where the two sides face each other and the stretches
+    // of them an arrow may meet (spreadRoom) overlap: out of a Start and
+    // down into a box set a little to one side of it, say.  From middle to
+    // middle that took a step sideways halfway down -- two corners for
+    // nothing, and two more wherever the shapes nearly touch.  It meets the
+    // shape it goes into in its middle where it can, and leaves the shape
+    // it comes from from its middle where it can; otherwise halfway along
+    // the overlap.
+    function tryStraight(i, j) {
+      if ((outOnly >= 0 && i !== outOnly) || (inOnly >= 0 && j !== inOnly)) { return; }
+      var p0 = outs[i], q0 = ins[j], down = i < 2;
+      if (((down ? q0.y - p0.y : q0.x - p0.x) * (down ? p0.dy : p0.dx)) <= 0) { return; }
+      var ta = turned(a), tb = turned(b);
+      var ca = down ? ta.x : ta.y, cb = down ? tb.x : tb.y;
+      var ra = spreadRoom(a, i), rb = spreadRoom(b, j);
+      var lo = Math.max(ca - ra, cb - rb), hi = Math.min(ca + ra, cb + rb);
+      if (lo > hi + 0.01) { return; }
+      var at = cb >= lo && cb <= hi ? cb : (ca >= lo && ca <= hi ? ca : (lo + hi) / 2);
+      if (Math.abs(at - ca) < 0.5 && Math.abs(at - cb) < 0.5) { return; }   // tried above
+      var p = portAlong(a, i, at - ca), q = portAlong(b, j, at - cb);
+      weigh([[p.x, p.y], [q.x, q.y]], i, j);
+    }
+
     for (var i = 0; i < outs.length; i++) {
       for (var j = 0; j < ins.length; j++) {
         tryJoin(i, j);
       }
     }
+    [[1, 0], [0, 1], [3, 2], [2, 3]].forEach(function (pair) {
+      tryStraight(pair[0], pair[1]);
+    });
     // nothing in the way, on top of no other arrow and across none: done
     if (good() && !bestOver && !bestCross) { return done(); }
 
@@ -528,8 +568,10 @@
     // and those can be further off than half way: the one lane that gets a
     // line from the right of a decision round to a box below and to its
     // left is the one just right of the decision.
+    // And so does any line with no clear way yet: the way round the outside
+    // of the pair is often the only one left when two shapes stand close.
     var endsY = [], endsX = [];
-    if ((outOnly >= 0 || inOnly >= 0) && !clear) {
+    if (!clear) {
       var p0 = outOnly >= 0 ? outs[outOnly] : { x: a.x, y: a.y, dx: 0, dy: 0 };
       var q0 = inOnly >= 0 ? ins[inOnly] : { x: b.x, y: b.y, dx: 0, dy: 0 };
       // and the lanes just clear of both shapes at once, which is the way
@@ -564,12 +606,15 @@
         tryJoin(m, m, lanesX[k]);
       }
     }
-    if (good() || (outOnly < 0 && inOnly < 0)) { return done(); }
+    if (good()) { return done(); }
 
-    // A line held to its sides may have none of those ways open to it: out
-    // of the foot and into a side, or back up to the top of a shape above.
-    // So it may also go out along a lane and come in from one side, or
-    // round a corner by two lanes, one each way.
+    // None of those ways may be open: out of the foot and into a side, or
+    // back up to the top of a shape above, for a line held to its sides --
+    // or, for any line, two shapes so close together that every way
+    // between them runs through one or the other.  So it may also go out
+    // along a lane and come in from one side, or round a corner by two
+    // lanes, one each way.  Only ever reached when nothing simpler is
+    // clear, so the usual case pays nothing for it.
     for (k = 0; k < lanesY.length; k++) {
       for (i = 0; i < 2; i++) { tryJoin(i, 2, lanesY[k]); tryJoin(i, 3, lanesY[k]); }
     }
@@ -662,6 +707,7 @@
   // top of that run with it, so every run stays square and the rest of the
   // way is the way it was.
   var SPREAD = 18;                        // at most this far apart
+  var APART = 12;                         // and heads this far apart do not touch
   function spreadEnds(routes) {
     var at = {};
     hand.links.forEach(function (link, li) {
@@ -683,13 +729,32 @@
       var room = node ? spreadRoom(node, side) : 0;
       if (room <= 0) { return; }
       var axis = side < 2 ? 0 : 1;          // along the top or foot, or down a side
+      // Already apart -- one of them straight across to a shape off to one
+      // side, the other in the middle -- they are left where they are.
+      var t = turned(node), centre = axis ? t.y : t.x;
+      var along = ends.map(function (e) {
+        var pts = routes[e.li];
+        return (e.end === "from" ? pts[0] : pts[pts.length - 1])[axis] - centre;
+      });
+      var sorted = along.slice().sort(function (p, q) { return p - q; });
+      var apart = true;
+      for (var k = 1; k < sorted.length; k++) {
+        if (sorted[k] - sorted[k - 1] < APART) { apart = false; }
+      }
+      if (apart) { return; }
       ends.sort(function (p, q) {
         return (p.toward[axis] - q.toward[axis]) || (p.li - q.li);
       });
       var step = Math.min(SPREAD, 2 * room / (ends.length - 1));
-      ends = leastCrossed(ends, step, routes);
+      // Spread round where they are, not round the middle of the side:
+      // most often that is the middle, but two straight lines down into a
+      // shape set off to one side of them stay over to that side.
+      var mean = along.reduce(function (s, v) { return s + v; }, 0) / along.length;
+      var span = (ends.length - 1) * step / 2;
+      var middle = Math.max(-room + span, Math.min(room - span, mean));
+      ends = leastCrossed(ends, step, routes, middle);
       ends.forEach(function (e, n) {
-        (shift[e.li] = shift[e.li] || {})[e.end] = (n - (ends.length - 1) / 2) * step;
+        (shift[e.li] = shift[e.li] || {})[e.end] = middle + (n - (ends.length - 1) / 2) * step;
       });
     });
     hand.links.forEach(function (link, li) {
@@ -707,7 +772,8 @@
   // there are few enough ends for that to be quick, and the one crossing
   // least is taken; of equals, the first.
   var ORDER_MOST = 5;
-  function leastCrossed(ends, step, routes) {
+  function leastCrossed(ends, step, routes, middle) {
+    middle = middle || 0;
     if (ends.length > ORDER_MOST) { return ends; }
     var seen = {};
     for (var k = 0; k < ends.length; k++) {   // an arrow round to its own side
@@ -717,7 +783,7 @@
     function crossings(order) {
       var slid = order.map(function (e, n) {
         var by = {}, link = hand.links[e.li];
-        by[e.end] = (n - (order.length - 1) / 2) * step;
+        by[e.end] = middle + (n - (order.length - 1) / 2) * step;
         return slidEnds(routes[e.li], nodeById(link.from), nodeById(link.to), by);
       });
       var count = 0;
@@ -744,13 +810,30 @@
   // A route with its two ends moved along their sides by `by.from` and
   // `by.to`.  A straight route whose two ends move by different amounts is
   // given a step halfway along, rather than being tipped over.
+  // An end that is not being spread stays where it is -- which is not
+  // always the middle of its side: a straight line across to a shape set to
+  // one side meets it off the middle (tryStraight), and putting that end
+  // back to the middle because the other end was spread put a step in it.
   function slidEnds(pts, a, b, by) {
     var sides = pts.sides, out = pts.map(function (p) { return p.slice(); });
     var last = out.length - 1;
-    var p = portAlong(a, sides[0], by.from || 0), q = portAlong(b, sides[1], by.to || 0);
+    var p = by.from != null ? portAlong(a, sides[0], by.from)
+                            : { x: out[0][0], y: out[0][1] };
+    var q = by.to != null ? portAlong(b, sides[1], by.to)
+                          : { x: out[last][0], y: out[last][1] };
     var ax = sides[0] < 2 ? 0 : 1, bx = sides[1] < 2 ? 0 : 1;   // the axis each slides on
     if (out.length === 2) {
       var d0 = [p.x, p.y][ax] - out[0][ax], d1 = [q.x, q.y][bx] - out[1][bx];
+      // A straight line with only one end being spread takes its other end
+      // along with it, where that side has the room, and stays straight.
+      if (ax === bx && (by.from == null) !== (by.to == null)) {
+        var other = by.from == null ? [a, sides[0], 0, d1] : [b, sides[1], 1, d0];
+        var t = turned(other[0]), off = out[other[2]][ax] - (ax ? t.y : t.x) + other[3];
+        if (Math.abs(off) <= spreadRoom(other[0], other[1]) + 0.01) {
+          var moved = portAlong(other[0], other[1], off);
+          if (other[2]) { q = moved; d1 = d0; } else { p = moved; d0 = d1; }
+        }
+      }
       if (ax === bx && Math.abs(d0 - d1) > 0.5) {
         var cross = 1 - ax, mid = (out[0][cross] + out[1][cross]) / 2;
         var bend0 = [], bend1 = [];
@@ -1313,8 +1396,7 @@
     var tips = [];                     // held back so nothing paints over them
     // Every arrow is routed before any is drawn, so that the word on one
     // can keep clear of all the others, and of their heads.
-    var laid = routeAll();             // and which sides they meet shapes at
-    var routes = laid.map(function (pts) {
+    var routes = routeAll().map(function (pts) {
       return pts && pts.map(function (p) { return [p[0] + ox, p[1] + oy]; });
     });
     var keep = null;
@@ -1446,7 +1528,7 @@
                      '" width="' + GRIP + '" height="' + GRIP + '" rx="2" fill="#ffffff" ' +
                      'stroke="#14427c" stroke-width="1.6"/>');
           });
-        out.push(plusMarks(n, moved, about, laid));   // and what comes next (13-hand-more.js)
+        out.push(plusMarks(n, moved, about));   // and what comes next (13-hand-more.js)
       }
     });
     out.push('<g class="tips">' + tips.join("") + "</g>");

@@ -9,51 +9,31 @@
   // it on the paper, drag it into place, then go back to the first shape
   // and draw an arrow from one to the other -- four moves for what is, in
   // a flowchart, the one thing you do over and over.  So the picked shape
-  // wears a + on every side no arrow meets it at, and pressing one asks
-  // what comes next and puts it out that way, joined on, ready to be typed
-  // into -- down the page, across it, or back up it, as there is room.
+  // wears a + under it, and pressing it asks what comes next and puts it
+  // there, joined on, ready to be typed into.  A decision has a second +
+  // at its right, for the other answer.  (For a while there was a + on
+  // every free side; one under it is what was wanted, 2026-09-25.)
   // What it offers is the shapes the rules give each kind of step
   // (ruleChoices, 13-hand-rules.js), so whatever is added keeps to them.
   var PLUS_R = 9;                        // how big the + is
   var PLUS_OFF = 30;                     // how far out from the shape it sits
   var NEXT_GAP = 50;                     // the room left between the two shapes
-  // Each way a + can point: which way the next shape goes from this one,
-  // and the side of it the arrow comes in at.
+  // Each way the next shape can go from this one, and the side of it the
+  // arrow comes in at: down from the +, and across from a decision's.
   var NEXT_WAYS = { top: [0, -1, "foot"], foot: [0, 1, "top"],
                     left: [-1, 0, "right"], right: [1, 0, "left"] };
 
-  // The sides of a shape its arrows meet it at, out and in, as routeAll
-  // laid them (`laid`) -- or as they were drawn, where it is not to hand.
-  function sidesUsed(id, laid) {
-    var used = {};
-    hand.links.forEach(function (link, li) {
-      var pts = laid && laid[li];
-      if (link.from === id) {
-        used[pts && pts.sides ? PORT_SIDES[pts.sides[0]] : link.fromSide] = true;
-      }
-      if (link.to === id) {
-        used[pts && pts.sides ? PORT_SIDES[pts.sides[1]] : link.toSide] = true;
-      }
-    });
-    return used;
-  }
-
-  // The +s for the picked shape, drawn by drawHand beside its dots.  `at`
-  // is where the shape stands on the paper and `about` how much room it
-  // takes up once turned.  None on a question already answered both ways
-  // -- a third way out of it is not a way.  Near the top or the left of the
-  // paper a + comes in closer rather than off the edge, and where there is
-  // not room for it clear of the shape's own dot, it is left off.
-  function plusMarks(n, at, about, laid) {
+  // The + (or two) for the picked shape, drawn by drawHand beside its dots.
+  // `at` is where the shape stands on the paper and `about` how much room
+  // it takes up once turned.
+  function plusMarks(n, at, about) {
     if (joining || many.length > 1) { return ""; }
-    if (asksKind(n.kind) && outOf(n.id).length >= 2) { return ""; }
-    var used = sidesUsed(n.id, laid);
-    return PORT_SIDES.filter(function (way) { return !used[way]; }).map(function (way) {
-      var go = NEXT_WAYS[way];
-      var x = Math.max(PLUS_R + 1, at.x + go[0] * (about.w / 2 + PLUS_OFF));
-      var y = Math.max(PLUS_R + 1, at.y + go[1] * (about.h / 2 + PLUS_OFF));
-      if ((way === "left" && at.x - about.w / 2 - x < PLUS_R + 8) ||
-          (way === "top" && at.y - about.h / 2 - y < PLUS_R + 8)) { return ""; }
+    var ways = [["foot", at.x, at.y + about.h / 2 + PLUS_OFF]];
+    if (asksKind(n.kind) && outOf(n.id).length < 2) {
+      ways.push(["right", at.x + about.w / 2 + PLUS_OFF, at.y]);
+    }
+    return ways.map(function (one) {
+      var way = one[0], x = one[1], y = one[2];
       return '<g class="plus" data-i="' + n.id + '" data-way="' + way +
              '" transform="translate(' + x + "," + y + ')">' +
              "<title>" + escaped(TXT.hp_next || "") + "</title>" +
