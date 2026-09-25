@@ -150,6 +150,8 @@
        inside those rather than beside them, and wants the room. */
     .slide-frame.room.has-y { padding-right: 0; }
     .slide-frame.room.has-x { padding-bottom: 0; }
+    #panel.has-y > .slide-in { padding-right: 0; }   /* made inside, for the panel */
+    #panel.has-y .panel-top { margin-right: 0; }
     /* The dots a line is drawn from and aimed at are sized by 10-hand.js
        rather than here.  `r` is a CSS property in some browsers and not in
        others, so said here it grew them on a touch screen in Chrome and

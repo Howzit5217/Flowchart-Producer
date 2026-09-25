@@ -376,6 +376,16 @@
      strip never scrolls, so the bar has nothing to say about the room it
      stands in.  How tall the strip is, 24-scroll.js keeps in --top-keep. */
   #panel > .slider.y { top: var(--top-keep, 0px); }
+  /* Nor does the strip move over for the bar.  The room the bar takes when
+     it comes up (01-base .room) is made inside the box that scrolls rather
+     than round it, so the cards still narrow by the width of the bar -- but
+     the strip reaches back out over that room and stays exactly where it
+     was, Chart, Style and the arrow that closes the panel with it, and its
+     line running the whole width for the bar to start under.  The two move
+     at the same pace (07-motion.css), so the strip never stirs. */
+  #panel.slide-frame.room.has-y { padding-right: 0; }
+  #panel.has-y > .slide-in { padding-right: 15px; }
+  #panel.has-y .panel-top { margin-right: -15px; }
   .seg {
     flex: 1; display: flex; gap: 2px; padding: 2px; border-radius: 9px;
     background: var(--line-soft);
@@ -2429,6 +2439,8 @@
        inside those rather than beside them, and wants the room. */
     .slide-frame.room.has-y { padding-right: 0; }
     .slide-frame.room.has-x { padding-bottom: 0; }
+    #panel.has-y > .slide-in { padding-right: 0; }   /* made inside, for the panel */
+    #panel.has-y .panel-top { margin-right: 0; }
     /* The dots a line is drawn from and aimed at are sized by 10-hand.js
        rather than here.  `r` is a CSS property in some browsers and not in
        others, so said here it grew them on a touch screen in Chrome and
@@ -2735,6 +2747,11 @@
      measures it as it starts to close and says so here, and the width goes
      back to being whatever it was once it is open again. */
   #panel > .slide-in { width: var(--panel-w, 100%); }
+  /* The room the bar takes (03-layout.css), and the strip at the top
+     reaching back over it: the same change at the same pace, so the cards
+     narrow as the bar slides in and the strip does not move at all. */
+  #panel > .slide-in { transition: padding-right var(--move) var(--ease); }
+  #panel .panel-top { transition: margin-right var(--move) var(--ease); }
   /* Nothing means nothing: the strip the panel keeps for its slider bar
      has a width of its own, and a box told to be no wider than nothing
      still comes out as wide as what it is padded by -- so a panel that

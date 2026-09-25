@@ -280,6 +280,11 @@
      measures it as it starts to close and says so here, and the width goes
      back to being whatever it was once it is open again. */
   #panel > .slide-in { width: var(--panel-w, 100%); }
+  /* The room the bar takes (03-layout.css), and the strip at the top
+     reaching back over it: the same change at the same pace, so the cards
+     narrow as the bar slides in and the strip does not move at all. */
+  #panel > .slide-in { transition: padding-right var(--move) var(--ease); }
+  #panel .panel-top { transition: margin-right var(--move) var(--ease); }
   /* Nothing means nothing: the strip the panel keeps for its slider bar
      has a width of its own, and a box told to be no wider than nothing
      still comes out as wide as what it is padded by -- so a panel that
