@@ -46,6 +46,36 @@
   function sizeIt(e, c) { e.style.fontSize = c; }
   function weighIt(e, c) { e.style.strokeWidth = c; }
 
+  // ----------------------------------------------------- what a kind wears --
+  // A palette gives colors to the six kinds of step, and a built chart only
+  // ever draws those six, whatever shape the rules draw each of them as.
+  // Drawn by hand, though, a shape can be any of thirty, and the other
+  // twenty-four were given nothing: they stayed white, which on Night is a
+  // white box with pale words on it.  So a shape whose kind has no color of
+  // its own wears the colors of the step it stands for -- the one the
+  // "Shape for each kind" rules draw as that shape, as a built chart would,
+  // or else its nearest relative.  A color the kind has been given itself,
+  // by Apply to all, still comes first, one color at a time.
+  var KIN = { roundrect: "rect", trap: "rect", delay: "rect", parallel: "rect",
+              step: "rect", cube: "rect", note: "rect", callout: "rect",
+              actor: "rect", arrow: "rect", text: "rect",
+              circle: "oval", offpage: "oval",
+              io_back: "io", manual: "io", doc: "io", docs: "io", card: "io",
+              screen: "io", store: "io", stored: "io", table: "io",
+              loop: "hex", cloud: "sub" };
+  function standsFor(kind) {
+    if (ROLES.indexOf(kind) >= 0) { return kind; }
+    for (var r = 0; r < ROLES.length; r++) {
+      if (geom[ROLES[r]] === kind) { return ROLES[r]; }
+    }
+    return KIN[kind] || "rect";
+  }
+  function kindColors(kind) {
+    var own = style.kinds[kind] || {}, kin = style.kinds[standsFor(kind)] || {};
+    return { fill: own.fill || kin.fill || "", line: own.line || kin.line || "",
+             text: own.text || kin.text || "" };
+  }
+
   // ------------------------------------------------------- how words look --
   // What every step's words are set in, said once for the whole chart on the
   // Style side: the typeface, how big, and whether bold, slanted or
@@ -251,6 +281,7 @@
       major: all(".grid.major", chart),
       ruled: all(".grid", chart),
       nodes: all(".node", chart),
+      keyShapes: all(".key-shape", chart),   // the key of a drawing by hand
       words: el("g[font-family]", chart)     // the group every word is in
     };
     return chart._lists;
@@ -271,7 +302,7 @@
     var first = eyeAt(nodes.length);
     nodes.forEach(function (ignored, step) {
       var g = nodes[(first + step) % nodes.length];
-      var k = style.kinds[g.dataset.kind] || {}, n = style.nodes[g.dataset.i] || {};
+      var k = kindColors(g.dataset.kind), n = style.nodes[g.dataset.i] || {};
       var fill = n.fill || k.fill || "";
       var line = n.line || k.line || style.ink || "";
       var word = n.text || k.text || style.words || style.ink || "";
@@ -289,7 +320,8 @@
       }
       if (daubed >= ATONCE && !paintingAll) { leftOver = true; return; }
       if (g._fill !== fill || g._line !== line) {
-        all("ellipse, rect, polygon, path", g).forEach(function (e) {
+        // circle is the actor's head: left out, it stayed white and black.
+        all("ellipse, rect, polygon, path, circle", g).forEach(function (e) {
           // .ghost is the clear pane behind a words-only box: it is there to
           // be clicked, never to be seen, so no color is put on it at all.
           // Nor on the highlighter behind the words, which has its own.
@@ -353,6 +385,18 @@
       block.style.background = paper;
       block._paper = paper;
     }
+    // The key along the top of a drawing by hand: each shape in it the
+    // colors its kind wears on the paper, as a built chart's key is.
+    here.keyShapes.forEach(function (g) {
+      var k = kindColors(g.dataset.kind), line = k.line || style.ink || "";
+      all("ellipse, rect, polygon, path, circle, line", g).forEach(function (e) {
+        if (e.classList.contains("ghost")) { return; }
+        if (e.tagName !== "line" && !e.classList.contains("trim")) {
+          putOn(e, "_fill", k.fill, fillIt);
+        }
+        putOn(e, "_line", line, strokeIt);
+      });
+    });
     var ink = style.ink || "";
     here.flows.forEach(function (e) { putOn(e, "_ink", ink, strokeIt); });
     here.heads.forEach(function (e) { putOn(e, "_ink", ink, bothIt); });
@@ -365,7 +409,7 @@
     var shown = style.gridOff ? "none" : "";
     here.ruled.forEach(function (e) { putOn(e, "_shown", shown, showIt); });
     all(".keymark", document).forEach(function (mark) {
-      var kind = mark.dataset.kind, k = style.kinds[kind] || {};
+      var kind = mark.dataset.kind, k = kindColors(kind);
       all("ellipse, rect, polygon, path, circle", mark).forEach(function (e) {
         e.setAttribute("fill", k.fill || style.sheet || "#ffffff");
         e.setAttribute("stroke", k.line || style.ink || "#10151b");

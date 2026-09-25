@@ -14,6 +14,9 @@ import os
 # them.  Fetching the modules themselves is a fifth of the size and there
 # is no second copy of anything to keep in step.
 PYODIDE = "https://cdn.jsdelivr.net/pyodide/v0.27.7/full/"
+# The website's icons as an app, where they are beside index.html (see
+# site.py, which writes the manifest that names them).
+ICONS = "flowchart/ui/app/"
 
 HERE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 DRAWS = "studio/drawing.py"         # the one thing the browser asks us for

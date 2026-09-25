@@ -589,10 +589,33 @@
     return out.join("\n");
   }
 
-  // Reading the design as a program, and holding on to it.  Pressing Check
-  // is what asks for this: a design that passes is worth running, and one
-  // that does not is not worth pretending about.
+  // Reading the design as a program, and holding on to it.  A design that
+  // passes is worth running, and one that does not is not worth pretending
+  // about.  It used to wait for Check: every change put Run out again, even
+  // moving a shape, and it stayed out until Check was pressed once more.
+  // Now the design is read by itself once the drawing has been still for a
+  // moment (readHandSoon), and Run lights up the moment it works.  Check
+  // still says so in words, and says what is in the way when it does not.
   var handWas = null;                    // the design the program was read from
+  var handTried = null;                  // and the last one read unasked, however it went
+  var handReading = null;                // one being read now
+  var HAND_SETTLE = 400;                 // ms of stillness before it is read
+  var handSoon = 0;
+
+  // What a design says as a program: the words and kinds of its shapes and
+  // the arrows between them, and not where anything stands or what color
+  // it is.  Moving a shape does not change the program, so it neither puts
+  // Run out nor needs reading again.  The kinds are as the shape rules see
+  // them, because a rule changed can make a diamond stop asking.
+  function handKey() {
+    return JSON.stringify([
+      el("#f-lang") ? el("#f-lang").value : "",
+      hand.nodes.map(function (n) {
+        return [n.id, n.kind, asksKind(n.kind), endsKind(n.kind), n.text || ""];
+      }),
+      hand.links.map(function (l) { return [l.from, l.to, l.label || ""]; })
+    ]);
+  }
 
   function handSays(what, bad) {
     var box = el("#report");
@@ -603,8 +626,34 @@
     box.appendChild(line);
   }
 
-  function readyHandProgram() {
+  // `how` is "auto" for the read nobody asked for, which says nothing in
+  // the report -- the note under Run says whether it is ready -- and
+  // "check" for the Check button, which only reads again what has changed.
+  // Nothing at all is a fresh read however it stands: putting a save back
+  // (29-saves.js) waits on the drawing that read asks for.
+  function readyHandProgram(how) {
     if (!byHand) { return; }
+    var auto = how === "auto";
+    var mine = handKey();
+    if (AST && handWas === mine) {
+      if (how === "check") { handSays(TXT.h_runnable); return; }
+      if (auto) { return; }
+    }
+    if (auto && (handReading === mine ||
+                 (handTried === mine && handWas !== mine))) { return; }
+    if (auto) { handTried = mine; }
+    function tell(what) { if (!auto) { handSays(what, true); } }
+    // The first read is what starts Python, and Python says so in the
+    // pseudocode side's note -- "Drawing..." last of all, which then sat
+    // there over a side that was drawing nothing.  Put back to Ready unless
+    // a build of its own is saying it.
+    function unsaid() {
+      var says = el("#build-note"), build = el("#build");
+      if (!says || (build && build.classList.contains("working"))) { return; }
+      if (says.textContent === TXT.starting || says.textContent === TXT.drawing) {
+        says.textContent = TXT.ready;
+      }
+    }
     forgetProgram();
     handWas = null;
     // Only what stops it working stops it: a shape overlapping another is
@@ -613,34 +662,55 @@
         checkDesign().some(function (bit) { return !bit.warn; })) { return; }
     var text;
     try { text = handAsPseudocode(); }
-    catch (thrown) { handSays(thrown.message || String(thrown), true); return; }
-    var mine = JSON.stringify(hand);
+    catch (thrown) { tell(thrown.message || String(thrown)); return; }
+    handReading = mine;
     askFor({ text: text, title: el("#f-title") ? el("#f-title").value : "",
              author: "", shape: "auto", seed: "",
              lang: el("#f-lang") ? el("#f-lang").value : "",
              legend: false, grid: true, shapes: geom })
       .then(function (data) {
-        if (!byHand || JSON.stringify(hand) !== mine) { return; }
+        if (handReading === mine) { handReading = null; }
+        unsaid();
+        if (!byHand || handKey() !== mine) { return; }
         if (!data.ok || !data.ast || !(data.ast.main || []).length) {
-          handSays(data.error || TXT.h_not_a_program, true);
+          tell(data.error || TXT.h_not_a_program);
           return;
         }
+        var wasOut = !runnable();
         AST = data.ast;
         forgetLines();
         handWas = mine;
         dressRunner();
-        handSays(TXT.h_runnable);
+        if (!auto) { handSays(TXT.h_runnable); }
+        else if (wasOut && typeof briefly === "function") {
+          briefly(el("#run"), "lit-up", 800);   // lit by itself: say so
+        }
       })
       .catch(function (err) {
-        handSays(String(err && err.message ? err.message : err), true);
+        if (handReading === mine) { handReading = null; }
+        unsaid();
+        tell(String(err && err.message ? err.message : err));
       });
   }
 
   // A design that has been changed since it was read is not that program
-  // any more, so the runner lets go of it until Check is pressed again.
+  // any more, so the runner lets go of it -- and reads the new one as soon
+  // as the drawing is still.
   function handChanged() {
-    if (!byHand || !handWas) { return; }
-    if (JSON.stringify(hand) !== handWas) { forgetProgram(); handWas = null; }
+    if (!byHand) { return; }
+    var now = handKey();
+    if (handWas && now !== handWas) { forgetProgram(); handWas = null; }
+    if (now !== handWas || !AST) { readHandSoon(); }
+  }
+
+  function readHandSoon() {
+    clearTimeout(handSoon);
+    handSoon = setTimeout(function () {
+      handSoon = 0;
+      if (!byHand) { return; }
+      if (running) { readHandSoon(); return; }   // not under a run's feet
+      readyHandProgram("auto");
+    }, HAND_SETTLE);
   }
 
   // ---- tidying a drawing up ----------------------------------------------

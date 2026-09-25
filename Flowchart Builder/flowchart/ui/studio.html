@@ -12,6 +12,14 @@
      strokes, because a tab bar may be light or dark and a stroke in
      one ink cannot be seen on both. -->
 <link rel="icon" href="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%3E%3Crect%20width%3D%2224%22%20height%3D%2224%22%20rx%3D%225%22%20fill%3D%22%2314427c%22%2F%3E%3Cg%20transform%3D%22translate%282.5%202.2%29%20scale%280.79%29%22%20fill%3D%22none%22%20stroke%3D%22%23ffffff%22%20stroke-width%3D%222.1%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Crect%20x%3D%227.5%22%20y%3D%221.8%22%20width%3D%229%22%20height%3D%225.4%22%20rx%3D%221.4%22%2F%3E%3Cpath%20d%3D%22M12%207.2v3.1%22%2F%3E%3Cpath%20d%3D%22M12%2010.3l4%203.3-4%203.3-4-3.3z%22%2F%3E%3Cpath%20d%3D%22M12%2016.9v2.1H4.6v3.2M12%2019h7.4v3.2%22%2F%3E%3C%2Fg%3E%3C%2Fsvg%3E">
+<!-- The color of the bar, for whatever the browser draws around the
+     page: a phone's address bar, or the title bar of the page installed
+     as an app.  wearTheme() keeps it in step with light and dark. -->
+<meta name="theme-color" content="#ffffff">
+<!-- On the website, what makes it an app you can install: the manifest,
+     and the icon an iPhone puts on its home screen.  Nothing anywhere
+     else -- page.py writes it only for the website. -->
+__APPHEAD__
 <style>
 @@CSS@@</style>
 </head>
@@ -156,6 +164,12 @@ __OPTIONS__
          something you found by accident or not at all. -->
     <button class="btn wide" id="keys-open" data-w="k_head"
             data-w-title="k_tip" title="__W(k_tip)__">__W(k_head)__</button>
+    <!-- The website as an app of its own, on the home screen or the Start
+         menu, working with no connection.  Only there where it can be
+         done: 31-app.js shows it. -->
+    <button class="btn wide" id="app-install" data-w="app_install" hidden
+            data-w-title="app_tip" title="__W(app_tip)__">__W(app_install)__</button>
+    <p class="hint" id="app-note"></p>
   </div>
 </header>
 

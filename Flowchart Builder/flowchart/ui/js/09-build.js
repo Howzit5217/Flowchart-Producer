@@ -758,6 +758,7 @@
       pick.onchange = function () {
         geom[role] = pick.value;
         drawRoles();
+        drawAdders();                    // the rules' shapes lead Add a shape
         // Drawing by hand, it is the drawing that is looked at again: which
         // shapes the rules now say otherwise about (13-hand-rules.js), and
         // what the check makes of them -- not a chart built over the top.
@@ -772,9 +773,7 @@
   // ------------------------------------------------ somewhere to start from --
   // Three programs short enough to read at a glance and different enough to
   // show the three things this pseudocode does: a decision, a loop, and a
-  // module called from somewhere else.  The keywords are not translated --
-  // they are what you type, and lookup.py says so -- so one set serves
-  // every language; only their names are words.
+  // module called from somewhere else.
   // ------------------------------------------------ somewhere to start from --
   // The first minute used to be an empty box and an instruction to paste
   // something into it, with nothing anywhere on the page saying what this
@@ -789,12 +788,18 @@
   // are a press away from the line under the box.
   //
   // They are written in US English, down to the money: dollars, dimes and
-  // cents, and a letter grade on the 90 / 80 / 70 / 60 scale.
+  // cents, and a letter grade on the 90 / 80 / 70 / 60 scale.  The other
+  // languages keep the dollars and the grades and put the words round
+  // them into their own.
   //
-  // The programs themselves are not translated and are not meant to be:
-  // the keywords are what you type, and lookup.py says in as many words
-  // that they stay as they are whichever language the chart is drawn in.
-  // Their names are words like any other, and those are.
+  // Each language writes every one of them out for itself, in its own
+  // file under words/ -- e_ask_p for the one called e_ask -- so an
+  // example opened in German asks "Wie alt bist du?" and reads the answer
+  // into alter.  The keywords are the one thing not translated:
+  // Display, If and While are what you type, and lookup.py says in as
+  // many words that they stay as they are whichever language the chart
+  // is drawn in.  A language that has not written one out yet is handed
+  // the US English one, as it is any other word it leaves out.
   //
   // Every one of them declares what it reads into.  That is a box more on
   // the chart, and it is worth it twice over: it is how these courses
@@ -803,67 +808,22 @@
   // program that skips it comes out as `age = askText();` with no `int`
   // anywhere and will not compile.
   var STARTS = [
-    ["eg_l1", [
-      ["e_ask", "Start\nDeclare String name\nDisplay \"What is your name?\"\nInput name\nDisplay \"Hello\"\nDisplay name\nStop"],
-      ["e_add", "Start\nDeclare Integer a\nDeclare Integer b\nDisplay \"Two numbers, please\"\nInput a\nInput b\nDisplay \"They come to\"\nDisplay a + b\nStop"],
-      ["e_swap", "Start\nDeclare Integer a\nDeclare Integer b\nDeclare Integer keep\nInput a\nInput b\nkeep = a\na = b\nb = keep\nDisplay a\nDisplay b\nStop"],
-      ["e_decide", "Start\nDeclare Integer age\nDisplay \"How old are you?\"\nInput age\nIf age >= 18 Then\n    Display \"Old enough to vote\"\nElse\n    Display \"Not old enough yet\"\nEnd If\nStop"],
-      ["e_oddeven", "Start\nDeclare Integer n\nDisplay \"Enter a number\"\nInput n\nIf n mod 2 = 0 Then\n    Display \"even\"\nElse\n    Display \"odd\"\nEnd If\nStop"],
-      ["e_count", "Start\nFor i = 1 To 5\n    Display i\nEnd For\nStop"],
-      ["e_while", "Start\nDeclare Integer n\nn = 1\nWhile n <= 5\n    Display n\n    n = n + 1\nEnd While\nStop"],
-      ["e_total", "Start\nDeclare Integer total\ntotal = 0\nFor i = 1 To 10\n    total = total + i\nEnd For\nDisplay \"The total is\"\nDisplay total\nStop"],
-      ["e_module", "Start\nDeclare String name\nInput name\nCall greet(name)\nStop\n\nModule greet(who)\n    Display \"Hello\"\n    Display who\nEnd Module"],
-      ["e_answers", "Start\nDeclare Integer a\nDeclare Integer b\nDeclare Integer sum\nInput a\nInput b\nsum = add(a, b)\nDisplay \"The answer is\"\nDisplay sum\nStop\n\nFunction add(x, y)\n    Return x + y\nEnd Function"]
-    ]],
-    ["eg_l2", [
-      ["e_grades", "Start\nDeclare Integer score\nDisplay \"Enter the score\"\nInput score\nIf score >= 90 Then\n    Display \"A\"\nElse If score >= 80 Then\n    Display \"B\"\nElse If score >= 70 Then\n    Display \"C\"\nElse If score >= 60 Then\n    Display \"D\"\nElse\n    Display \"F\"\nEnd If\nStop"],
-      ["e_biggest", "Start\nDeclare Integer a\nDeclare Integer b\nDeclare Integer c\nDeclare Integer biggest\nInput a\nInput b\nInput c\nbiggest = a\nIf b > biggest Then\n    biggest = b\nEnd If\nIf c > biggest Then\n    biggest = c\nEnd If\nDisplay \"The biggest is\"\nDisplay biggest\nStop"],
-      ["e_menu", "Start\nDeclare Integer choice\nDisplay \"1 add  2 subtract  3 quit\"\nInput choice\nSelect Case choice\n    Case 1\n        Display \"Adding\"\n    Case 2\n        Display \"Subtracting\"\n    Case Else\n        Display \"Goodbye\"\nEnd Select\nStop"],
-      ["e_vowel", "Start\nDeclare String letter\nDisplay \"Enter a letter\"\nInput letter\nSelect Case letter\n    Case \"a\"\n        Display \"vowel\"\n    Case \"e\"\n        Display \"vowel\"\n    Case \"i\"\n        Display \"vowel\"\n    Case \"o\"\n        Display \"vowel\"\n    Case \"u\"\n        Display \"vowel\"\n    Case Else\n        Display \"not a vowel\"\nEnd Select\nStop"],
-      ["e_leap", "Start\nDeclare Integer year\nDisplay \"Which year?\"\nInput year\nIf year mod 400 = 0 Then\n    Display \"leap year\"\nElse If year mod 100 = 0 Then\n    Display \"not a leap year\"\nElse If year mod 4 = 0 Then\n    Display \"leap year\"\nElse\n    Display \"not a leap year\"\nEnd If\nStop"],
-      ["e_keepasking", "Start\nDeclare Integer n\nDo\n    Display \"Enter a number from 1 to 10\"\n    Input n\nUntil n >= 1 And n <= 10\nDisplay \"Thank you\"\nStop"],
-      ["e_backwards", "Start\nDeclare Integer n\nDisplay \"Count back from?\"\nInput n\nFor i = n To 1 Step -1\n    Display i\nEnd For\nDisplay \"Done\"\nStop"],
-      ["e_sumevens", "Start\nDeclare Integer total\ntotal = 0\nFor i = 1 To 20\n    If i mod 2 = 0 Then\n        total = total + i\n    End If\nEnd For\nDisplay \"The evens come to\"\nDisplay total\nStop"],
-      ["e_countdown", "Start\nDeclare Integer n\nn = 10\nWhile n > 0\n    Display n\n    If n = 5 Then\n        Display \"Halfway\"\n    End If\n    n = n - 1\nEnd While\nDisplay \"Liftoff\"\nStop"],
-      ["e_guess", "Start\nDeclare Integer secret\nDeclare Integer guess\nsecret = 7\nDo\n    Display \"Guess my number\"\n    Input guess\n    If guess < secret Then\n        Display \"Higher\"\n    End If\n    If guess > secret Then\n        Display \"Lower\"\n    End If\nUntil guess = secret\nDisplay \"You got it\"\nStop"]
-    ]],
-    ["eg_l3", [
-      ["e_fizz", "Start\nFor i = 1 To 15\n    If i mod 15 = 0 Then\n        Display \"FizzBuzz\"\n    Else If i mod 3 = 0 Then\n        Display \"Fizz\"\n    Else If i mod 5 = 0 Then\n        Display \"Buzz\"\n    Else\n        Display i\n    End If\nEnd For\nStop"],
-      ["e_prime", "Start\nDeclare Integer n\nDeclare Integer factors\nDisplay \"Enter a number\"\nInput n\nfactors = 0\nFor i = 1 To n\n    If n mod i = 0 Then\n        factors = factors + 1\n    End If\nEnd For\nIf factors = 2 Then\n    Display \"prime\"\nElse\n    Display \"not prime\"\nEnd If\nStop"],
-      ["e_gcd", "Start\nDeclare Integer a\nDeclare Integer b\nDisplay \"Two numbers, please\"\nInput a\nInput b\nWhile a <> b\n    If a > b Then\n        a = a - b\n    Else\n        b = b - a\n    End If\nEnd While\nDisplay \"The greatest common factor is\"\nDisplay a\nStop"],
-      ["e_digits", "Start\nDeclare Integer n\nDeclare Integer many\nDisplay \"Enter a whole number\"\nInput n\nmany = 0\nWhile n > 0\n    n = n div 10\n    many = many + 1\nEnd While\nDisplay \"That many digits:\"\nDisplay many\nStop"],
-      ["e_reverse", "Start\nDeclare Integer n\nDeclare Integer back\nDisplay \"Enter a whole number\"\nInput n\nback = 0\nWhile n > 0\n    back = back * 10 + n mod 10\n    n = n div 10\nEnd While\nDisplay \"Backwards that is\"\nDisplay back\nStop"],
-      ["e_fib", "Start\nDeclare Integer a\nDeclare Integer b\nDeclare Integer next\na = 0\nb = 1\nFor i = 1 To 10\n    Display a\n    next = a + b\n    a = b\n    b = next\nEnd For\nStop"],
-      ["e_factorial", "Start\nDeclare Integer n\nDeclare Integer answer\nDisplay \"Enter a number\"\nInput n\nanswer = 1\nFor i = 1 To n\n    answer = answer * i\nEnd For\nDisplay \"The factorial is\"\nDisplay answer\nStop"],
-      ["e_minmax", "Start\nDeclare Integer n\nDeclare Integer lowest\nDeclare Integer highest\nDisplay \"Five numbers, please\"\nInput n\nlowest = n\nhighest = n\nFor i = 2 To 5\n    Input n\n    If n < lowest Then\n        lowest = n\n    End If\n    If n > highest Then\n        highest = n\n    End If\nEnd For\nDisplay \"Lowest\"\nDisplay lowest\nDisplay \"Highest\"\nDisplay highest\nStop"],
-      ["e_grid", "Start\nFor row = 1 To 5\n    For col = 1 To 5\n        Display row * col\n    End For\nEnd For\nStop"],
-      ["e_stars", "Start\nDeclare String line\nDeclare Integer n\nDisplay \"How many rows?\"\nInput n\nFor row = 1 To n\n    line = \"\"\n    For col = 1 To row\n        line = line + \"*\"\n    End For\n    Display line\nEnd For\nStop"]
-    ]],
-    ["eg_l4", [
-      ["e_area", "Start\nDeclare Integer width\nDeclare Integer height\nDisplay \"How wide?\"\nInput width\nDisplay \"How tall?\"\nInput height\nDisplay \"The area is\"\nDisplay width * height\nStop"],
-      ["e_change", "Start\nDeclare Integer cents\nDisplay \"How many cents?\"\nInput cents\nDisplay \"Dollars\"\nDisplay cents div 100\ncents = cents mod 100\nDisplay \"Dimes\"\nDisplay cents div 10\nDisplay \"Pennies\"\nDisplay cents mod 10\nStop"],
-      ["e_temps", "Start\nDeclare String fromScale\nDeclare String toScale\nDeclare Real degrees\nDeclare Real celsius\nDeclare Real result\nDeclare String again\nDo\n    fromScale = askScale(\"Convert from C, F or K?\")\n    toScale = askScale(\"Convert to C, F or K?\")\n    Display \"The temperature?\"\n    Input degrees\n    celsius = toCelsius(degrees, fromScale)\n    result = round(fromCelsius(celsius, toScale) * 100) / 100\n    Display degrees, \" \", fromScale, \" is \", result, \" \", toScale\n    Display \"Another one? y or n\"\n    Input again\nUntil toupper(again) <> \"Y\"\nStop\n\nFunction askScale(question)\n    Declare String scale\n    Display question\n    Input scale\n    scale = toupper(scale)\n    While scale <> \"C\" And scale <> \"F\" And scale <> \"K\"\n        Display \"Please type C, F or K\"\n        Input scale\n        scale = toupper(scale)\n    End While\n    Return scale\nEnd Function\n\nFunction toCelsius(deg, scale)\n    If scale = \"F\" Then\n        Return (deg - 32) * 5 / 9\n    Else If scale = \"K\" Then\n        Return deg - 273.15\n    Else\n        Return deg\n    End If\nEnd Function\n\nFunction fromCelsius(deg, scale)\n    If scale = \"F\" Then\n        Return deg * 9 / 5 + 32\n    Else If scale = \"K\" Then\n        Return deg + 273.15\n    Else\n        Return deg\n    End If\nEnd Function"],
-      ["e_shop", "Start\nDeclare Integer many\nDeclare Real price\nDeclare Real total\nDisplay \"How many?\"\nInput many\nDisplay \"Price each?\"\nInput price\ntotal = many * price\nIf total > 50 Then\n    total = total * 0.9\n    Display \"Ten percent off\"\nEnd If\nDisplay \"Amount due: $\", total\nStop"],
-      ["e_report", "Start\nDeclare Integer score\nDeclare Integer total\nDeclare Integer passes\nDeclare Integer best\ntotal = 0\npasses = 0\nbest = 0\nFor i = 1 To 5\n    Display \"Enter a score\"\n    Input score\n    total = total + score\n    If score >= 60 Then\n        passes = passes + 1\n    End If\n    If score > best Then\n        best = score\n    End If\nEnd For\nDisplay \"Passes\"\nDisplay passes\nDisplay \"Average\"\nDisplay total / 5\nDisplay \"Best\"\nDisplay best\nStop"],
-      ["e_votes", "Start\nDeclare String vote\nDeclare Integer reds\nDeclare Integer blues\nreds = 0\nblues = 0\nFor i = 1 To 5\n    Display \"red or blue?\"\n    Input vote\n    If vote = \"red\" Then\n        reds = reds + 1\n    Else\n        blues = blues + 1\n    End If\nEnd For\nDisplay \"Red\"\nDisplay reds\nDisplay \"Blue\"\nDisplay blues\nIf reds > blues Then\n    Display \"Red wins\"\nElse If blues > reds Then\n    Display \"Blue wins\"\nElse\n    Display \"A tie\"\nEnd If\nStop"],
-      ["e_quiz", "Start\nDeclare Integer score\nscore = 0\nscore = score + asked(\"2 plus 2?\", 4)\nscore = score + asked(\"5 times 3?\", 15)\nscore = score + asked(\"10 minus 7?\", 3)\nDisplay \"You scored\"\nDisplay score\nStop\n\nFunction asked(question, answer)\n    Declare Integer said\n    Display question\n    Input said\n    If said = answer Then\n        Display \"Right\"\n        Return 1\n    Else\n        Display \"Wrong\"\n        Return 0\n    End If\nEnd Function"],
-      ["e_login", "Start\nDeclare String word\nDeclare Integer tries\ntries = 0\nDo\n    Display \"Password?\"\n    Input word\n    tries = tries + 1\nUntil word = \"open\" Or tries = 3\nCall verdict(word)\nStop\n\nModule verdict(said)\n    If said = \"open\" Then\n        Display \"Welcome in\"\n    Else\n        Display \"Locked out\"\n    End If\nEnd Module"],
-      ["e_sentinel", "Start\nDeclare Integer n\nDeclare Integer total\nDeclare Integer many\ntotal = 0\nmany = 0\nDisplay \"Numbers, please. 0 to finish.\"\nInput n\nWhile n <> 0\n    total = total + n\n    many = many + 1\n    Input n\nEnd While\nIf many > 0 Then\n    Display \"The average is\"\n    Display total / many\nElse\n    Display \"Nothing to average\"\nEnd If\nStop"],
-      ["e_picktable", "Start\nDeclare Integer n\nDisplay \"Which table? 0 to stop.\"\nInput n\nWhile n > 0\n    For i = 1 To 12\n        Display n * i\n    End For\n    Display \"Which table? 0 to stop.\"\n    Input n\nEnd While\nDisplay \"Bye\"\nStop"]
-    ]],
-    ["eg_l5", [
-      ["e_bank", "Start\nDeclare Real balance\nDeclare Integer choice\nbalance = 0\nDo\n    Display \"1 deposit  2 withdraw  3 balance  4 quit\"\n    Input choice\n    Select Case choice\n        Case 1\n            Call deposit(balance)\n        Case 2\n            Call withdraw(balance)\n        Case 3\n            Display \"Your balance is $\", balance\n        Case 4\n            Display \"Goodbye\"\n        Case Else\n            Display \"Pick 1, 2, 3 or 4\"\n    End Select\nUntil choice = 4\nStop\n\nModule deposit(Real Ref money)\n    Declare Real amount\n    Display \"How much to deposit?\"\n    Input amount\n    If amount <= 0 Then\n        Display \"A deposit has to be more than zero\"\n    Else\n        money = money + amount\n        Display \"Deposited $\", amount\n    End If\nEnd Module\n\nModule withdraw(Real Ref money)\n    Declare Real amount\n    Display \"How much to withdraw?\"\n    Input amount\n    If amount <= 0 Then\n        Display \"A withdrawal has to be more than zero\"\n    Else If amount > money Then\n        Display \"Not enough money. You have $\", money\n    Else\n        money = money - amount\n        Display \"Withdrew $\", amount\n    End If\nEnd Module"],
-      ["e_gradebook", "Start\nDeclare Integer students\nDeclare Integer score\nDeclare Integer total\nDeclare Integer highest\nDeclare Integer lowest\nDeclare Integer passed\nDeclare String grade\ntotal = 0\npassed = 0\nhighest = 0\nlowest = 100\nDisplay \"How many students?\"\nInput students\nWhile students < 1\n    Display \"There has to be at least one student\"\n    Input students\nEnd While\nFor i = 1 To students\n    Display \"Score for student \", i\n    Input score\n    While score < 0 Or score > 100\n        Display \"A score is from 0 to 100. Try again\"\n        Input score\n    End While\n    grade = letterGrade(score)\n    Display \"That is a grade of \", grade\n    total = total + score\n    If grade <> \"F\" Then\n        passed = passed + 1\n    End If\n    If score > highest Then\n        highest = score\n    End If\n    If score < lowest Then\n        lowest = score\n    End If\nEnd For\nDisplay \"Class average: \", total / students\nDisplay \"Highest score: \", highest\nDisplay \"Lowest score: \", lowest\nDisplay \"Students who passed: \", passed\nStop\n\nFunction String letterGrade(Integer points)\n    If points >= 90 Then\n        Return \"A\"\n    Else If points >= 80 Then\n        Return \"B\"\n    Else If points >= 70 Then\n        Return \"C\"\n    Else If points >= 60 Then\n        Return \"D\"\n    Else\n        Return \"F\"\n    End If\nEnd Function"],
-      ["e_paycheck", "Start\nConstant Real TAX_RATE = 0.15\nDeclare String name\nDeclare Real hours\nDeclare Real rate\nDeclare Real gross\nDeclare Real tax\nDeclare Integer paid\npaid = 0\nDisplay \"Employee name? Type done to finish\"\nInput name\nWhile name <> \"done\"\n    Display \"Hours worked this week?\"\n    Input hours\n    Display \"Hourly pay rate?\"\n    Input rate\n    gross = grossPay(hours, rate)\n    tax = gross * TAX_RATE\n    Display name, \" earned $\", gross\n    Display \"Taxes withheld: $\", tax\n    Display \"Take-home pay: $\", gross - tax\n    paid = paid + 1\n    Display \"Employee name? Type done to finish\"\n    Input name\nEnd While\nDisplay \"Paychecks written: \", paid\nStop\n\nFunction Real grossPay(Real worked, Real hourly)\n    Declare Real overtime\n    If worked <= 40 Then\n        Return worked * hourly\n    Else\n        overtime = worked - 40\n        Return 40 * hourly + overtime * hourly * 1.5\n    End If\nEnd Function"],
-      ["e_convert", "Start\nDeclare Integer choice\nDeclare Real amount\nDo\n    Display \"1 miles to kilometers\"\n    Display \"2 pounds to kilograms\"\n    Display \"3 Fahrenheit to Celsius\"\n    Display \"4 inches to centimeters\"\n    Display \"5 quit\"\n    Input choice\n    If choice >= 1 And choice <= 4 Then\n        Display \"How many?\"\n        Input amount\n        Call convert(choice, amount)\n    Else If choice <> 5 Then\n        Display \"Pick a number from 1 to 5\"\n    End If\nUntil choice = 5\nDisplay \"Goodbye\"\nStop\n\nModule convert(Integer which, Real amount)\n    Select Case which\n        Case 1\n            Display amount, \" miles is \", amount * 1.609, \" kilometers\"\n        Case 2\n            Display amount, \" pounds is \", amount * 0.4536, \" kilograms\"\n        Case 3\n            Display amount, \" F is \", (amount - 32) * 5 / 9, \" C\"\n        Case Else\n            Display amount, \" inches is \", amount * 2.54, \" centimeters\"\n    End Select\nEnd Module"],
-      ["e_splitcheck", "Start\nDeclare Real bill\nDeclare Real percent\nDeclare Integer people\nDeclare Real tip\nDisplay \"How much is the check?\"\nInput bill\nWhile bill <= 0\n    Display \"The check has to be more than zero\"\n    Input bill\nEnd While\nDisplay \"What percent tip? 15, 18 or 20 is usual\"\nInput percent\nWhile percent < 0 Or percent > 100\n    Display \"Pick a percent from 0 to 100\"\n    Input percent\nEnd While\nDisplay \"How many people are splitting it?\"\nInput people\nWhile people < 1\n    Display \"At least one person has to pay\"\n    Input people\nEnd While\ntip = bill * percent / 100\nCall receipt(bill, tip, people)\nStop\n\nModule receipt(Real food, Real extra, Integer many)\n    Declare Real total\n    total = food + extra\n    Display \"Food and drinks: $\", food\n    Display \"Tip: $\", extra\n    Display \"Total: $\", total\n    If many = 1 Then\n        Display \"You pay it all: $\", total\n    Else\n        Display \"Each of the \", many, \" people pays $\", total / many\n    End If\nEnd Module"],
-      ["e_vending", "Start\nDeclare Integer price\nDeclare Integer paid\nDeclare Integer coin\nDisplay \"What does the snack cost, in cents?\"\nInput price\nWhile price <= 0 Or price mod 5 <> 0\n    Display \"Prices here go up in steps of 5 cents\"\n    Input price\nEnd While\npaid = 0\nWhile paid < price\n    Display \"Still owed: \", price - paid, \" cents. Put in 5, 10 or 25\"\n    Input coin\n    Select Case coin\n        Case 5\n            paid = paid + coin\n        Case 10\n            paid = paid + coin\n        Case 25\n            paid = paid + coin\n        Case Else\n            Display \"This machine only takes nickels, dimes and quarters\"\n    End Select\nEnd While\nDisplay \"Enjoy your snack\"\nIf paid > price Then\n    Call giveChange(paid - price)\nEnd If\nStop\n\nModule giveChange(Integer cents)\n    Display \"Your change is \", cents, \" cents\"\n    Display \"Quarters: \", cents div 25\n    cents = cents mod 25\n    Display \"Dimes: \", cents div 10\n    cents = cents mod 10\n    Display \"Nickels: \", cents div 5\nEnd Module"],
-      ["e_primelist", "Start\nDeclare Integer limit\nDeclare Integer found\nDeclare Integer total\nDisplay \"Find the primes up to what number?\"\nInput limit\nWhile limit < 2\n    Display \"Pick a number that is 2 or more\"\n    Input limit\nEnd While\nfound = 0\ntotal = 0\nFor n = 2 To limit\n    If isPrime(n) Then\n        Display n\n        found = found + 1\n        total = total + n\n    End If\nEnd For\nDisplay \"Primes found: \", found\nDisplay \"They add up to \", total\nStop\n\nFunction Boolean isPrime(Integer number)\n    Declare Integer d\n    d = 2\n    While d * d <= number\n        If number mod d = 0 Then\n            Return False\n        End If\n        d = d + 1\n    End While\n    Return True\nEnd Function"],
-      ["e_weekday", "Start\nDeclare Integer year\nDeclare Integer month\nDeclare Integer day\nDisplay \"Year?\"\nInput year\nDisplay \"Month, from 1 to 12?\"\nInput month\nWhile month < 1 Or month > 12\n    Display \"A month is from 1 to 12\"\n    Input month\nEnd While\nDisplay \"Day of the month?\"\nInput day\nWhile day < 1 Or day > daysIn(month, year)\n    Display \"That month has \", daysIn(month, year), \" days\"\n    Input day\nEnd While\nDisplay month, \"/\", day, \"/\", year, \" is a \", dayName(weekday(year, month, day))\nStop\n\nFunction Integer daysIn(Integer m, Integer y)\n    Select Case m\n        Case 2\n            If isLeap(y) Then\n                Return 29\n            Else\n                Return 28\n            End If\n        Case 4\n            Return 30\n        Case 6\n            Return 30\n        Case 9\n            Return 30\n        Case 11\n            Return 30\n        Case Else\n            Return 31\n    End Select\nEnd Function\n\nFunction Boolean isLeap(Integer y)\n    Return (y mod 4 = 0 And y mod 100 <> 0) Or y mod 400 = 0\nEnd Function\n\nFunction Integer weekday(Integer y, Integer m, Integer d)\n    Declare Integer k\n    Declare Integer j\n    If m < 3 Then\n        m = m + 12\n        y = y - 1\n    End If\n    k = y mod 100\n    j = y div 100\n    Return (d + 13 * (m + 1) div 5 + k + k div 4 + j div 4 + 5 * j) mod 7\nEnd Function\n\nFunction String dayName(Integer h)\n    Select Case h\n        Case 0\n            Return \"Saturday\"\n        Case 1\n            Return \"Sunday\"\n        Case 2\n            Return \"Monday\"\n        Case 3\n            Return \"Tuesday\"\n        Case 4\n            Return \"Wednesday\"\n        Case 5\n            Return \"Thursday\"\n        Case Else\n            Return \"Friday\"\n    End Select\nEnd Function"],
-      ["e_loan", "Start\nDeclare Real balance\nDeclare Real rate\nDeclare Real payment\nDeclare Real interest\nDeclare Real paidInterest\nDeclare Integer months\nDisplay \"How much is the loan?\"\nInput balance\nDisplay \"Yearly interest rate, as a percent?\"\nInput rate\nDisplay \"Monthly payment?\"\nInput payment\ninterest = balance * rate / 100 / 12\nIf payment <= interest Then\n    Display \"That never pays it off. Pay more than $\", interest\nElse\n    months = 0\n    paidInterest = 0\n    While balance > 0\n        interest = balance * rate / 100 / 12\n        paidInterest = paidInterest + interest\n        balance = balance + interest - payment\n        months = months + 1\n        If months mod 12 = 0 And balance > 0 Then\n            Display \"After year \", months div 12, \" you still owe $\", balance\n        End If\n    End While\n    Display \"Paid off in \", months, \" months\"\n    Display \"The last payment is only $\", payment + balance\n    Display \"Interest paid in all: $\", paidInterest\nEnd If\nStop"],
-      ["e_rps", "Start\nDeclare Integer player\nDeclare Integer computer\nDeclare Integer result\nDeclare Integer wins\nDeclare Integer losses\nwins = 0\nlosses = 0\nFor game = 1 To 5\n    Display \"Game \", game, \": 1 rock, 2 paper, 3 scissors\"\n    Input player\n    While player < 1 Or player > 3\n        Display \"Pick 1, 2 or 3\"\n        Input player\n    End While\n    computer = random(1, 3)\n    Display \"You: \", nameOf(player), \"   Computer: \", nameOf(computer)\n    result = winner(player, computer)\n    If result = 1 Then\n        Display \"You win this one\"\n        wins = wins + 1\n    Else If result = 2 Then\n        Display \"The computer wins this one\"\n        losses = losses + 1\n    Else\n        Display \"A tie\"\n    End If\nEnd For\nDisplay \"You won \", wins, \" and lost \", losses\nIf wins > losses Then\n    Display \"You beat the computer!\"\nElse If losses > wins Then\n    Display \"The computer beat you\"\nElse\n    Display \"It is a tie overall\"\nEnd If\nStop\n\nFunction String nameOf(Integer pick)\n    Select Case pick\n        Case 1\n            Return \"rock\"\n        Case 2\n            Return \"paper\"\n        Case Else\n            Return \"scissors\"\n    End Select\nEnd Function\n\nFunction Integer winner(Integer a, Integer b)\n    If a = b Then\n        Return 0\n    Else If (a - b + 3) mod 3 = 1 Then\n        Return 1\n    Else\n        Return 2\n    End If\nEnd Function"]
-    ]]
+    ["eg_l1", ["e_ask", "e_add", "e_swap", "e_decide", "e_oddeven",
+               "e_count", "e_while", "e_total", "e_module", "e_answers"]],
+    ["eg_l2", ["e_grades", "e_biggest", "e_menu", "e_vowel", "e_leap",
+               "e_keepasking", "e_backwards", "e_sumevens", "e_countdown",
+               "e_guess"]],
+    ["eg_l3", ["e_fizz", "e_prime", "e_gcd", "e_digits", "e_reverse",
+               "e_fib", "e_factorial", "e_minmax", "e_grid", "e_stars"]],
+    ["eg_l4", ["e_area", "e_change", "e_temps", "e_shop", "e_report",
+               "e_votes", "e_quiz", "e_login", "e_sentinel", "e_picktable"]],
+    ["eg_l5", ["e_bank", "e_gradebook", "e_paycheck", "e_convert",
+               "e_splitcheck", "e_vending", "e_primelist", "e_weekday",
+               "e_loan", "e_rps"]]
   ];
+
+  // One of them, in the language the page is in.
+  function programOf(key) { return TXT[key + "_p"] || ""; }
 
   // ---------------------------------------------------- what it is called --
   // A new program in the box names itself in the Title box, so a chart is
@@ -891,19 +851,35 @@
     return from.text || "";
   }
 
+  // Which example or puzzle a program is, word for word, as any language
+  // the page carries writes it out -- so one opened in German is still
+  // that example with the page in French.  The key it goes by (e_ask,
+  // z_else) and the puzzle itself, where it is one; or nothing.
+  function shippedAs(code) {
+    if (!code) { return null; }
+    function is(key) {
+      for (var lang in ALL) { if (ALL[lang][key + "_p"] === code) { return true; } }
+      return false;
+    }
+    var found = null;
+    STARTS.forEach(function (level) {
+      level[1].forEach(function (key) { if (!found && is(key)) { found = { key: key }; } });
+    });
+    if (!found && typeof PUZZLES !== "undefined") {
+      PUZZLES.forEach(function (level) {
+        level[1].forEach(function (one) {
+          if (!found && is(one.key)) { found = { key: one.key, puzzle: one }; }
+        });
+      });
+    }
+    return found;
+  }
+
   // The words themselves, when nothing says where they came from.
   function titleFromWords(code) {
-    var eg = null;
-    STARTS.forEach(function (level) {
-      level[1].forEach(function (pair) { if (pair[1] === code) { eg = pair[0]; } });
-    });
-    if (eg) { return { key: eg }; }
-    if (typeof PUZZLES !== "undefined") {
-      var pz = null;
-      PUZZLES.forEach(function (level) {
-        level[1].forEach(function (one) { if (one.start === code) { pz = one.no; } });
-      });
-      if (pz) { return { puzzle: pz }; }
+    var shipped = shippedAs(code);
+    if (shipped) {
+      return shipped.puzzle ? { puzzle: shipped.puzzle.no } : { key: shipped.key };
     }
     // Otherwise the name it gives itself, however it gives it (// Program:
     // Paint Job Estimator, Display "*** Ocean Levels ***"); then what its
@@ -977,12 +953,12 @@
     el("#build").click();
   }
 
-  function startButton(name, code, i) {
+  function startButton(name, i) {
     var b = document.createElement("button");
     b.className = "btn small";
     b.textContent = TXT[name] || name;
     b.style.setProperty("--i", i);       // so they arrive one after another
-    b.onclick = function () { startFrom(code, name); };
+    b.onclick = function () { startFrom(programOf(name), name); };
     return b;
   }
 
@@ -1021,8 +997,8 @@
       part.innerHTML = "<h3>" + (TXT[level[0]] || level[0]) + "</h3>";
       var list = document.createElement("div");
       list.className = "eg-row";
-      level[1].forEach(function (pair, i) {
-        list.appendChild(startButton(pair[0], pair[1], i));
+      level[1].forEach(function (key, i) {
+        list.appendChild(startButton(key, i));
       });
       part.appendChild(list);
       body.appendChild(part);
@@ -1222,12 +1198,18 @@
   var tongue = el("#f-lang");
   if (tongue) {
     tongue.onchange = function () {
+      // An example or a puzzle still exactly as it arrived goes over into
+      // the new language along with everything else.  One that has been
+      // typed at is somebody's own work now, and stays as they wrote it.
+      var shipped = el("#code") ? shippedAs(el("#code").value) : null;
       LANG = tongue.value;
       if (ALL[LANG]) {                   // the page can change its own words
         TXT = ALL[LANG];
+        if (shipped && programOf(shipped.key)) { el("#code").value = programOf(shipped.key); }
         dress();
         buildPresets(); buildGlobals(); buildKinds(); drawSelection(); sizeList();
         buildStarts();
+        if (typeof dressPuzzle === "function") { dressPuzzle(); }
         if (el("#code").value.trim()) { el("#build").click(); }
       } else {
         location.search = "?lang=" + LANG;

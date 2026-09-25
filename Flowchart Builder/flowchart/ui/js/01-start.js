@@ -154,6 +154,14 @@
     all("#theme-seg .seg-btn").forEach(function (b) {
       b.classList.toggle("on", b.dataset.theme === theme);
     });
+    // Whatever the browser draws around the page -- a phone's address bar,
+    // the title bar of the website installed as an app -- in the color of
+    // our own bar, so light is light and dark is dark all the way up.
+    var tint = el('meta[name="theme-color"]');
+    if (tint) {
+      tint.content = getComputedStyle(document.documentElement)
+        .getPropertyValue("--panel").trim() || tint.content;
+    }
     try { localStorage.setItem("flowchart-theme", theme); } catch (e) { /* fine */ }
   }
 

@@ -73,13 +73,8 @@
                text: [120, 34], actor: [110, 96], callout: [180, 76],
                cube: [176, 68], step: [190, 58], table: [180, 76] };
 
-  // Where the words sit in a shape, as a share of its height.  Most shapes
-  // are happy with their middle; some have something in the way of it -- the
-  // lip on a drum, the point on an off-page marker, the wave at the foot of
-  // a page -- so the words step aside rather than sit across it.
-  var WORD_SHIFT = { store: 0.09, stored: 0.07, offpage: -0.12, doc: -0.06,
-                     docs: -0.05, manual: 0.07, card: 0.06, note: 0.04,
-                     actor: 0.34, callout: -0.1, cube: 0.06, table: 0.14 };
+  // Where the words sit in a shape is the shape's to say: wordsAt, and
+  // wordsArt for a table, in 03-shapes.js.
 
   var HAND_TYPE = 12.5;                  // the words on a shape
   var HAND_LINE = 15;                    // and the step from line to line
@@ -100,11 +95,6 @@
   var DOT_KNOB = COARSE ? 8 : 5.5;
   var DOT_SPOT = COARSE ? 9 : 6.5;
 
-  function handKinds() {                 // the whole catalog, by name
-    return SHAPE_LIST.map(function (kind) {
-      return [kind, TXT["n_" + kind] || kind];
-    });
-  }
   function kindName(kind) {
     return TXT["n_" + kind] || TXT["key_" + kind] || kind;
   }
@@ -143,21 +133,23 @@
                               .getContext("2d"));
     var type = handType(node);
     pen.font = type.font;
-    var wide = 0;
-    lines.forEach(function (line) { wide = Math.max(wide, pen.measureText(line).width); });
+    // As big as the words need where this shape puts them: under a person,
+    // along an arrow's shaft, in a table's head and cells (wordsNeed).
+    var need = wordsNeed(node.kind, lines, type.line, function (line) {
+      return pen.measureText(line).width;
+    });
     var room = ROOM[node.kind] || ROOM.rect;
     var STEP = HAND_GRID * 2;          // so half of it is a whole quarter
-    node.w = Math.max(room[0], Math.round(wide) + (node.kind === "diamond" ? 84 : 40));
-    node.h = Math.max(room[1], lines.length * type.line +
-                               (node.kind === "diamond" ? 38 : 24));
+    node.w = Math.max(room[0], Math.round(need.w));
+    node.h = Math.max(room[1], need.h);
     node.w = Math.ceil(node.w / STEP) * STEP;
     node.h = Math.ceil(node.h / STEP) * STEP;
     if (node.kind === "circle") { node.w = node.h = Math.max(node.w, node.h); }
     node.own = false;
   }
 
-  function shapeSvg(n) {                 // full size, on the paper
-    return shapeArt(n.kind, n.x, n.y, n.w, n.h, "#ffffff");
+  function shapeSvg(n, words, line) {    // full size, on the paper
+    return shapeArt(n.kind, n.x, n.y, n.w, n.h, "#ffffff", words, line);
   }
 
   // --------------------------------------------------------- joining two up --
@@ -211,8 +203,8 @@
         foot = b - Math.min(5, h * 0.12) * 0.4; break;
       case "screen":
         left = l + Math.min(16, w * 0.16) / 4; break;
-      case "arrow":
-        top = t + h * 0.26; foot = b - h * 0.26; break;
+      case "arrow":                     // the shaft, not the box
+        top = t + arrowParts(w, h).wing; foot = b - arrowParts(w, h).wing; break;
       case "step":                      // the point and the notch are the sides
         left = l + Math.min(22, w * 0.16); right = r - Math.min(22, w * 0.16);
         break;
@@ -221,8 +213,16 @@
         left = l; foot = b; break;
       case "callout":
         foot = b - Math.min(16, h * 0.28); break;
-      case "actor":                     // the head is all there is up top
+      case "actor": {                   // the head up top, the hands either side
+        // At the box's sides, halfway down, there is nothing: a line from
+        // there started in mid-air beside the person.
+        var fig = figureH(h, nameRoom(String(node.text || "").split("\n"),
+                                      handType(node).line));
+        var arm = Math.min(fig * 0.34, w * 0.45);
+        left = x - arm; right = x + arm;
+        y = t + Math.min(fig * 0.17, w * 0.17) * 2 + fig * 0.12;
         break;
+      }
       case "offpage":
         break;                          // the point is at the middle anyway
       case "cloud":
@@ -1111,7 +1111,9 @@
                (FACES[L.face] || FACES.sans);
     var out = [], x = 0;
     used.forEach(function (kind) {
-      out.push(shapeArt(kind, x + KEY_W / 2, KEY_H / 2, KEY_W, KEY_H, "#ffffff"));
+      out.push('<g class="key-shape" data-kind="' + kind + '">' +     // paint()
+               shapeArt(kind, x + KEY_W / 2, KEY_H / 2, KEY_W, KEY_H, "#ffffff") +
+               "</g>");
       x += KEY_W + KEY_GAP;
       var name = kindName(kind);
       out.push('<text class="label" x="' + x + '" y="' + (KEY_H / 2 + 4) +
@@ -1476,19 +1478,14 @@
                '" data-kind="' + n.kind + '" data-i="h' + n.id + '"' +
                (n.turn ? ' transform="rotate(' + n.turn + " " + moved.x + " " +
                          moved.y + ')"' : "") + ">");
-      out.push(shapeSvg(moved));
       var lines = String(n.text || "").split("\n");
-      // The baseline sits below the middle by about a third of the type,
+      var type = handType(n);
+      out.push(shapeSvg(moved, lines, type.line));
+      // Where this shape holds its words (wordsArt, 03-shapes.js), the
+      // baseline below each line's middle by about a third of the type,
       // which is what puts the body of the letters on the middle line
       // instead of hanging them off it.
-      var mid = moved.y + (WORD_SHIFT[n.kind] || 0) * n.h;
-      var type = handType(n);
-      var y0 = mid - (lines.length - 1) * type.line / 2 + type.size * 0.35;
-      lines.forEach(function (line, k) {
-        out.push('<text x="' + moved.x + '" y="' + (y0 + k * type.line).toFixed(1) +
-                 '" text-anchor="middle" stroke="none" fill="#000000">' +
-                 escaped(line) + "</text>");
-      });
+      out.push.apply(out, wordsArt(n.kind, moved.x, moved.y, n.w, n.h, lines, type));
       out.push("</g>");
       if (joining && picked && n.id !== picked) {
         // Somewhere to aim for.  Once a line is being drawn, every other

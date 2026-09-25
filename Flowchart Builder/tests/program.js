@@ -258,8 +258,10 @@ function wanted(one) {                   // what run.py said it should print
       var each = pz.tries[t], where = pz.name + " try " + (t + 1);
 
       // The mend has to answer for every set of answers, not just one.
+      // A puzzle handed over without one -- the same puzzle in another
+      // language, say -- is only asked whether it is broken.
       var mended = null;
-      try { mended = await go.quietly(pz.fixed, each.give.slice()); }
+      try { mended = pz.fixed ? await go.quietly(pz.fixed, each.give.slice()) : null; }
       catch (blew) {
         bad.push(where + ": the mend threw -- " + (blew && blew.message || blew));
       }

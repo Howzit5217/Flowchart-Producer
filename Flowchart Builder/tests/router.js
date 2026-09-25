@@ -15,6 +15,20 @@ if (from < 0 || to < 0) {
   process.exit(1);
 }
 var hand = { nodes: [] };
+// And what the router asks of the shapes themselves: where an arrow's shaft
+// is, and where a person's hands are (03-shapes.js), in words the size a
+// shape's words are drawn.
+var parts = fs.readFileSync(path.join(__dirname, "..", "flowchart", "ui", "js",
+                                      "03-shapes.js"), "utf8");
+var partsFrom = parts.indexOf("// ------------------------------------------" +
+                              "--- shapes with parts to them --");
+var partsTo = parts.indexOf("function keyMark(");
+if (partsFrom < 0 || partsTo < 0) {
+  console.error("could not find the shapes' parts in 03-shapes.js");
+  process.exit(1);
+}
+eval(parts.slice(partsFrom, partsTo));        // eslint-disable-line no-eval
+function handType() { return { size: 12.5, line: 15 }; }
 eval(src.slice(from, to));                    // eslint-disable-line no-eval
 
 var KINDS = ["rect", "roundrect", "oval", "io", "io_back", "diamond", "hex",
@@ -30,14 +44,14 @@ var bad = [];
 (function () {
   var want = { below: "bottom", above: "top", right: "right", left: "left" };
   var spots = { below: [0, 190], above: [0, -190], right: [300, 0], left: [-300, 0] };
+  // Which of its own sides the line left from, asked of the shape rather
+  // than guessed from the box round it: a person's sides are its hands,
+  // well inside the box, which is the only place there is anything to meet.
   function sideOf(n, p) {
-    var t = turned(n);
-    var l = t.x - t.w / 2, r = t.x + t.w / 2;
-    var top = t.y - t.h / 2, b = t.y + t.h / 2;
-    if (Math.abs(p[1] - top) < t.h * 0.3 && Math.abs(p[0] - t.x) < 1) return "top";
-    if (Math.abs(p[1] - b) < t.h * 0.3 && Math.abs(p[0] - t.x) < 1) return "bottom";
-    if (Math.abs(p[0] - l) < t.w * 0.25) return "left";
-    if (Math.abs(p[0] - r) < t.w * 0.25) return "right";
+    var names = ["top", "bottom", "left", "right"];
+    for (var side = 0; side < 4; side++) {
+      if (onSideAt(n, side, p)) return names[side];
+    }
     return "?";
   }
   var wrong = 0;
@@ -71,8 +85,11 @@ function throughAny(pts, a, b) {
 // arrow may meet: the middle, or along it as far as spreadRoom allows (a
 // straight line across to a shape set to one side meets it off the middle).
 function onSideAt(n, side, p) {
-  var t = turned(n), room = Math.max(0, spreadRoom(n, side));
-  var off = side < 2 ? p[0] - t.x : p[1] - t.y;
+  // Along the side from its own dot, as portAlong measures it -- which is
+  // the middle of the side on every shape but a person, whose sides are
+  // its hands.
+  var mid = ports(n)[side], room = Math.max(0, spreadRoom(n, side));
+  var off = side < 2 ? p[0] - mid.x : p[1] - mid.y;
   if (Math.abs(off) > room + 0.6) return false;
   var q = portAlong(n, side, off);
   return Math.abs(q.x - p[0]) < 0.6 && Math.abs(q.y - p[1]) < 0.6;

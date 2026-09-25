@@ -60,13 +60,16 @@
   // Exactly where the words were, which is where drawHand puts them: the
   // shape's middle on the paper -- moved over by however far the paper
   // reaches past the design, to the left or up above it for the Key -- and
-  // stepped up or down for a shape with something in the way of its middle.
-  // The space was put at the design's own middle, so with the Key showing,
-  // or a shape out past the left edge, it opened off to one side of the
-  // words it was meant to be holding.
+  // moved to wherever the shape holds its words (wordsAt): under a person,
+  // along an arrow, clear of a lip or a tail.  The space was put at the
+  // design's own middle, so with the Key showing, or a shape out past the
+  // left edge, it opened off to one side of the words it was meant to be
+  // holding.  A table is typed into as plain lines across the middle of it,
+  // its rules put away until the lines are set out in its head and cells.
   function wordsMiddle(node) {
-    return { x: node.x + handOrigin.x,
-             y: node.y + handOrigin.y + (WORD_SHIFT[node.kind] || 0) * node.h };
+    var at = wordsAt(node.kind, node.x, node.y, node.w, node.h,
+                     String(node.text || "").split("\n"), handType(node).line);
+    return { x: at.x + handOrigin.x, y: at.y + handOrigin.y };
   }
 
   // Words only, where the browser can be asked for that: a new line is a
@@ -234,7 +237,7 @@
     space.setAttribute("enterkeyhint", "done");      // what Enter does here
     space.textContent = node.text || "";
     var ink = (style.nodes["h" + node.id] || {}).text ||
-              (style.kinds[node.kind] || {}).text || style.words || style.ink || "#000000";
+              kindColors(node.kind).text || style.words || style.ink || "#000000";
     space.style.color = ink;
     // Typed in the words it will be drawn in, so that what is typed is the
     // size and the shape it will be when the box is let go of -- not the
@@ -253,7 +256,8 @@
 
     // The words step aside for the box, and so does a highlighter across
     // them, which would otherwise be left marking words that are not there.
-    all("text, .highlights", g).forEach(function (t) { t.style.display = "none"; });
+    all("text, .highlights" + (node.kind === "table" ? ", .trim" : ""), g)
+      .forEach(function (t) { t.style.display = "none"; });
     g.appendChild(slot);
 
     // While it is being typed into, the shape is the typing's: a press on

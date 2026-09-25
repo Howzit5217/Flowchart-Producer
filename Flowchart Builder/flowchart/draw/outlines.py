@@ -1,14 +1,77 @@
-"""Each shape's outline."""
+"""Each shape's outline, and where the words go inside it."""
 from .. import settings
+from ..shapes import ACTOR_FIG, arrow_parts, figure_h, table_plan
 
 
-def shape_art(kind, cx, cy, w, h, paint):
+def name_room(lines, tall):
+    """How much of a person's box the name under them takes."""
+    return len(lines) * tall + 2 * settings.PAD_Y if lines else 0.0
+
+
+def words_at(kind, cx, cy, w, h, lines=(), tall=0.0):
+    """Where the middle of a shape's words goes.
+
+    Most shapes are happy with their middle.  Some have something in the
+    way of it, and the words step aside rather than sit across it: the lip
+    on a drum, the point on an off-page marker, the wave at the foot of a
+    page, the slope on a typed-in step, the tail of a speech bubble, the
+    side of a cube and the ruled corner of internal storage.  A person's
+    name goes under them, and an arrow's words along its shaft.  The
+    numbers are the ones shape_art draws with, below.
+    """
+    dx = dy = 0.0
+    if kind == "store":                     # under the lip
+        dy = min(11.0, h * 0.24) / 2.0
+    elif kind == "offpage":                 # above the point
+        dy = -min(18.0, h * 0.42) / 2.0
+    elif kind == "doc":                     # above the wave
+        dy = -min(10.0, h * 0.18) * 0.6
+    elif kind == "docs":                    # on the front page
+        step = min(5.0, h * 0.12)
+        return words_at("doc", cx - step, cy + step, w - 2 * step, h - 2 * step)
+    elif kind == "manual":                  # under the slope
+        dy = min(11.0, h * 0.28) * 0.45
+    elif kind == "card":                    # clear of the nick
+        dy = min(14.0, h * 0.34) * 0.3
+    elif kind == "note":                    # clear of the fold
+        dy = min(14.0, h * 0.34) * 0.25
+    elif kind == "loop":                    # under the cut corners
+        dy = min(14.0, h * 0.34, w / 5.0) * 0.3
+    elif kind == "stored":                  # in the ruled corner
+        dx = dy = min(11.0, w * 0.14) / 2.0
+    elif kind == "cube":                    # on the front of it
+        lip = min(14.0, h * 0.26, w * 0.14)
+        dx, dy = -lip / 2.0, lip / 2.0
+    elif kind == "callout":                 # above the tail
+        dy = -min(16.0, h * 0.28) / 2.0
+    elif kind == "arrow":                   # along the shaft
+        dx = -arrow_parts(w, h)[0] / 2.0
+    elif kind == "actor":                   # just under the person's feet,
+        below = name_room(lines, tall)      #   whatever room is left over
+        dy = figure_h(h, below) + below / 2.0 - h / 2.0
+    return cx + dx, cy + dy
+
+
+def name_gap(h, lines, tall):
+    """How far above the foot of a person's box their name ends: the room
+    a box rounded up to the ruling has over the person and the name."""
+    below = name_room(lines, tall)
+    return max(0.0, h - figure_h(h, below) - below) if below else 0.0
+
+
+def shape_art(kind, cx, cy, w, h, paint, lines=(), tall=0.0):
     """One shape, drawn: the outline and whatever goes with it.
 
     Every kind in SHAPES is here.  The first six are the ones a textbook
     uses; the rest are the ones that turn up in the back of the chapter --
     a document, a drum for a file, a wait, a joining point, a step done by
     hand -- and any of them can stand in for any kind of step.
+
+    A person and a table are drawn round their words, so those two are
+    handed the lines and how far apart they are: a person stands over as
+    many lines of name as there are, and a table's rules go between its
+    head and its cells wherever those came out.  Handed none, as in the
+    key, each is drawn the way it looks on its own.
     """
     l, r = cx - w / 2.0, cx + w / 2.0
     t, b = cy - h / 2.0, cy + h / 2.0
@@ -91,10 +154,14 @@ def shape_art(kind, cx, cy, w, h, paint):
         out += shape_art("doc", cx - step, cy + step, w - 2 * step,
                          h - 2 * step, paint)
     elif kind == "screen":                    # shown to somebody
+        # The round end is as deep as the pointed one, and no deeper: drawn
+        # as a half circle, it stood out past the box by half of whatever
+        # the box was over two lines tall, off the side of the paper and
+        # across whatever stood beside it.
         bow = min(16.0, w * 0.16)
         out.append('<path d="M%.1f,%.1f H%.1f A%.1f,%.1f 0 0 1 %.1f,%.1f '
                    'H%.1f C%.1f,%.1f %.1f,%.1f %.1f,%.1f Z" fill="%s"/>'
-                   % (l + bow, t, r - bow, h / 2.0, h / 2.0, r - bow, b,
+                   % (l + bow, t, r - bow, bow, h / 2.0, r - bow, b,
                       l + bow, l, cy + h * 0.28, l, cy - h * 0.28, l + bow, t,
                       paint))
     elif kind == "offpage":                   # it carries on somewhere else
@@ -144,15 +211,22 @@ def shape_art(kind, cx, cy, w, h, paint):
                    'height="%.1f" fill="none" pointer-events="all"/>'
                    % (l, t, w, h))
     elif kind == "actor":                     # somebody, rather than something
-        head = min(h * 0.17, w * 0.17)
+        # Standing at the top of the box, over their name, and in their own
+        # proportions: a long name makes a wide box, and a person as wide
+        # as their name was all arms.
+        fig = figure_h(h, name_room(lines, tall), ACTOR_FIG)
+        foot = t + fig
+        head = min(fig * 0.17, w * 0.17)
         neck = t + head * 2
-        hip = t + h * 0.62
+        hip = t + fig * 0.62
+        arm = min(fig * 0.34, w * 0.45)
+        leg = min(fig * 0.3, w * 0.42)
         out.append('<circle cx="%.1f" cy="%.1f" r="%.1f" fill="%s"/>'
                    % (cx, t + head, head, paint))
         out.append('<path class="trim" d="M%.1f,%.1f V%.1f M%.1f,%.1f H%.1f '
                    'M%.1f,%.1f L%.1f,%.1f M%.1f,%.1f L%.1f,%.1f" fill="none"/>'
-                   % (cx, neck, hip, cx - w * 0.22, neck + h * 0.12, cx + w * 0.22,
-                      cx, hip, cx - w * 0.2, b, cx, hip, cx + w * 0.2, b))
+                   % (cx, neck, hip, cx - arm, neck + fig * 0.12, cx + arm,
+                      cx, hip, cx - leg, foot, cx, hip, cx + leg, foot))
     elif kind == "callout":                   # something said about it
         tail = min(16.0, h * 0.28)
         sill = b - tail
@@ -179,16 +253,19 @@ def shape_art(kind, cx, cy, w, h, paint):
                    % (l, t, r - notch, t, r, cy, r - notch, b, l, b,
                       l + notch, cy, paint))
     elif kind == "table":
-        head = min(16.0, h * 0.3)
         out.append('<rect x="%.1f" y="%.1f" width="%.1f" height="%.1f" rx="2" '
                    'fill="%s"/>' % (l, t, w, h, paint))
-        out.append('<path class="trim" d="M%.1f,%.1f H%.1f M%.1f,%.1f V%.1f '
-                   'M%.1f,%.1f V%.1f" fill="none"/>'
-                   % (l, t + head, r, l + w / 3.0, t + head, b,
-                      l + w * 2.0 / 3.0, t + head, b))
+        if lines:                             # ruled round its words
+            _, head, cols, rows = table_plan(lines, tall, h)
+        else:                                 # as it looks in the key
+            head, cols, rows = min(16.0, h * 0.3), 3, [(min(16.0, h * 0.3),)]
+        rules = ["M%.1f,%.1f H%.1f" % (l, t + head, r)]
+        rules += ["M%.1f,%.1f H%.1f" % (l, t + row[0], r) for row in rows[1:]]
+        rules += ["M%.1f,%.1f V%.1f" % (l + w * k / float(cols), t + head, b)
+                  for k in range(1, cols)]
+        out.append('<path class="trim" d="%s" fill="none"/>' % " ".join(rules))
     elif kind == "arrow":                     # which way it goes
-        head = min(26.0, w * 0.3)
-        wing = h * 0.26
+        head, wing = arrow_parts(w, h)
         out.append('<polygon points="%.1f,%.1f %.1f,%.1f %.1f,%.1f %.1f,%.1f '
                    '%.1f,%.1f %.1f,%.1f %.1f,%.1f" fill="%s"/>'
                    % (l, t + wing, r - head, t + wing, r - head, t,

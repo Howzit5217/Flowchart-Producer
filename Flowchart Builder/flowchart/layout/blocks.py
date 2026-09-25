@@ -4,7 +4,8 @@ import math
 from .. import measure, settings
 from ..measure import line_h, text_w, type_of
 from ..parse.nodes import Node
-from ..shapes import SHAPES, geom_of
+from ..shapes import (ARROW_AIR, CELL_AIR, SHAPES, TABLE_CELL, TABLE_COLS,
+                      arrow_h, geom_of, table_plan)
 
 
 # ------------------------------------------------------------------- layout --
@@ -122,7 +123,12 @@ def edge_shape(block, top=False):
         return None                     # a test's sides are its own answers'
     # Where the outline actually is at half height, which for anything that
     # leans or bows is not where the box is.  A line meeting the box instead
-    # would stop short of the shape, in mid-air beside it.
+    # would stop short of the shape, in mid-air beside it.  That is a matter
+    # of what the step is drawn as, not what kind of step it is: an Input
+    # drawn as a box has straight sides, and a box drawn leaning has not.
+    kind = geom_of(kind)
+    if kind == "actor":
+        return None                     # nothing beside a person to meet
     if kind in ("io", "io_back", "trap"):
         lean = min(settings.SLANT, w / 4.0) / 2.0          # a parallelogram's waist
     elif kind == "screen":
@@ -312,6 +318,33 @@ def as_table(text, size, bold, pad):
     return width, tallest, lines
 
 
+def table_lines(text, size, bold, grow=1):
+    """A table's words, set out for it: the first line across its head row,
+    and every line after it in a cell of its own, a row of up to TABLE_COLS
+    at a time -- so "Students" over "name", "grade" and "score" comes out a
+    table of students with a column for each.  A statement on its own is
+    the name across the head, over a row of empty cells.
+
+    Wide enough for the head to wrap no sooner than any box's words would,
+    and for the cells side by side to wrap no sooner than a table set out
+    in columns does (see as_table).  Returns the width and the lines, each
+    cell's words after a TABLE_CELL (see table_plan)."""
+    said = text.split("\n")
+    head, cells = said[0], said[1:]
+    cols = min(len(cells), TABLE_COLS) or TABLE_COLS
+    side = SHAPES["table"]["side"]
+    w = max(settings.NODE_W,
+            min(settings.NODE_MAX_W * grow, text_w(head, size, bold) + side))
+    if cells:
+        widest = max(text_w(c, size, bold) for c in cells) + 2 * CELL_AIR
+        w = max(w, min(settings.TABLE_W * grow, widest * cols))
+    lines = wrap(head, w - side, size, bold)
+    for cell in cells:
+        lines.append(TABLE_CELL)
+        lines += wrap(cell, w / cols - 2 * CELL_AIR, size, bold)
+    return w, lines
+
+
 def node_block(node):
     # Measured in whatever its words are set in.  A step whose words have
     # been made bigger, or bold, wants a box that fits them -- not the box
@@ -338,12 +371,19 @@ def node_block(node):
     rows = len(lines)
     if (len(lines) > settings.TABLE_ROWS > 0 and "\n" in node.text
             and not drawn.get("wide") and not drawn.get("round")
-            and drawn.get("floor") != "oval"):
+            and drawn.get("floor") != "oval" and not drawn.get("grid")
+            and not drawn.get("under")):
         w, rows, lines = as_table(node.text, size, bold, drawn["side"])
-    if drawn.get("wide"):
+    if drawn.get("grid"):                       # a table: a head, and cells
+        w, lines = table_lines(node.text, size, bold, grow)
+        h = max(settings.NODE_MIN_H, table_plan(lines, tall))
+    elif drawn.get("wide"):
         h = max(settings.DIA_MIN_H, 2.4 * len(lines) * tall + 8)
     elif drawn.get("floor") == "oval":
         h = max(settings.OVAL_H, len(lines) * tall + 2 * settings.PAD_Y)
+    elif drawn.get("shaft"):                    # an arrow: as tall as it takes
+        # for its shaft to carry the words, since that is where they go
+        h = max(settings.NODE_MIN_H, arrow_h(rows * tall + 2 * ARROW_AIR))
     else:
         h = max(settings.NODE_MIN_H, rows * tall + 2 * settings.PAD_Y + drawn["top"])
     if drawn.get("round"):                      # a joining point is round

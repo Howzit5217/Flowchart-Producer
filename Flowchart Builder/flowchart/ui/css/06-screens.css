@@ -134,6 +134,7 @@
     body.railed[data-side="right"] #stage { padding-right: 72px; }
     .seg-btn { padding: 9px 10px; }
     .menu button { padding: 10px 11px; }
+    .menu .mi-keys { display: none; }       /* no keys to press them with */
     .slider { display: none; }              /* a finger scrolls by dragging */
     /* Ours go, so the machine's come back -- and they have to be given back
        in both spellings.  Only the Firefox one was said here, so on a touch

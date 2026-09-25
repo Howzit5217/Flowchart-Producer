@@ -904,7 +904,7 @@
       head.appendChild(saidIt);
       body.appendChild(head);
       var mine = style.nodes[i] = style.nodes[i] || {};
-      var k = style.kinds[kind] || {};
+      var k = kindColors(kind);
       [[TXT.fill, "fill", k.fill || "#ffffff"],
        [TXT.outline, "line", k.line || style.ink || "#000000"],
        [TXT.text, "text", k.text || style.words || style.ink || "#000000"]]

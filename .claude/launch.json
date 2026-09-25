@@ -221,6 +221,60 @@
         "C:/Users/origa/Downloads/GitHub/Flowchart-Producer/Flowchart Builder"
       ],
       "port": 8917
+    },
+    {
+      "name": "shape-words-scratch",
+      "runtimeExecutable": "python",
+      "runtimeArgs": [
+        "-m",
+        "http.server",
+        "8941",
+        "--directory",
+        "C:/Users/origa/AppData/Local/Temp/claude/C--Users-origa-Downloads-GitHub-Flowchart-Producer/705aab3b-b6d7-4f48-ba55-6398724ca23a/scratchpad"
+      ],
+      "port": 8941
+    },
+    {
+      "name": "palette-site",
+      "runtimeExecutable": "python",
+      "runtimeArgs": [
+        "-m",
+        "http.server",
+        "8957",
+        "--directory",
+        "C:/Users/origa/Downloads/GitHub/Flowchart-Producer/Flowchart Builder"
+      ],
+      "port": 8957
+    },
+    {
+      "name": "menu-studio",
+      "runtimeExecutable": "python",
+      "runtimeArgs": [
+        "C:/Users/origa/AppData/Local/Temp/claude/C--Users-origa-Downloads-GitHub-Flowchart-Producer/2b1e2a10-8f54-4eba-ac70-717b4ae3d545/scratchpad/menu_studio.py",
+        "8963"
+      ],
+      "port": 8963
+    },
+    {
+      "name": "shape-words-studio",
+      "runtimeExecutable": "python",
+      "runtimeArgs": [
+        "C:/Users/origa/AppData/Local/Temp/claude/C--Users-origa-Downloads-GitHub-Flowchart-Producer/705aab3b-b6d7-4f48-ba55-6398724ca23a/scratchpad/words_studio.py",
+        "8947"
+      ],
+      "port": 8947
+    },
+    {
+      "name": "lang-programs-site",
+      "runtimeExecutable": "python",
+      "runtimeArgs": [
+        "-m",
+        "http.server",
+        "8973",
+        "--directory",
+        "C:/Users/origa/Downloads/GitHub/Flowchart-Producer/Flowchart Builder"
+      ],
+      "port": 8973
     }
   ]
 }

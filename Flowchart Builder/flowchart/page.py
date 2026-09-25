@@ -5,7 +5,7 @@ import re
 
 from . import parts, settings
 from .shapes import SHAPE_ORDER
-from .studio.web import PYODIDE, needed
+from .studio.web import ICONS, PYODIDE, needed
 from .words import lookup
 from .words.lookup import NAMES, WORDS, in_full, word
 
@@ -41,6 +41,19 @@ def poured():
         _POURED.update(page=parts.page_html(),
                        panel=parts.read_ui("source-panel.html"), at=at)
     return _POURED["page"], _POURED["panel"]
+
+# What the website's head carries to be installable as an app (see
+# studio/site.py, which writes the manifest and the service worker beside
+# it).  The studio served from a computer and a page kept beside an .svg
+# have neither, and pointing at files that are not there only fills the
+# console with complaints.  An iPhone reads none of the manifest's icons,
+# so its own is named here.
+APP_HEAD = "\n".join([
+    '<link rel="manifest" href="manifest.webmanifest">',
+    '<link rel="apple-touch-icon" href="%sapple-touch-icon.png">' % ICONS,
+    '<meta name="mobile-web-app-capable" content="yes">',
+    '<meta name="apple-mobile-web-app-capable" content="yes">',
+    '<meta name="apple-mobile-web-app-title" content="Flowchart">'])
 
 PNG_SIZES = (1, 2, 3, 4, 6, 8)      # the sizes the page's PNG button offers
 PNG_FRAMES = ((1920, 1080), (1080, 1080))   # and the fixed picture sizes it
@@ -158,7 +171,8 @@ def to_page(svg, title=None, name="flowchart", source=None, seed=None,
     said = every.get(lookup.LANGUAGE) or in_full("en")
     page = re.sub(r"__W\((\w+)\)__",
                   lambda m: html.escape(word(m.group(1))),
-                  page_html.replace("__SOURCE__", panel)
+                  page_html.replace("__APPHEAD__", APP_HEAD if web else "")
+                           .replace("__SOURCE__", panel)
                            .replace("__LANGS__", tongues)
                            .replace("__SHAPES__", picks))
     return (page

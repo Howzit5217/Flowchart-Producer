@@ -230,6 +230,7 @@
      because the system was asked to keep still, or because anything at all
      went wrong -- what is left is a menu, not a hole where one should be. */
   .menu { transform-origin: top left; }
+  .menu.sub[data-side="left"] { transform-origin: top right; }
   .menu.in { animation: menu-pop .19s var(--ease) backwards; }
   @keyframes menu-pop { from { opacity: 0; transform: scale(.96); } }
   .menu.out {
@@ -376,6 +377,17 @@
                 0 2px 7px rgba(16, 24, 40, .28);
   }
   .cp-sq:active { transform: scale(1.06); }
+  /* Under a finger drawn along a row of them (20-slide.js): a square grows
+     as it does under the pointer, a menu row leans in, a button dips as
+     a press dips it -- one after another, as the finger goes. */
+  .cp-sq.under-finger {
+    position: relative; z-index: 2; transform: scale(1.22);
+    box-shadow: 0 2px 7px rgba(16, 24, 40, .28);
+  }
+  .menu button.under-finger { transform: translateX(2px); }
+  .btn.under-finger:not([disabled]) { transform: scale(.975); }
+  /* A set's chevron turns over as its menu opens (11-hand-panel.js). */
+  .set-btn svg { transition: transform var(--move) var(--ease-back), stroke var(--quick); }
   .row { transition: background-color var(--quick) var(--ease-soft); }
   .legendkey svg { transition: transform var(--quick) var(--ease-back); }
   .row:hover .legendkey svg { transform: scale(1.1); }
@@ -526,6 +538,13 @@
   }
   .btn.primary.done::after { transition: none; opacity: 0; }
   .btn.primary.done { animation: done-pop .42s var(--ease-back); }
+  /* Run lighting up by itself, once a design drawn by hand works
+     (readyHandProgram, 12-check.js): the same gloss, sent across once, so
+     the button is seen to come on rather than found on later. */
+  .btn.primary.lit-up::after {
+    transition: none;
+    animation: gloss-run .75s var(--ease) .1s backwards;
+  }
   @keyframes gloss-run {
     from { transform: translateX(-130%); }
     to { transform: translateX(130%); }
@@ -1001,4 +1020,6 @@
     .btn:hover, .icon:hover, .preset:hover, .tab:hover, .swatch:hover,
     .menu button:hover, .fault:hover, .mark:hover,
     .tog:hover, .pen:hover, .cp-sq:hover { transform: none; }
+    .cp-sq.under-finger, .menu button.under-finger,
+    .btn.under-finger:not([disabled]) { transform: none; }
   }

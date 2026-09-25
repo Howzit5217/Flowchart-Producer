@@ -368,17 +368,25 @@
       });
     }
     openMenu(x, y, [
-      { name: TXT.m_clip_copy, go: function () { copyShapes(ids); } },
-      { name: TXT.m_clip_cut, go: function () { copyShapes(ids, true); } },
-      { name: TXT.m_copy, go: function () { duplicateShapes(ids); } },
+      { icon: "copy", name: TXT.m_clip_copy, keys: keyHint(["ctrl", "C"]),
+        go: function () { copyShapes(ids); } },
+      { icon: "cut", name: TXT.m_clip_cut, keys: keyHint(["ctrl", "X"]),
+        go: function () { copyShapes(ids, true); } },
+      { icon: "another", name: TXT.m_copy, keys: keyHint(["ctrl", "D"]),
+        go: function () { duplicateShapes(ids); } },
       "-",
-      { head: TXT.hl_head }, lineUpTools(ids),   // 13-hand-more.js
+      // lining them up and coloring them in, a menu each beside this one
+      { icon: "lineup", name: TXT.hl_head,
+        sub: function () { return [lineUpTools(ids)]; } },   // 13-hand-more.js
+      { icon: "colors", name: TXT.m_colors, sub: function () {
+          return [
+            allPaint("fill", TXT.c_fill || "Fill", "#ffffff"),
+            allPaint("line", TXT.c_line || "Border", style.ink || "#000000"),
+            allPaint("text", TXT.c_words || "Words", style.words || style.ink || "#000000")
+          ];
+        } },
       "-",
-      allPaint("fill", TXT.c_fill || "Fill", "#ffffff"),
-      allPaint("line", TXT.c_line || "Border", style.ink || "#000000"),
-      allPaint("text", TXT.c_words || "Words", style.words || style.ink || "#000000"),
-      "-",
-      { name: TXT.delete, go: function () {
+      { icon: "drop", name: TXT.delete, danger: true, go: function () {
           keepUndo();
           dropShapes(ids);
           drawHand(); drawHandPanel(); showReport();

@@ -1,16 +1,21 @@
 """Which language is on, and looking a word up in it."""
+import textwrap
+
 from .. import settings
 
 # =============================================================================
 #  Everything the chart and the page say, in one place per language.
 #
-#  Two sorts of text live in a language file: the few words the chart itself
-#  draws (True, False, Start, End, and the names in the key) and everything
-#  the page shows around it.  Nothing else in the code has words in it that a
-#  reader sees, so a language is one of those files and nothing more.  The
-#  pseudocode keywords are not there and are not translated: Display, If,
-#  While and the rest are what you type, and they stay as they are whichever
-#  language the chart is drawn in.
+#  Three sorts of text live in a language file: the few words the chart
+#  itself draws (True, False, Start, End, and the names in the key),
+#  everything the page shows around it, and the programs it offers -- the
+#  fifty examples and the fifty puzzles, each written out in that language.
+#  Nothing else in the code has words in it that a reader sees, so a
+#  language is one of those files and nothing more.  The pseudocode keywords
+#  are not there and are not translated: Display, If, While and the rest are
+#  what you type, and they stay as they are whichever language the chart is
+#  drawn in.  What a program says and what it calls things are words like
+#  any other, and those are.
 #
 #  To add one: copy words/en.py, change the right-hand side of each line, and
 #  end the file the way that one ends --
@@ -36,6 +41,16 @@ def speaks(code, name, said):
     WORDS[code] = said
     NAMES[code] = name
     return said
+
+
+def program(text):
+    """One of the examples or puzzles, written out the way it reads.
+
+    It sits in its language file indented along with everything round it,
+    one line to a line, so a translator can see the program they are
+    translating.  The indent the file gave it is taken back off here, and
+    the blank line at either end, so what is left is what goes in the box."""
+    return textwrap.dedent(text).strip("\n")
 
 
 def word(key, **fill):

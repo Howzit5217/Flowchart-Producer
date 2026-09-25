@@ -326,6 +326,25 @@
     letGoOfMenus();
   };
 
+  // A menu opened beside a row comes in the way the first one did, out of
+  // the side it is on, and goes the same way.
+  var openSubMenuPlain = openSubMenu;
+  openSubMenu = function (row, items) {
+    var sub = openSubMenuPlain(row, items);
+    if (!sub) { return sub; }
+    all("button", sub).forEach(function (b, i) { b.style.setProperty("--i", i); });
+    void sub.offsetWidth;
+    sub.classList.add("in");
+    return sub;
+  };
+  var letSubGoPlain = letSubGo;
+  letSubGo = function (sub) {
+    if (STILL) { return letSubGoPlain(sub); }
+    sub.classList.remove("in");
+    sub.classList.add("out");
+    setTimeout(function () { sub.remove(); }, 140);
+  };
+
   // ------------------------------------------ the pseudocode, full screen --
   // Going out is the same trick as the sheets: the overlay is left where it
   // is until the falling is done, and only then handed to the plain one,

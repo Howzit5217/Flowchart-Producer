@@ -20,7 +20,7 @@
   }
   svg { display: block; height: auto; }
   svg .node { cursor: pointer; }
-  svg .node.on > :is(rect, ellipse, polygon) { stroke-width: 2.6; }
+  svg .node.on > :is(rect, ellipse, polygon, circle) { stroke-width: 2.6; }
   svg .node.on { filter: drop-shadow(0 0 7px rgba(20, 66, 124, .55)); }
 
   /* --------------------------------------------------------- foot bar -- */
@@ -649,9 +649,14 @@
      in the panel is what comes out of the printer. */
   .no-ink svg .sheet, .no-ink svg .patch { fill: #fff !important; }
   .no-ink svg .node ellipse, .no-ink svg .node rect,
-  .no-ink svg .node polygon, .no-ink svg .node path {
+  .no-ink svg .node polygon, .no-ink svg .node path,
+  .no-ink svg .node circle, .no-ink svg .key-shape > * {
     fill: transparent !important; stroke: #000 !important;
   }
+  .no-ink svg .node line { stroke: #000 !important; }   /* a call's side bars */
+  /* The clear pane behind a words-only shape stays clear, or it printed as
+     a black box round the words. */
+  .no-ink svg .node .ghost { fill: none !important; stroke: none !important; }
   .no-ink svg .trim { fill: none !important; stroke: #000 !important; }
   .no-ink svg .flow { stroke: #000 !important; }
   .no-ink svg .head { fill: #000 !important; stroke: #000 !important; }
@@ -751,8 +756,8 @@
   }
   /* the paper, while a shape is being carried onto it */
   #stage.taking { outline: 2px dashed var(--accent); outline-offset: -6px; }
-  #adders .btn { cursor: grab; }
-  #adders .btn:active { cursor: grabbing; }
+  #adders .btn.adder { cursor: grab; }
+  #adders .btn.adder:active { cursor: grabbing; }
   /* A finger dragging a shape should move the shape, not scroll the page;
      the stage still scrolls normally where there is no shape under it. */
   #chart, #chart * { touch-action: none; }

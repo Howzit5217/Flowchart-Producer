@@ -29,7 +29,7 @@ Each folder is one stage of the job.
 | `settings.py` | Every knob, in one place |
 | `measure.py` | How wide words come out, and how tall a line is |
 | `progress.py` | How far along a drawing is, for the bar the page shows while it waits |
-| `shapes.py` | The catalog of shapes, and which kind is drawn as which |
+| `shapes.py` | The catalog of shapes, which kind is drawn as which, and what the parts of a person, an arrow and a table measure |
 | `parts.py` | The page's own files, poured together |
 | `page.py` | The page around the chart |
 | **`words/`** | |
@@ -52,7 +52,7 @@ Each folder is one stage of the job.
 | **`draw/`** — what it looks like | |
 | `draw/arrows.py` | Lines with square corners, rounded off, and the heads on them |
 | `draw/grid.py` | The faint grid behind it |
-| `draw/outlines.py` | Each shape's outline |
+| `draw/outlines.py` | Each shape's outline, and where its words go inside it |
 | `draw/svg.py` | Putting the SVG together |
 | **`studio/`** | |
 | `studio/web.py` | What the published website needs to know |
@@ -86,7 +86,7 @@ the `@@CSS@@` and `@@JS@@` marks in `studio.html` and hands back the page.
 | `ui/css/07-motion.css` | How it moves, and how it does not |
 | `ui/js/01-start.js` | The bits everything else uses |
 | `ui/js/02-paint.js` | Painting the colors on, and how the words and borders look |
-| `ui/js/03-shapes.js` | The shape catalog, in the browser |
+| `ui/js/03-shapes.js` | The shape catalog, in the browser, and where each shape holds its words |
 | `ui/js/04-panel.js` | The Style side: palette, words, shapes, the picked shape |
 | `ui/js/05-keep.js` | Remembering what you chose |
 | `ui/js/06-chart.js` | Showing a chart, and moving about it |
@@ -106,7 +106,8 @@ the `@@CSS@@` and `@@JS@@` marks in `studio.html` and hands back the page.
 | `ui/js/18-write.js` | The writer, which knows no language by name, and the screen the code is written in on |
 | `ui/js/19-files.js` | Saving a design to a file, and opening it again |
 | `ui/js/19-folder.js` | Saving into a folder picked in Files instead of the browser's downloads |
-| `ui/js/20-menu.js` | The right button |
+| `ui/js/20-menu.js` | The right button, and the menus opened beside its rows |
+| `ui/js/20-slide.js` | A finger drawn along a menu or a row of buttons, lighting each in turn |
 | `ui/js/21-typing.js` | Double-click to type in a shape |
 | `ui/js/22-settings.js` | The settings sheet: light or dark, which side, full screen |
 | `ui/js/23-undo.js` | Stepping back, and stepping forward again |
@@ -115,7 +116,10 @@ the `@@CSS@@` and `@@JS@@` marks in `studio.html` and hands back the page.
 | `ui/js/26-motion.js` | What moves, and what holds still |
 | `ui/js/27-mend.js` | Putting right what a warning already worked out |
 | `ui/js/29-saves.js` | A few places to keep your progress, and picking a run up again where it stood |
+| `ui/js/31-app.js` | Installing the website as an app, and keeping it for offline |
 | `ui/js/99-go.js` | Starting it all up |
+| `ui/app/sw.js` | The service worker `--site` writes beside the page, so the app opens and draws offline |
+| `ui/app/*.png` | The app's icons, named by the manifest `--site` writes |
 
 ## Four things worth knowing
 

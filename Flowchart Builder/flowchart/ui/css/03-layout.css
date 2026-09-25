@@ -94,6 +94,7 @@
   .hint { color: var(--muted); font-size: 12.5px; margin: 8px 0 0; }
   .hint.bad { color: var(--bad); }
   .hint.warn { color: var(--warn); }     /* worth a look, but it still works */
+  .hint.good { color: var(--good); }     /* ready: Run is lit */
 
   /* ------------------------------------------------- the settings sheet -- */
   /* Anchored under the bar on the right, where its button is.  It is a

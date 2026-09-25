@@ -5,31 +5,89 @@
 //  in the order parts.py lists them, and share everything between them.
 // ---------------------------------------------------------------------------
   // ---- the panel side of it ---------------------------------------------
+  // Thirty shapes in a grid of thirty little drawings was a lot to look
+  // through for the half-dozen a flowchart is mostly made of, and on a
+  // touch screen none of them had a name.  So the shapes the rules give
+  // each kind of step (ruleChoices, 13-hand-rules.js) come first, each
+  // named for the step it is, and every shape there is is sorted into
+  // four sets behind a button each, a menu of them with their names.
+  var SHAPE_SETS = [
+    ["sg_basic", ["rect", "roundrect", "oval", "circle", "diamond", "hex", "io", "io_back"]],
+    ["sg_flow", ["sub", "loop", "trap", "delay", "parallel", "step", "offpage"]],
+    ["sg_data", ["doc", "docs", "manual", "card", "store", "stored", "table", "screen"]],
+    ["sg_other", ["note", "callout", "cloud", "actor", "cube", "arrow", "text"]]
+  ];
+
+  // The sets, holding only shapes this page can draw -- and any shape it
+  // can that no set names goes in the last, so none is ever out of reach.
+  function shapeSets() {
+    var placed = {};
+    var sets = SHAPE_SETS.map(function (set) {
+      var kinds = set[1].filter(function (kind) {
+        return SHAPE_LIST.indexOf(kind) >= 0 && !placed[kind] && (placed[kind] = true);
+      });
+      return { name: set[0], kinds: kinds };
+    });
+    var left = SHAPE_LIST.filter(function (kind) { return !placed[kind]; });
+    sets[sets.length - 1].kinds = sets[sets.length - 1].kinds.concat(left);
+    return sets.filter(function (set) { return set.kinds.length; });
+  }
+
   function drawAdders() {
     var box = el("#adders");
     if (!box) { return; }
     box.innerHTML = "";
-    handKinds().forEach(function (pair) {
+    var tiles = document.createElement("div");
+    tiles.className = "adder-tiles";
+    ruleChoices().forEach(function (one) {
       var b = document.createElement("button");
-      b.className = "btn small";
-      b.title = pair[1];
-      b.setAttribute("aria-label", pair[1]);
-      b.draggable = true;
-      b.innerHTML = keyMark(pair[0]);
-      b.onclick = function () { addNode(pair[0]); };
-      // Dragged onto the paper it lands where it is dropped, which is what
-      // anyone who has used a drawing program will try first.  Clicking it
-      // still drops one below whatever is in hand, for anyone who would
-      // rather not drag.
-      b.ondragstart = function (ev) {
-        ev.dataTransfer.setData("text/plain", pair[0]);
-        ev.dataTransfer.effectAllowed = "copy";
-        dragging_kind = pair[0];
-      };
-      b.ondragend = function () { dragging_kind = null; };
-      box.appendChild(b);
+      b.type = "button";
+      b.className = "btn adder";
+      b.title = kindName(one.kind);      // what the shape itself is called
+      b.setAttribute("aria-label", one.name);
+      b.innerHTML = keyMark(one.kind) + '<span class="adder-name"></span>';
+      b.lastChild.textContent = one.name;
+      b.onclick = function () { addNode(one.kind); };
+      lendAdder(b, one.kind);
+      tiles.appendChild(b);
     });
+    box.appendChild(tiles);
+    var sets = document.createElement("div");
+    sets.className = "adder-sets";
+    shapeSets().forEach(function (set) {
+      var b = document.createElement("button");
+      b.type = "button";
+      b.className = "btn small set-btn";
+      b.setAttribute("aria-haspopup", "menu");
+      b.setAttribute("aria-expanded", "false");
+      b.innerHTML = '<span class="set-name"></span><svg viewBox="0 0 10 10" aria-hidden="true">' +
+                    '<path d="M2.2 3.8 5 6.6l2.8-2.8"/></svg>';
+      b.firstChild.textContent = TXT[set.name] || set.name;
+      b.onclick = function (ev) {
+        ev.stopPropagation();            // or the click that opened it shuts it
+        if (b.getAttribute("aria-expanded") === "true") { closeMenu(); return; }
+        var r = b.getBoundingClientRect();
+        openMenu(r.left, r.bottom + 4, shapeRows(set.kinds, addNode, true), "shape-set");
+        b.setAttribute("aria-expanded", "true");
+      };
+      sets.appendChild(b);
+    });
+    box.appendChild(sets);
     paperTakesDrops();
+  }
+
+  // Dragged onto the paper it lands where it is dropped, which is what
+  // anyone who has used a drawing program will try first.  Clicking it
+  // still drops one below whatever is in hand, for anyone who would
+  // rather not drag.
+  function lendAdder(b, kind) {
+    b.draggable = true;
+    b.ondragstart = function (ev) {
+      ev.dataTransfer.setData("text/plain", kind);
+      ev.dataTransfer.effectAllowed = "copy";
+      dragging_kind = kind;
+    };
+    b.ondragend = function () { dragging_kind = null; };
   }
 
   var dragging_kind = null;              // the shape being carried in
@@ -213,7 +271,7 @@
     var paints = document.createElement("div");
     paints.className = "trio";
     var mine = style.nodes["h" + node.id] = style.nodes["h" + node.id] || {};
-    var k = style.kinds[node.kind] || {};
+    var k = kindColors(node.kind);
     [[TXT.fill, "fill", k.fill || "#ffffff"],
      [TXT.outline, "line", k.line || style.ink || "#000000"],
      [TXT.text, "text", k.text || style.words || style.ink || "#000000"]]

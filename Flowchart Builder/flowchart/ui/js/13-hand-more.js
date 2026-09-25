@@ -43,12 +43,16 @@
     }).join("");
   }
 
-  // What can come next, asked where the + was pressed.
+  // What can come next, asked where the + was pressed -- and the same rows
+  // in the menu beside the shape menu's Add the next step (20-menu.js).
   function plusMenu(fromId, way, x, y) {
-    openMenu(x, y, [{ head: TXT.hp_what_next }].concat(ruleChoices().map(function (one) {
-      return { mark: keyMark(one.kind), name: one.name,
-               go: function () { addNext(fromId, way, one.kind); } };
-    })));
+    openMenu(x, y, [{ head: TXT.hp_what_next }].concat(nextRows(fromId, way)));
+  }
+  function nextRows(fromId, way) {
+    function go(kind) { addNext(fromId, way, kind); }
+    return ruleChoices().map(function (one) {
+      return { mark: keyMark(one.kind), name: one.name, go: function () { go(one.kind); } };
+    }).concat(["-", moreShapesRow(go)]);
   }
 
   // Put it there, join it on, and open it to be typed into.
@@ -119,13 +123,14 @@
   // the flow on to where the old one went, keeping the side it came in at.
   // Where there is not room between the two, everything from the far one
   // on moves along to make some, as it would on paper.
-  // What it offers is the rules' shapes, as the + does -- all but Start and
-  // End, which are never in the middle of anything.
-  function stepMenu(linkId, x, y) {
-    openMenu(x, y, [{ head: TXT.hp_what_in }].concat(ruleChoices(["oval"]).map(function (one) {
-      return { mark: keyMark(one.kind), name: one.name,
-               go: function () { stepInto(linkId, one.kind); } };
-    })));
+  // What it offers, in a menu beside the arrow's own, is the rules' shapes,
+  // as the + does -- all but Start and End, which are never in the middle
+  // of anything -- and the rest of the shapes behind a row of their own.
+  function intoRows(linkId) {
+    function go(kind) { stepInto(linkId, kind); }
+    return ruleChoices(["oval"]).map(function (one) {
+      return { mark: keyMark(one.kind), name: one.name, go: function () { go(one.kind); } };
+    }).concat(["-", moreShapesRow(go)]);
   }
 
   function stepInto(linkId, kind) {

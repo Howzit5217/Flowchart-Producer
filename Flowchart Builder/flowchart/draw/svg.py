@@ -4,13 +4,111 @@ from bisect import bisect_left
 
 from .. import measure, progress, settings
 from ..draw.grid import grid_slabs
-from ..draw.outlines import shape_art
+from ..draw.outlines import name_gap, shape_art, words_at
 from ..draw.arrows import arrow_head, chain_lines, path_d
 from ..layout.blocks import TABLE_BREAK, label_drop, shift
 from ..layout.columns import bbox
 from ..measure import FONT, line_h, text_w, type_of
-from ..shapes import SHAPES, geom_of
+from ..shapes import SHAPES, arrow_parts, geom_of, table_plan
 from ..words.lookup import word
+
+
+def middle_words(lines, x, y, size, tall):
+    """Lines of words, each in the middle across and the lot in the middle
+    up and down: lines as far apart as the words they carry are tall, and
+    the baseline set down by a third of that."""
+    y0 = y - (len(lines) - 1) * tall / 2.0 + 4.0 * size / measure.BASE_SIZE
+    return [f'<text x="{x:.1f}" y="{y0 + i*tall:.1f}" '
+            f'text-anchor="middle" stroke="none" fill="{settings.INK}">'
+            f'{html.escape(line)}</text>' for i, line in enumerate(lines)]
+
+
+def grid_words(lines, left, top, w, h, size, tall):
+    """A table's words, each in its own part of it: the first line across
+    the head, and every line after it in the middle of a cell of its own
+    (see table_plan), where the rules drawn round them leave room."""
+    head, head_h, cols, rows = table_plan(lines, tall, h)
+    out = middle_words(head, left + w / 2.0, top + head_h / 2.0, size, tall)
+    across = w / float(cols)
+    for y, height, row in rows:
+        for k, cell in enumerate(row):
+            out += middle_words(cell, left + across * (k + 0.5),
+                                top + y + height / 2.0, size, tall)
+    return out
+
+
+def meet_outlines(elems):
+    """Lines brought on to the outline they meet, where it stands in from
+    its box.
+
+    The layout joins shapes box to box, and nearly every outline touches
+    its box where a line comes in at the top or leaves from the foot.
+    Four do not: an arrow's shaft is well inside its box above and below,
+    a speech bubble's foot is its tail's height above the box's, a
+    typed-in step's top slopes down from the right, and a person's name
+    ends above the foot of a box rounded up to the ruling.  A line meeting
+    the box there stopped short of the shape, in mid-air, its head pointing
+    at nothing.  An upright line ending on such an edge is carried on to
+    the outline; one leaving the middle of it sideways -- a loop's way back
+    does, along the foot of the last box in it -- is given a short drop out
+    of the outline first, to where it turns.  Nothing else in the chart is
+    touched, and a chart without those shapes is handed back as it came."""
+    tops, feet = {}, {}
+    for e in elems:
+        if e[0] != "shape":
+            continue
+        kind = geom_of(e[1])
+        if kind in ("arrow", "manual"):
+            tops.setdefault(round(e[3] - e[5] / 2.0, 1), []).append((kind, e))
+        if kind in ("arrow", "callout", "actor"):
+            feet.setdefault(round(e[3] + e[5] / 2.0, 1), []).append((kind, e))
+    if not tops and not feet:
+        return elems
+
+    def inset(kind, x, e):
+        """How far in from its box the outline is, at x."""
+        _, _, cx, _, w, h = e[:6]
+        l = cx - w / 2.0
+        if not l <= x <= l + w:
+            return 0.0
+        if kind == "arrow":                       # off the shaft: the head
+            head, wing = arrow_parts(w, h)
+            return wing if x <= l + w - head else 0.0
+        if kind == "callout":                     # but the tail reaches down
+            return 0.0 if l + w * 0.18 <= x <= l + w * 0.36 else min(16.0, h * 0.28)
+        if kind == "actor":                       # up to the name
+            return name_gap(h, e[6], line_h(type_of(e[7] if len(e) > 7 else 0)[0]))
+        return min(11.0, h * 0.28) * (l + w - x) / w          # the slope
+
+    def onto(x, y, middle=False):
+        """Where the outline is, for a line meeting its box at (x, y) --
+        and, asked for the middle, only if x is the middle of the box."""
+        for kind, e in tops.get(round(y, 1), ()):
+            gap = inset(kind, x, e) if not middle or abs(x - e[2]) < 0.5 else 0
+            if gap:
+                return y + gap
+        for kind, e in feet.get(round(y, 1), ()):
+            gap = inset(kind, x, e) if not middle or abs(x - e[2]) < 0.5 else 0
+            if gap:
+                return y - gap
+        return y
+
+    out = []
+    for e in elems:
+        if e[0] == "line":
+            _, x1, y1, x2, y2, head = e
+            if abs(x1 - x2) < 0.5 and abs(y1 - y2) > 0.01:          # upright
+                e = ("line", x1, onto(x1, y1), x2, onto(x2, y2), head)
+            elif abs(y1 - y2) < 0.5:                                # across
+                y = onto(x1, y1, True)
+                if y != y1:                        # down out of it, then along
+                    out.append(("line", x1, y, x1, y1, False))
+                y = onto(x2, y2, True)
+                if y != y2:                        # along, then up into it
+                    out.append(e)
+                    e = ("line", x2, y2, x2, y, True)
+        out.append(e)
+    return out
 
 
 def table_words(lines, drawn, left, w, ty, size, tall):
@@ -114,7 +212,7 @@ def to_svg(elems, title=None, author=None, paper=None):
         height += pad_y * 2
         over += pad_x
         down += pad_y
-    elems = shift(elems, over, down)
+    elems = meet_outlines(shift(elems, over, down))
 
     out = [
         '<?xml version="1.0" encoding="UTF-8"?>',
@@ -386,7 +484,6 @@ def to_svg(elems, title=None, author=None, paper=None):
             l, r = cx - w / 2.0, cx + w / 2.0
             t, b = cy - h / 2.0, cy + h / 2.0
             paint = settings.FILL.get(shape, "#ffffff")
-            tx, ty = cx, cy                     # where the words go
             # Every shape and the words in it go in a group of their own,
             # named for what kind of thing it is and numbered.  Nothing in
             # the drawing depends on that; it is there so a page showing the
@@ -396,15 +493,6 @@ def to_svg(elems, title=None, author=None, paper=None):
             piece = [f'<g class="node" data-kind="{shape}" '
                      f'data-i="{said or nodes}">']
             drawn = geom_of(shape)
-            piece += shape_art(drawn, cx, cy, w, h, paint)
-            if drawn == "store":                 # the words clear of the lip
-                ty = cy + min(5.0, h * 0.09)
-            elif drawn == "offpage":             # clear of the point at the foot
-                ty = cy - h * 0.12
-            elif drawn == "parallel":            # between the two bars
-                ty = cy
-            elif drawn == "stored":              # inside the ruled corner
-                ty = cy + min(4.0, h * 0.07)
             # Lines as far apart as the words they carry are tall, and the
             # baseline set down by a third of that, whatever size the page
             # asked this step's words to be.  The size itself is the page's
@@ -412,14 +500,15 @@ def to_svg(elems, title=None, author=None, paper=None):
             # is where that is decided and changed.
             size, _ = type_of(said)
             tall = line_h(size)
-            if TABLE_BREAK in lines:             # set as a table: see as_table
-                piece += table_words(lines, drawn, l, w, ty, size, tall)
+            piece += shape_art(drawn, cx, cy, w, h, paint, lines, tall)
+            # Where the words go is the shape's to say: see words_at.
+            tx, ty = words_at(drawn, cx, cy, w, h, lines, tall)
+            if drawn == "table" and lines:       # a head row, and cells
+                piece += grid_words(lines, l, t, w, h, size, tall)
+            elif TABLE_BREAK in lines:           # set as a table: see as_table
+                piece += table_words(lines, drawn, l + tx - cx, w, ty, size, tall)
             else:
-                y0 = ty - (len(lines) - 1) * tall / 2.0 + 4.0 * size / measure.BASE_SIZE
-                for i, line in enumerate(lines):
-                    piece.append(f'<text x="{tx:.1f}" y="{y0 + i*tall:.1f}" '
-                                 f'text-anchor="middle" stroke="none" fill="{settings.INK}">'
-                                 f'{html.escape(line)}</text>')
+                piece += middle_words(lines, tx, ty, size, tall)
             piece.append("</g>")
             put(1, t - 4, b + 4, "\n".join(piece))
     if banded is None:

@@ -1,5 +1,5 @@
 """Every word it says, in US English."""
-from ..words.lookup import speaks
+from ..words.lookup import program, speaks
 
 EN = {
     # ---- the words the chart draws
@@ -88,8 +88,9 @@ EN = {
     "r_odd_op": "I do not know what to do with {op}.",
     "r_half": "This does not read as a whole thing: {bit}",
     "r_back": "Back to the run", "back": "Back",
-    "r_by_hand": "Press Check the design; if it passes, it can be run here.",
-    "h_runnable": "It reads as a program. You can run it now.",
+    "r_by_hand": "Run lights up by itself as soon as the design works. Check the design shows what is still in the way.",
+    "r_hand_ready": "Ready to go: the design works as a program. Press Run to try it.",
+    "h_runnable": "Ready to go: it reads as a program, so Run is lit.",
     "h_no_start": "There is no shape to start from.",
     "h_tangled": "The loops in this design cross each other, so it cannot be written out as a program.",
     "h_not_a_program": "The words in these shapes do not read as a program.",
@@ -289,7 +290,7 @@ EN = {
     "checked_good": "This design works: one Start, every shape reached, and every path ends at an End.",
     "problems": "{n} to look at",
     "h_info": "How to draw by hand",
-    "h_add_how": "Click a shape above to add it under the one you're working on, or drag it onto the paper where you want it.",
+    "h_add_how": "Click a shape above to add it under the one you're working on, or drag it onto the paper where you want it. Basic, Flow, Data and Other open a menu each of every other shape.",
     "h_mouse": "Mouse and touch",
     "h_keys": "Keys",
     "h_all_keys": "All keyboard shortcuts",
@@ -334,7 +335,8 @@ EN = {
     "hp_next": "Add the next step",
     "hp_what_next": "What comes next?",
     "hp_into": "Put a step in it",
-    "hp_what_in": "What goes in it?",
+    "m_colors": "Colors", "m_more_shapes": "More shapes",
+    "sg_basic": "Basic", "sg_flow": "Flow", "sg_data": "Data", "sg_other": "Other",
     "hr_head": "Shape rules",
     "hr_says": "This looks like “{role}”. The shape rules use the {shape} for that.",
     "hr_change": "Change to {shape}",
@@ -590,6 +592,13 @@ EN = {
     "side_left": "Left", "side_right": "Right", "full_screen": "Full screen",
     "full_on": "Fill the screen", "full_off": "Leave full screen",
     "no_full": "This browser will not go full screen.",
+    # the website installed as an app (31-app.js)
+    "app_install": "Install as an app",
+    "app_tip": "An icon on your home screen or with your other apps, opening "
+               "in a window of its own -- and it works with no connection",
+    "app_ios": "Press Share, then Add to Home Screen.",
+    "app_mac": "In Safari's File menu, choose Add to Dock.",
+    "app_done": "Installed -- it is with your other apps now, and works offline.",
     "p_ink": "Ink", "p_classic": "Classic", "p_slate": "Slate",
     "p_meadow": "Meadow", "p_sunset": "Sunset", "p_night": "Night",
     # ---- the studio
@@ -683,6 +692,1744 @@ EN = {
     "ready": "Ready.",
     "boot_failed": "Python could not start in this browser ({err}).",
     "py_gave_out": "Python in this browser gave out part way through drawing this ({err}).",
+    # ================================================================
+    #  The programs it offers, written out in full: the fifty examples
+    #  (e_ask_p is the one the button e_ask opens) and the fifty
+    #  puzzles (z_else_p).  The keywords stay as they are in every
+    #  language -- Display, If, While are what you type -- and
+    #  everything else is words: what it says, and what it calls its
+    #  boxes, modules and functions.  A translation keeps each program
+    #  the same program, line for line, and a puzzle the same fault.
+    # ================================================================
+    # ---- the examples: getting started
+    "e_ask_p": program("""
+        Start
+        Declare String name
+        Display "What is your name?"
+        Input name
+        Display "Hello"
+        Display name
+        Stop
+    """),
+    "e_add_p": program("""
+        Start
+        Declare Integer a
+        Declare Integer b
+        Display "Two numbers, please"
+        Input a
+        Input b
+        Display "They come to"
+        Display a + b
+        Stop
+    """),
+    "e_swap_p": program("""
+        Start
+        Declare Integer a
+        Declare Integer b
+        Declare Integer keep
+        Input a
+        Input b
+        keep = a
+        a = b
+        b = keep
+        Display a
+        Display b
+        Stop
+    """),
+    "e_decide_p": program("""
+        Start
+        Declare Integer age
+        Display "How old are you?"
+        Input age
+        If age >= 18 Then
+            Display "Old enough to vote"
+        Else
+            Display "Not old enough yet"
+        End If
+        Stop
+    """),
+    "e_oddeven_p": program("""
+        Start
+        Declare Integer n
+        Display "Enter a number"
+        Input n
+        If n mod 2 = 0 Then
+            Display "even"
+        Else
+            Display "odd"
+        End If
+        Stop
+    """),
+    "e_count_p": program("""
+        Start
+        For i = 1 To 5
+            Display i
+        End For
+        Stop
+    """),
+    "e_while_p": program("""
+        Start
+        Declare Integer n
+        n = 1
+        While n <= 5
+            Display n
+            n = n + 1
+        End While
+        Stop
+    """),
+    "e_total_p": program("""
+        Start
+        Declare Integer total
+        total = 0
+        For i = 1 To 10
+            total = total + i
+        End For
+        Display "The total is"
+        Display total
+        Stop
+    """),
+    "e_module_p": program("""
+        Start
+        Declare String name
+        Input name
+        Call greet(name)
+        Stop
+
+        Module greet(who)
+            Display "Hello"
+            Display who
+        End Module
+    """),
+    "e_answers_p": program("""
+        Start
+        Declare Integer a
+        Declare Integer b
+        Declare Integer sum
+        Input a
+        Input b
+        sum = add(a, b)
+        Display "The answer is"
+        Display sum
+        Stop
+
+        Function add(x, y)
+            Return x + y
+        End Function
+    """),
+    # ---- the examples: decisions and loops
+    "e_grades_p": program("""
+        Start
+        Declare Integer score
+        Display "Enter the score"
+        Input score
+        If score >= 90 Then
+            Display "A"
+        Else If score >= 80 Then
+            Display "B"
+        Else If score >= 70 Then
+            Display "C"
+        Else If score >= 60 Then
+            Display "D"
+        Else
+            Display "F"
+        End If
+        Stop
+    """),
+    "e_biggest_p": program("""
+        Start
+        Declare Integer a
+        Declare Integer b
+        Declare Integer c
+        Declare Integer biggest
+        Input a
+        Input b
+        Input c
+        biggest = a
+        If b > biggest Then
+            biggest = b
+        End If
+        If c > biggest Then
+            biggest = c
+        End If
+        Display "The biggest is"
+        Display biggest
+        Stop
+    """),
+    "e_menu_p": program("""
+        Start
+        Declare Integer choice
+        Display "1 add  2 subtract  3 quit"
+        Input choice
+        Select Case choice
+            Case 1
+                Display "Adding"
+            Case 2
+                Display "Subtracting"
+            Case Else
+                Display "Goodbye"
+        End Select
+        Stop
+    """),
+    "e_vowel_p": program("""
+        Start
+        Declare String letter
+        Display "Enter a letter"
+        Input letter
+        Select Case letter
+            Case "a"
+                Display "vowel"
+            Case "e"
+                Display "vowel"
+            Case "i"
+                Display "vowel"
+            Case "o"
+                Display "vowel"
+            Case "u"
+                Display "vowel"
+            Case Else
+                Display "not a vowel"
+        End Select
+        Stop
+    """),
+    "e_leap_p": program("""
+        Start
+        Declare Integer year
+        Display "Which year?"
+        Input year
+        If year mod 400 = 0 Then
+            Display "leap year"
+        Else If year mod 100 = 0 Then
+            Display "not a leap year"
+        Else If year mod 4 = 0 Then
+            Display "leap year"
+        Else
+            Display "not a leap year"
+        End If
+        Stop
+    """),
+    "e_keepasking_p": program("""
+        Start
+        Declare Integer n
+        Do
+            Display "Enter a number from 1 to 10"
+            Input n
+        Until n >= 1 And n <= 10
+        Display "Thank you"
+        Stop
+    """),
+    "e_backwards_p": program("""
+        Start
+        Declare Integer n
+        Display "Count back from?"
+        Input n
+        For i = n To 1 Step -1
+            Display i
+        End For
+        Display "Done"
+        Stop
+    """),
+    "e_sumevens_p": program("""
+        Start
+        Declare Integer total
+        total = 0
+        For i = 1 To 20
+            If i mod 2 = 0 Then
+                total = total + i
+            End If
+        End For
+        Display "The evens come to"
+        Display total
+        Stop
+    """),
+    "e_countdown_p": program("""
+        Start
+        Declare Integer n
+        n = 10
+        While n > 0
+            Display n
+            If n = 5 Then
+                Display "Halfway"
+            End If
+            n = n - 1
+        End While
+        Display "Liftoff"
+        Stop
+    """),
+    "e_guess_p": program("""
+        Start
+        Declare Integer secret
+        Declare Integer guess
+        secret = 7
+        Do
+            Display "Guess my number"
+            Input guess
+            If guess < secret Then
+                Display "Higher"
+            End If
+            If guess > secret Then
+                Display "Lower"
+            End If
+        Until guess = secret
+        Display "You got it"
+        Stop
+    """),
+    # ---- the examples: numbers and patterns
+    "e_fizz_p": program("""
+        Start
+        For i = 1 To 15
+            If i mod 15 = 0 Then
+                Display "FizzBuzz"
+            Else If i mod 3 = 0 Then
+                Display "Fizz"
+            Else If i mod 5 = 0 Then
+                Display "Buzz"
+            Else
+                Display i
+            End If
+        End For
+        Stop
+    """),
+    "e_prime_p": program("""
+        Start
+        Declare Integer n
+        Declare Integer factors
+        Display "Enter a number"
+        Input n
+        factors = 0
+        For i = 1 To n
+            If n mod i = 0 Then
+                factors = factors + 1
+            End If
+        End For
+        If factors = 2 Then
+            Display "prime"
+        Else
+            Display "not prime"
+        End If
+        Stop
+    """),
+    "e_gcd_p": program("""
+        Start
+        Declare Integer a
+        Declare Integer b
+        Display "Two numbers, please"
+        Input a
+        Input b
+        While a <> b
+            If a > b Then
+                a = a - b
+            Else
+                b = b - a
+            End If
+        End While
+        Display "The greatest common factor is"
+        Display a
+        Stop
+    """),
+    "e_digits_p": program("""
+        Start
+        Declare Integer n
+        Declare Integer many
+        Display "Enter a whole number"
+        Input n
+        many = 0
+        While n > 0
+            n = n div 10
+            many = many + 1
+        End While
+        Display "That many digits:"
+        Display many
+        Stop
+    """),
+    "e_reverse_p": program("""
+        Start
+        Declare Integer n
+        Declare Integer back
+        Display "Enter a whole number"
+        Input n
+        back = 0
+        While n > 0
+            back = back * 10 + n mod 10
+            n = n div 10
+        End While
+        Display "Backwards that is"
+        Display back
+        Stop
+    """),
+    "e_fib_p": program("""
+        Start
+        Declare Integer a
+        Declare Integer b
+        Declare Integer next
+        a = 0
+        b = 1
+        For i = 1 To 10
+            Display a
+            next = a + b
+            a = b
+            b = next
+        End For
+        Stop
+    """),
+    "e_factorial_p": program("""
+        Start
+        Declare Integer n
+        Declare Integer answer
+        Display "Enter a number"
+        Input n
+        answer = 1
+        For i = 1 To n
+            answer = answer * i
+        End For
+        Display "The factorial is"
+        Display answer
+        Stop
+    """),
+    "e_minmax_p": program("""
+        Start
+        Declare Integer n
+        Declare Integer lowest
+        Declare Integer highest
+        Display "Five numbers, please"
+        Input n
+        lowest = n
+        highest = n
+        For i = 2 To 5
+            Input n
+            If n < lowest Then
+                lowest = n
+            End If
+            If n > highest Then
+                highest = n
+            End If
+        End For
+        Display "Lowest"
+        Display lowest
+        Display "Highest"
+        Display highest
+        Stop
+    """),
+    "e_grid_p": program("""
+        Start
+        For row = 1 To 5
+            For col = 1 To 5
+                Display row * col
+            End For
+        End For
+        Stop
+    """),
+    "e_stars_p": program("""
+        Start
+        Declare String line
+        Declare Integer n
+        Display "How many rows?"
+        Input n
+        For row = 1 To n
+            line = ""
+            For col = 1 To row
+                line = line + "*"
+            End For
+            Display line
+        End For
+        Stop
+    """),
+    # ---- the examples: everyday programs
+    "e_area_p": program("""
+        Start
+        Declare Integer width
+        Declare Integer height
+        Display "How wide?"
+        Input width
+        Display "How tall?"
+        Input height
+        Display "The area is"
+        Display width * height
+        Stop
+    """),
+    "e_change_p": program("""
+        Start
+        Declare Integer cents
+        Display "How many cents?"
+        Input cents
+        Display "Dollars"
+        Display cents div 100
+        cents = cents mod 100
+        Display "Dimes"
+        Display cents div 10
+        Display "Pennies"
+        Display cents mod 10
+        Stop
+    """),
+    "e_temps_p": program("""
+        Start
+        Declare String fromScale
+        Declare String toScale
+        Declare Real degrees
+        Declare Real celsius
+        Declare Real result
+        Declare String again
+        Do
+            fromScale = askScale("Convert from C, F or K?")
+            toScale = askScale("Convert to C, F or K?")
+            Display "The temperature?"
+            Input degrees
+            celsius = toCelsius(degrees, fromScale)
+            result = round(fromCelsius(celsius, toScale) * 100) / 100
+            Display degrees, " ", fromScale, " is ", result, " ", toScale
+            Display "Another one? y or n"
+            Input again
+        Until toupper(again) <> "Y"
+        Stop
+
+        Function askScale(question)
+            Declare String scale
+            Display question
+            Input scale
+            scale = toupper(scale)
+            While scale <> "C" And scale <> "F" And scale <> "K"
+                Display "Please type C, F or K"
+                Input scale
+                scale = toupper(scale)
+            End While
+            Return scale
+        End Function
+
+        Function toCelsius(deg, scale)
+            If scale = "F" Then
+                Return (deg - 32) * 5 / 9
+            Else If scale = "K" Then
+                Return deg - 273.15
+            Else
+                Return deg
+            End If
+        End Function
+
+        Function fromCelsius(deg, scale)
+            If scale = "F" Then
+                Return deg * 9 / 5 + 32
+            Else If scale = "K" Then
+                Return deg + 273.15
+            Else
+                Return deg
+            End If
+        End Function
+    """),
+    "e_shop_p": program("""
+        Start
+        Declare Integer many
+        Declare Real price
+        Declare Real total
+        Display "How many?"
+        Input many
+        Display "Price each?"
+        Input price
+        total = many * price
+        If total > 50 Then
+            total = total * 0.9
+            Display "Ten percent off"
+        End If
+        Display "Amount due: $", total
+        Stop
+    """),
+    "e_report_p": program("""
+        Start
+        Declare Integer score
+        Declare Integer total
+        Declare Integer passes
+        Declare Integer best
+        total = 0
+        passes = 0
+        best = 0
+        For i = 1 To 5
+            Display "Enter a score"
+            Input score
+            total = total + score
+            If score >= 60 Then
+                passes = passes + 1
+            End If
+            If score > best Then
+                best = score
+            End If
+        End For
+        Display "Passes"
+        Display passes
+        Display "Average"
+        Display total / 5
+        Display "Best"
+        Display best
+        Stop
+    """),
+    "e_votes_p": program("""
+        Start
+        Declare String vote
+        Declare Integer reds
+        Declare Integer blues
+        reds = 0
+        blues = 0
+        For i = 1 To 5
+            Display "red or blue?"
+            Input vote
+            If vote = "red" Then
+                reds = reds + 1
+            Else
+                blues = blues + 1
+            End If
+        End For
+        Display "Red"
+        Display reds
+        Display "Blue"
+        Display blues
+        If reds > blues Then
+            Display "Red wins"
+        Else If blues > reds Then
+            Display "Blue wins"
+        Else
+            Display "A tie"
+        End If
+        Stop
+    """),
+    "e_quiz_p": program("""
+        Start
+        Declare Integer score
+        score = 0
+        score = score + asked("2 plus 2?", 4)
+        score = score + asked("5 times 3?", 15)
+        score = score + asked("10 minus 7?", 3)
+        Display "You scored"
+        Display score
+        Stop
+
+        Function asked(question, answer)
+            Declare Integer said
+            Display question
+            Input said
+            If said = answer Then
+                Display "Right"
+                Return 1
+            Else
+                Display "Wrong"
+                Return 0
+            End If
+        End Function
+    """),
+    "e_login_p": program("""
+        Start
+        Declare String word
+        Declare Integer tries
+        tries = 0
+        Do
+            Display "Password?"
+            Input word
+            tries = tries + 1
+        Until word = "open" Or tries = 3
+        Call verdict(word)
+        Stop
+
+        Module verdict(said)
+            If said = "open" Then
+                Display "Welcome in"
+            Else
+                Display "Locked out"
+            End If
+        End Module
+    """),
+    "e_sentinel_p": program("""
+        Start
+        Declare Integer n
+        Declare Integer total
+        Declare Integer many
+        total = 0
+        many = 0
+        Display "Numbers, please. 0 to finish."
+        Input n
+        While n <> 0
+            total = total + n
+            many = many + 1
+            Input n
+        End While
+        If many > 0 Then
+            Display "The average is"
+            Display total / many
+        Else
+            Display "Nothing to average"
+        End If
+        Stop
+    """),
+    "e_picktable_p": program("""
+        Start
+        Declare Integer n
+        Display "Which table? 0 to stop."
+        Input n
+        While n > 0
+            For i = 1 To 12
+                Display n * i
+            End For
+            Display "Which table? 0 to stop."
+            Input n
+        End While
+        Display "Bye"
+        Stop
+    """),
+    # ---- the examples: bigger projects
+    "e_bank_p": program("""
+        Start
+        Declare Real balance
+        Declare Integer choice
+        balance = 0
+        Do
+            Display "1 deposit  2 withdraw  3 balance  4 quit"
+            Input choice
+            Select Case choice
+                Case 1
+                    Call deposit(balance)
+                Case 2
+                    Call withdraw(balance)
+                Case 3
+                    Display "Your balance is $", balance
+                Case 4
+                    Display "Goodbye"
+                Case Else
+                    Display "Pick 1, 2, 3 or 4"
+            End Select
+        Until choice = 4
+        Stop
+
+        Module deposit(Real Ref money)
+            Declare Real amount
+            Display "How much to deposit?"
+            Input amount
+            If amount <= 0 Then
+                Display "A deposit has to be more than zero"
+            Else
+                money = money + amount
+                Display "Deposited $", amount
+            End If
+        End Module
+
+        Module withdraw(Real Ref money)
+            Declare Real amount
+            Display "How much to withdraw?"
+            Input amount
+            If amount <= 0 Then
+                Display "A withdrawal has to be more than zero"
+            Else If amount > money Then
+                Display "Not enough money. You have $", money
+            Else
+                money = money - amount
+                Display "Withdrew $", amount
+            End If
+        End Module
+    """),
+    "e_gradebook_p": program("""
+        Start
+        Declare Integer students
+        Declare Integer score
+        Declare Integer total
+        Declare Integer highest
+        Declare Integer lowest
+        Declare Integer passed
+        Declare String grade
+        total = 0
+        passed = 0
+        highest = 0
+        lowest = 100
+        Display "How many students?"
+        Input students
+        While students < 1
+            Display "There has to be at least one student"
+            Input students
+        End While
+        For i = 1 To students
+            Display "Score for student ", i
+            Input score
+            While score < 0 Or score > 100
+                Display "A score is from 0 to 100. Try again"
+                Input score
+            End While
+            grade = letterGrade(score)
+            Display "That is a grade of ", grade
+            total = total + score
+            If grade <> "F" Then
+                passed = passed + 1
+            End If
+            If score > highest Then
+                highest = score
+            End If
+            If score < lowest Then
+                lowest = score
+            End If
+        End For
+        Display "Class average: ", total / students
+        Display "Highest score: ", highest
+        Display "Lowest score: ", lowest
+        Display "Students who passed: ", passed
+        Stop
+
+        Function String letterGrade(Integer points)
+            If points >= 90 Then
+                Return "A"
+            Else If points >= 80 Then
+                Return "B"
+            Else If points >= 70 Then
+                Return "C"
+            Else If points >= 60 Then
+                Return "D"
+            Else
+                Return "F"
+            End If
+        End Function
+    """),
+    "e_paycheck_p": program("""
+        Start
+        Constant Real TAX_RATE = 0.15
+        Declare String name
+        Declare Real hours
+        Declare Real rate
+        Declare Real gross
+        Declare Real tax
+        Declare Integer paid
+        paid = 0
+        Display "Employee name? Type done to finish"
+        Input name
+        While name <> "done"
+            Display "Hours worked this week?"
+            Input hours
+            Display "Hourly pay rate?"
+            Input rate
+            gross = grossPay(hours, rate)
+            tax = gross * TAX_RATE
+            Display name, " earned $", gross
+            Display "Taxes withheld: $", tax
+            Display "Take-home pay: $", gross - tax
+            paid = paid + 1
+            Display "Employee name? Type done to finish"
+            Input name
+        End While
+        Display "Paychecks written: ", paid
+        Stop
+
+        Function Real grossPay(Real worked, Real hourly)
+            Declare Real overtime
+            If worked <= 40 Then
+                Return worked * hourly
+            Else
+                overtime = worked - 40
+                Return 40 * hourly + overtime * hourly * 1.5
+            End If
+        End Function
+    """),
+    "e_convert_p": program("""
+        Start
+        Declare Integer choice
+        Declare Real amount
+        Do
+            Display "1 miles to kilometers"
+            Display "2 pounds to kilograms"
+            Display "3 Fahrenheit to Celsius"
+            Display "4 inches to centimeters"
+            Display "5 quit"
+            Input choice
+            If choice >= 1 And choice <= 4 Then
+                Display "How many?"
+                Input amount
+                Call convert(choice, amount)
+            Else If choice <> 5 Then
+                Display "Pick a number from 1 to 5"
+            End If
+        Until choice = 5
+        Display "Goodbye"
+        Stop
+
+        Module convert(Integer which, Real amount)
+            Select Case which
+                Case 1
+                    Display amount, " miles is ", amount * 1.609, " kilometers"
+                Case 2
+                    Display amount, " pounds is ", amount * 0.4536, " kilograms"
+                Case 3
+                    Display amount, " F is ", (amount - 32) * 5 / 9, " C"
+                Case Else
+                    Display amount, " inches is ", amount * 2.54, " centimeters"
+            End Select
+        End Module
+    """),
+    "e_splitcheck_p": program("""
+        Start
+        Declare Real bill
+        Declare Real percent
+        Declare Integer people
+        Declare Real tip
+        Display "How much is the check?"
+        Input bill
+        While bill <= 0
+            Display "The check has to be more than zero"
+            Input bill
+        End While
+        Display "What percent tip? 15, 18 or 20 is usual"
+        Input percent
+        While percent < 0 Or percent > 100
+            Display "Pick a percent from 0 to 100"
+            Input percent
+        End While
+        Display "How many people are splitting it?"
+        Input people
+        While people < 1
+            Display "At least one person has to pay"
+            Input people
+        End While
+        tip = bill * percent / 100
+        Call receipt(bill, tip, people)
+        Stop
+
+        Module receipt(Real food, Real extra, Integer many)
+            Declare Real total
+            total = food + extra
+            Display "Food and drinks: $", food
+            Display "Tip: $", extra
+            Display "Total: $", total
+            If many = 1 Then
+                Display "You pay it all: $", total
+            Else
+                Display "Each of the ", many, " people pays $", total / many
+            End If
+        End Module
+    """),
+    "e_vending_p": program("""
+        Start
+        Declare Integer price
+        Declare Integer paid
+        Declare Integer coin
+        Display "What does the snack cost, in cents?"
+        Input price
+        While price <= 0 Or price mod 5 <> 0
+            Display "Prices here go up in steps of 5 cents"
+            Input price
+        End While
+        paid = 0
+        While paid < price
+            Display "Still owed: ", price - paid, " cents. Put in 5, 10 or 25"
+            Input coin
+            Select Case coin
+                Case 5
+                    paid = paid + coin
+                Case 10
+                    paid = paid + coin
+                Case 25
+                    paid = paid + coin
+                Case Else
+                    Display "This machine only takes nickels, dimes and quarters"
+            End Select
+        End While
+        Display "Enjoy your snack"
+        If paid > price Then
+            Call giveChange(paid - price)
+        End If
+        Stop
+
+        Module giveChange(Integer cents)
+            Display "Your change is ", cents, " cents"
+            Display "Quarters: ", cents div 25
+            cents = cents mod 25
+            Display "Dimes: ", cents div 10
+            cents = cents mod 10
+            Display "Nickels: ", cents div 5
+        End Module
+    """),
+    "e_primelist_p": program("""
+        Start
+        Declare Integer limit
+        Declare Integer found
+        Declare Integer total
+        Display "Find the primes up to what number?"
+        Input limit
+        While limit < 2
+            Display "Pick a number that is 2 or more"
+            Input limit
+        End While
+        found = 0
+        total = 0
+        For n = 2 To limit
+            If isPrime(n) Then
+                Display n
+                found = found + 1
+                total = total + n
+            End If
+        End For
+        Display "Primes found: ", found
+        Display "They add up to ", total
+        Stop
+
+        Function Boolean isPrime(Integer number)
+            Declare Integer d
+            d = 2
+            While d * d <= number
+                If number mod d = 0 Then
+                    Return False
+                End If
+                d = d + 1
+            End While
+            Return True
+        End Function
+    """),
+    "e_weekday_p": program("""
+        Start
+        Declare Integer year
+        Declare Integer month
+        Declare Integer day
+        Display "Year?"
+        Input year
+        Display "Month, from 1 to 12?"
+        Input month
+        While month < 1 Or month > 12
+            Display "A month is from 1 to 12"
+            Input month
+        End While
+        Display "Day of the month?"
+        Input day
+        While day < 1 Or day > daysIn(month, year)
+            Display "That month has ", daysIn(month, year), " days"
+            Input day
+        End While
+        Display month, "/", day, "/", year, " is a ", dayName(weekday(year, month, day))
+        Stop
+
+        Function Integer daysIn(Integer m, Integer y)
+            Select Case m
+                Case 2
+                    If isLeap(y) Then
+                        Return 29
+                    Else
+                        Return 28
+                    End If
+                Case 4
+                    Return 30
+                Case 6
+                    Return 30
+                Case 9
+                    Return 30
+                Case 11
+                    Return 30
+                Case Else
+                    Return 31
+            End Select
+        End Function
+
+        Function Boolean isLeap(Integer y)
+            Return (y mod 4 = 0 And y mod 100 <> 0) Or y mod 400 = 0
+        End Function
+
+        Function Integer weekday(Integer y, Integer m, Integer d)
+            Declare Integer k
+            Declare Integer j
+            If m < 3 Then
+                m = m + 12
+                y = y - 1
+            End If
+            k = y mod 100
+            j = y div 100
+            Return (d + 13 * (m + 1) div 5 + k + k div 4 + j div 4 + 5 * j) mod 7
+        End Function
+
+        Function String dayName(Integer h)
+            Select Case h
+                Case 0
+                    Return "Saturday"
+                Case 1
+                    Return "Sunday"
+                Case 2
+                    Return "Monday"
+                Case 3
+                    Return "Tuesday"
+                Case 4
+                    Return "Wednesday"
+                Case 5
+                    Return "Thursday"
+                Case Else
+                    Return "Friday"
+            End Select
+        End Function
+    """),
+    "e_loan_p": program("""
+        Start
+        Declare Real balance
+        Declare Real rate
+        Declare Real payment
+        Declare Real interest
+        Declare Real paidInterest
+        Declare Integer months
+        Display "How much is the loan?"
+        Input balance
+        Display "Yearly interest rate, as a percent?"
+        Input rate
+        Display "Monthly payment?"
+        Input payment
+        interest = balance * rate / 100 / 12
+        If payment <= interest Then
+            Display "That never pays it off. Pay more than $", interest
+        Else
+            months = 0
+            paidInterest = 0
+            While balance > 0
+                interest = balance * rate / 100 / 12
+                paidInterest = paidInterest + interest
+                balance = balance + interest - payment
+                months = months + 1
+                If months mod 12 = 0 And balance > 0 Then
+                    Display "After year ", months div 12, " you still owe $", balance
+                End If
+            End While
+            Display "Paid off in ", months, " months"
+            Display "The last payment is only $", payment + balance
+            Display "Interest paid in all: $", paidInterest
+        End If
+        Stop
+    """),
+    "e_rps_p": program("""
+        Start
+        Declare Integer player
+        Declare Integer computer
+        Declare Integer result
+        Declare Integer wins
+        Declare Integer losses
+        wins = 0
+        losses = 0
+        For game = 1 To 5
+            Display "Game ", game, ": 1 rock, 2 paper, 3 scissors"
+            Input player
+            While player < 1 Or player > 3
+                Display "Pick 1, 2 or 3"
+                Input player
+            End While
+            computer = random(1, 3)
+            Display "You: ", nameOf(player), "   Computer: ", nameOf(computer)
+            result = winner(player, computer)
+            If result = 1 Then
+                Display "You win this one"
+                wins = wins + 1
+            Else If result = 2 Then
+                Display "The computer wins this one"
+                losses = losses + 1
+            Else
+                Display "A tie"
+            End If
+        End For
+        Display "You won ", wins, " and lost ", losses
+        If wins > losses Then
+            Display "You beat the computer!"
+        Else If losses > wins Then
+            Display "The computer beat you"
+        Else
+            Display "It is a tie overall"
+        End If
+        Stop
+
+        Function String nameOf(Integer pick)
+            Select Case pick
+                Case 1
+                    Return "rock"
+                Case 2
+                    Return "paper"
+                Case Else
+                    Return "scissors"
+            End Select
+        End Function
+
+        Function Integer winner(Integer a, Integer b)
+            If a = b Then
+                Return 0
+            Else If (a - b + 3) mod 3 = 1 Then
+                Return 1
+            Else
+                Return 2
+            End If
+        End Function
+    """),
+    # ---- the puzzles: find the fault
+    "z_else_p": program("""
+        Start
+        Declare Integer age
+        Input age
+        If age >= 18 Then
+            Display "in"
+        End If
+        Stop
+    """),
+    "z_swap_p": program("""
+        Start
+        Declare Integer n
+        Input n
+        If n > 10 Then
+            Display "small"
+        Else
+            Display "big"
+        End If
+        Stop
+    """),
+    "z_count_p": program("""
+        Start
+        For i = 1 To 4
+            Display i
+        End For
+        Stop
+    """),
+    "z_greet_p": program("""
+        Start
+        Declare String name
+        Display "Hello"
+        Display name
+        Input name
+        Stop
+    """),
+    "z_range_p": program("""
+        Start
+        Declare Integer n
+        Input n
+        If n > 0 Or n < 10 Then
+            Display "in range"
+        Else
+            Display "out of range"
+        End If
+        Stop
+    """),
+    "z_double_p": program("""
+        Start
+        Declare Integer n
+        Input n
+        Display n
+        Stop
+    """),
+    "z_sign_p": program("""
+        Start
+        Declare Integer n
+        Input n
+        If n > 0 Then
+            Display "positive"
+        Else
+            Display "negative"
+        End If
+        Stop
+    """),
+    "z_twice_p": program("""
+        Start
+        Declare String word
+        Input word
+        Display word
+        Stop
+    """),
+    "z_minus_p": program("""
+        Start
+        Declare Integer a
+        Declare Integer b
+        Input a
+        Input b
+        Display a + b
+        Stop
+    """),
+    "z_early_p": program("""
+        Start
+        Declare Integer n
+        Declare Integer answer
+        Input n
+        Display answer
+        answer = n * 3
+        Stop
+    """),
+    # ---- the puzzles: make it work
+    "z_forever_p": program("""
+        Start
+        Declare Integer n
+        n = 3
+        While n > 0
+            Display n
+        End While
+        Display "go"
+        Stop
+    """),
+    "z_total_p": program("""
+        Start
+        Declare Integer total
+        For i = 1 To 4
+            total = 0
+            total = total + i
+        End For
+        Display total
+        Stop
+    """),
+    "z_two_p": program("""
+        Start
+        Declare Integer a
+        Declare Integer b
+        Input a
+        Display a + b
+        Stop
+    """),
+    "z_order_p": program("""
+        Start
+        Declare Integer total
+        total = 0
+        For i = 1 To 3
+            total = total + i
+            Display total
+        End For
+        Stop
+    """),
+    "z_until_p": program("""
+        Start
+        Declare Integer n
+        n = 0
+        Do
+            n = n + 1
+            Display n
+        Until n > 0
+        Stop
+    """),
+    "z_nested_p": program("""
+        Start
+        For row = 1 To 2
+            For col = 1 To 1
+                Display row * col
+            End For
+        End For
+        Stop
+    """),
+    "z_never_p": program("""
+        Start
+        Declare Integer n
+        n = 5
+        While n > 5
+            Display n
+            n = n - 1
+        End While
+        Stop
+    """),
+    "z_odds_p": program("""
+        Start
+        Declare Integer total
+        total = 0
+        For i = 1 To 10
+            If i mod 2 = 1 Then
+                total = total + i
+            End If
+        End For
+        Display total
+        Stop
+    """),
+    "z_asked_p": program("""
+        Start
+        Declare Integer n
+        Declare Integer total
+        total = 0
+        Input n
+        For i = 1 To 3
+            total = total + n
+        End For
+        Display total
+        Stop
+    """),
+    "z_onemore_p": program("""
+        Start
+        Declare Integer total
+        total = 0
+        For i = 1 To 11
+            total = total + i
+        End For
+        Display total
+        Stop
+    """),
+    # ---- the puzzles: build it
+    "z_grade_p": program("""
+        Start
+        Declare Integer score
+        Input score
+        If score > 60 Then
+            Display "pass"
+        Else
+            Display "fail"
+        End If
+        Stop
+    """),
+    "z_evens_p": program("""
+        Start
+        For i = 1 To 10
+            Display i
+        End For
+        Stop
+    """),
+    "z_return_p": program("""
+        Start
+        Declare Integer n
+        Input n
+        Display twice(n)
+        Stop
+
+        Function twice(x)
+            x = x * 2
+        End Function
+    """),
+    "z_param_p": program("""
+        Start
+        Declare Integer n
+        Input n
+        Call show(n)
+        Stop
+
+        Module show(x)
+            Display "x"
+        End Module
+    """),
+    "z_many_p": program("""
+        Start
+        Declare Integer n
+        Declare Integer many
+        For i = 1 To 5
+            many = 0
+            Input n
+            If n > 10 Then
+                many = many + 1
+            End If
+        End For
+        Display many
+        Stop
+    """),
+    "z_divide_p": program("""
+        Start
+        Declare Real total
+        Declare Real n
+        total = 0
+        For i = 1 To 4
+            Input n
+            total = total + n
+        End For
+        Display total / 5
+        Stop
+    """),
+    "z_valid_p": program("""
+        Start
+        Declare Integer n
+        Do
+            Input n
+        Until n > 0
+        Display "ok"
+        Display n
+        Stop
+    """),
+    "z_smallest_p": program("""
+        Start
+        Declare Integer n
+        Declare Integer best
+        best = 0
+        For i = 1 To 4
+            Input n
+            If n < best Then
+                best = n
+            End If
+        End For
+        Display best
+        Stop
+    """),
+    "z_short_p": program("""
+        Start
+        Declare Integer a
+        Declare Integer b
+        Input a
+        Input b
+        Display add(a)
+        Stop
+
+        Function add(x, y)
+            Return x + y
+        End Function
+    """),
+    "z_stops_p": program("""
+        Start
+        Declare Integer n
+        n = 5
+        While n > 1
+            Display n
+            n = n - 1
+        End While
+        Display "go"
+        Stop
+    """),
+    # ---- the puzzles: harder faults
+    "z_fizz_p": program("""
+        Start
+        For i = 1 To 15
+            If i mod 3 = 0 Then
+                Display "Fizz"
+            Else If i mod 5 = 0 Then
+                Display "Buzz"
+            Else If i mod 15 = 0 Then
+                Display "FizzBuzz"
+            Else
+                Display i
+            End If
+        End For
+        Stop
+    """),
+    "z_prime_p": program("""
+        Start
+        Declare Integer n
+        Declare Integer factors
+        Input n
+        factors = 0
+        For i = 1 To n
+            If n mod i = 0 Then
+                factors = factors + 1
+            End If
+        End For
+        If factors < 3 Then
+            Display "prime"
+        Else
+            Display "not prime"
+        End If
+        Stop
+    """),
+    "z_digits_p": program("""
+        Start
+        Declare Integer n
+        Declare Integer many
+        Input n
+        many = 1
+        While n > 0
+            n = n div 10
+            many = many + 1
+        End While
+        Display many
+        Stop
+    """),
+    "z_revzero_p": program("""
+        Start
+        Declare Integer n
+        Declare Integer back
+        Input n
+        back = 0
+        While n > 0
+            back = back + n mod 10
+            n = n div 10
+        End While
+        Display back
+        Stop
+    """),
+    "z_sumd_p": program("""
+        Start
+        Declare Integer n
+        Declare Integer total
+        Input n
+        total = 0
+        While n > 0
+            total = total + n div 10
+            n = n div 10
+        End While
+        Display total
+        Stop
+    """),
+    "z_gridrow_p": program("""
+        Start
+        For row = 1 To 3
+            For col = 1 To 3
+                Display row * row
+            End For
+        End For
+        Stop
+    """),
+    "z_tri_p": program("""
+        Start
+        Declare Integer total
+        total = 0
+        For i = 1 To 4
+            total = total + i
+        End For
+        Display total
+        Stop
+    """),
+    "z_lowhigh_p": program("""
+        Start
+        Declare Integer n
+        Declare Integer lowest
+        Declare Integer highest
+        lowest = 0
+        highest = 0
+        For i = 1 To 4
+            Input n
+            If n < lowest Then
+                lowest = n
+            End If
+            If n > highest Then
+                highest = n
+            End If
+        End For
+        Display lowest
+        Display highest
+        Stop
+    """),
+    "z_starsrow_p": program("""
+        Start
+        Declare String line
+        For row = 1 To 3
+            line = ""
+            For col = 1 To 3
+                line = line + "*"
+            End For
+            Display line
+        End For
+        Stop
+    """),
+    "z_factloop_p": program("""
+        Start
+        Declare Integer n
+        Declare Integer answer
+        Input n
+        answer = 0
+        For i = 1 To n
+            answer = answer * i
+        End For
+        Display answer
+        Stop
+    """),
+    # ---- the puzzles: real bugs
+    "z_report_p": program("""
+        Start
+        Declare Integer score
+        Declare Integer total
+        total = 0
+        For i = 1 To 5
+            Input score
+            total = total + score
+        End For
+        Display total / 6
+        Stop
+    """),
+    "z_tries_p": program("""
+        Start
+        Declare String word
+        Declare Integer tries
+        tries = 0
+        Do
+            Input word
+            tries = tries + 1
+        Until word = "open" Or tries = 2
+        If word = "open" Then
+            Display "in"
+        Else
+            Display "out"
+        End If
+        Stop
+    """),
+    "z_discount_p": program("""
+        Start
+        Declare Real total
+        Input total
+        If total > 100 Then
+            total = total * 0.9
+        End If
+        Display total
+        Stop
+    """),
+    "z_convert_p": program("""
+        Start
+        Declare Real c
+        Input c
+        Display c * 9 / 5
+        Stop
+    """),
+    "z_tie_p": program("""
+        Start
+        Declare Integer reds
+        Declare Integer blues
+        Input reds
+        Input blues
+        If reds > blues Then
+            Display "Red wins"
+        Else
+            Display "Blue wins"
+        End If
+        Stop
+    """),
+    "z_fibstep_p": program("""
+        Start
+        Declare Integer a
+        Declare Integer b
+        a = 0
+        b = 1
+        For i = 1 To 5
+            Display a
+            a = b
+            b = a + b
+        End For
+        Stop
+    """),
+    "z_coins_p": program("""
+        Start
+        Declare Integer cents
+        Input cents
+        Display cents div 100
+        Display cents div 10
+        Display cents mod 10
+        Stop
+    """),
+    "z_score_p": program("""
+        Start
+        Declare Integer score
+        score = 0
+        score = score + asked(4)
+        score = score + asked(15)
+        Display score
+        Stop
+
+        Function asked(answer)
+            Declare Integer said
+            Input said
+            If said = answer Then
+                Return 0
+            Else
+                Return 1
+            End If
+        End Function
+    """),
+    "z_sent_p": program("""
+        Start
+        Declare Integer n
+        Declare Integer total
+        Declare Integer many
+        total = 0
+        many = 0
+        Input n
+        While n <> 0
+            total = total + n
+            many = many + 1
+            Input n
+        End While
+        Display total / (many + 1)
+        Stop
+    """),
+    "z_menu0_p": program("""
+        Start
+        Declare Integer n
+        Display "Pick a number, 0 to stop"
+        Input n
+        While n <> 1
+            Display n
+            Display "Pick a number, 0 to stop"
+            Input n
+        End While
+        Display "Bye"
+        Stop
+    """),
+    # ---- the answers a puzzle is marked against that are words.  A
+    # puzzle's tries write them as {out}; each is said here the way the
+    # puzzles above say it, so a fixed program says exactly this.
+    "zw_in": "in", "zw_out": "out",
+    "zw_big": "big", "zw_small": "small",
+    "zw_hello": "Hello", "zw_hi": "hi",
+    "zw_inrange": "in range", "zw_outrange": "out of range",
+    "zw_positive": "positive", "zw_zero": "zero", "zw_negative": "negative",
+    "zw_go": "go", "zw_ok": "ok",
+    "zw_pass": "pass", "zw_fail": "fail",
+    "zw_prime": "prime", "zw_notprime": "not prime",
+    "zw_open": "open",
+    "zw_redwins": "Red wins", "zw_bluewins": "Blue wins", "zw_tie": "A tie",
+    "zw_pick": "Pick a number, 0 to stop", "zw_bye": "Bye",
 }
 
 speaks("en", "English", EN)

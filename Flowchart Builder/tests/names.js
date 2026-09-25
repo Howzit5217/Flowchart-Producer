@@ -45,12 +45,14 @@ function literal(file, name) {
   return eval("(" + src.slice(at + ("var " + name + " = ").length, end + 4) + ")");
 }
 
+// The lists name them; the programs themselves are words, written out in
+// each language (e_ask_p), so they come from the words handed over.
 var out = [];
 literal("09-build.js", "STARTS").forEach(function (level) {
-  level[1].forEach(function (pair) { out.push([pair[0], titleFor(pair[1])]); });
+  level[1].forEach(function (key) { out.push([key, titleFor(TXT[key + "_p"])]); });
 });
 literal("28-puzzles.js", "PUZZLES").forEach(function (level) {
-  level[1].forEach(function (one) { out.push([one.key, titleFor(one.start)]); });
+  level[1].forEach(function (one) { out.push([one.key, titleFor(TXT[one.key + "_p"])]); });
 });
 // And any others run.py hands over, as [key, program] pairs in a file.
 if (process.argv[3]) {

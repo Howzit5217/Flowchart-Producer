@@ -99,7 +99,7 @@
     el("#tab-hand").onclick = function () { setMode(true); };
     el("#check").onclick = function () {
       showReport();
-      readyHandProgram();              // passed? then it can be run
+      readyHandProgram("check");       // passed? then it can be run
     };
   }
 

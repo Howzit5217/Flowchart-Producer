@@ -836,6 +836,92 @@ def _():
                                     "" if not bad else " -- " + ", ".join(bad))
 
 
+@check("every shape keeps its words clear of its parts")
+def _():
+    """A shape with parts to it holds its words where the parts leave room.
+
+    Set in the middle like any other, a table's words were drawn across its
+    rules, a person's name through the person, an arrow's words off the end
+    of its shaft and into its head, and a cube's across its side.  So every
+    shape stands in for a step, with words of every sort in it, plainly
+    spaced and compressed, and each line of words -- measured as ink, the
+    way crowded_labels measures a label -- has to sit inside its box and
+    clear of whatever that shape draws where words cannot go."""
+    fb = builder()
+    said = ["Set total = 0",
+            "Set the running total of every score read in so far = total + score",
+            "Students\nname\ngrade\nscore",
+            "Scores\n90\n85\n77\n60",
+            "Report\nthe first name of every student in the class\ngrade"]
+    found = re.compile(r'<text x="([-\d.]+)" y="([-\d.]+)"[^>]*>([^<]*)</text>')
+    keep = (fb.GRID, fb.GEOM["rect"])
+    spacing = {name: getattr(fb, name) for name in set(fb.TIGHT) | set(fb.ROOMY)}
+    bad, tried = [], 0
+    try:
+        fb.GRID = False                  # so the box stands at the wall's corner
+        for tight in (False, True):
+            if tight:
+                for name, value in fb.TIGHT.items():
+                    setattr(fb, name, value)
+            for kind in fb.SHAPE_ORDER:
+                fb.GEOM["rect"] = kind
+                for text in said:
+                    e = fb.node_block(fb.Node("rect", text)).elems[0]
+                    w, h, lines = e[4], e[5], e[6]
+                    l = t = float(fb.MARGIN)
+                    r, b = l + w, t + h
+                    size = fb.FONT_SIZE
+                    tall = fb.line_h(size)
+                    # Where words cannot go: (x0, y0, x1, y1) boxes they must
+                    # stay inside, and rules they must not cross.
+                    inside, across, down = [(l, t, r, b)], [], []
+                    if kind == "table":
+                        _, head, cols, rows = fb.table_plan(lines, tall, h)
+                        across += [t + head] + [t + y for y, _, _ in rows[1:]]
+                        down += [l + w * k / float(cols) for k in range(1, cols)]
+                    elif kind == "actor":
+                        fig = fb.figure_h(h, fb.name_room(lines, tall))
+                        inside.append((l, t + fig, r, b))
+                    elif kind == "arrow":
+                        head, wing = fb.arrow_parts(w, h)
+                        inside.append((l, t + wing, r - head, b - wing))
+                    elif kind == "cube":
+                        lip = min(14.0, h * 0.26, w * 0.14)
+                        inside.append((l, t + lip, r - lip, b))
+                    elif kind == "callout":
+                        inside.append((l, t, r, b - min(16.0, h * 0.28)))
+                    elif kind == "stored":
+                        rule = min(11.0, w * 0.14)
+                        inside.append((l + rule, t + rule, r, b))
+                    elif kind == "store":
+                        inside.append((l, t + 2 * min(11.0, h * 0.24), r, b))
+                    elif kind == "offpage":
+                        inside.append((l, t, r, b - min(18.0, h * 0.42)))
+                    svg = fb.to_svg([e])
+                    for x, y, word in found.findall(svg):
+                        tried += 1
+                        x, y = float(x), float(y)
+                        word = word.replace("&amp;", "&")
+                        half = fb.text_w(word, size, False) / 2.0
+                        ink = (x - half, y - 0.72 * size, x + half, y + 0.22 * size)
+                        wrong = [box for box in inside
+                                 if ink[0] < box[0] - 0.5 or ink[2] > box[2] + 0.5
+                                 or ink[1] < box[1] - 0.5 or ink[3] > box[3] + 0.5]
+                        wrong += [ry for ry in across if ink[1] < ry < ink[3]]
+                        wrong += [rx for rx in down
+                                  if ink[0] < rx < ink[2] and ink[3] > t + head]
+                        if wrong:
+                            bad.append("%s%s %r" % (kind, " compressed" if tight
+                                                    else "", word[:18]))
+    finally:
+        fb.GRID, fb.GEOM["rect"] = keep
+        for name, value in spacing.items():
+            setattr(fb, name, value)
+    return not bad, "%d lines of words in %d shapes%s" % (
+        tried, len(fb.SHAPE_ORDER), "" if not bad else
+        " -- %d astray: %s" % (len(bad), ", ".join(sorted(set(bad))[:5])))
+
+
 @check("every word the page asks for is a word we have")
 def _():
     """The page names its words twice over: once as __W(key)__, which is
@@ -1364,7 +1450,8 @@ def _():
     got = subprocess.run(RUN + ["--site", where],
                          cwd=HOME, capture_output=True, text=True)
     ok = got.returncode == 0
-    want = ("index.html", "README.md", ".nojekyll")
+    want = ("index.html", "README.md", ".nojekyll", "manifest.webmanifest",
+            "sw.js")
     there = [f for f in want if os.path.exists(os.path.join(where, f))]
     page = ""
     if os.path.exists(os.path.join(where, "index.html")):
@@ -1373,13 +1460,33 @@ def _():
     asked = fb.needed()
     missing = [w for w in asked
                if not os.path.exists(os.path.join(where, w.replace("/", os.sep)))]
+    # Installable as an app: the page names its manifest, the manifest's
+    # icons are there, and everything the service worker keeps for offline
+    # is there too -- one missing and the worker never installs at all,
+    # silently, on every phone.
+    app = ""
+    if os.path.exists(os.path.join(where, "sw.js")):
+        app = io.open(os.path.join(where, "sw.js"), encoding="utf-8").read()
+    kept = re.search(r"var HOME = (\[.*?\]);", app, re.S)
+    kept = json.loads(kept.group(1)) if kept else []
+    icons = []
+    if os.path.exists(os.path.join(where, "manifest.webmanifest")):
+        icons = [i["src"] for i in json.load(io.open(
+            os.path.join(where, "manifest.webmanifest"), encoding="utf-8"))["icons"]]
+    for w in kept + icons:
+        if w != "./" and not os.path.exists(os.path.join(where, w.replace("/", os.sep))):
+            missing.append(w)
+    marks = re.findall(r"__[A-Z]+__", app)
+    named = 'rel="manifest"' in page and not marks and len(kept) > len(asked)
     import shutil
     shutil.rmtree(where, ignore_errors=True)
     big = len(page) > 200000
-    return ok and len(there) == len(want) and big and not missing, \
-        "%d files, %d modules beside them, page %d KB%s" % (
-            len(there), len(asked) - len(missing), len(page) // 1024,
-            "" if not missing else " -- missing " + ", ".join(missing[:3]))
+    return ok and len(there) == len(want) and big and not missing and named, \
+        "%d files, %d modules beside them, %d kept offline, page %d KB%s" % (
+            len(there), len(asked), len(kept), len(page) // 1024,
+            (" -- missing " + ", ".join(missing[:3]) if missing else "") +
+            ("" if named else " -- not installable%s" % (
+                " (unfilled %s)" % ", ".join(marks[:3]) if marks else "")))
 
 
 @check("the seed is nowhere to be seen")
@@ -2024,6 +2131,18 @@ def puzzle_list():
     return json.loads(got.stdout)
 
 
+def puzzle_as(one, words):
+    """A puzzle as one language has it: its program out of that language's
+    words (z_else_p), and its tries with every {word} said the way that
+    language says it (zw_out) -- which is how the page marks it."""
+    def said(text):
+        named = re.match(r"^\{(\w+)\}$", text)
+        return words.get("zw_" + named.group(1), named.group(1)) if named else text
+    return (words.get(one["key"] + "_p", ""),
+            [{"give": [said(s) for s in each["give"]],
+              "want": [said(s) for s in each["want"]]} for each in one["tries"]])
+
+
 @check("every puzzle is broken, and every mend puts it right")
 def _():
     """Both halves of a puzzle, run rather than read.
@@ -2061,11 +2180,12 @@ def _():
         with io.open(os.path.join(PUZZLE_MENDS, one["key"] + ".txt"),
                      encoding="utf-8") as f:
             mend = f.read().strip()
+        start, tries = puzzle_as(one, fb.WORDS["en"])
         asked["puzzles"].append({
             "name": "puzzle %d (%s)" % (one["no"], one["key"]),
-            "broken": read_as_data(one["start"]),
+            "broken": read_as_data(start),
             "fixed": read_as_data(mend),
-            "tries": one["tries"]})
+            "tries": tries})
     handle, where = tempfile.mkstemp(suffix=".json")
     try:
         with io.open(handle, "w", encoding="utf-8") as f:
@@ -2079,6 +2199,152 @@ def _():
     return got.returncode == 0, (
         "%d puzzles, %d sets of answers" % (len(puzzles), tries)
         if got.returncode == 0 else said.replace("\n", "\n       "))
+
+
+def example_keys():
+    """The examples' keys, read out of 09-build.js as the puzzles are read
+    out of theirs.  The programs are words; the list is the page's."""
+    lift = ("var fs = require('fs');"
+            "var src = fs.readFileSync(process.argv[1], 'utf8');"
+            "var at = src.indexOf('var STARTS = [');"
+            "var end = src.indexOf('\\n  ];', at);"
+            "var list = eval('(' + src.slice(at + 'var STARTS = '.length, end + 4) + ')');"
+            "var out = [];"
+            "list.forEach(function (level) { out = out.concat(level[1]); });"
+            "process.stdout.write(JSON.stringify(out));")
+    got = subprocess.run(["node", "-e", lift,
+                          os.path.join(HERE, "..", "flowchart", "ui", "js", "09-build.js")],
+                         capture_output=True, text=True)
+    if got.returncode:
+        raise RuntimeError("could not read the examples: " + got.stderr.strip())
+    return json.loads(got.stdout)
+
+
+# What is the same in every language: the keywords, and the few functions
+# the runner knows by name.  Anything else a program names is its own.
+SAME_EVERYWHERE = set("""
+    start stop end declare constant integer real string boolean char
+    display input if then else while for to step do until select case call
+    module function return ref and or not mod div true false
+    toupper tolower round random sqrt abs floor ceiling ceil int length pow
+    min max""".split())
+
+
+def program_shape(text):
+    """A program with its words taken out, line by line: every string one
+    S, every name the order it was first met in, the keywords and the
+    numbers and the sums as they are -- and a Display only the values it
+    shows, since one language says "Du hast 3 gewonnen" where another says
+    "You won 3" and both show the same 3."""
+    names, lines = {}, []
+    for line in text.split("\n"):
+        said, at, s = [], 0, line.strip()
+        while at < len(s):
+            c = s[at]
+            if c.isspace():
+                at += 1
+            elif c == '"':
+                shut = s.find('"', at + 1)
+                at = len(s) if shut < 0 else shut + 1
+                said.append("S")
+            else:
+                word = re.match(r"[A-Za-z_]\w*|\d+(?:\.\d+)?", s[at:])
+                piece = word.group(0) if word else c
+                at += len(piece)
+                if word and not piece[0].isdigit():
+                    piece = (piece.lower() if piece.lower() in SAME_EVERYWHERE
+                             else "v%d" % names.setdefault(piece, len(names)))
+                said.append(piece)
+        if said[:1] == ["display"]:
+            said = [t for t in said if t not in ("S", ",")]
+        lines.append(" ".join(said))
+    return lines
+
+
+@check("every example and puzzle is the same program in every language")
+def _():
+    """Each language writes the fifty examples and the fifty puzzles out
+    for itself (e_ask_p, z_else_p), and a translation that dropped a line,
+    changed a number or made two boxes into one would be another program
+    under the same button -- and a puzzle with another fault, or none.  So
+    each is set beside the English one with its words taken out (see
+    program_shape) and has to match it line for line; and what it names
+    has to be in plain letters, which every language the code is written
+    out in takes.
+
+    A puzzle is marked against words as well as numbers -- {out} is "raus"
+    in German -- and each of those has to be somewhere a solver can see it,
+    in the program or in its brief.  Where node is, every language's copy
+    of every puzzle is run as well, and has to come out wrong.
+    """
+    fb = builder()
+    en = fb.WORDS["en"]
+    keys = sorted(k for k in en if k.endswith("_p"))
+    bad, runs = [], []
+    for code in sorted(fb.WORDS):
+        words = fb.WORDS[code]
+        for key in keys:
+            text = words.get(key)
+            if not text:
+                bad.append("%s/%s: not written out" % (code, key))
+                continue
+            odd = re.findall(r"[^\x00-\x7f]", re.sub(r'"[^"]*"', "", text))
+            if odd:
+                bad.append("%s/%s: %s in a name" % (code, key, "".join(odd[:3])))
+            if code == "en":
+                continue
+            want, got = program_shape(en[key]), program_shape(text)
+            if len(want) != len(got):
+                bad.append("%s/%s: %d lines, not %d" % (code, key, len(got), len(want)))
+                continue
+            for n, (a, b) in enumerate(zip(want, got)):
+                if a != b:
+                    bad.append("%s/%s line %d is not the English line: %r"
+                               % (code, key, n + 1, text.split("\n")[n].strip()))
+                    break
+            if len(read_as_data(text)["problems"]) != len(read_as_data(en[key])["problems"]):
+                bad.append("%s/%s: does not read the way the English one does" % (code, key))
+    if not node_there():
+        return not bad, "%d programs x %d languages, not run: node is not installed%s" % (
+            len(keys), len(fb.WORDS), "" if not bad else " -- " + "; ".join(bad[:3]))
+
+    puzzles = puzzle_list()
+    listed = set(example_keys()) | set(one["key"] for one in puzzles)
+    for key in sorted(listed ^ set(k[:-2] for k in keys)):
+        bad.append("%s: %s" % (key, "on the page with no program" if key in listed
+                               else "a program nothing on the page offers"))
+    asked = {"words": en, "cases": [], "puzzles": []}
+    for code in sorted(fb.WORDS):
+        words = fb.WORDS[code]
+        for one in puzzles:
+            start, tries = puzzle_as(one, words)
+            seen = (start + "\n" + words.get(one["key"] + "_b", "")).lower()
+            for each, raw in zip(tries, one["tries"]):
+                for said, was in zip(each["want"], raw["want"]):
+                    if was != said and said not in each["give"] and said.lower() not in seen:
+                        bad.append("%s/%s: marked against %r, which it never says"
+                                   % (code, one["key"], said))
+                for said, was in zip(each["give"], raw["give"]):
+                    if was != said and said not in each["want"] and said.lower() not in start.lower():
+                        bad.append("%s/%s: typed %r, which it never asks for"
+                                   % (code, one["key"], said))
+            if start:
+                asked["puzzles"].append({"name": "%s puzzle %d (%s)" % (code, one["no"], one["key"]),
+                                         "broken": read_as_data(start), "tries": tries})
+    handle, where = tempfile.mkstemp(suffix=".json")
+    try:
+        with io.open(handle, "w", encoding="utf-8") as f:
+            f.write(json.dumps(asked))
+        got = subprocess.run(["node", os.path.join(HERE, "program.js"), where],
+                             capture_output=True, text=True, encoding="utf-8")
+    finally:
+        os.remove(where)
+    if got.returncode:
+        bad += [line.strip() for line in got.stderr.strip().split("\n")
+                if line.strip()][:6] or [got.stdout.strip()[-200:]]
+    return not bad, "%d programs x %d languages, %d puzzles run%s" % (
+        len(keys), len(fb.WORDS), len(asked["puzzles"]),
+        "" if not bad else " -- " + "; ".join(bad[:4]))
 
 
 def node_there():

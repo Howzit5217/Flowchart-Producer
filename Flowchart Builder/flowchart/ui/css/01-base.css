@@ -23,6 +23,7 @@
     --code-bad: #fbdcdc;                /*   or the line it stopped at */
     --warn: #8a5a00;   /* said, but not fatal: a line it could not do */
     --bad-glow: rgba(164, 38, 44, .55);
+    --bad-soft: #fbeaea;               /* a menu row about to throw away */
     --here-glow: rgba(20, 66, 124, .42);  /* the shape the cursor is in */
     --code-well: rgba(16, 24, 40, .05);
     --dim: rgba(16, 24, 40, .34);   /* behind a sheet that fills the screen */
@@ -49,6 +50,7 @@
     --code-bad: #3d1e20;
     --warn: #e0b341;
     --bad-glow: rgba(255, 139, 139, .5);
+    --bad-soft: #3a2226;
     --here-glow: rgba(91, 155, 240, .55);  /* the shape the cursor is in */
       --code-well: rgba(0, 0, 0, .35);
       --dim: rgba(0, 0, 0, .58);   /* behind a sheet that fills the screen */
@@ -69,6 +71,7 @@
     --code-bad: #3d1e20;
     --warn: #e0b341;
     --bad-glow: rgba(255, 139, 139, .5);
+    --bad-soft: #3a2226;
     --here-glow: rgba(91, 155, 240, .55);  /* the shape the cursor is in */
     --code-well: rgba(0, 0, 0, .35);
     --dim: rgba(0, 0, 0, .58);   /* behind a sheet that fills the screen */

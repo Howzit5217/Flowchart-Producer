@@ -21,198 +21,155 @@
   //
   // Nothing here knows the answers.  It knows what the program should say,
   // which is a different thing and the only thing worth checking.
+  //
+  // Nor are the programs here.  Each language writes every puzzle out for
+  // itself, in its own file under words/ (z_else_p for z_else), so a
+  // puzzle opened in Spanish is a Spanish program with a Spanish fault in
+  // it.  What it is marked against has to be in the same language, so an
+  // answer that is a word is written as {out} here and said as that
+  // language says zw_out -- "out", "raus", "fuera", "dehors".
   var PUZZLES = [
     ["pz_l1", [
       { key: "z_else",
-        start: "Start\nDeclare Integer age\nInput age\nIf age >= 18 Then\n    Display \"in\"\nEnd If\nStop",
-        tries: [{ give: ["20"], want: ["in"] },
-                { give: ["9"], want: ["out"] }] },
+        tries: [{ give: ["20"], want: ["{in}"] },
+                { give: ["9"], want: ["{out}"] }] },
       { key: "z_swap",
-        start: "Start\nDeclare Integer n\nInput n\nIf n > 10 Then\n    Display \"small\"\nElse\n    Display \"big\"\nEnd If\nStop",
-        tries: [{ give: ["12"], want: ["big"] },
-                { give: ["3"], want: ["small"] }] },
+        tries: [{ give: ["12"], want: ["{big}"] },
+                { give: ["3"], want: ["{small}"] }] },
       { key: "z_count",
-        start: "Start\nFor i = 1 To 4\n    Display i\nEnd For\nStop",
         tries: [{ give: [], want: ["1", "2", "3", "4", "5"] }] },
       { key: "z_greet",
-        start: "Start\nDeclare String name\nDisplay \"Hello\"\nDisplay name\nInput name\nStop",
-        tries: [{ give: ["Sam"], want: ["Hello", "Sam"] }] },
+        tries: [{ give: ["Sam"], want: ["{hello}", "Sam"] }] },
       { key: "z_range",
-        start: "Start\nDeclare Integer n\nInput n\nIf n > 0 Or n < 10 Then\n    Display \"in range\"\nElse\n    Display \"out of range\"\nEnd If\nStop",
-        tries: [{ give: ["5"], want: ["in range"] },
-                { give: ["50"], want: ["out of range"] },
-                { give: ["-3"], want: ["out of range"] }] },
+        tries: [{ give: ["5"], want: ["{inrange}"] },
+                { give: ["50"], want: ["{outrange}"] },
+                { give: ["-3"], want: ["{outrange}"] }] },
       { key: "z_double",
-        start: "Start\nDeclare Integer n\nInput n\nDisplay n\nStop",
         tries: [{ give: ["4"], want: ["8"] },
                 { give: ["10"], want: ["20"] }] },
       { key: "z_sign",
-        start: "Start\nDeclare Integer n\nInput n\nIf n > 0 Then\n    Display \"positive\"\nElse\n    Display \"negative\"\nEnd If\nStop",
-        tries: [{ give: ["5"], want: ["positive"] },
-                { give: ["0"], want: ["zero"] },
-                { give: ["-2"], want: ["negative"] }] },
+        tries: [{ give: ["5"], want: ["{positive}"] },
+                { give: ["0"], want: ["{zero}"] },
+                { give: ["-2"], want: ["{negative}"] }] },
       { key: "z_twice",
-        start: "Start\nDeclare String word\nInput word\nDisplay word\nStop",
-        tries: [{ give: ["hi"], want: ["hi", "hi"] }] },
+        tries: [{ give: ["{hi}"], want: ["{hi}", "{hi}"] }] },
       { key: "z_minus",
-        start: "Start\nDeclare Integer a\nDeclare Integer b\nInput a\nInput b\nDisplay a + b\nStop",
         tries: [{ give: ["10", "4"], want: ["6"] },
                 { give: ["9", "9"], want: ["0"] }] },
       { key: "z_early",
-        start: "Start\nDeclare Integer n\nDeclare Integer answer\nInput n\nDisplay answer\nanswer = n * 3\nStop",
         tries: [{ give: ["4"], want: ["12"] },
                 { give: ["10"], want: ["30"] }] }
     ]],
     ["pz_l2", [
       { key: "z_forever",
-        start: "Start\nDeclare Integer n\nn = 3\nWhile n > 0\n    Display n\nEnd While\nDisplay \"go\"\nStop",
-        tries: [{ give: [], want: ["3", "2", "1", "go"] }] },
+        tries: [{ give: [], want: ["3", "2", "1", "{go}"] }] },
       { key: "z_total",
-        start: "Start\nDeclare Integer total\nFor i = 1 To 4\n    total = 0\n    total = total + i\nEnd For\nDisplay total\nStop",
         tries: [{ give: [], want: ["10"] }] },
       { key: "z_two",
-        start: "Start\nDeclare Integer a\nDeclare Integer b\nInput a\nDisplay a + b\nStop",
         tries: [{ give: ["3", "4"], want: ["7"] },
                 { give: ["10", "5"], want: ["15"] }] },
       { key: "z_order",
-        start: "Start\nDeclare Integer total\ntotal = 0\nFor i = 1 To 3\n    total = total + i\n    Display total\nEnd For\nStop",
         tries: [{ give: [], want: ["6"] }] },
       { key: "z_until",
-        start: "Start\nDeclare Integer n\nn = 0\nDo\n    n = n + 1\n    Display n\nUntil n > 0\nStop",
         tries: [{ give: [], want: ["1", "2", "3"] }] },
       { key: "z_nested",
-        start: "Start\nFor row = 1 To 2\n    For col = 1 To 1\n        Display row * col\n    End For\nEnd For\nStop",
         tries: [{ give: [], want: ["1", "2", "2", "4"] }] },
       { key: "z_never",
-        start: "Start\nDeclare Integer n\nn = 5\nWhile n > 5\n    Display n\n    n = n - 1\nEnd While\nStop",
         tries: [{ give: [], want: ["5", "4", "3", "2", "1"] }] },
       { key: "z_odds",
-        start: "Start\nDeclare Integer total\ntotal = 0\nFor i = 1 To 10\n    If i mod 2 = 1 Then\n        total = total + i\n    End If\nEnd For\nDisplay total\nStop",
         tries: [{ give: [], want: ["30"] }] },
       { key: "z_asked",
-        start: "Start\nDeclare Integer n\nDeclare Integer total\ntotal = 0\nInput n\nFor i = 1 To 3\n    total = total + n\nEnd For\nDisplay total\nStop",
         tries: [{ give: ["1", "2", "3"], want: ["6"] },
                 { give: ["5", "5", "5"], want: ["15"] }] },
       { key: "z_onemore",
-        start: "Start\nDeclare Integer total\ntotal = 0\nFor i = 1 To 11\n    total = total + i\nEnd For\nDisplay total\nStop",
         tries: [{ give: [], want: ["55"] }] }
     ]],
     ["pz_l3", [
       { key: "z_grade",
-        start: "Start\nDeclare Integer score\nInput score\nIf score > 60 Then\n    Display \"pass\"\nElse\n    Display \"fail\"\nEnd If\nStop",
-        tries: [{ give: ["60"], want: ["pass"] },
-                { give: ["59"], want: ["fail"] },
-                { give: ["80"], want: ["pass"] }] },
+        tries: [{ give: ["60"], want: ["{pass}"] },
+                { give: ["59"], want: ["{fail}"] },
+                { give: ["80"], want: ["{pass}"] }] },
       { key: "z_evens",
-        start: "Start\nFor i = 1 To 10\n    Display i\nEnd For\nStop",
         tries: [{ give: [], want: ["2", "4", "6", "8", "10"] }] },
       { key: "z_return",
-        start: "Start\nDeclare Integer n\nInput n\nDisplay twice(n)\nStop\n\nFunction twice(x)\n    x = x * 2\nEnd Function",
         tries: [{ give: ["5"], want: ["10"] },
                 { give: ["11"], want: ["22"] }] },
       { key: "z_param",
-        start: "Start\nDeclare Integer n\nInput n\nCall show(n)\nStop\n\nModule show(x)\n    Display \"x\"\nEnd Module",
         tries: [{ give: ["7"], want: ["7"] },
                 { give: ["2"], want: ["2"] }] },
       { key: "z_many",
-        start: "Start\nDeclare Integer n\nDeclare Integer many\nFor i = 1 To 5\n    many = 0\n    Input n\n    If n > 10 Then\n        many = many + 1\n    End If\nEnd For\nDisplay many\nStop",
         tries: [{ give: ["4", "20", "30", "1", "50"], want: ["3"] }] },
       { key: "z_divide",
-        start: "Start\nDeclare Real total\nDeclare Real n\ntotal = 0\nFor i = 1 To 4\n    Input n\n    total = total + n\nEnd For\nDisplay total / 5\nStop",
         tries: [{ give: ["2", "4", "6", "8"], want: ["5"] }] },
       { key: "z_valid",
-        start: "Start\nDeclare Integer n\nDo\n    Input n\nUntil n > 0\nDisplay \"ok\"\nDisplay n\nStop",
-        tries: [{ give: ["50", "-1", "7"], want: ["ok", "7"] }] },
+        tries: [{ give: ["50", "-1", "7"], want: ["{ok}", "7"] }] },
       { key: "z_smallest",
-        start: "Start\nDeclare Integer n\nDeclare Integer best\nbest = 0\nFor i = 1 To 4\n    Input n\n    If n < best Then\n        best = n\n    End If\nEnd For\nDisplay best\nStop",
         tries: [{ give: ["3", "9", "2", "7"], want: ["9"] }] },
       { key: "z_short",
-        start: "Start\nDeclare Integer a\nDeclare Integer b\nInput a\nInput b\nDisplay add(a)\nStop\n\nFunction add(x, y)\n    Return x + y\nEnd Function",
         tries: [{ give: ["3", "4"], want: ["7"] },
                 { give: ["10", "5"], want: ["15"] }] },
       { key: "z_stops",
-        start: "Start\nDeclare Integer n\nn = 5\nWhile n > 1\n    Display n\n    n = n - 1\nEnd While\nDisplay \"go\"\nStop",
-        tries: [{ give: [], want: ["5", "4", "3", "2", "1", "go"] }] }
+        tries: [{ give: [], want: ["5", "4", "3", "2", "1", "{go}"] }] }
     ]],
     ["pz_l4", [
       { key: "z_fizz",
-        start: "Start\nFor i = 1 To 15\n    If i mod 3 = 0 Then\n        Display \"Fizz\"\n    Else If i mod 5 = 0 Then\n        Display \"Buzz\"\n    Else If i mod 15 = 0 Then\n        Display \"FizzBuzz\"\n    Else\n        Display i\n    End If\nEnd For\nStop",
         tries: [{ give: [], want: ["1", "2", "Fizz", "4", "Buzz", "Fizz", "7", "8", "Fizz", "Buzz", "11", "Fizz", "13", "14", "FizzBuzz"] }] },
       { key: "z_prime",
-        start: "Start\nDeclare Integer n\nDeclare Integer factors\nInput n\nfactors = 0\nFor i = 1 To n\n    If n mod i = 0 Then\n        factors = factors + 1\n    End If\nEnd For\nIf factors < 3 Then\n    Display \"prime\"\nElse\n    Display \"not prime\"\nEnd If\nStop",
-        tries: [{ give: ["1"], want: ["not prime"] },
-                { give: ["7"], want: ["prime"] },
-                { give: ["9"], want: ["not prime"] }] },
+        tries: [{ give: ["1"], want: ["{notprime}"] },
+                { give: ["7"], want: ["{prime}"] },
+                { give: ["9"], want: ["{notprime}"] }] },
       { key: "z_digits",
-        start: "Start\nDeclare Integer n\nDeclare Integer many\nInput n\nmany = 1\nWhile n > 0\n    n = n div 10\n    many = many + 1\nEnd While\nDisplay many\nStop",
         tries: [{ give: ["7"], want: ["1"] },
                 { give: ["123"], want: ["3"] }] },
       { key: "z_revzero",
-        start: "Start\nDeclare Integer n\nDeclare Integer back\nInput n\nback = 0\nWhile n > 0\n    back = back + n mod 10\n    n = n div 10\nEnd While\nDisplay back\nStop",
         tries: [{ give: ["123"], want: ["321"] },
                 { give: ["70"], want: ["7"] }] },
       { key: "z_sumd",
-        start: "Start\nDeclare Integer n\nDeclare Integer total\nInput n\ntotal = 0\nWhile n > 0\n    total = total + n div 10\n    n = n div 10\nEnd While\nDisplay total\nStop",
         tries: [{ give: ["123"], want: ["6"] },
                 { give: ["45"], want: ["9"] }] },
       { key: "z_gridrow",
-        start: "Start\nFor row = 1 To 3\n    For col = 1 To 3\n        Display row * row\n    End For\nEnd For\nStop",
         tries: [{ give: [], want: ["1", "2", "3", "2", "4", "6", "3", "6", "9"] }] },
       { key: "z_tri",
-        start: "Start\nDeclare Integer total\ntotal = 0\nFor i = 1 To 4\n    total = total + i\nEnd For\nDisplay total\nStop",
         tries: [{ give: [], want: ["1", "3", "6", "10"] }] },
       { key: "z_lowhigh",
-        start: "Start\nDeclare Integer n\nDeclare Integer lowest\nDeclare Integer highest\nlowest = 0\nhighest = 0\nFor i = 1 To 4\n    Input n\n    If n < lowest Then\n        lowest = n\n    End If\n    If n > highest Then\n        highest = n\n    End If\nEnd For\nDisplay lowest\nDisplay highest\nStop",
         tries: [{ give: ["5", "9", "3", "7"], want: ["3", "9"] },
                 { give: ["2", "2", "2", "2"], want: ["2", "2"] }] },
       { key: "z_starsrow",
-        start: "Start\nDeclare String line\nFor row = 1 To 3\n    line = \"\"\n    For col = 1 To 3\n        line = line + \"*\"\n    End For\n    Display line\nEnd For\nStop",
         tries: [{ give: [], want: ["*", "**", "***"] }] },
       { key: "z_factloop",
-        start: "Start\nDeclare Integer n\nDeclare Integer answer\nInput n\nanswer = 0\nFor i = 1 To n\n    answer = answer * i\nEnd For\nDisplay answer\nStop",
         tries: [{ give: ["4"], want: ["24"] },
                 { give: ["1"], want: ["1"] }] }
     ]],
     ["pz_l5", [
       { key: "z_report",
-        start: "Start\nDeclare Integer score\nDeclare Integer total\ntotal = 0\nFor i = 1 To 5\n    Input score\n    total = total + score\nEnd For\nDisplay total / 6\nStop",
         tries: [{ give: ["10", "20", "30", "40", "50"], want: ["30"] }] },
       { key: "z_tries",
-        start: "Start\nDeclare String word\nDeclare Integer tries\ntries = 0\nDo\n    Input word\n    tries = tries + 1\nUntil word = \"open\" Or tries = 2\nIf word = \"open\" Then\n    Display \"in\"\nElse\n    Display \"out\"\nEnd If\nStop",
-        tries: [{ give: ["a", "b", "open"], want: ["in"] },
-                { give: ["a", "b", "c"], want: ["out"] }] },
+        tries: [{ give: ["a", "b", "{open}"], want: ["{in}"] },
+                { give: ["a", "b", "c"], want: ["{out}"] }] },
       { key: "z_discount",
-        start: "Start\nDeclare Real total\nInput total\nIf total > 100 Then\n    total = total * 0.9\nEnd If\nDisplay total\nStop",
         tries: [{ give: ["60"], want: ["54"] },
                 { give: ["40"], want: ["40"] }] },
       { key: "z_convert",
-        start: "Start\nDeclare Real c\nInput c\nDisplay c * 9 / 5\nStop",
         tries: [{ give: ["100"], want: ["212"] },
                 { give: ["0"], want: ["32"] }] },
       { key: "z_tie",
-        start: "Start\nDeclare Integer reds\nDeclare Integer blues\nInput reds\nInput blues\nIf reds > blues Then\n    Display \"Red wins\"\nElse\n    Display \"Blue wins\"\nEnd If\nStop",
-        tries: [{ give: ["3", "1"], want: ["Red wins"] },
-                { give: ["1", "3"], want: ["Blue wins"] },
-                { give: ["2", "2"], want: ["A tie"] }] },
+        tries: [{ give: ["3", "1"], want: ["{redwins}"] },
+                { give: ["1", "3"], want: ["{bluewins}"] },
+                { give: ["2", "2"], want: ["{tie}"] }] },
       { key: "z_fibstep",
-        start: "Start\nDeclare Integer a\nDeclare Integer b\na = 0\nb = 1\nFor i = 1 To 5\n    Display a\n    a = b\n    b = a + b\nEnd For\nStop",
         tries: [{ give: [], want: ["0", "1", "1", "2", "3"] }] },
       { key: "z_coins",
-        start: "Start\nDeclare Integer cents\nInput cents\nDisplay cents div 100\nDisplay cents div 10\nDisplay cents mod 10\nStop",
         tries: [{ give: ["132"], want: ["1", "3", "2"] },
                 { give: ["205"], want: ["2", "0", "5"] }] },
       { key: "z_score",
-        start: "Start\nDeclare Integer score\nscore = 0\nscore = score + asked(4)\nscore = score + asked(15)\nDisplay score\nStop\n\nFunction asked(answer)\n    Declare Integer said\n    Input said\n    If said = answer Then\n        Return 0\n    Else\n        Return 1\n    End If\nEnd Function",
         tries: [{ give: ["4", "15"], want: ["2"] },
                 { give: ["4", "1"], want: ["1"] },
                 { give: ["1", "1"], want: ["0"] }] },
       { key: "z_sent",
-        start: "Start\nDeclare Integer n\nDeclare Integer total\nDeclare Integer many\ntotal = 0\nmany = 0\nInput n\nWhile n <> 0\n    total = total + n\n    many = many + 1\n    Input n\nEnd While\nDisplay total / (many + 1)\nStop",
         tries: [{ give: ["2", "4", "6", "0"], want: ["4"] },
                 { give: ["10", "20", "0"], want: ["15"] }] },
       { key: "z_menu0",
-        start: "Start\nDeclare Integer n\nDisplay \"Pick a number, 0 to stop\"\nInput n\nWhile n <> 1\n    Display n\n    Display \"Pick a number, 0 to stop\"\n    Input n\nEnd While\nDisplay \"Bye\"\nStop",
-        tries: [{ give: ["5", "0"], want: ["Pick a number, 0 to stop", "5", "Pick a number, 0 to stop", "Bye"] }] }
+        tries: [{ give: ["5", "0"], want: ["{pick}", "5", "{pick}", "{bye}"] }] }
     ]]
   ];
 
@@ -228,6 +185,18 @@
       level[1].forEach(function (one) { one.no = ++n; });
     });
   })();
+
+  // A puzzle as it arrives, in the language the page is in.
+  function startOf(one) { return TXT[one.key + "_p"] || ""; }
+
+  // Answers to type and answers to expect, with every {word} in them said
+  // in the language the page is in.
+  function puzzleWords(list) {
+    return list.map(function (said) {
+      var named = /^\{(\w+)\}$/.exec(said);
+      return named ? (TXT["zw_" + named[1]] || named[1]) : said;
+    });
+  }
 
   // How many of the level before it have to be solved before a level opens.
   // Not all of them: one puzzle nobody can see the trick of should not be a
@@ -275,7 +244,7 @@
     var said = el("#code").value;
     // Back to how it arrived is nothing to keep: it is what opening the
     // puzzle puts there anyway.
-    if (said === onPuzzle.start) { delete work[onPuzzle.key]; }
+    if (said === startOf(onPuzzle)) { delete work[onPuzzle.key]; }
     else { work[onPuzzle.key] = said; }
     keepWork();
   }
@@ -405,7 +374,7 @@
     if (el("#code")) {
       setMode(false);
       // Where you left it, if you left it anywhere.
-      el("#code").value = work[one.key] || one.start;
+      el("#code").value = work[one.key] || startOf(one);
       titleComesFrom({ puzzle: one.no });
       showStarts();
       el("#build").click();
@@ -425,10 +394,10 @@
     box.focus();
     box.select();
     var put = false;
-    try { put = document.execCommand("insertText", false, onPuzzle.start); }
+    try { put = document.execCommand("insertText", false, startOf(onPuzzle)); }
     catch (e) { put = false; }
     if (!put) {
-      box.value = onPuzzle.start;
+      box.value = startOf(onPuzzle);
       box.dispatchEvent(new Event("input", { bubbles: true }));
     }
     delete work[onPuzzle.key];
@@ -629,11 +598,11 @@
       // typed in for you.  The rest are run out of sight -- it is the same
       // program, and watching it go round five times says nothing the
       // first time round did not.
-      var got = i === 0 ? await runWatched(go.give)
-                        : await runQuietly(go.give);
+      var got = i === 0 ? await runWatched(puzzleWords(go.give))
+                        : await runQuietly(puzzleWords(go.give));
       // Stopped on purpose, or the puzzle put down: nothing to say.
       if (stoppedCheck || onPuzzle !== one) { return; }
-      if (got.wentWrong || !readsSame(got.said, go.want)) {
+      if (got.wentWrong || !readsSame(got.said, puzzleWords(go.want))) {
         beaten = false;
         why = { go: go, got: got };
         break;
@@ -654,7 +623,7 @@
     // watching the run just saw for themselves.
     mark.className = "hint bad";
     mark.textContent = say(why.got.wentWrong ? "pz_broke" : "pz_wrong", {
-      give: listed(why.go.give),
+      give: listed(puzzleWords(why.go.give)),
       said: listed(why.got.said)
     });
   }

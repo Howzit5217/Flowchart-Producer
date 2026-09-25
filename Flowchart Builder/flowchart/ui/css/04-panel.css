@@ -551,11 +551,33 @@
     border-radius: 8px; padding: 7px 8px; cursor: pointer; font-size: 13px;
   }
   .tab.on { background: var(--accent); border-color: var(--accent); color: #fff; }
-  .adders { display: grid; grid-template-columns: repeat(6, 1fr); gap: 5px; }
-  .adders .btn {
-    padding: 5px 2px; justify-content: center; border-radius: 7px;
+  /* Add a shape: the shapes the rules give each kind of step, a named tile
+     each, three to a row -- and under them every other shape, sorted into
+     four sets, a button and a menu each (11-hand-panel.js). */
+  .adders { display: flex; flex-direction: column; gap: 6px; }
+  .adder-tiles { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+  .adders .btn.adder {
+    flex-direction: column; justify-content: center; gap: 4px; min-width: 0;
+    padding: 8px 4px 7px; border-radius: 8px; white-space: normal;
   }
   .adders .legendkey { width: 24px; height: 17px; }
+  .adder-name {
+    max-width: 100%; font-size: 11.5px; line-height: 1.25; text-align: center;
+    overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical; overflow-wrap: anywhere;
+  }
+  .adder-sets { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
+  .adders .set-btn { min-width: 0; justify-content: center; gap: 4px; padding: 5px 4px; }
+  .set-btn .set-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+  .set-btn svg {
+    flex: none; width: 10px; height: 10px; fill: none; stroke: var(--muted);
+    stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round;
+  }
+  /* open: lit as a hovered button is, the chevron turned over */
+  .set-btn[aria-expanded="true"] {
+    background-color: var(--accent-soft); border-color: var(--accent);
+  }
+  .set-btn[aria-expanded="true"] svg { stroke: var(--accent); transform: rotate(180deg); }
   textarea.field { resize: vertical; }
   .trio { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px;
           margin-top: 10px; }
@@ -704,16 +726,16 @@
      the width it is being read at -- get bars of their own too, and the
      frames those hang in take no room of their own. */
   .tape .slide-frame { min-width: 0; }
-  svg .node.now > :is(rect, ellipse, polygon, path) { stroke-width: 3; }
+  svg .node.now > :is(rect, ellipse, polygon, path, circle) { stroke-width: 3; }
   svg .node.now { filter: drop-shadow(0 0 8px rgba(17, 97, 73, .65)); }
   /* The shape the cursor is standing in, over in the pseudocode.  Lighter
      than the one you have picked to color and lighter again than the one a
      run is standing on, because it is only saying where you are: the line
      under the cursor made this. */
-  svg .node.here > :is(rect, ellipse, polygon, path) { stroke-width: 2.2; }
+  svg .node.here > :is(rect, ellipse, polygon, path, circle) { stroke-width: 2.2; }
   svg .node.here { filter: drop-shadow(0 0 6px var(--here-glow)); }
   /* and the one it stopped at, which stays marked after it has stopped */
-  svg .node.wrong > :is(rect, ellipse, polygon, path) {
+  svg .node.wrong > :is(rect, ellipse, polygon, path, circle) {
     stroke: var(--bad); stroke-width: 3;
   }
   svg .node.wrong { filter: drop-shadow(0 0 8px var(--bad-glow)); }
@@ -731,7 +753,83 @@
     padding: 7px 9px; border-radius: 7px; cursor: pointer; font-size: 13px;
   }
   .menu button:hover { background: var(--accent-soft); }
+  .menu:focus { outline: 0; }            /* it holds the keys; its rows show them */
   .menu hr { border: 0; border-top: 1px solid var(--line-soft); margin: 4px 2px; }
+  /* A row says what it does the way the bar over the paper says it (.sel-bar,
+     11-hand-many.js): a drawing in front, in the page's muted gray, going
+     to the accent with the row -- then the words, then the keys that do
+     the same, and a chevron where there is a menu beside it. */
+  .menu .mi-lead {
+    flex: none; width: 16px; height: 16px; display: inline-flex;
+    align-items: center; justify-content: center; color: var(--muted);
+  }
+  .menu.wide-lead .mi-lead { width: 24px; }
+  .menu .mi-lead .legendkey { width: 24px; height: 17px; }
+  .menu svg.mi {
+    width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.6;
+    stroke-linecap: round; stroke-linejoin: round;
+  }
+  .menu .mi-name {
+    flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .menu .mi-keys {
+    flex: none; margin-left: 22px; font-size: 11.5px; color: var(--muted);
+    font-variant-numeric: tabular-nums;
+  }
+  .menu .mi-more {
+    flex: none; width: 10px; height: 10px; margin-left: 16px; margin-right: -2px;
+    fill: none; stroke: var(--muted); stroke-width: 1.6;
+    stroke-linecap: round; stroke-linejoin: round;
+  }
+  .menu .mi-keys + .mi-more { margin-left: 8px; }
+  /* A and a sign, for the words a size smaller or bigger, in the face the
+     B, I, U and S keys are drawn in. */
+  .menu .mi-glyph { font: 600 12px/1 Georgia, "Times New Roman", serif; white-space: nowrap; }
+  .menu button:is(:hover, :focus-visible, .under-finger, [aria-expanded="true"]) .mi-lead {
+    color: var(--accent);
+  }
+  .menu button:is(:hover, :focus-visible, .under-finger, [aria-expanded="true"]) .mi-more {
+    stroke: var(--accent);
+  }
+  /* The row a menu beside it came from stays lit while that menu is open. */
+  .menu button[aria-expanded="true"] { background: var(--accent-soft); }
+  /* Away with it: red, and only when it is about to be pressed. */
+  .menu button.danger:is(:hover, :focus-visible, .under-finger) {
+    background: var(--bad-soft); color: var(--bad);
+  }
+  .menu button.danger:is(:hover, :focus-visible, .under-finger) .mi-lead { color: var(--bad); }
+  /* A shape carried out of a menu onto the paper: the menus stand aside. */
+  .menu.lending { opacity: .2; pointer-events: none; transition: opacity .15s; }
+  /* A menu opened beside a row is the menu it came from, over again. */
+  .menu.sub { min-width: 160px; }
+  .menu.shape-set { min-width: 190px; }
+  /* Words on their own draw no outline, only lines of writing, and those
+     are written in the color the page writes in -- or on a dark page they
+     were dark lines on dark. */
+  svg.keymark[data-kind="text"] path { stroke: currentColor; }
+
+  /* ---------------------------------- a finger drawn along the buttons -- */
+  /* The one under a finger drawn along a row of buttons (20-slide.js) is lit
+     the way a pointer over it lights it, whichever kind of button it is. */
+  .menu button.under-finger, .sel-bar .bar-btn.under-finger { background: var(--accent-soft); }
+  .btn.under-finger:not(.primary):not([disabled]),
+  .tab.under-finger:not(.on), .tog.under-finger:not(.on) {
+    background-color: var(--accent-soft); border-color: var(--accent);
+  }
+  .btn.primary.under-finger { filter: brightness(1.12); }
+  .seg-btn.under-finger { color: var(--ink); }
+  .seg-btn.under-finger:not(.on) { background: var(--accent-soft); }
+  .icon.under-finger:not([disabled]) { background: var(--line-soft); color: var(--ink); }
+  .preset.under-finger { border-color: var(--accent); }
+  /* And a finger drawn along them is not taken for the page being scrolled:
+     not at all where nothing under them scrolls -- the menus, the bars, the
+     sheets -- and only across where the panel scrolls up and down. */
+  .menu button, .colorpop button, .sel-bar .bar-btn, footer.bar .seg-btn,
+  .sheet-menu :is(.btn, .seg-btn) { touch-action: none; }
+  .menu.sizes button, .menu .pick-rows button { touch-action: pan-y; }
+  #panel :is(.seg-btn, .tab, .adders .btn, .preset, .tog, .line-up-row .icon) {
+    touch-action: pan-y;
+  }
   /* The same menu as the list a dropdown opens (20-menu.js), joined on to
      the box: at least as wide as it, lit round the edge as the box is, a
      faint seam where the two meet, and square at the join -- except where
