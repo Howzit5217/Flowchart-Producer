@@ -507,7 +507,15 @@
   }
   #hand .hand-row .btn { width: 100%; justify-content: center; }
   #hand .check-row { margin-top: 8px; }
-  #hand-switches .switches { margin-top: 0; margin-bottom: 4px; }
+  /* Grid and Key, up here from under the pseudocode (13-hand-keep.js).  A
+     pair side by side, as they are there, rather than spread over the
+     card's two columns with Key left alone in the middle; and a clear gap
+     under the shapes, which used to be the hint's to give and went with it,
+     so they read as the chart's switches and not as one more row of shapes. */
+  #hand-switches .switches {
+    display: flex; flex-wrap: wrap; gap: 8px 22px;
+    margin: 14px 0 0; padding: 0 2px;
+  }
   .btn.wide { width: 100%; justify-content: center; }
   /* what the button is doing, said in color */
   .btn.primary.working {
@@ -827,6 +835,27 @@
   svg .plus { cursor: pointer; }
   svg .plus:hover circle { r: 11; fill: #2f6fc4; }
   svg.lassoing .plus { display: none; }
+  /* The amber mark where the shape rules would draw a shape otherwise
+     (13-hand-rules.js).  Amber because it is worth a look and nothing is
+     wrong; pressed, it offers the rules' shape, or leaves it as it is. */
+  svg .rule-dot { cursor: pointer; }
+  svg .rule-dot:hover circle { r: 10; fill: #efa11a; }
+  svg.lassoing .rule-dot { display: none; }
+  /* The same offer in the panel, under the picked shape's name. */
+  .rule-tip {
+    margin: 0 0 10px; padding: 9px 10px 10px; border: 1px solid var(--line);
+    border-left: 3px solid var(--warn); border-radius: 8px;
+  }
+  .rule-tip p { margin: 0 0 8px; font-size: 12.5px; line-height: 1.4; color: var(--ink); }
+  .rule-tip-go { display: flex; flex-wrap: wrap; gap: 6px; }
+  .rule-tip-go .btn { gap: 6px; }
+  .rule-tip-go .take { border-color: var(--accent); background: var(--accent-soft); }
+  .rule-tip-go .legendkey { width: 20px; height: 14px; }
+  .rule-tip-go .legendkey svg { width: 20px; height: 14px; }
+  .menu .rule-says {
+    margin: 0 9px 6px; max-width: 250px;
+    font-size: 12.5px; line-height: 1.4; color: var(--ink);
+  }
   /* Lining several shapes up: eight small drawings in a row under the
      buttons for the lot, and the same in their menu. */
   .line-up { margin-top: 12px; }

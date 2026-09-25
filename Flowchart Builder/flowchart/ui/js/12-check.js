@@ -14,34 +14,37 @@
                    key: key, warn: !!ONLY_LOOKS[key], fix: fix || null });
     }
     if (!hand.nodes.length) { return found; }
+    // Start and End, and a decision, are whatever the shape rules draw them
+    // as as well as an oval and a diamond (endsKind, asksKind: 13-hand-rules.js).
+    var endShape = { shape: kindName(ruleShape("oval")) };
 
     var heads = hand.nodes.filter(function (n) { return !intoOf(n.id).length; });
     if (!heads.length) { fault("p_no_start", null); }
     else if (heads.length > 1) { fault("p_many_starts", null, { n: heads.length }); }
-    else if (heads[0].kind !== "oval") {
-      fault("p_start_kind", heads[0], null, startAbove(heads[0]));
+    else if (!endsKind(heads[0].kind)) {
+      fault("p_start_kind", heads[0], endShape, startAbove(heads[0]));
     }
 
     var ends = hand.nodes.filter(function (n) {
-      return n.kind === "oval" && !outOf(n.id).length;
+      return endsKind(n.kind) && !outOf(n.id).length;
     });
     var endFix = ends.length ? null : endBelow();
-    if (!ends.length) { fault("p_no_end", null, null, endFix); }
+    if (!ends.length) { fault("p_no_end", null, endShape, endFix); }
 
     hand.nodes.forEach(function (n) {
-      var outs = outOf(n.id), ins = intoOf(n.id);
+      var outs = outOf(n.id), ins = intoOf(n.id), asks = asksKind(n.kind);
       if (!String(n.text || "").trim()) { fault("p_empty", n, null, fillEmpty(n)); }
       if (!outs.length && !ins.length) { fault("p_alone", n, null, arrowFrom(n)); }
-      else if (!outs.length && n.kind !== "oval") {
+      else if (!outs.length && !endsKind(n.kind)) {
         fault("p_dead_end", n, null, ends.length ? toEnd(n) : endFix);
       }
-      if (n.kind === "diamond" && outs.length !== 2) {
+      if (asks && outs.length !== 2) {
         fault("p_decision_out", n, { n: outs.length });
       }
-      if (n.kind !== "diamond" && outs.length > 1) {
+      if (!asks && outs.length > 1) {
         fault("p_one_out", n, { n: outs.length });
       }
-      if (n.kind === "diamond" && outs.length === 2) {
+      if (asks && outs.length === 2) {
         var one = (outs[0].label || "").trim(), two = (outs[1].label || "").trim();
         if (!one || !two) { fault("p_no_label", n, null, labelWays(outs)); }
         else if (one.toLowerCase() === two.toLowerCase()) {
@@ -190,7 +193,7 @@
   // An arrow, worded the way drawing one by hand words it (see joinUp).
   function joinOn(from, to) {
     var tag = "";
-    if (from.kind === "diamond") { tag = outOf(from.id).length ? TXT.no : TXT.yes; }
+    if (asksKind(from.kind)) { tag = outOf(from.id).length ? TXT.no : TXT.yes; }
     hand.links.push({ from: from.id, to: to.id, label: tag });
   }
 
@@ -239,7 +242,7 @@
     return { auto: true, says: TXT.hf_start, go: function () {
       var first = nodeById(id);
       if (!first) { return; }
-      var start = { id: hand.next++, kind: "oval", text: TXT.start, x: first.x, y: 0,
+      var start = { id: hand.next++, kind: ruleShape("oval"), text: TXT.start, x: first.x, y: 0,
                     w: 140, h: 46 };
       measure(start);
       var y = first.y - first.h / 2 - 70;
@@ -260,7 +263,7 @@
   // The shapes the flow stops dead at, that are not an End.
   function deadEnds() {
     return hand.nodes.filter(function (n) {
-      return n.kind !== "oval" && !outOf(n.id).length && intoOf(n.id).length;
+      return !endsKind(n.kind) && !outOf(n.id).length && intoOf(n.id).length;
     });
   }
 
@@ -274,7 +277,7 @@
       var low = loose.reduce(function (a, b) {
         return b.y + b.h / 2 > a.y + a.h / 2 ? b : a;
       });
-      var end = newShape("oval", TXT.end, low.x, low.y + low.h / 2 + 70);
+      var end = newShape(ruleShape("oval"), TXT.end, low.x, low.y + low.h / 2 + 70);
       loose.forEach(function (n) { joinOn(n, end); });
     } };
   }
@@ -287,7 +290,7 @@
       var from = nodeById(id);
       if (!from) { return; }
       var ends = hand.nodes.filter(function (n) {
-        return n.kind === "oval" && !outOf(n.id).length && n.id !== id;
+        return endsKind(n.kind) && !outOf(n.id).length && n.id !== id;
       });
       var used = ends.filter(function (n) { return intoOf(n.id).length; });
       if (used.length) { ends = used; }
@@ -305,7 +308,7 @@
   // opens the shape to be typed into.
   function fillEmpty(node) {
     var id = node.id;
-    if (node.kind === "oval") {
+    if (endsKind(node.kind)) {
       var word = !intoOf(id).length ? TXT.start : (!outOf(id).length ? TXT.end : "");
       if (word) {
         return { auto: true, says: say("hf_write", { word: word }), go: function () {
@@ -546,7 +549,7 @@
           put(step(deep) + "End", node.id);
           return;
         }
-        if (node.kind === "diamond") {
+        if (asksKind(node.kind)) {
           var ways = bothWays(id), yes = ways[0], no = ways[1];
           var asked = saidIn(node);
           var yesBack = canReach(yes.to, id), noBack = canReach(no.to, id);

@@ -9,26 +9,53 @@
   // it on the paper, drag it into place, then go back to the first shape
   // and draw an arrow from one to the other -- four moves for what is, in
   // a flowchart, the one thing you do over and over.  So the picked shape
-  // wears a + under it, and pressing it asks what comes next and puts it
-  // there, joined on, ready to be typed into.  A decision has a second +
-  // at its right, for the other answer.
+  // wears a + on every side no arrow meets it at, and pressing one asks
+  // what comes next and puts it out that way, joined on, ready to be typed
+  // into -- down the page, across it, or back up it, as there is room.
+  // What it offers is the shapes the rules give each kind of step
+  // (ruleChoices, 13-hand-rules.js), so whatever is added keeps to them.
   var PLUS_R = 9;                        // how big the + is
   var PLUS_OFF = 30;                     // how far out from the shape it sits
   var NEXT_GAP = 50;                     // the room left between the two shapes
-  var NEXT_KINDS = ["rect", "io", "diamond", "oval"];
+  // Each way a + can point: which way the next shape goes from this one,
+  // and the side of it the arrow comes in at.
+  var NEXT_WAYS = { top: [0, -1, "foot"], foot: [0, 1, "top"],
+                    left: [-1, 0, "right"], right: [1, 0, "left"] };
 
-  // The + (or two) for the picked shape, drawn by drawHand beside its dots.
-  // `at` is where the shape stands on the paper and `about` how much room
-  // it takes up once turned.
-  function plusMarks(n, at, about) {
+  // The sides of a shape its arrows meet it at, out and in, as routeAll
+  // laid them (`laid`) -- or as they were drawn, where it is not to hand.
+  function sidesUsed(id, laid) {
+    var used = {};
+    hand.links.forEach(function (link, li) {
+      var pts = laid && laid[li];
+      if (link.from === id) {
+        used[pts && pts.sides ? PORT_SIDES[pts.sides[0]] : link.fromSide] = true;
+      }
+      if (link.to === id) {
+        used[pts && pts.sides ? PORT_SIDES[pts.sides[1]] : link.toSide] = true;
+      }
+    });
+    return used;
+  }
+
+  // The +s for the picked shape, drawn by drawHand beside its dots.  `at`
+  // is where the shape stands on the paper and `about` how much room it
+  // takes up once turned.  None on a question already answered both ways
+  // -- a third way out of it is not a way.  Near the top or the left of the
+  // paper a + comes in closer rather than off the edge, and where there is
+  // not room for it clear of the shape's own dot, it is left off.
+  function plusMarks(n, at, about, laid) {
     if (joining || many.length > 1) { return ""; }
-    var ways = [["foot", at.x, at.y + about.h / 2 + PLUS_OFF]];
-    if (n.kind === "diamond" && outOf(n.id).length < 2) {
-      ways.push(["right", at.x + about.w / 2 + PLUS_OFF, at.y]);
-    }
-    return ways.map(function (way) {
-      return '<g class="plus" data-i="' + n.id + '" data-way="' + way[0] +
-             '" transform="translate(' + way[1] + "," + way[2] + ')">' +
+    if (asksKind(n.kind) && outOf(n.id).length >= 2) { return ""; }
+    var used = sidesUsed(n.id, laid);
+    return PORT_SIDES.filter(function (way) { return !used[way]; }).map(function (way) {
+      var go = NEXT_WAYS[way];
+      var x = Math.max(PLUS_R + 1, at.x + go[0] * (about.w / 2 + PLUS_OFF));
+      var y = Math.max(PLUS_R + 1, at.y + go[1] * (about.h / 2 + PLUS_OFF));
+      if ((way === "left" && at.x - about.w / 2 - x < PLUS_R + 8) ||
+          (way === "top" && at.y - about.h / 2 - y < PLUS_R + 8)) { return ""; }
+      return '<g class="plus" data-i="' + n.id + '" data-way="' + way +
+             '" transform="translate(' + x + "," + y + ')">' +
              "<title>" + escaped(TXT.hp_next || "") + "</title>" +
              '<circle r="' + PLUS_R + '" fill="#14427c" stroke="#ffffff" stroke-width="1.5"/>' +
              '<path d="M-4.5,0H4.5M0,-4.5V4.5" stroke="#ffffff" stroke-width="2" ' +
@@ -38,9 +65,9 @@
 
   // What can come next, asked where the + was pressed.
   function plusMenu(fromId, way, x, y) {
-    openMenu(x, y, [{ head: TXT.hp_what_next }].concat(NEXT_KINDS.map(function (kind) {
-      return { mark: keyMark(kind), name: kindName(kind),
-               go: function () { addNext(fromId, way, kind); } };
+    openMenu(x, y, [{ head: TXT.hp_what_next }].concat(ruleChoices().map(function (one) {
+      return { mark: keyMark(one.kind), name: one.name,
+               go: function () { addNext(fromId, way, one.kind); } };
     })));
   }
 
@@ -49,27 +76,41 @@
     var from = nodeById(fromId);
     if (!from || !byHand) { return; }
     keepUndo();
-    var node = { id: hand.next++, kind: kind, text: firstWords(kind),
+    var go = NEXT_WAYS[way] || NEXT_WAYS.foot;
+    // A Start or End that comes after something is where the flow stops,
+    // whether or not there is a Start on the paper yet.
+    var node = { id: hand.next++, kind: kind,
+                 text: endsKind(kind) ? TXT.end : firstWords(kind),
                  x: from.x, y: from.y, w: 140, h: 46 };
     measure(node);
-    var a = turned(from), right = way === "right";
-    if (right) { node.x = from.x + a.w / 2 + NEXT_GAP + node.w / 2; }
-    else { node.y = from.y + a.h / 2 + NEXT_GAP + node.h / 2; }
+    var a = turned(from);
+    node.x = from.x + go[0] * (a.w / 2 + NEXT_GAP + node.w / 2);
+    node.y = from.y + go[1] * (a.h / 2 + NEXT_GAP + node.h / 2);
     node.x = Math.round(node.x / HAND_GRID) * HAND_GRID;
     node.y = Math.round(node.y / HAND_GRID) * HAND_GRID;
     // On past anything already standing where it would go.
     for (var i = 0; i < 200 && crowds(node, node.x, node.y); i++) {
-      if (right) { node.x += HAND_GRID * 4; } else { node.y += HAND_GRID * 4; }
+      node.x += go[0] * HAND_GRID * 4;
+      node.y += go[1] * HAND_GRID * 4;
+    }
+    // Up past the top of the paper: everything goes down to make room, as
+    // a Start put above the first shape does (startAbove, 12-check.js).
+    // The paper grows to the left by itself.
+    var short = node.h / 2 + 20 - node.y;
+    if (short > 0) {
+      var by = Math.ceil(short / HAND_GRID) * HAND_GRID;
+      hand.nodes.forEach(function (n) { n.y += by; });
+      node.y += by;
     }
     var link = { from: fromId, to: node.id, label: "",
-                 fromSide: right ? "right" : "foot", toSide: right ? "left" : "top" };
-    if (from.kind === "diamond") { link.label = outOf(fromId).length ? TXT.no : TXT.yes; }
+                 fromSide: NEXT_WAYS[way] ? way : "foot", toSide: go[2] };
+    if (asksKind(from.kind)) { link.label = outOf(fromId).length ? TXT.no : TXT.yes; }
     hand.nodes.push(node);
     hand.links.push(link);
     picked = node.id; chosen = null; many = []; joining = false;
     drawHand(); drawHandPanel(); showReport();
     // An End already says what it is; anything else wants its words.
-    var g = kind === "oval" ? null : el('.node[data-i="h' + node.id + '"]', chart);
+    var g = endsKind(kind) ? null : el('.node[data-i="h' + node.id + '"]', chart);
     if (g) { typeInto(g); }
   }
 
@@ -98,12 +139,12 @@
   // the flow on to where the old one went, keeping the side it came in at.
   // Where there is not room between the two, everything from the far one
   // on moves along to make some, as it would on paper.
-  var INTO_KINDS = ["rect", "io", "diamond"];
-
+  // What it offers is the rules' shapes, as the + does -- all but Start and
+  // End, which are never in the middle of anything.
   function stepMenu(linkId, x, y) {
-    openMenu(x, y, [{ head: TXT.hp_what_in }].concat(INTO_KINDS.map(function (kind) {
-      return { mark: keyMark(kind), name: kindName(kind),
-               go: function () { stepInto(linkId, kind); } };
+    openMenu(x, y, [{ head: TXT.hp_what_in }].concat(ruleChoices(["oval"]).map(function (one) {
+      return { mark: keyMark(one.kind), name: one.name,
+               go: function () { stepInto(linkId, one.kind); } };
     })));
   }
 
@@ -138,7 +179,7 @@
       if (spot) { node.x = spot.x; node.y = spot.y; }
     }
     hand.nodes.push(node);
-    var onward = { from: node.id, to: b.id, label: kind === "diamond" ? TXT.yes : "" };
+    var onward = { from: node.id, to: b.id, label: asksKind(kind) ? TXT.yes : "" };
     ["dash", "color", "wide", "head"].forEach(function (key) {
       if (link[key] !== undefined) { onward[key] = link[key]; }
     });

@@ -97,8 +97,8 @@
   }
 
   function firstWords(kind) {
-    if (kind === "oval") {
-      return hand.nodes.some(function (n) { return n.kind === "oval"; })
+    if (endsKind(kind)) {                // an oval, or the rules' Start / End
+      return hand.nodes.some(function (n) { return endsKind(n.kind); })
              ? TXT.end : TXT.start;
     }
     // A words-only box has no outline, so an empty one would be nothing at
@@ -126,6 +126,9 @@
     head.style.cssText = "font-weight:600; margin:10px 0 6px";
     head.textContent = name;
     box.appendChild(head);
+    var tipBox = document.createElement("div");   // the rules' shape for it,
+    box.appendChild(tipBox);                      //   offered (13-hand-rules.js)
+    ruleTip(tipBox, node);
 
     function put(bit) { box.appendChild(bit); }
     var label = document.createElement("label");
@@ -139,6 +142,8 @@
     words.oninput = function () {
       node.text = words.value;
       drawHand();
+      tipBox.innerHTML = "";             // what the words make it may have changed
+      ruleTip(tipBox, node);
     };
     box.appendChild(words);
 
@@ -245,7 +250,7 @@
       row.innerHTML = '<span class="name">' +
                       escaped((to && to.text) || (to ? to.kind : "?")).slice(0, 22) +
                       "</span>";
-      if (node.kind === "diamond" || outs.length > 1) {
+      if (asksKind(node.kind) || outs.length > 1) {
         var tag = document.createElement("input");
         tag.className = "field";
         tag.style.cssText = "width:78px; padding:3px 6px";
@@ -288,7 +293,7 @@
       keepUndo();
       var from = nodeById(fromId);
       var tag = "";
-      if (from && from.kind === "diamond") {
+      if (from && asksKind(from.kind)) {
         tag = outOf(fromId).length ? TXT.no : TXT.yes;
       }
       var link = { from: fromId, to: toId, label: tag };

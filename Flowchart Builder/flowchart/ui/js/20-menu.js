@@ -264,7 +264,9 @@
   }
 
   function paperMenu(x, y) {
-    var spots = ["rect", "oval", "io", "diamond", "text"];
+    // The shapes the rules give each kind of step (13-hand-rules.js), and a
+    // box of words on its own.
+    var spots = ruleChoices().concat([{ kind: "text", name: kindName("text") }]);
     // Pasted from here, it goes where the menu was opened.
     var here = onPaper({ clientX: x, clientY: y });
     var after = [];
@@ -272,9 +274,9 @@
       after.push({ name: TXT.m_clip_paste, go: function () { pasteShapes(here); } });
     }
     if (hand.nodes.length) { after.push({ name: TXT.m_all, go: selectAll }); }
-    openMenu(x, y, spots.map(function (kind) {
-      return { mark: keyMark(kind), name: kindName(kind),
-               go: function () { addNode(kind); } };
+    openMenu(x, y, spots.map(function (one) {
+      return { mark: keyMark(one.kind), name: one.name,
+               go: function () { addNode(one.kind); } };
     }).concat(["-"], after, after.length ? ["-"] : [], [
       { name: TXT.m_fit, go: function () { el("#fit").click(); } }
     ]));

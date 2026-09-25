@@ -1313,7 +1313,8 @@
     var tips = [];                     // held back so nothing paints over them
     // Every arrow is routed before any is drawn, so that the word on one
     // can keep clear of all the others, and of their heads.
-    var routes = routeAll().map(function (pts) {
+    var laid = routeAll();             // and which sides they meet shapes at
+    var routes = laid.map(function (pts) {
       return pts && pts.map(function (p) { return [p[0] + ox, p[1] + oy]; });
     });
     var keep = null;
@@ -1382,9 +1383,13 @@
       out.push("</g>");
     });
 
+    // The shapes the rules would draw otherwise, and their marks, held back
+    // with the heads so no shape is drawn over them (13-hand-rules.js).
+    var hints = ruleHints(), marks = [];
     hand.nodes.forEach(function (n) {
       var moved = { kind: n.kind, x: n.x + ox, y: n.y + oy, w: n.w, h: n.h };
       var about = turned(n);           // what it takes up, once turned
+      marks.push(ruleMark(n, moved, about, hints[n.id]));
       out.push('<g class="node' + (picked === n.id || inMany(n.id) ? " on" : "") +
                '" data-kind="' + n.kind + '" data-i="h' + n.id + '"' +
                (n.turn ? ' transform="rotate(' + n.turn + " " + moved.x + " " +
@@ -1441,10 +1446,11 @@
                      '" width="' + GRIP + '" height="' + GRIP + '" rx="2" fill="#ffffff" ' +
                      'stroke="#14427c" stroke-width="1.6"/>');
           });
-        out.push(plusMarks(n, moved, about));   // and what comes next (13-hand-more.js)
+        out.push(plusMarks(n, moved, about, laid));   // and what comes next (13-hand-more.js)
       }
     });
     out.push('<g class="tips">' + tips.join("") + "</g>");
+    out.push(marks.join(""));
     if (key.art) {
       out.push('<g transform="translate(' + (pad / 2) + ',' + (pad / 2) + ')">' +
                key.art + "</g>");

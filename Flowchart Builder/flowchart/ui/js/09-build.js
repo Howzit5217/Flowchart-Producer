@@ -758,6 +758,10 @@
       pick.onchange = function () {
         geom[role] = pick.value;
         drawRoles();
+        // Drawing by hand, it is the drawing that is looked at again: which
+        // shapes the rules now say otherwise about (13-hand-rules.js), and
+        // what the check makes of them -- not a chart built over the top.
+        if (byHand) { drawHand(); drawHandPanel(); showReport(); return; }
         if (el("#code").value.trim()) { el("#build").click(); }
       };
       row.appendChild(pick);

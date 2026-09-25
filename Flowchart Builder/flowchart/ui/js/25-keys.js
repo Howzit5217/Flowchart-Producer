@@ -72,7 +72,7 @@
                   space: "kn_space", click: "kn_click", drag: "kn_drag",
                   dblclick: "kn_dblclick", rclick: "kn_rclick", hold: "kn_hold",
                   wheel: "kn_wheel", pinch: "kn_pinch", corner: "kn_corner",
-                  dot: "kn_dot" }[key];
+                  dot: "kn_dot", plus: "kn_plus" }[key];
     return named ? (TXT[named] || key) : key;
   }
 
@@ -179,6 +179,8 @@
     "k_pan",
     [[["corner"]], "hm_size"],
     [[["dot"]], "hm_join"],
+    [[["plus"]], "hp_next"],             // on any free side (13-hand-more.js)
+    [[["click"]], "hm_rule"],            // the amber mark (13-hand-rules.js)
     [[["dblclick"]], "hm_type"],
     [[["rclick"], ["hold"]], "hm_menu"],
     [[["ctrl", "wheel"], ["pinch"]], "hm_zoom"]
