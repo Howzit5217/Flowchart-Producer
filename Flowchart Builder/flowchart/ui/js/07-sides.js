@@ -79,6 +79,21 @@
     if (card.scrollIntoView) { card.scrollIntoView({ block: "nearest" }); }
   }
 
+  // Asked for by name -- Format shape on a shape's menu (20-menu.js), as
+  // Word opens its Format pane -- the Style side comes out at the card for
+  // the shape, by hand as well, and on a narrow screen over the chart too,
+  // since that is what was asked for.
+  function formatPicked() {
+    if (!el("#modes")) { return; }
+    showSide("colors");
+    if (shut) { showPanel(true); }
+    var card = el("#sel-card");
+    if (!card) { return; }
+    var head = el("h2", card);
+    if (card.classList.contains("shut") && head) { head.click(); }
+    if (card.scrollIntoView) { card.scrollIntoView({ block: "nearest" }); }
+  }
+
   el("#side-chart").onclick = function () { showSide("chart"); };
   el("#side-colors").onclick = function () { showSide("colors"); };
   el("#collapse").onclick = function () { showPanel(false); };

@@ -278,7 +278,8 @@
     // What it was opened from can be taken off the page under it -- a
     // menu that has gone -- and then it goes too.
     function place() {
-      var menu = anchor.closest ? anchor.closest(".menu") : null;
+      // beside a menu's row; under a button of Word's bar (20-menu.js)
+      var menu = anchor.closest ? anchor.closest(".menu:not(.mini-bar)") : null;
       var from = anchor.getBoundingClientRect();
       if (!from.width && !from.height) { shut(); return; }
       var room = { width: box.offsetWidth, height: box.offsetHeight };

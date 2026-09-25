@@ -65,7 +65,6 @@
     next: '<rect x="5.5" y="2.5" width="9" height="5.5" rx="1.2"/><path d="M10 8v3"/>' +
           '<circle cx="10" cy="14.5" r="3.3"/><path d="M10 13v3M8.5 14.5h3"/>',
     into: '<path d="M10 2.5v3.5M10 14v3.5"/><rect x="5" y="6" width="10" height="8" rx="1.5"/>',
-    rotate: '<path d="M15.6 11.5a5.8 5.8 0 1 1-1.7-5.6"/><path d="M14.4 2.8v3.6h-3.6"/>',
     colors: '<path d="M10 3a7 7 0 1 0 0 14c1.1 0 1.7-.8 1.7-1.7 0-.9-.8-1.3-.8-2.2 0-.9.7-1.5 1.6-1.5' +
             'H14a3 3 0 0 0 3-3C17 5.7 13.9 3 10 3z"/><circle cx="6.6" cy="9.4" r=".8"/>' +
             '<circle cx="8.6" cy="6.3" r=".8"/><circle cx="12.3" cy="6.3" r=".8"/>',
@@ -78,7 +77,9 @@
     pin: '<path d="M10 17.5V12.4M6 12.4h8l-1.6-3.1V4.5H7.6v4.8z"/>',
     shapes: '<rect x="3" y="3" width="6" height="6" rx="1.2"/><circle cx="14" cy="6" r="3"/>' +
             '<path d="M6 11.5l3.2 5.5H2.8zM14 11l3 3-3 3-3-3z"/>',
-    fit: '<path d="M3.5 7.5v-4h4M12.5 3.5h4v4M16.5 12.5v4h-4M7.5 16.5h-4v-4"/>'
+    fit: '<path d="M3.5 7.5v-4h4M12.5 3.5h4v4M16.5 12.5v4h-4M7.5 16.5h-4v-4"/>',
+    format: '<path d="M3.5 6H6M10 6h6.5M3.5 14h7M14.5 14h2"/><circle cx="8" cy="6" r="2"/>' +
+            '<circle cx="12.5" cy="14" r="2"/>'
   };
   function menuIcon(name) {
     var art = MENU_ICONS[name] || BAR_ICONS[name] || "";
@@ -92,15 +93,35 @@
   var MORE_ART = '<svg class="mi-more" viewBox="0 0 10 10" aria-hidden="true">' +
                  '<path d="M3.8 2.2 6.6 5 3.8 7.8"/></svg>';
 
+  // A letter of each row's name to press for it, the way Word's menus mark
+  // theirs: the first letter of a word that no row above has taken, or
+  // failing that any letter it has.  Where in the name it is, or -1.
+  function accessLetter(name, used) {
+    function free(i) {
+      var c = name.charAt(i).toLowerCase();
+      return c !== c.toUpperCase() && !used[c];     // a letter, and not taken
+    }
+    var at = -1, i;
+    for (i = 0; i < name.length && at < 0; i++) {
+      if ((i === 0 || name.charAt(i - 1) === " ") && free(i)) { at = i; }
+    }
+    for (i = 0; i < name.length && at < 0; i++) { if (free(i)) { at = i; } }
+    if (at >= 0) { used[name.charAt(at).toLowerCase()] = true; }
+    return at;
+  }
+
   // The rows themselves, for a menu or for one opened off a row of it.
   // A row is { name, go } and may also have: `icon` (a MENU_ICONS name),
   // `mark` (a shape in miniature, or a tick), `swatch` (a color), `keys`
   // (the keys that do the same), `sub` (the rows of a menu of its own,
   // opened beside it, as a list or a function that makes one), `drag`
   // (a shape the row can be carried onto the paper as), `danger` (it
-  // throws something away) and `keepOpen`.
+  // throws something away), `off` (nothing for it to do just now) and
+  // `keepOpen`.  In a menu laid out as Word's (.word) every row has a
+  // letter to press for it, underlined.
   function menuRows(menu, items) {
     menu.setAttribute("role", "menu");
+    var used = {}, word = menu.classList.contains("word");
     // Rows with a shape in front want more room there than an icon does;
     // every row keeps the same, so the words all start in one place.
     menu.classList.toggle("wide-lead", items.some(function (item) {
@@ -169,9 +190,20 @@
                       '<span class="mi-name"></span>' +
                       (item.keys ? '<span class="mi-keys"></span>' : "") +
                       (item.sub ? MORE_ART : "");
-      row.querySelector(".mi-name").textContent = item.name;
+      var named = row.querySelector(".mi-name");
+      var letter = word ? accessLetter(item.name, used) : -1;
+      if (letter < 0) { named.textContent = item.name; }
+      else {
+        var mark = document.createElement("u");
+        mark.textContent = item.name.charAt(letter);
+        named.appendChild(document.createTextNode(item.name.slice(0, letter)));
+        named.appendChild(mark);
+        named.appendChild(document.createTextNode(item.name.slice(letter + 1)));
+        row.dataset.key = mark.textContent.toLowerCase();
+      }
       if (item.keys) { row.querySelector(".mi-keys").textContent = item.keys; }
       if (item.danger) { row.classList.add("danger"); }
+      if (item.off) { row.disabled = true; }
       if (item.sub) {
         row.setAttribute("aria-haspopup", "menu");
         row.setAttribute("aria-expanded", "false");
@@ -233,26 +265,38 @@
     })[0] || null;
   }
 
-  function openSubMenu(row, items) {
+  // `how` may say `below` -- dropped down under a button of a bar rather
+  // than beside a row -- and give it a `kind` of its own.  One opened off a
+  // menu laid out as Word's is laid out as Word's too.
+  function openSubMenu(row, items, how) {
     var parent = row.closest(".menu");
     if (!parent || !items || !items.length) { return null; }
+    how = how || {};
     var level = +(parent.dataset.level || 0) + 1;
     shutSubMenus(level);
     var sub = document.createElement("div");
-    sub.className = "menu sub";
+    sub.className = "menu sub" + (parent.classList.contains("word") ? " word" : "") +
+                    (how.kind ? " " + how.kind : "");
     sub.dataset.level = String(level);
     sub.opener = row;
     sub.openedAt = Date.now();
     menuRows(sub, items);
     document.body.appendChild(sub);
     row.setAttribute("aria-expanded", "true");
-    placeSubMenu(sub, row, parent);
+    placeSubMenu(sub, row, parent, how.below);
     return sub;
   }
 
-  function placeSubMenu(sub, row, parent) {
+  function placeSubMenu(sub, row, parent, below) {
     var p = parent.getBoundingClientRect(), r = row.getBoundingClientRect();
     var w = sub.offsetWidth, h = sub.offsetHeight;
+    if (below) {                          // under the button, or over it
+      var down = r.bottom + 4 + h <= innerHeight - 8;
+      sub.dataset.side = down ? "below" : "above";
+      sub.style.left = Math.max(8, Math.min(r.left, innerWidth - w - 8)) + "px";
+      sub.style.top = Math.max(8, down ? r.bottom + 4 : r.top - 4 - h) + "px";
+      return;
+    }
     // the menu's own padding and border, so the rows line up
     var inset = parseFloat(getComputedStyle(sub).paddingTop) + 1;
     var y = r.top - inset;
@@ -334,6 +378,14 @@
       if (from) { from.focus(); }
     } else if (ev.key === "Escape") { closeMenu(); }
     else if (ev.key === "Enter" || ev.key === " ") { done = false; ev.stopPropagation(); }
+    else if (ev.key.length === 1 && !ev.ctrlKey && !ev.metaKey && !ev.altKey &&
+             menu.classList.contains("word")) {
+      // the underlined letter: that row, pressed -- or its menu, gone into
+      var hit = rows.filter(function (b) { return b.dataset.key === ev.key.toLowerCase(); })[0];
+      if (!hit) { done = false; }
+      else if (hit.openSub) { firstRowOf(subOf(hit) || hit.openSub()); }
+      else { hit.click(); }
+    }
     else { done = false; }
     if (done) { ev.preventDefault(); ev.stopPropagation(); }
   }
@@ -375,27 +427,6 @@
              } };
   }
 
-  function colorRows(which, mine, fallbacks) {
-    var first = true;
-    function set(key, value) {
-      if (first) { first = false; keepUndo(); }   // one step for one choice
-      mine[key] = value;
-      style.nodes[which] = mine;
-      paint();
-      keep();
-    }
-    return [
-      paintRow(TXT.c_fill || "Fill", mine.fill, fallbacks.fill,
-               function (v) { set("fill", v); }),
-      paintRow(TXT.c_line || "Border", mine.line, fallbacks.line,
-               function (v) { set("line", v); }),
-      paintRow(TXT.c_words || "Words", mine.text, fallbacks.text,
-               function (v) { set("text", v); }),
-      paintRow(TXT.t_mark, mine.mark, MARKERS[0][0],
-               function (v) { set("mark", v); })
-    ];
-  }
-
   // Everything a shape was given of its own -- colors, how its words look,
   // its border -- taken off together, one step to step back from.
   function plainRow(which, mine) {
@@ -409,32 +440,178 @@
       } };
   }
 
-  // B, I, U and S side by side, as the Style side has them, and the words
-  // a size smaller or bigger, a row each -- all of which leave the menu
-  // open, so that bold and two sizes bigger is one visit.
-  function wordRows(which) {
-    function flip(what) {
-      return function () {
-        var on = flipLook(which, what);
-        drawSelection();
-        return on;
+  // --------------------------------------------- Word's small bar above --
+  // Word puts how a thing looks in a small bar of its own over the menu,
+  // and what can be done to it in the menu under that.  Using the bar puts
+  // the menu away and leaves the bar, so that bold, a size and a color are
+  // one visit; a press anywhere else, or Escape, puts the bar away too.
+  // It stands above the menu, the left edges lined up -- or, where there is
+  // no room above, the menu goes down to make some, or the bar goes under.
+  function openMiniBar(list, fill) {
+    if (!list) { return null; }
+    var bar = document.createElement("div");
+    bar.className = "menu mini-bar";
+    bar.dataset.level = "0";
+    bar.setAttribute("role", "toolbar");
+    fill(bar);
+    bar.addEventListener("keydown", barKeys);
+    bar.addEventListener("click", function () {   // first, before the press itself
+      clearTimeout(subTimer);
+      all(".menu.word:not(.out)").forEach(function (menu) {
+        if (menu.opener) { menu.opener.setAttribute("aria-expanded", "false"); }
+        letSubGo(menu);
+      });
+    }, true);
+    document.body.appendChild(bar);
+    var m = list.getBoundingClientRect(), w = bar.offsetWidth, h = bar.offsetHeight;
+    var y = m.top - h - 6;
+    if (y < 8) {
+      if (8 + h + 6 + m.height <= innerHeight - 8) {
+        list.style.top = (8 + h + 6) + "px";
+        y = 8;
+      } else {
+        y = Math.min(m.bottom + 6, innerHeight - h - 8);
+        bar.dataset.side = "below";
+      }
+    }
+    bar.style.left = Math.max(8, Math.min(m.left, innerWidth - w - 8)) + "px";
+    bar.style.top = y + "px";
+    return bar;
+  }
+
+  // Along the bar with the arrow keys, and Escape out of it.
+  function barKeys(ev) {
+    var keys = menuKeyRows(ev.currentTarget), at = keys.indexOf(document.activeElement);
+    if (ev.key === "ArrowRight" || ev.key === "ArrowLeft") {
+      var to = keys[(at + (ev.key === "ArrowRight" ? 1 : -1) + keys.length) % keys.length];
+      if (to) { to.focus(); }
+    } else if (ev.key === "Escape") { closeMenu(); }
+    else if (ev.key === "Enter" || ev.key === " ") { ev.stopPropagation(); return; }
+    else { return; }
+    ev.preventDefault();
+    ev.stopPropagation();
+  }
+
+  // The bar's drawings, in Word's way of saying them: the letter a bit
+  // bigger or smaller, a marker pen, the letter A, a paint pot and an
+  // outline -- the last four standing over a bar of the color they are now.
+  var TB_ART = {
+    grow: '<path d="M2.5 16 7 5h1.2l4.5 11M4.3 12h6.6"/><path d="M13.6 7.6 15.8 5.2 18 7.6"/>',
+    shrink: '<path d="M3 16l3.8-8.5h1.1L11.7 16M4.6 13.2h5.4"/><path d="M13.6 5.2 15.8 7.6 18 5.2"/>',
+    mark: '<path d="M5.5 12 12 5.5l2.5 2.5L8 14.5H5.5z"/><path d="M10.5 7l2.5 2.5"/>',
+    text: '<path d="M5.5 13.5 10 3.5l4.5 10M7.2 10h5.6"/>',
+    fill: '<path d="M4.5 8.5 9 4l5 5-4.5 4.5z"/><path d="M4.5 8.5h9.5"/>' +
+          '<path d="M16 10.3s1.3 1.6 1.3 2.4a1.3 1.3 0 0 1-2.6 0c0-.8 1.3-2.4 1.3-2.4z"/>',
+    line: '<rect x="4" y="3.5" width="12" height="10" rx="1.5"/>'
+  };
+  var TB_LOOKS = { bold: '<b class="tb-glyph">B</b>', italic: '<i class="tb-glyph">I</i>',
+                   under: '<u class="tb-glyph">U</u>', strike: '<s class="tb-glyph">ab</s>' };
+  var TB_DROP = '<svg class="tb-drop" viewBox="0 0 10 10" aria-hidden="true">' +
+                '<path d="M2.5 3.8 5 6.3l2.5-2.5"/></svg>';
+
+  // One shape's bar: its size, a step bigger and smaller; bold, italic,
+  // underline and struck through; and its highlighter, words, fill and
+  // border colors -- in that order, as Word has them.
+  function shapeBar(bar, node, which, mine) {
+    var k = kindColors(node.kind), first = true;
+    function group() {
+      var g = document.createElement("div");
+      g.className = "tb-group";
+      bar.appendChild(g);
+      return g;
+    }
+    function button(into, cls, art, name) {
+      var b = document.createElement("button");
+      b.type = "button";
+      b.className = cls;
+      b.innerHTML = art;
+      b.title = name;
+      b.setAttribute("aria-label", name);
+      into.appendChild(b);
+      return b;
+    }
+    function art(name) {
+      return '<svg class="tb-art" viewBox="0 0 20 20" aria-hidden="true">' + TB_ART[name] + "</svg>";
+    }
+    if (CAN_REFLOW) {
+      var sizes = group();
+      var size = button(sizes, "tb-size", "", TXT.t_size);
+      var up = button(sizes, "tb-btn", art("grow"), TXT.t_bigger + " (Ctrl+Shift+>)");
+      var down = button(sizes, "tb-btn", art("shrink"), TXT.t_smaller + " (Ctrl+Shift+<)");
+      var showSize = function () {
+        var now = shapePt(which);
+        size.innerHTML = "<span></span>" + TB_DROP;
+        size.firstChild.textContent = ptSaid(now);
+        up.disabled = nextSize(now, 1) === now;
+        down.disabled = nextSize(now, -1) === now;
+      };
+      showSize();
+      size.setAttribute("aria-haspopup", "menu");
+      size.setAttribute("aria-expanded", "false");
+      // The sizes, dropped down under the box, the one in use ticked and
+      // in the middle of what shows.
+      size.onclick = function () {
+        if (subOf(size)) { shutSubMenus(1); return; }
+        var now = shapePt(which), at = 0;
+        var list = openSubMenu(size, TYPE_POINTS.map(function (pt, n) {
+          if (pt === now) { at = n; }
+          return { name: ptSaid(pt), keepOpen: true,
+                   mark: pt === now ? tickArt() : '<span class="tick"></span>',
+                   go: function () {
+                     ownSize(which, pt);
+                     drawSelection();
+                     shutSubMenus(1);
+                     showSize();
+                   } };
+        }), { below: true, kind: "sizes" });
+        var row = list && list.querySelectorAll("button")[at];
+        if (row) { list.scrollTop = row.offsetTop - (list.clientHeight - row.offsetHeight) / 2; }
+      };
+      up.onclick = function () { growWords(which, 1); drawSelection(); showSize(); };
+      down.onclick = function () { growWords(which, -1); drawSelection(); showSize(); };
+    }
+    var looks = group();
+    LOOK_KEYS.forEach(function (one) {
+      var b = button(looks, "tb-btn", TB_LOOKS[one[0]],
+                     TXT[one[1]] + (one[3] ? " (" + one[3] + ")" : ""));
+      function show(on) {
+        b.classList.toggle("on", !!on);
+        b.setAttribute("aria-pressed", on ? "true" : "false");
+      }
+      show(lookOn(which, one[0]));
+      b.onclick = function () { show(flipLook(which, one[0])); drawSelection(); };
+    });
+    // Each color opens the squares and sliders under its button (colorPop),
+    // and the shape takes the color as you move about in them; the bar under
+    // the drawing goes with it.  One step back undoes the lot.
+    var paints = group();
+    function colorButton(key, name, fallback) {
+      var at = mine[key] || fallback;
+      var b = button(paints, "tb-color",
+                     '<svg class="tb-art" viewBox="0 0 20 20" aria-hidden="true">' + TB_ART[key] +
+                     '<rect class="tb-bar" x="3" y="16" width="14" height="3" rx=".6"/></svg>' +
+                     TB_DROP, name);
+      var swatch = b.querySelector(".tb-bar");
+      swatch.style.fill = at;
+      b.setAttribute("aria-haspopup", "dialog");
+      b.onclick = function () {
+        colorPop(b, at, function (v) {
+          if (first) { first = false; keepUndo(); }
+          at = v;
+          mine[key] = v;
+          style.nodes[which] = mine;
+          paint();
+          keep();
+          swatch.style.fill = v;
+        });
       };
     }
-    function grow(way) {
-      return function () { growWords(which, way); drawSelection(); };
-    }
-    var rows = [{ tools: LOOK_KEYS.map(function (one) {
-      return { mark: one[2], on: lookOn(which, one[0]), go: flip(one[0]),
-               name: TXT[one[1]] + (one[3] ? " (" + one[3] + ")" : "") };
-    }) }];
-    if (CAN_REFLOW) {
-      rows.push("-",
-        { mark: '<span class="mi-glyph">A−</span>', name: TXT.t_smaller, keepOpen: true,
-          keys: keyHint(["ctrl", "shift", "<"]), go: grow(-1) },
-        { mark: '<span class="mi-glyph">A+</span>', name: TXT.t_bigger, keepOpen: true,
-          keys: keyHint(["ctrl", "shift", ">"]), go: grow(1) });
-    }
-    return rows;
+    // what it wears now, where it has nothing of its own: its kind's, as
+    // the panel's swatches show (kindColors, 02-paint.js)
+    colorButton("mark", TXT.t_mark, MARKERS[0][0]);
+    colorButton("text", TXT.c_words || "Words", k.text || style.words || style.ink || "#000000");
+    colorButton("fill", TXT.c_fill || "Fill", k.fill || "#ffffff");
+    colorButton("line", TXT.c_line || "Border", k.line || style.ink || "#000000");
   }
 
   // A row for each shape of a set, which does `go` with it -- and, where
@@ -457,9 +634,11 @@
     } };
   }
 
-  // What is done to one shape, sorted: working on it, then the clipboard
-  // and the like, then how it looks -- colors and words each a menu of
-  // their own, beside this one -- and last, away with it.
+  // One shape's menu, laid out the way Word lays out the menu for a shape:
+  // how it looks in the small bar above (shapeBar), and under it what can
+  // be done to it -- the clipboard first, then working on it, then another
+  // like it, then its style, ending on Format Shape, which opens the Style
+  // side at the card for it the way Word opens its pane.
   function shapeMenu(node, x, y) {
     // One of several taken up: what is done is done to them all.
     if (inMany(node.id)) { groupMenu(x, y); return; }
@@ -471,8 +650,23 @@
     // the shape's own, kept, so that everything this menu does to it --
     // colors and words alike -- is to one and the same record of how it looks
     var mine = style.nodes[which] = style.nodes[which] || {};
+    var here = onPaper({ clientX: x, clientY: y });   // pasted, it goes here
     openMenu(x, y, [
-      { icon: "type", name: TXT.m_type, keys: keyHint(["enter"]), go: function () {
+      { icon: "cut", name: TXT.m_clip_cut, go: function () { copyShapes([node.id], true); } },
+      { icon: "copy", name: TXT.m_clip_copy, go: function () { copyShapes([node.id]); } },
+      { icon: "paste", name: TXT.m_clip_paste, off: !clipNow(),
+        go: function () { pasteShapes(here); } },
+      { icon: "drop", name: TXT.delete, go: function () {
+          keepUndo();
+          hand.nodes = hand.nodes.filter(function (n) { return n.id !== node.id; });
+          hand.links = hand.links.filter(function (l) {
+            return l.from !== node.id && l.to !== node.id;
+          });
+          picked = null;
+          drawHand(); drawHandPanel(); showReport();
+        } },
+      "-",
+      { icon: "type", name: TXT.m_type, go: function () {
           var g = el('.node[data-i="h' + node.id + '"]', chart);
           if (g) { typeInto(g); }
         } },
@@ -483,40 +677,16 @@
       { icon: "next", name: TXT.hp_next,
         sub: function () { return nextRows(node.id, "foot"); } },
       "-",
-      { icon: "copy", name: TXT.m_clip_copy, keys: keyHint(["ctrl", "C"]),
-        go: function () { copyShapes([node.id]); } },
-      { icon: "cut", name: TXT.m_clip_cut, keys: keyHint(["ctrl", "X"]),
-        go: function () { copyShapes([node.id], true); } },
       // Another like it -- colors and all, which it used to leave behind.
-      { icon: "another", name: TXT.m_copy, keys: keyHint(["ctrl", "D"]),
-        go: function () { duplicateShapes([node.id]); } },
-      { icon: "rotate", name: TXT.m_turn, go: function () {
-          keepUndo();
-          node.turn = ((node.turn || 0) + 90) % 360;
-          drawHand(); drawHandPanel();
-        } },
+      // (Turning it is the round handle over it now, 13-hand-turn.js.)
+      { icon: "another", name: TXT.m_copy, go: function () { duplicateShapes([node.id]); } },
       "-",
-      { icon: "colors", name: TXT.m_colors, sub: function () {
-          // what it wears now, where it has nothing of its own: its
-          // kind's, as the panel's swatches show (kindColors, 02-paint.js)
-          var k = kindColors(node.kind);
-          return colorRows(which, mine,
-                           { fill: k.fill || "#ffffff", line: k.line || style.ink || "#000000",
-                             text: k.text || style.words || style.ink || "#000000" });
-        } },
-      { icon: "words", name: TXT.t_head, sub: function () { return wordRows(which); } },
       plainRow(which, mine),
-      "-",
-      { icon: "drop", name: TXT.delete, danger: true, go: function () {
-          keepUndo();
-          hand.nodes = hand.nodes.filter(function (n) { return n.id !== node.id; });
-          hand.links = hand.links.filter(function (l) {
-            return l.from !== node.id && l.to !== node.id;
-          });
-          picked = null;
-          drawHand(); drawHandPanel(); showReport();
-        } }
-    ]);
+      { icon: "format", name: TXT.m_format, go: formatPicked }   // 07-sides.js
+    ], "word");
+    openMiniBar(el(".menu.word:not(.out)"), function (bar) {
+      shapeBar(bar, node, which, mine);
+    });
   }
 
   function arrowMenu(link, x, y) {

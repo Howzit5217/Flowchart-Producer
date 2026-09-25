@@ -231,6 +231,11 @@
      went wrong -- what is left is a menu, not a hole where one should be. */
   .menu { transform-origin: top left; }
   .menu.sub[data-side="left"] { transform-origin: top right; }
+  /* Word's bar grows up out of the menu it stands over; its menus come in
+     whole, as Word's do, rather than a row at a time. */
+  .menu.mini-bar { transform-origin: bottom left; }
+  .menu.mini-bar[data-side="below"], .menu.sub[data-side="below"] { transform-origin: top left; }
+  .menu.word.in button, .menu.mini-bar.in button { animation: none; }
   .menu.in { animation: menu-pop .19s var(--ease) backwards; }
   @keyframes menu-pop { from { opacity: 0; transform: scale(.96); } }
   .menu.out {

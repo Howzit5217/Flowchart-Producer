@@ -329,13 +329,22 @@
   // A menu opened beside a row comes in the way the first one did, out of
   // the side it is on, and goes the same way.
   var openSubMenuPlain = openSubMenu;
-  openSubMenu = function (row, items) {
-    var sub = openSubMenuPlain(row, items);
+  openSubMenu = function (row, items, how) {
+    var sub = openSubMenuPlain(row, items, how);   // whatever it was asked for, passed on
     if (!sub) { return sub; }
     all("button", sub).forEach(function (b, i) { b.style.setProperty("--i", i); });
     void sub.offsetWidth;
     sub.classList.add("in");
     return sub;
+  };
+  // Word's small bar over a shape's menu grows up out of it.
+  var openMiniBarPlain = openMiniBar;
+  openMiniBar = function (list, fill) {
+    var bar = openMiniBarPlain(list, fill);
+    if (!bar) { return bar; }
+    void bar.offsetWidth;
+    bar.classList.add("in");
+    return bar;
   };
   var letSubGoPlain = letSubGo;
   letSubGo = function (sub) {

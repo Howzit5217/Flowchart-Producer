@@ -155,23 +155,35 @@
   // of the paper the lot stops there together, rather than each shape
   // stopping on its own and the lot squashing flat.
   function carryCrowd(crowd, held, wasX, wasY, dx, dy) {
+    var ids = crowd.map(function (c) { return c.node.id; });
+    var last = { x: held.x - wasX, y: held.y - wasY };   // how far, a moment ago
     held.x = Math.round((wasX + dx) / HAND_GRID) * HAND_GRID;
     held.y = Math.round((wasY + dy) / HAND_GRID) * HAND_GRID;
-    lineUp(held, crowd.map(function (c) { return c.node.id; }));
+    lineUp(held, ids);
     var byX = held.x - wasX, byY = held.y - wasY;
     crowd.forEach(function (c) {
       byY = Math.max(byY, turned(c.node).h / 2 + 20 - c.y);
     });
+    // Never onto a shape outside the lot: along it instead (13-hand-apart.js).
+    var by = slideClear({ x: byX, y: byY }, last, function (x, y) {
+      return crowd.some(function (c) { return onTopOf(c.node, c.x + x, c.y + y, ids); });
+    });
+    if (by.x !== byX || by.y !== byY) { guides = []; }
     crowd.forEach(function (c) {
-      c.node.x = c.x + byX;
-      c.node.y = c.y + byY;
+      c.node.x = c.x + by.x;
+      c.node.y = c.y + by.y;
     });
   }
 
-  // An arrow key moves the lot a step, as it moves one shape.
+  // An arrow key moves the lot a step, as it moves one shape -- and not
+  // onto anything outside the lot.
   function nudgeMany(ids, dx, dy) {
     var lot = crowdOf(ids);
     lot.forEach(function (c) { dy = Math.max(dy, turned(c.node).h / 2 + 20 - c.y); });
+    function hits(x, y) {
+      return lot.some(function (c) { return onTopOf(c.node, c.x + x, c.y + y, ids); });
+    }
+    if (hits(dx, dy) && !hits(0, 0)) { return; }
     lot.forEach(function (c) { c.node.x += dx; c.node.y += dy; });
   }
 
@@ -271,6 +283,10 @@
       link.to = to[link.to];
       if (link.from && link.to) { hand.links.push(link); }
     });
+    // Landing on anything, the copies go on together to the nearest place
+    // clear of it all (13-hand-apart.js).
+    made.forEach(function (id) { measure(nodeById(id)); });
+    moveClear(made);
     takeUp(made);
     drawHand();
     drawHandPanel();

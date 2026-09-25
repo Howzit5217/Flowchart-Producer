@@ -454,26 +454,47 @@
           var toward = grip.dataset.corner || "se";
           var ax = toward.indexOf("e") >= 0 ? 1 : -1;
           var ay = toward.indexOf("s") >= 0 ? 1 : -1;
-          var heldX = wasX - ax * wasW / 2;      // the corner that stays put
-          var heldY = wasY - ay * wasH / 2;
+          // Worked out the shape's own way up, so that a turned shape grows
+          // along its own sides: the drag, turned back by as much as the
+          // shape is turned, and the middle moved on by half the growth,
+          // turned forward again -- which leaves the corner opposite where
+          // it was.
+          var spun = (node.turn || 0) * Math.PI / 180;
+          var cos = Math.cos(spun), sin = Math.sin(spun);
+          var alongX = dx * cos + dy * sin, alongY = dy * cos - dx * sin;
+          var before = { w: node.w, h: node.h, x: node.x, y: node.y };
           // Sizes go in steps of two quarters, so that half of them is a
           // whole quarter: that is what puts a shape's sides on the ruling
           // rather than only its middle.
           var STEP = HAND_GRID * 2;
           node.w = Math.max(least[0] * 0.5,
-                            Math.round((wasW + ax * dx) / STEP) * STEP);
+                            Math.round((wasW + ax * alongX) / STEP) * STEP);
           node.h = Math.max(least[1] * 0.5,
-                            Math.round((wasH + ay * dy) / STEP) * STEP);
+                            Math.round((wasH + ay * alongY) / STEP) * STEP);
           if (node.kind === "circle") { node.w = node.h = Math.max(node.w, node.h); }
-          node.x = heldX + ax * node.w / 2;
-          node.y = heldY + ay * node.h / 2;
+          var grewX = ax * (node.w - wasW) / 2, grewY = ay * (node.h - wasH) / 2;
+          node.x = wasX + grewX * cos - grewY * sin;
+          node.y = wasY + grewX * sin + grewY * cos;
+          // Grown into another shape, it stops at the size it had
+          // (13-hand-apart.js) -- unless it was on top of one already.
+          if (onTopOf(node, node.x, node.y) && !overlaps(node, before)) {
+            node.w = before.w; node.h = before.h; node.x = before.x; node.y = before.y;
+          }
           node.own = true;               // a size set by hand, so keep it
         } else if (crowd) {
           carryCrowd(crowd, node, wasX, wasY, dx, dy);
         } else {
+          var last = { x: node.x, y: node.y };
           node.x = Math.round((wasX + dx) / HAND_GRID) * HAND_GRID;
           node.y = Math.round((wasY + dy) / HAND_GRID) * HAND_GRID;
           lineUp(node);                  // and settle onto anything it is near
+          // Never onto another shape: along it instead (13-hand-apart.js).
+          var clear = slideClear({ x: node.x, y: node.y }, last, function (x, y) {
+            return !!onTopOf(node, x, y);
+          });
+          if (clear.x !== node.x || clear.y !== node.y) { guides = []; }
+          node.x = clear.x;
+          node.y = clear.y;
         }
         paint();
       }

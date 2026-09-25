@@ -97,6 +97,8 @@ the `@@CSS@@` and `@@JS@@` marks in `studio.html` and hands back the page.
 | `ui/js/11-hand-panel.js` | What the panel shows for a shape or arrow |
 | `ui/js/12-check.js` | Checking a design makes sense |
 | `ui/js/13-hand-keep.js` | Remembering a design |
+| `ui/js/13-hand-apart.js` | Shapes kept off one another: carried, added, pasted, grown or turned |
+| `ui/js/13-hand-turn.js` | Turning a shape to any angle by the round handle over it |
 | `ui/js/14-run.js` | Running the program |
 | `ui/js/15-sums.js` | Working out what an expression comes to |
 | `ui/js/16-wrong.js` | Where a run stopped, and why |

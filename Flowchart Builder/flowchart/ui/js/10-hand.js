@@ -177,15 +177,47 @@
   // sides are, where an arrow should meet it, where its corners are to take
   // hold of.  The drawing itself is turned with a transform, so this is the
   // one place that has to know.
+  //
+  // Turned any other way (the handle over it, 13-hand-turn.js), what it
+  // takes up is the box round it turned -- and `slant` says by how much.
   function turned(n) {
-    var quarter = Math.round(((n.turn || 0) % 360) / 90) % 4;
+    var turn = (((n.turn || 0) % 360) + 360) % 360;
+    var quarter = Math.round(turn / 90) % 4;
     var over = quarter === 1 || quarter === 3;
+    if (turn % 90) {
+      var a = turn * Math.PI / 180, c = Math.abs(Math.cos(a)), s = Math.abs(Math.sin(a));
+      return { kind: n.kind, id: n.id, x: n.x, y: n.y, sideways: over, slant: turn,
+               w: n.w * c + n.h * s, h: n.w * s + n.h * c };
+    }
     return { kind: n.kind, id: n.id, x: n.x, y: n.y,
              w: over ? n.h : n.w, h: over ? n.w : n.h, sideways: over };
   }
 
+  // Turned at a slant, an arrow still meets the middle of a side, where
+  // that side now is -- the side of it that faces most nearly up meets
+  // arrows from above, and so on round -- and still leaves it square to
+  // the page, so the lines keep their right angles.
+  var SIDE_ROUND = [0, 3, 1, 2];         // top, right, foot, left: clockwise
+  function slantPorts(node, turn) {
+    var flat = {};
+    for (var key in node) { flat[key] = node[key]; }
+    flat.turn = 0;
+    var upright = ports(flat);
+    var a = turn * Math.PI / 180, cos = Math.cos(a), sin = Math.sin(a);
+    var quarter = Math.round(turn / 90) % 4;
+    var ways = [[0, -1], [0, 1], [-1, 0], [1, 0]];
+    return ways.map(function (way, side) {
+      var at = SIDE_ROUND.indexOf(side);
+      var p = upright[SIDE_ROUND[(at - quarter + 4) % 4]];
+      var rx = p.x - node.x, ry = p.y - node.y;
+      return { x: node.x + rx * cos - ry * sin, y: node.y + rx * sin + ry * cos,
+               dx: way[0], dy: way[1] };
+    });
+  }
+
   function ports(node) {
     var n = turned(node);
+    if (n.slant) { return slantPorts(node, n.slant); }
     var w = n.w, h = n.h, x = n.x, y = n.y;
     var l = x - w / 2, r = x + w / 2, t = y - h / 2, b = y + h / 2;
     var lean = Math.min(12, (n.sideways ? h : w) / 4);
@@ -868,6 +900,7 @@
                       cube: [1, 2] };
   function spreadRoom(node, side) {
     var n = turned(node), along = side < 2 ? n.w : n.h;
+    if (n.slant) { return 0; }           // at a slant, only the middle is trusted
     var upright = !(Math.round(((node.turn || 0) % 360) / 90) % 4);
     if (n.kind === "diamond") { return along * 0.2; }
     if (n.kind === "oval" || n.kind === "circle") { return along * 0.28; }
@@ -1353,6 +1386,7 @@
 
   function drawHand() {
     tidyMany();                          // only shapes still on the paper
+    keepApart();                         // and none on top of another (13-hand-apart.js)
     var pad = 40, maxx = 520, maxy = 280, ox = 0, oy = 0, least = Infinity;
     hand.nodes.forEach(function (n) {
       measure(n);
@@ -1514,17 +1548,25 @@
         });
         // a corner at every corner, each one anchored to the one opposite,
         // so a shape grows and shrinks from whichever you take hold of --
-        // bigger under a finger, as the dots are
+        // bigger under a finger, as the dots are.  Turned, the corners are
+        // where its own corners have gone, and are named for those.
         var GRIP = COARSE ? 16 : 9;
+        var spun = (n.turn || 0) * Math.PI / 180;
+        var cos = Math.cos(spun), sin = Math.sin(spun);
         [["nw", -1, -1], ["ne", 1, -1], ["sw", -1, 1], ["se", 1, 1]]
           .forEach(function (corner) {
+            var cx = corner[1] * n.w / 2, cy = corner[2] * n.h / 2;
             out.push('<rect class="grip" data-i="' + n.id +
                      '" data-corner="' + corner[0] + '" x="' +
-                     (moved.x + corner[1] * about.w / 2 - GRIP / 2) + '" y="' +
-                     (moved.y + corner[2] * about.h / 2 - GRIP / 2) +
+                     (moved.x + cx * cos - cy * sin - GRIP / 2) + '" y="' +
+                     (moved.y + cx * sin + cy * cos - GRIP / 2) +
                      '" width="' + GRIP + '" height="' + GRIP + '" rx="2" fill="#ffffff" ' +
-                     'stroke="#14427c" stroke-width="1.6"/>');
+                     'stroke="#14427c" stroke-width="1.6"' +
+                     (spun ? ' transform="rotate(' + n.turn + " " +
+                             (moved.x + cx * cos - cy * sin) + " " +
+                             (moved.y + cx * sin + cy * cos) + ')"' : "") + "/>");
           });
+        out.push(spinMark(n, moved));           // and a handle to turn it by (13-hand-turn.js)
         out.push(plusMarks(n, moved, about));   // and what comes next (13-hand-more.js)
       }
     });

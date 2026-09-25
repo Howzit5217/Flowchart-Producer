@@ -135,6 +135,10 @@
     .seg-btn { padding: 9px 10px; }
     .menu button { padding: 10px 11px; }
     .menu .mi-keys { display: none; }       /* no keys to press them with */
+    .menu.word > button { height: 42px; }
+    .menu.word .mi-name u { text-decoration: none; }
+    .menu.mini-bar button { min-width: 36px; height: 36px; }
+    .menu.mini-bar .tb-size { height: 34px; }
     .slider { display: none; }              /* a finger scrolls by dragging */
     /* Ours go, so the machine's come back -- and they have to be given back
        in both spellings.  Only the Firefox one was said here, so on a touch

@@ -149,6 +149,7 @@
                  x: x, y: y, w: 140, h: 46 };
     measure(node);
     hand.nodes.push(node);
+    moveClear([node.id]);                // on nothing already there (13-hand-apart.js)
     picked = node.id;
     drawHand();
     drawHandPanel();
@@ -230,7 +231,7 @@
     var sizing = document.createElement("div");
     sizing.className = "trio";
     [[TXT.width, "w", 30, 600], [TXT.height, "h", 24, 400],
-     [TXT.turn, "turn", 0, 350]].forEach(function (item) {
+     [TXT.turn, "turn", 0, 359]].forEach(function (item) {
       var cell = document.createElement("label");
       cell.innerHTML = '<span>' + item[0] + "</span>";
       var spin = document.createElement("input");

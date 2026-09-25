@@ -28,9 +28,10 @@
   // shows; a copy away from the page has nothing to leave out for, so the
   // words come off it and every band is in it.
   function wholeCopy(copy) {
-    // Nor what is only there to draw with: a picked shape's dots, corners
-    // and +s, and the marks where the shape rules would say otherwise.
-    all(".knob, .spot, .grip, .plus, .rule-dot, .guide", copy).forEach(function (bit) {
+    // Nor what is only there to draw with: a picked shape's dots, corners,
+    // +s and the handle it turns by, and the marks where the shape rules
+    // would say otherwise.
+    all(".knob, .spot, .grip, .plus, .spin, .spin-says, .rule-dot, .guide", copy).forEach(function (bit) {
       bit.remove();
     });
     copy.classList.remove("culled");

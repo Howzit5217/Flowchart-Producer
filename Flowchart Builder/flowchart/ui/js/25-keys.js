@@ -72,7 +72,7 @@
                   space: "kn_space", click: "kn_click", drag: "kn_drag",
                   dblclick: "kn_dblclick", rclick: "kn_rclick", hold: "kn_hold",
                   wheel: "kn_wheel", pinch: "kn_pinch", corner: "kn_corner",
-                  dot: "kn_dot", plus: "kn_plus" }[key];
+                  dot: "kn_dot", plus: "kn_plus", spin: "kn_spin" }[key];
     return named ? (TXT[named] || key) : key;
   }
 
@@ -178,6 +178,7 @@
     "k_lasso",
     "k_pan",
     [[["corner"]], "hm_size"],
+    [[["spin"]], "hm_turn"],             // the round handle (13-hand-turn.js)
     [[["dot"]], "hm_join"],
     [[["plus"]], "hp_next"],             // on any free side (13-hand-more.js)
     [[["click"]], "hm_rule"],            // the amber mark (13-hand-rules.js)
@@ -461,10 +462,14 @@
     }
     if (WAYS[ev.key] && node) {
       ev.preventDefault();
-      keepUndo();
       var by = keyStep(ev);
-      node.x += WAYS[ev.key][0] * by;    // the paper grows to the left too
-      node.y = Math.max(node.h / 2 + 20, node.y + WAYS[ev.key][1] * by);
+      var toX = node.x + WAYS[ev.key][0] * by;   // the paper grows to the left too
+      var toY = Math.max(node.h / 2 + 20, node.y + WAYS[ev.key][1] * by);
+      // not onto another shape (13-hand-apart.js)
+      if (onTopOf(node, toX, toY) && !onTopOf(node, node.x, node.y)) { return; }
+      keepUndo();
+      node.x = toX;
+      node.y = toY;
       drawHand();
       drawHandPanel();
     }
