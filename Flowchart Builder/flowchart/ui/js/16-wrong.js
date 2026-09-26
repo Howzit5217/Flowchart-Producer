@@ -107,10 +107,8 @@
     var code = el("#code");
     if (code) { code.classList.remove("wrong"); }
     if (!at) { return; }
-    if (at.id) {
-      all('.node[data-i="' + at.id + '"]', chart).forEach(function (g) {
-        g.classList.add("wrong");
-      });
+    if (at.id) {                         // drawn by hand too (runShapes, 14-run.js)
+      runShapes(at.id, at.line).forEach(function (g) { g.classList.add("wrong"); });
     }
     if (at.line && code) {
       var span = lineSpan(code, at.line);
@@ -126,7 +124,7 @@
   function goToFault(at) {
     tapeFull(false);                     // out of the full screen, if it is up
     if (at.id && chart) {
-      var g = el('.node[data-i="' + at.id + '"]', chart);
+      var g = runShapes(at.id, at.line)[0];
       if (g) { followNode(g); }
     }
     markFault(at);

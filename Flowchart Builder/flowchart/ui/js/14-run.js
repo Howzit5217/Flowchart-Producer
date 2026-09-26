@@ -176,12 +176,27 @@
   // whole chart at every step of a run.  This is the only place that lights
   // one, so the list is the whole of what is lit.
   var litNow = [];
+
+  // The shapes a statement is drawn in.  From pseudocode the chart numbers
+  // its shapes the way the program numbers its statements (shapesNumbered).
+  // Drawn by hand, the program was read from the writing the drawing makes
+  // (handAsPseudocode, 12-check.js), which notes the shape each of its lines
+  // came from -- so the line a statement was read from is the way back to
+  // its shape.  Asked by number, a design drawn by hand has none: its run
+  // lit up nothing, and the camera never moved from where it was.
+  function runShapes(id, line) {
+    if (!byHand) { return shapesNumbered(id); }
+    var mine = id && line ? handLine[line] : null;
+    var g = mine && chart ? el('.node[data-i="h' + mine + '"]', chart) : null;
+    return g ? [g] : [];
+  }
+
   function lightUp(item) {
     var id = item ? item.id : 0;
     litNow.forEach(function (g) { g.classList.remove("now"); });
     litNow = [];
     var lit = null;
-    shapesNumbered(id).forEach(function (g) {
+    runShapes(id, item ? item.line : 0).forEach(function (g) {
       g.classList.add("now");
       litNow.push(g);
       if (!lit) { lit = g; }
