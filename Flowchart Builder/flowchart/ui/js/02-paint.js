@@ -306,6 +306,11 @@
       var fill = n.fill || k.fill || "";
       var line = n.line || k.line || style.ink || "";
       var word = n.text || k.text || style.words || style.ink || "";
+      // and readable on what they are on, unless turned down (02-read.js)
+      var fix = shapeReads(g.dataset.kind, fill, line, word, n);
+      line = fix.line;
+      word = fix.word;
+      g._read = fix.changed ? fix : null;
       var look = shapeLook(g.dataset.i), dress = lookSaid(look);
       // Looking inside a shape is the expensive part of this, so a shape
       // already wearing all three of its colors, and its words already set
@@ -397,10 +402,12 @@
         putOn(e, "_line", line, strokeIt);
       });
     });
-    var ink = style.ink || "";
+    // The arrows and the words along them, readable on the paper (02-read.js).
+    var readOn = chartReads(style.ink || "", style.words || style.ink || "");
+    var ink = readOn.ink;
     here.flows.forEach(function (e) { putOn(e, "_ink", ink, strokeIt); });
     here.heads.forEach(function (e) { putOn(e, "_ink", ink, bothIt); });
-    var said = style.words || style.ink || "";
+    var said = readOn.said;
     here.said.forEach(function (e) { putOn(e, "_said", said, fillIt); });
     var ruling = style.grid || "";
     here.fine.forEach(function (e) { putOn(e, "_ruling", ruling, strokeIt); });
@@ -418,6 +425,10 @@
         e.setAttribute("stroke", k.line || style.ink || "#10151b");
       });
     });
+    if (!leftOver) {
+      readMarks();                       // what was made readable, marked (02-read.js)
+      dressResets();                     // and which cards have anything to put back (22-reset.js)
+    }
     keep();
     if (leftOver && !paintingAll) { paintSoon(); }
   }

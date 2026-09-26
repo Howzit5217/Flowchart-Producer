@@ -31,7 +31,7 @@
     // Nor what is only there to draw with: a picked shape's dots, corners,
     // +s and the handle it turns by, and the marks where the shape rules
     // would say otherwise.
-    all(".knob, .spot, .grip, .plus, .spin, .spin-says, .rule-dot, .guide", copy).forEach(function (bit) {
+    all(".knob, .spot, .grip, .plus, .spin, .spin-says, .rule-dot, .read-dot, .guide", copy).forEach(function (bit) {
       bit.remove();
     });
     copy.classList.remove("culled");

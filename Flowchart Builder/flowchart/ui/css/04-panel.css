@@ -1011,6 +1011,11 @@
   svg .rule-dot { cursor: pointer; }
   svg .rule-dot:hover circle { r: 10; fill: #efa11a; }
   svg.lassoing .rule-dot { display: none; }
+  /* The mark for a color made readable (02-read.js): the same mark, with
+     its own drawing in it, and the same answer to a pointer. */
+  svg .read-dot { cursor: pointer; }
+  svg .read-dot:hover circle:first-of-type { r: 10; fill: #efa11a; }
+  svg.lassoing .read-dot, svg.typing-in .read-dot { display: none; }
   /* The same offer in the panel, under the picked shape's name. */
   .rule-tip {
     margin: 0 0 10px; padding: 9px 10px 10px; border: 1px solid var(--line);

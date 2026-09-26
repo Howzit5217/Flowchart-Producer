@@ -27,7 +27,7 @@ CSS = ["css/01-base.css", "css/02-bar.css", "css/03-layout.css",
 # The script.  These run inside one function and share everything between
 # them, so this order is the order they happen in: a later part may use what
 # an earlier one made, never the other way round.
-JS = ["js/01-start.js", "js/02-paint.js", "js/03-shapes.js",
+JS = ["js/01-start.js", "js/02-paint.js", "js/02-read.js", "js/03-shapes.js",
       "js/04-panel.js", "js/05-keep.js", "js/06-chart.js", "js/07-sides.js",
       "js/08-save.js", "js/09-build.js", "js/09-names.js", "js/10-hand.js",
       "js/11-hand-panel.js", "js/11-hand-many.js", "js/12-check.js", "js/13-hand-keep.js",
@@ -37,7 +37,7 @@ JS = ["js/01-start.js", "js/02-paint.js", "js/03-shapes.js",
       "js/18-ahead.js", "js/18-code.js", "js/18-write.js", "js/19-files.js",
       "js/19-folder.js",
       "js/20-menu.js", "js/20-slide.js", "js/21-typing.js",
-      "js/22-settings.js", "js/23-undo.js", "js/24-scroll.js",
+      "js/22-settings.js", "js/22-reset.js", "js/23-undo.js", "js/24-scroll.js",
       "js/25-keys.js", "js/26-motion.js", "js/27-mend.js",
       "js/28-puzzles.js", "js/29-saves.js", "js/30-blocks.js", "js/31-app.js",
       "js/99-go.js"]

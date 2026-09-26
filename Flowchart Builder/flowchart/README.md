@@ -86,6 +86,7 @@ the `@@CSS@@` and `@@JS@@` marks in `studio.html` and hands back the page.
 | `ui/css/07-motion.css` | How it moves, and how it does not |
 | `ui/js/01-start.js` | The bits everything else uses |
 | `ui/js/02-paint.js` | Painting the colors on, and how the words and borders look |
+| `ui/js/02-read.js` | Colors kept readable on what they are on, and the mark that says so |
 | `ui/js/03-shapes.js` | The shape catalog, in the browser, and where each shape holds its words |
 | `ui/js/04-panel.js` | The Style side: palette, words, shapes, the picked shape |
 | `ui/js/05-keep.js` | Remembering what you chose |
@@ -112,6 +113,7 @@ the `@@CSS@@` and `@@JS@@` marks in `studio.html` and hands back the page.
 | `ui/js/20-slide.js` | A finger drawn along a menu or a row of buttons, lighting each in turn |
 | `ui/js/21-typing.js` | Double-click to type in a shape |
 | `ui/js/22-settings.js` | The settings sheet: light or dark, which side, full screen |
+| `ui/js/22-reset.js` | Each Style card put back the way it started |
 | `ui/js/23-undo.js` | Stepping back, and stepping forward again |
 | `ui/js/24-scroll.js` | Slider bars of our own, and the pseudocode filling the screen |
 | `ui/js/25-keys.js` | The keys people already know |

@@ -1010,6 +1010,7 @@
       go.appendChild(clear);
       body.appendChild(go);
     });
+    dressResets();                       // the card's own reset, for this shape (22-reset.js)
   }
 
   function found(kind) {
