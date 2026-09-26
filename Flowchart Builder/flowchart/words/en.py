@@ -611,7 +611,8 @@ EN = {
     "app_mac": "In Safari's File menu, choose Add to Dock.",
     "app_done": "Installed -- it is with your other apps now, and works offline.",
     "p_ink": "Ink", "p_classic": "Classic", "p_slate": "Slate",
-    "p_meadow": "Meadow", "p_sunset": "Sunset", "p_night": "Night",
+    "p_meadow": "Meadow", "p_sunset": "Sunset", "p_night": "Night", "p_lavender": "Lavender",
+    "p_charcoal": "Charcoal", "p_ember": "Ember",
     # ---- the studio
     "pseudocode": "Pseudocode", "title": "Title", "your_name": "Your name",
     "code_big": "Fill the screen", "code_small": "Back to the panel", "done": "Done",

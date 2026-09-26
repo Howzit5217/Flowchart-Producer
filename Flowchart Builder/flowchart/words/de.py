@@ -610,7 +610,8 @@ DE = {
     "app_done": "Installiert -- jetzt bei deinen anderen Apps, und es geht "
                 "auch offline.",
     "p_ink": "Tinte", "p_classic": "Klassisch", "p_slate": "Schiefer",
-    "p_meadow": "Wiese", "p_sunset": "Abendrot", "p_night": "Nacht",
+    "p_meadow": "Wiese", "p_sunset": "Abendrot", "p_night": "Nacht", "p_lavender": "Lavendel",
+    "p_charcoal": "Anthrazit", "p_ember": "Glut",
     "pseudocode": "Pseudocode", "title": "Titel", "your_name": "Dein Name",
     "code_big": "Bildschirm füllen", "code_small": "Zurück zum Panel", "done": "Fertig",
     "code_lines": "{n} Zeilen",

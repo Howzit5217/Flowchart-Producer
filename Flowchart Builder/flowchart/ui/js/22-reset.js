@@ -17,30 +17,49 @@
     });
   }
 
+  // Two colors the same, "" and none being the same (the drawing's own).
+  function sameColor(a, b) {
+    return String(a || "").toLowerCase() === String(b || "").toLowerCase();
+  }
+  // Every kind's colors as the palette has them, and no others.
+  function kindsAsPalette(kinds, base) {
+    var keys = Object.keys(kinds || {}).concat(Object.keys(base));
+    return keys.every(function (k) {
+      var a = (kinds || {})[k] || {}, b = base[k] || {};
+      return sameColor(a.fill, b.fill) && sameColor(a.line, b.line) && sameColor(a.text, b.text);
+    });
+  }
+
   // For each card: where it is, whether it is as it started, and putting
-  // it back.  The palette is every color on the chart; the words card is
-  // how the words look and their color; the shapes card is each kind's
-  // own colors; the picked shape is whatever it was given of its own;
-  // and the last card is the lines, the paper, the grid and how heavy the
-  // lines are drawn.
+  // it back.  "As it started" is the palette that was picked (paletteBase,
+  // 04-panel.js) -- a palette is a starting point, not a change to undo --
+  // so under Night the shapes card is dim until a shape's color is changed,
+  // and its reset puts back Night's colors, not white.  The palette card
+  // itself goes back to no palette at all.  The words card is how the
+  // words look and their color; the shapes card each kind's colors; the
+  // picked shape whatever it was given of its own; and the last card the
+  // lines, the paper, the grid and how heavy the lines are drawn.
   var RESETS = [
     ["#presets", function () {
-       return !style.sheet && !style.ink && !style.words && !style.grid &&
-              !hasAny(style.kinds) && !style.readAsIs;
+       return !style.palette && !style.sheet && !style.ink && !style.words &&
+              !style.grid && !hasAny(style.kinds) && !style.readAsIs;
      }, function () {
+       delete style.palette;
        style.sheet = style.ink = style.words = style.grid = "";
        style.kinds = {};
        delete style.readAsIs;
      }],
     ["#letters", function () {
-       return !hasAny(style.letters) && !style.words;
+       var base = paletteBase();
+       return !hasAny(style.letters) && sameColor(style.words, base.words) &&
+              !Object.keys(style.kinds || {}).some(function (k) { return style.kinds[k] && style.kinds[k].text; });
      }, function () {
        style.letters = {};
-       style.words = "";
+       style.words = paletteBase().words;
        Object.keys(style.kinds || {}).forEach(function (k) { delete style.kinds[k].text; });
      }],
-    ["#kinds", function () { return !hasAny(style.kinds); },
-     function () { style.kinds = {}; }],
+    ["#kinds", function () { return kindsAsPalette(style.kinds, paletteBase().kinds); },
+     function () { style.kinds = paletteBase().kinds; }],
     ["#sel-body", function () {
        var now = selectedNow();
        return !now || !hasAny(style.nodes[now.i]);
@@ -49,9 +68,12 @@
        if (now) { style.nodes[now.i] = {}; }
      }],
     ["#globals", function () {
-       return !style.ink && !style.sheet && !style.grid && !style.weight && !style.gridOff;
+       var base = paletteBase();
+       return sameColor(style.ink, base.ink) && sameColor(style.sheet, base.sheet) &&
+              sameColor(style.grid, base.grid) && !style.weight && !style.gridOff;
      }, function () {
-       style.ink = style.sheet = style.grid = "";
+       var base = paletteBase();
+       style.ink = base.ink; style.sheet = base.sheet; style.grid = base.grid;
        delete style.weight;
        style.gridOff = false;
        if (el("#grid-on")) { el("#grid-on").checked = true; }

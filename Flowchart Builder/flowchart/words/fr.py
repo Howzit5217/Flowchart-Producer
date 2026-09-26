@@ -611,7 +611,8 @@ FR = {
     "app_done": "Installée : elle est avec tes autres applis, et marche hors "
                 "ligne.",
     "p_ink": "Encre", "p_classic": "Classique", "p_slate": "Ardoise",
-    "p_meadow": "Prairie", "p_sunset": "Couchant", "p_night": "Nuit",
+    "p_meadow": "Prairie", "p_sunset": "Couchant", "p_night": "Nuit", "p_lavender": "Lavande",
+    "p_charcoal": "Anthracite", "p_ember": "Braise",
     "pseudocode": "Pseudocode", "title": "Titre", "your_name": "Votre nom",
     "code_big": "Remplir l’écran", "code_small": "Revenir au panneau", "done": "Terminé",
     "code_lines": "{n} lignes",

@@ -1046,12 +1046,11 @@
         // A palette throws away every color set by hand, which is the
         // most that can be lost in one press anywhere on this page.
         keepUndo();
-        style.sheet = p.sheet; style.ink = p.ink;
-        style.words = p.words; style.grid = p.grid;
-        style.kinds = {};
-        Object.keys(p.fills).forEach(function (k) {
-          style.kinds[k] = { fill: p.fills[k], line: p.ink };
-        });
+        style.palette = pair[0];         // remembered: what a card resets to
+        var base = paletteBase();
+        style.sheet = base.sheet; style.ink = base.ink;
+        style.words = base.words; style.grid = base.grid;
+        style.kinds = base.kinds;
         all(".preset", box).forEach(function (x) { x.classList.remove("on"); });
         b.classList.add("on");
         paint(); buildKinds(); buildGlobals(); drawSelection();
@@ -1061,17 +1060,34 @@
     lightPreset();
   }
 
-  // The palette the colors are now, lit on its button.  It was only ever
-  // lit by pressing it, so colors that came back any other way -- opening
-  // the page again, opening a file, or the buttons being made afresh in
-  // another language -- left the chart in Night with no palette chosen on
-  // the Style side at all.  Lit by what the colors are, it is right however
-  // they got there; colors changed by hand since are no palette, and light
-  // none.
+  // What the palette picked says every color is, fresh each time: what a
+  // card on the Style side goes back to when it is reset (22-reset.js).
+  // With no palette picked, every color is the drawing's own.
+  function paletteBase() {
+    var pair = PRESETS.filter(function (one) { return one[0] === style.palette; })[0];
+    var p = pair ? pair[1] : null, kinds = {};
+    if (p) {
+      Object.keys(p.fills).forEach(function (k) {
+        kinds[k] = { fill: p.fills[k], line: p.ink };
+      });
+    }
+    return { sheet: p ? p.sheet : "", ink: p ? p.ink : "", words: p ? p.words : "",
+             grid: p ? p.grid : "", kinds: kinds };
+  }
+
+  // The palette picked, lit on its button -- and still lit once a color
+  // has been changed on top of it, since that is still the palette the
+  // cards go back to.  Colors that came back without saying which palette
+  // they were (a design kept before palettes were remembered, a file) are
+  // matched against them instead: one that is a palette exactly is taken
+  // as that palette picked.  It was only ever lit by pressing it once, so
+  // opening the page again left the chart in Night with no palette chosen
+  // on the Style side at all.
   function lightPreset() {
     var same = function (a, b) { return String(a || "").toLowerCase() === String(b || "").toLowerCase(); };
-    var now = "";
+    var now = PRESETS.some(function (one) { return one[0] === style.palette; }) ? style.palette : "";
     PRESETS.forEach(function (pair) {
+      if (now) { return; }               // picked, and remembered as picked
       var p = pair[1], kinds = style.kinds || {};
       if (!same(style.sheet, p.sheet) || !same(style.ink, p.ink) ||
           !same(style.words, p.words) || !same(style.grid, p.grid)) { return; }
@@ -1085,6 +1101,7 @@
       });
       if (all6) { now = pair[0]; }
     });
+    if (now) { style.palette = now; } else { delete style.palette; }
     all("#presets .preset").forEach(function (x) {
       x.classList.toggle("on", !!now && x.dataset.preset === now);
     });

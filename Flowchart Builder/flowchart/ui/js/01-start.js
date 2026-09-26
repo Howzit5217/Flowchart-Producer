@@ -52,10 +52,23 @@
                  grid: "#f2e9df",
                  fills: { oval: "#ffedd5", rect: "#ffffff", io: "#fee2e2",
                           diamond: "#fef3c7", hex: "#fef3c7", sub: "#fae8ff" } }],
+    ["p_lavender", { sheet: "#fdfcff", ink: "#4c1d95", words: "#3b0764",
+                   grid: "#eeeaf7",
+                   fills: { oval: "#ede9fe", rect: "#ffffff", io: "#fce7f3",
+                            diamond: "#e0e7ff", hex: "#e0e7ff", sub: "#f5f3ff" } }],
+    // and three for a dark page: cool, plain and warm
     ["p_night", { sheet: "#0f172a", ink: "#cbd5e1", words: "#e2e8f0",
                 grid: "#1e293b",
                 fills: { oval: "#1e293b", rect: "#111c30", io: "#152744",
-                         diamond: "#3a2e17", hex: "#3a2e17", sub: "#2b1b46" } }]
+                         diamond: "#3a2e17", hex: "#3a2e17", sub: "#2b1b46" } }],
+    ["p_charcoal", { sheet: "#18181b", ink: "#d4d4d8", words: "#fafafa",
+                   grid: "#27272a",
+                   fills: { oval: "#3f3f46", rect: "#27272a", io: "#1e2a33",
+                            diamond: "#3b2f1e", hex: "#3b2f1e", sub: "#2e2440" } }],
+    ["p_ember", { sheet: "#1c1210", ink: "#fdba74", words: "#fff7ed",
+                grid: "#2e1d18",
+                fills: { oval: "#431407", rect: "#2a1a15", io: "#3b1d2a",
+                         diamond: "#422006", hex: "#422006", sub: "#2f1a3a" } }]
   ];
 
   // ----------------------------------------------------------- the words --
