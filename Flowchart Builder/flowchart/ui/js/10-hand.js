@@ -126,12 +126,66 @@
                    (either("bold") ? "bold " : "") + size + "px " + face };
   }
 
+  // --------------------------------------------- words onto the next line --
+  // A line of words longer than a shape is comfortably wide goes on to the
+  // next line by itself, as it does in a word processor, rather than
+  // stretching the shape out sideways across the paper (asked for,
+  // 2026-09-25).  Only the drawing wraps them: the words themselves are
+  // kept as typed, so the pseudocode written from the drawing is the
+  // sentence that was typed, not one broken wherever a shape's side fell.
+  // A shape given a size of its own wraps at the room inside that size.
+  var WRAP_WIDE = 220;                    // how wide a line may run, at the plain size
+
+  function wrapWidth(node, type) {
+    if (node.own) {
+      var pad = wordsNeed(node.kind, [""], type.line, function () { return 0; }).w;
+      return Math.max(40, node.w - pad);
+    }
+    return WRAP_WIDE * type.size / HAND_TYPE;
+  }
+
+  // The lines a shape's words are drawn in: each line that was typed, broken
+  // between words wherever it runs past the room -- and a word too long for
+  // a line on its own, where it runs out.  A table's lines are its cells,
+  // and are left as they are.
+  function shownLines(node, type) {
+    type = type || handType(node);
+    var said = String(node.text || "").split("\n");
+    if (node.kind === "table") { return said; }
+    var pen = measure.pen || (measure.pen = document.createElement("canvas")
+                              .getContext("2d"));
+    pen.font = type.font;
+    var room = wrapWidth(node, type);
+    function fits(bit) { return pen.measureText(bit).width <= room; }
+    var out = [];
+    said.forEach(function (line) {
+      if (fits(line)) { out.push(line); return; }
+      var now = "";
+      line.split(" ").forEach(function (word) {
+        var tried = now ? now + " " + word : word;
+        if (fits(tried)) { now = tried; return; }
+        if (now) { out.push(now); }
+        while (word.length > 1 && !fits(word)) {
+          var cut = word.length - 1;
+          while (cut > 1 && !fits(word.slice(0, cut))) { cut--; }
+          out.push(word.slice(0, cut));
+          word = word.slice(cut);
+        }
+        now = word;
+      });
+      out.push(now);
+    });
+    return out;
+  }
+
   function measure(node, force) {         // how big the words make it
     if (node.own && !force) { return; }   // unless a size was set by hand
-    var lines = String(node.text || " ").split("\n");
+    if (force) { node.own = false; }      // sized afresh: wrapped the usual way
     var pen = measure.pen || (measure.pen = document.createElement("canvas")
                               .getContext("2d"));
     var type = handType(node);
+    var lines = shownLines(node, type);
+    if (!String(node.text || "")) { lines = [" "]; }
     pen.font = type.font;
     // As big as the words need where this shape puts them: under a person,
     // along an arrow's shaft, in a table's head and cells (wordsNeed).
@@ -248,8 +302,7 @@
       case "actor": {                   // the head up top, the hands either side
         // At the box's sides, halfway down, there is nothing: a line from
         // there started in mid-air beside the person.
-        var fig = figureH(h, nameRoom(String(node.text || "").split("\n"),
-                                      handType(node).line));
+        var fig = figureH(h, nameRoom(shownLines(node), handType(node).line));
         var arm = Math.min(fig * 0.34, w * 0.45);
         left = x - arm; right = x + arm;
         y = t + Math.min(fig * 0.17, w * 0.17) * 2 + fig * 0.12;
@@ -1512,8 +1565,8 @@
                '" data-kind="' + n.kind + '" data-i="h' + n.id + '"' +
                (n.turn ? ' transform="rotate(' + n.turn + " " + moved.x + " " +
                          moved.y + ')"' : "") + ">");
-      var lines = String(n.text || "").split("\n");
       var type = handType(n);
+      var lines = shownLines(n, type);   // wrapped where they run long
       out.push(shapeSvg(moved, lines, type.line));
       // Where this shape holds its words (wordsArt, 03-shapes.js), the
       // baseline below each line's middle by about a third of the type,

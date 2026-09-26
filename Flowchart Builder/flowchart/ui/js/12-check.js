@@ -635,10 +635,9 @@
     if (!byHand) { return; }
     var auto = how === "auto";
     var mine = handKey();
-    if (AST && handWas === mine) {
-      if (how === "check") { handSays(TXT.h_runnable); return; }
-      if (auto) { return; }
-    }
+    // Read already and unchanged: nothing more to say -- the report says
+    // it has no problems, and Run is lit.
+    if (AST && handWas === mine && (auto || how === "check")) { return; }
     if (auto && (handReading === mine ||
                  (handTried === mine && handWas !== mine))) { return; }
     if (auto) { handTried = mine; }
@@ -681,9 +680,10 @@
         forgetLines();
         handWas = mine;
         dressRunner();
-        if (!auto) { handSays(TXT.h_runnable); }
-        else if (wasOut && typeof briefly === "function") {
-          briefly(el("#run"), "lit-up", 800);   // lit by itself: say so
+        // Run lighting up is what says it can be run now, however it was
+        // asked: lit by itself, it says so with a glint.
+        if (wasOut && typeof briefly === "function") {
+          briefly(el("#run"), "lit-up", 800);
         }
       })
       .catch(function (err) {

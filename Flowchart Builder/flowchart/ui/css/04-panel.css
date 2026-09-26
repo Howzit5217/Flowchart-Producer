@@ -1046,10 +1046,11 @@
      wide and tall and takes no presses; the words sit in the middle of it,
      as wide as their longest line and a line tall at the least, so an
      empty shape still has somewhere in its middle for the cursor to be.
-     Every line is set in the middle and none is wrapped -- the drawing
-     starts a line only where one was started.  The chart itself is not
-     for selecting, so the words say they are, or a phone will not let
-     anything be typed into them at all. */
+     Every line is set in the middle, and one that runs past the width the
+     drawing wraps at (a max-width put on by 21-typing.js) goes on to the
+     next -- between words, or inside a word too long for a line.  The
+     chart itself is not for selecting, so the words say they are, or a
+     phone will not let anything be typed into them at all. */
   svg .typing-here { overflow: visible; pointer-events: none; }
   .writing-room {
     width: 100%; height: 100%; display: flex; align-items: center;
@@ -1057,7 +1058,8 @@
   }
   .writing {
     flex: none; min-width: 2px; min-height: 1.2em; outline: 0;
-    white-space: pre-wrap; text-align: center; pointer-events: auto;
+    white-space: pre-wrap; overflow-wrap: anywhere; text-align: center;
+    pointer-events: auto;
     font: 12.5px/1.2 Arial, Helvetica, sans-serif;
     caret-color: #14427c; cursor: text;
     -webkit-user-select: text; user-select: text; -webkit-touch-callout: default;
@@ -1082,6 +1084,9 @@
   /* One shape's dots and corners are about that one shape; while a box is
      being drawn, the shape may be about to be one of several. */
   svg.lassoing .knob, svg.lassoing .grip, svg.lassoing .spin { display: none; }
+  /* Nor while its words are being typed (21-typing.js): they wrap out past
+     the sides until the shape is sized to them, under where the dots are. */
+  svg.typing-in :is(.knob, .grip, .spin, .plus, .rule-dot) { display: none; }
   /* Under the Select tool a drag on the paper draws a box. */
   body.by-hand.tool-select #chart { cursor: crosshair; }
   body.by-hand.tool-select #chart .node { cursor: pointer; }

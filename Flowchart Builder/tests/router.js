@@ -29,6 +29,9 @@ if (partsFrom < 0 || partsTo < 0) {
 }
 eval(parts.slice(partsFrom, partsTo));        // eslint-disable-line no-eval
 function handType() { return { size: 12.5, line: 15 }; }
+// The lines a shape's words are drawn in (10-hand.js wraps long ones by
+// measuring them on a canvas, which node has none of): the lines as typed.
+function shownLines(node) { return String(node.text || "").split("\n"); }
 eval(src.slice(from, to));                    // eslint-disable-line no-eval
 
 var KINDS = ["rect", "roundrect", "oval", "io", "io_back", "diamond", "hex",

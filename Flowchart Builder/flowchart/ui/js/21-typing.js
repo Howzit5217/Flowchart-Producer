@@ -68,7 +68,7 @@
   // its rules put away until the lines are set out in its head and cells.
   function wordsMiddle(node) {
     var at = wordsAt(node.kind, node.x, node.y, node.w, node.h,
-                     String(node.text || "").split("\n"), handType(node).line);
+                     shownLines(node), handType(node).line);
     return { x: at.x + handOrigin.x, y: at.y + handOrigin.y };
   }
 
@@ -213,10 +213,11 @@
 
     keepUndo();
     // Room for the words to grow into as they are typed -- out from the
-    // middle both ways, as the drawn ones do, never wrapped (the drawing
-    // only starts a line where a line was started).  The shape is sized to
-    // them when the typing is done.  The room takes no presses; only the
-    // words do, so it covers nothing it is not meant to.
+    // middle both ways, as the drawn ones do, and on to the next line
+    // wherever the drawing will wrap them (shownLines, 10-hand.js), so the
+    // lines break as they are typed where they will be drawn.  The shape is
+    // sized to them when the typing is done.  The room takes no presses;
+    // only the words do, so it covers nothing it is not meant to.
     var mid = wordsMiddle(node);
     var wide = Math.max(node.w, 1600), tall = Math.max(node.h, 900);
     var slot = document.createElementNS("http://www.w3.org/2000/svg", "foreignObject");
@@ -251,6 +252,11 @@
     space.style.fontStyle = type.italic ? "italic" : "";
     space.style.textDecoration = [type.under ? "underline" : "",
                                   type.strike ? "line-through" : ""].join(" ").trim();
+    // As wide as a line may run, and no wider -- a table's cells excepted,
+    // which are lines of their own however long.
+    if (node.kind !== "table") {
+      space.style.maxWidth = Math.ceil(wrapWidth(node, type)) + 1 + "px";
+    }
     room.appendChild(space);
     slot.appendChild(room);
 
@@ -259,6 +265,10 @@
     all("text, .highlights" + (node.kind === "table" ? ", .trim" : ""), g)
       .forEach(function (t) { t.style.display = "none"; });
     g.appendChild(slot);
+    // The dots, corners and handles step aside too: the words wrap out past
+    // the sides until the shape is sized to them, and ran under the dots.
+    var paperNow = g.ownerSVGElement;
+    if (paperNow) { paperNow.classList.add("typing-in"); }
 
     // While it is being typed into, the shape is the typing's: a press on
     // it puts the cursor in the words rather than picking the shape up and
@@ -348,6 +358,7 @@
       if (window.scrollX || window.scrollY) { window.scrollTo(0, 0); }
       node.text = typedIn(space);
       slot.remove();
+      if (paperNow) { paperNow.classList.remove("typing-in"); }
       measure(node);
       // The drawing goes again a moment later, not now.  The box sits inside
       // the chart, so anything that pours the chart afresh while it is open

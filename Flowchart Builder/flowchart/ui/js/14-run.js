@@ -91,14 +91,13 @@
     // And whether asking for a file each would come to anything, which
     // depends on the program that has just been built.
     codeNote();
-    // Drawing by hand, it says which way it stands either way: Run lights
-    // up by itself once the design works (readHandSoon, 12-check.js), and
-    // lit, the note says so in green rather than going quiet.
+    // Not ready, a few words say why; ready, it goes quiet, drawing by hand
+    // as from pseudocode -- Run lit up (readHandSoon, 12-check.js) says it.
+    // It used to say so in a green sentence as well, which was one more
+    // thing to read for something the button already showed (2026-09-25).
     var says = el("#run-note");
     if (says) {
-      says.textContent = ready ? (byHand ? TXT.r_hand_ready : "")
-                       : (byHand ? TXT.r_by_hand : TXT.r_build_first);
-      says.classList.toggle("good", ready && byHand);
+      says.textContent = ready ? "" : (byHand ? TXT.r_by_hand : TXT.r_build_first);
     }
   }
 
