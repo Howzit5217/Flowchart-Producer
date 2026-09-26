@@ -347,6 +347,8 @@ ES = {
     "rd_words_light": "Texto más claro para que resalte.",
     "rd_edge_dark": "Borde más oscuro para que se vea en el papel.",
     "rd_edge_light": "Borde más claro para que se vea en el papel.",
+    "rd_mark_dark": "Resaltado más oscuro para que se lea el texto.",
+    "rd_mark_light": "Resaltado más claro para que se lea el texto.",
     "rd_lines_dark": "Flechas más oscuras para que se vean en el papel.",
     "rd_lines_light": "Flechas más claras para que se vean en el papel.",
     "rd_said_dark": "Texto de las flechas más oscuro para que se vea en el papel.",

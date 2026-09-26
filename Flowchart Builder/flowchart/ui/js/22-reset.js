@@ -5,8 +5,9 @@
 //  in the order parts.py lists them, and share everything between them.
 // ---------------------------------------------------------------------------
   // Reset, at the foot of the Style side, puts everything back at once --
-  // a lot to lose for want of one card's worth.  So each card has a turning
-  // arrow in its heading that puts back that card and nothing else, in one
+  // a lot to lose for want of one card's worth.  So each card (but the
+  // palettes, below) has a turning arrow in its heading that puts back that
+  // card and nothing else, in one
   // step that Undo takes back, and is dimmed while there is nothing on it
   // to put back (asked for, 2026-09-25).
   function hasAny(o) {
@@ -35,20 +36,12 @@
   // 04-panel.js) -- a palette is a starting point, not a change to undo --
   // so under Night the shapes card is dim until a shape's color is changed,
   // and its reset puts back Night's colors, not white.  The palette card
-  // itself goes back to no palette at all.  The words card is how the
-  // words look and their color; the shapes card each kind's colors; the
-  // picked shape whatever it was given of its own; and the last card the
-  // lines, the paper, the grid and how heavy the lines are drawn.
+  // has none: going back to no palette is what its Ink button already does
+  // (taken off, 2026-09-25).  The words card is how the words look and
+  // their color; the shapes card each kind's colors; the picked shape
+  // whatever it was given of its own; and the last card the lines, the
+  // paper, the grid and how heavy the lines are drawn.
   var RESETS = [
-    ["#presets", function () {
-       return !style.palette && !style.sheet && !style.ink && !style.words &&
-              !style.grid && !hasAny(style.kinds) && !style.readAsIs;
-     }, function () {
-       delete style.palette;
-       style.sheet = style.ink = style.words = style.grid = "";
-       style.kinds = {};
-       delete style.readAsIs;
-     }],
     ["#letters", function () {
        var base = paletteBase();
        return !hasAny(style.letters) && sameColor(style.words, base.words) &&

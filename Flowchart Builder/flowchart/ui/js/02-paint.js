@@ -310,8 +310,12 @@
       var fix = shapeReads(g.dataset.kind, fill, line, word, n);
       line = fix.line;
       word = fix.word;
-      g._read = fix.changed ? fix : null;
-      var look = shapeLook(g.dataset.i), dress = lookSaid(look);
+      var look = shapeLook(g.dataset.i);
+      // and a highlighter behind them that they can be read on
+      fix.mark = markReads(look.mark, word, n);
+      if (fix.mark) { look.mark = fix.mark.now; }
+      g._read = fix.changed || fix.mark ? fix : null;
+      var dress = lookSaid(look);
       // Looking inside a shape is the expensive part of this, so a shape
       // already wearing all three of its colors, and its words already set
       // the way they are meant to be, is stepped over whole and never

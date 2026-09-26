@@ -239,6 +239,13 @@
     space.textContent = node.text || "";
     var ink = (style.nodes["h" + node.id] || {}).text ||
               kindColors(node.kind).text || style.words || style.ink || "#000000";
+    // As the words are drawn, where that is a shade made readable on the
+    // fill (02-read.js): typed in the color chosen, pale words on a pale
+    // fill could not be seen while they were being written.
+    // The color paint() gave them, not what they measure as: a color on its
+    // way across (07-motion.css fades one) measures as where it came from.
+    var drawn = el("text", g);
+    if (drawn && drawn.style.fill) { ink = drawn.style.fill; }
     space.style.color = ink;
     // Typed in the words it will be drawn in, so that what is typed is the
     // size and the shape it will be when the box is let go of -- not the

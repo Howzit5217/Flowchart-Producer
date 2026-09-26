@@ -107,6 +107,18 @@
     return out;
   }
 
+  // A highlighter the words can still be read on.  The pens are pale, which
+  // is right behind dark words -- but on a dark palette the words are
+  // light, and a pale yellow behind light words hid them.  So the pen is
+  // drawn a darker shade of itself there (a lighter one behind dark words
+  // it is too dark for), only as far as the words need (asked for,
+  // 2026-09-25).  `word` is the words' color as drawn, "" being black.
+  function markReads(mark, word, mine) {
+    if (!mark || mine.readAsIs) { return null; }
+    var better = readableOn(mark, word || "#000000", WORDS_NEED);
+    return better ? { was: mark, now: better } : null;
+  }
+
   // The chart's own: the arrows, and the words along them, on the paper.
   var chartRead = null;                  // what was changed, for its mark
   function chartReads(ink, said) {
@@ -203,11 +215,13 @@
       } else { select(g); }
       if (fix.words) { said.push(way(fix.words, "rd_words_dark", "rd_words_light")); }
       if (fix.edge) { said.push(way(fix.edge, "rd_edge_dark", "rd_edge_light")); }
+      if (fix.mark) { said.push(way(fix.mark, "rd_mark_dark", "rd_mark_light")); }
       var mine = function () { return (style.nodes[key] = style.nodes[key] || {}); };
       take = function () {
         keepUndo();
         if (fix.words) { mine().text = fix.words.now; }
         if (fix.edge) { mine().line = fix.edge.now; }
+        if (fix.mark) { mine().mark = fix.mark.now; }
         paint(); drawSelection(); keep();
       };
       ignore = function () { keepUndo(); mine().readAsIs = true; paint(); drawSelection(); keep(); };
@@ -216,7 +230,7 @@
     words.className = "rule-says";
     words.textContent = said.join(" ");
     var now = key === "paper" ? (chartRead.lines || chartRead.words).now
-                              : ((fix.words || fix.edge).now);
+                              : ((fix.words || fix.edge || fix.mark).now);
     openMenu(x, y, [
       { head: TXT.rd_head },
       { bit: words },
