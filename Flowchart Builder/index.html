@@ -5615,11 +5615,20 @@
     // an empty square: a button in the row with all the others that nobody
     // could see, and no way to tell it apart from a gap.  Here it is shown
     // as what it holds instead.
+    //
+    // In the palette's colors from the start -- the ones paint() gives every
+    // miniature (02-paint.js) -- rather than in white and near-black until
+    // the chart is next painted.  Every list of them drawn again (the shapes
+    // on the Style side after a pick, an undo, a new chart; the rules; the
+    // menus) went back to the default palette until then: on the Night
+    // palette, a row of white shapes that turned dark again a moment later.
+    var k = kindColors(kind);
+    var fill = k.fill || style.sheet || "#ffffff", line = k.line || style.ink || "#10151b";
     var art = kind === "text"
             ? '<path d="M3.5 4.5h17M3.5 8.5h13M3.5 12.5h8"/>'
-            : shapeArt(kind, 12, 8.5, 21, 14);
+            : shapeArt(kind, 12, 8.5, 21, 14, fill);
     return '<span class="legendkey"><svg class="keymark" data-kind="' + kind +
-           '" width="24" height="17" viewBox="0 0 24 17" stroke="#10151b" ' +
+           '" width="24" height="17" viewBox="0 0 24 17" stroke="' + line + '" ' +
            'stroke-width="1.2" fill="none">' + art + "</svg></span>";
   }
 
