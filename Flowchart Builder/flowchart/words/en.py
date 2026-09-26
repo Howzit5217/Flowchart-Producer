@@ -50,7 +50,7 @@ EN = {
     "lock_tip": "Hold the chart in place, scrolling inside the stage",
     "loose_tip": "Drag the chart anywhere; a corner of it always stays in sight",
     "tool_move": "Move",
-    "tool_move_tip": "Drag the paper to move about it. Shift+drag draws a box to select shapes.",
+    "tool_move_tip": "Drag the paper to move about it. Ctrl+drag or Shift+drag draws a box to select shapes.",
     "tool_select": "Select",
     "tool_select_tip": "Drag across the paper to select the shapes inside. Tap or click shapes to add them or leave them out.",
     "pixels": "pixels",

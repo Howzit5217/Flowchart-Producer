@@ -1298,6 +1298,41 @@ def _():
             len(listed), quiet.group(1) if quiet else "?")
 
 
+@check("the website's page leaves the explaining out, and still runs")
+def _():
+    """The website is poured without the parts' comments, so a phone has
+    a quarter less to fetch (parts.lean_js).  Taking lines out of a script
+    is taking them out of something that has to go on working: its script
+    is handed to node to read, where node is about, and every part has to
+    have lost something -- one poured whole has a string running across
+    lines, which is not wrong, only heavier."""
+    fb = builder()
+    from flowchart import parts
+    chart = fb.make_flowchart("Start\nDisplay \"hi\"\nEnd\n", title="Test")
+    lean = fb.to_page(chart, title="Test", web=True)
+    full = fb.to_page(chart, title="Test", source={"code": ""})
+    whole = [name for name in parts.JS
+             if parts.lean_js(parts.without_header(parts.read_ui(name),
+                                                   parts.JS_HEAD_END))
+             == parts.without_header(parts.read_ui(name), parts.JS_HEAD_END)]
+    said = "%d KB against %d KB" % (len(lean) // 1024, len(full) // 1024)
+    if whole:
+        said += " -- poured whole: " + ", ".join(whole[:3])
+    script = lean[lean.index("<script>") + 8:lean.rindex("</script>")]
+    if not node_there():
+        return len(lean) < len(full) * 0.85 and not whole, \
+            said + " (node is not installed -- not read)"
+    with tempfile.NamedTemporaryFile("w", suffix=".js", delete=False,
+                                     encoding="utf-8") as f:
+        f.write(script)
+    got = subprocess.run(["node", "--check", f.name],
+                         capture_output=True, text=True)
+    os.unlink(f.name)
+    if got.returncode:
+        said += " -- " + got.stderr.strip()[-300:]
+    return not got.returncode and len(lean) < len(full) * 0.85 and not whole, said
+
+
 @check("no two parts of the page's script share a name")
 def _():
     """The script's parts run inside one function and share everything,

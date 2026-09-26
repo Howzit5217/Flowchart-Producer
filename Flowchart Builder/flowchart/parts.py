@@ -60,16 +60,70 @@ def without_header(text, ending):
     return text[at + len(ending):] if at >= 0 else text
 
 
-def page_html():
-    """studio.html with its stylesheet and its script poured in."""
+def page_html(lean=False):
+    """studio.html with its stylesheet and its script poured in.
+
+    Lean, it is poured without the parts' explanations (see lean_js)."""
     html = read_ui("studio.html")
-    for mark, names, ending in (("@@CSS@@", CSS, CSS_HEAD_END),
-                                ("@@JS@@", JS, JS_HEAD_END)):
+    if lean:
+        html = lean_html(html)
+    for mark, names, ending, trim in (
+            ("@@CSS@@", CSS, CSS_HEAD_END, lean_css),
+            ("@@JS@@", JS, JS_HEAD_END, lean_js)):
         if mark not in html:
             raise ValueError("ui/studio.html has lost its %s mark" % mark)
         html = html.replace(mark, "".join(
-            without_header(read_ui(name), ending) for name in names), 1)
+            (trim if lean else str)(without_header(read_ui(name), ending))
+            for name in names), 1)
     return html
+
+
+# ------------------------------------------------------------ the website --
+# The parts are written to be read, and more of their lines explain than do
+# anything: that is the right way round for somebody finding their way about
+# them, and the wrong way round for a phone opening the website on one bar
+# of signal, which had 1.6 MB of page to fetch and read, a good quarter of
+# it words for whoever edits the page next.  So the website's page is
+# poured without them.  The files keep every word, and so do the
+# studio and the page kept beside a chart.
+#
+# Only what is certainly an explanation goes.  A line of script that starts
+# with // is one, unless a string or a /* comment */ runs across lines and
+# the line is inside it -- so a part with one of those anywhere in it is
+# poured whole.  Either starts on a line of code (an odd ` in it, a \ at
+# the end, or a /* not closed on it), which comes before any line inside
+# it, so that is where to look: a ` or a /* in a comment is only a word
+# about one.  Comments at the end of a line of code stay: telling one from
+# a // inside a string or a pattern takes reading the script as a browser
+# does.
+def lean_js(text):
+    """A part of the script without the lines that are only comments."""
+    kept = []
+    for line in text.split("\n"):
+        bare = line.strip()
+        if bare.startswith("//"):
+            continue
+        if (line.count("`") % 2 or bare.endswith("\\") or
+                line.rfind("/*") > line.rfind("*/")):
+            return text                 # something running across lines
+        kept.append(line.rstrip())
+    return "\n".join(kept)
+
+
+def lean_css(text):
+    """A stylesheet without its /* ... */ comments."""
+    if re.search(r"[\"'][^\"'\n]*/\*", text):   # one inside a string
+        return text
+    text = re.sub(r"/\*.*?\*/", "", text, flags=re.S)
+    return "\n".join(line.rstrip() for line in text.split("\n")
+                     if line.strip()) + "\n"
+
+
+def lean_html(text):
+    """Some of the page's HTML without its <!-- ... --> comments."""
+    text = re.sub(r"<!--.*?-->", "", text, flags=re.S)
+    return "\n".join(line.rstrip() for line in text.split("\n")
+                     if line.strip()) + "\n"
 
 
 def changed_at():

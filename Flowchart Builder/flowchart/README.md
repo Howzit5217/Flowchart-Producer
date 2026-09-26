@@ -166,6 +166,18 @@ Which modules, it works out by following the imports from
 drawing goes to the browser on its own, and one that is only ever used from
 the command line does not. `studio/web.py` does the working out.
 
+Python starting from nothing is most of a second (several on a phone), so
+the first start keeps a copy of Python's memory once the package is
+imported (a Pyodide snapshot, in Cache Storage) and later visits start from
+that in about a fifth of the time. The copy is kept under a fingerprint of
+every module's text, so an edited module is picked up on the next visit,
+which starts from nothing once and keeps a new copy (`ui/js/09-build.js`).
+
+The website's page is also poured without the parts' comments (whole
+comment lines of script, and every CSS and HTML comment; `parts.lean_js`
+and the two beside it), which is about a quarter of it. The files, the
+studio and the page kept beside a chart keep every word.
+
 There is nothing built and no second copy. Editing a module needs no
 rebuild; only `index.html` does, and only when the page's own HTML, CSS or
 script changes:

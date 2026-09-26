@@ -48,8 +48,7 @@
     }
     // How far Python has got with starting, for the bar a build shows
     // while it waits on it.  Python itself is most of the wait and says
-    // nothing while it loads, so the fetching of our own files is the only
-    // part counted as it goes.
+    // nothing while it loads.
     function booting(id, part) {
       self.postMessage({ id: id, step: "boot", part: part });
     }
@@ -58,76 +57,226 @@
     function heapOf(py) {
       try { return py._module.HEAPU8.length; } catch (e) { return 0; }
     }
+
+    // The package, fetched a module at a time and written into Python's
+    // own filesystem, where importing it works exactly as it does on a
+    // computer.  They go at once rather than one after the other: two dozen
+    // small files over one connection is no wait at all, and it is a fifth
+    // of what one joined-up file used to cost.
+    //
+    // Each is checked with the server rather than taken from the browser's
+    // cache on trust.  Taken on trust, a page that had just been put up
+    // again ran the Python it had kept from the last visit -- new buttons,
+    // old drawing -- for hours afterwards, a file being kept for longer the
+    // longer it had gone unchanged before.  A file that has not changed
+    // still comes from the cache, after a reply that says so.
+    function ours(job) {
+      return Promise.all(job.files.map(function (path) {
+        return fetch(job.root + path, { cache: "no-cache" }).then(function (r) {
+          if (!r.ok) { throw new Error(path + " (" + r.status + ")"); }
+          return r.text();
+        }).then(function (text) { return [path, text]; });
+      }));
+    }
+
+    // What Python runs once the package is in.  draw_json is handed a
+    // function to tell how far each drawing has got (see progress.py), and
+    // lets go of it when done.
+    //
+    // What it hands back is bytes, not a string.  Python's string, made
+    // into the browser's, was three seconds and two gigabytes for the
+    // eighty megabytes a program of a hundred thousand lines draws; the
+    // same as bytes is a copy, handed over as it stands (see the
+    // postMessage below) and read on the page in a blink.
+    var SETUP = [
+      "import sys, json, os",
+      "sys.path.insert(0, os.getcwd())",
+      "from flowchart import progress",
+      "from flowchart.studio.drawing import draw_for_studio",
+      "def draw_json(ask, hear=None):",
+      "    progress.listen(hear)",
+      "    try:",
+      "        out = json.dumps(draw_for_studio(json.loads(ask)))",
+      "    except Exception as exc:",
+      "        out = json.dumps({'ok': False,",
+      "                          'error': str(exc) or type(exc).__name__})",
+      "    finally:",
+      "        progress.listen(None)",
+      "    return out.encode()"
+    ].join("\n");
+
+    // ---- Python as it was left ----------------------------------------
+    // Python starting from nothing is most of a second of its own
+    // arithmetic before it has read a line of ours -- several seconds on a
+    // phone -- and it was the whole of the wait for the first chart.  It
+    // comes out the same every time: the same memory, byte for byte.  So
+    // the first start keeps a copy of that memory once the package is
+    // imported (a snapshot, which Pyodide can make and start from), and
+    // every start after it begins from the copy instead: a fifth of the
+    // time or less, measured, and none of it spent importing.
+    //
+    // A copy is only good for the files it was made from.  It is kept
+    // under a fingerprint of them -- every module's text, SETUP, and which
+    // Python -- and one made from anything else is started again from
+    // nothing and replaced, the first time the page is opened after the
+    // site has changed.  Where there is nowhere to keep it (a page opened
+    // from a file has no Cache Storage) Python starts from nothing every
+    // time, as it always did.
+    var SNAPS = "flowchart-python-snapshot";   // the store it is kept in
+
+    function fingerprint(job, got) {
+      try {
+        var all = [job.where, SETUP].concat(got.map(function (pair) {
+          return pair[0] + "\n" + pair[1];
+        })).join("\u0000");
+        return crypto.subtle.digest("SHA-256", new TextEncoder().encode(all))
+          .then(function (sum) {
+            return Array.prototype.map.call(new Uint8Array(sum), function (b) {
+              return ("0" + b.toString(16)).slice(-2);
+            }).join("");
+          }, function () { return null; });
+      } catch (e) { return Promise.resolve(null); }
+    }
+
+    // Kept under an address that says which files it was made from and
+    // which Python made it: .../python-snapshot?<fingerprint>&<Python>.
+    function copyAt(job, print) {
+      return job.root + "python-snapshot?" + print + "&" +
+             encodeURIComponent(job.where);
+    }
+
+    // A copy Pyodide cannot start from -- one cut short, or made by another
+    // version of it -- is not always refused: given memory of the wrong
+    // size it says so in the console and then waits for ever, for a Python
+    // that never comes.  So a copy is only started from if it was made by
+    // this Python and is the shape Pyodide makes them (its mark, then its
+    // own header, then whole pages of memory), and it is given a while to
+    // start in and no longer (see within).
+    function looksWhole(bytes) {
+      try {
+        var head = new Uint32Array(bytes.buffer, bytes.byteOffset, 2);
+        return head[0] === 1886286592 && head[1] >= 48 &&
+               bytes.length > head[1] && (bytes.length - head[1]) % 65536 === 0;
+      } catch (e) { return false; }
+    }
+
+    function keptCopy(job) {             // { print, bytes }, or null
+      try {
+        return caches.open(SNAPS).then(function (box) {
+          return box.keys().then(function (asks) {
+            var said = asks.length ? new URL(asks[0].url).search.slice(1).split("&") : [];
+            if (said.length !== 2 || decodeURIComponent(said[1]) !== job.where) {
+              return null;               // none, or another Python's
+            }
+            return box.match(asks[0]).then(function (res) {
+              return res ? res.arrayBuffer() : null;
+            }).then(function (buf) {
+              var bytes = buf && new Uint8Array(buf);
+              return bytes && looksWhole(bytes) ? { print: said[0], bytes: bytes } : null;
+            });
+          });
+        }).catch(function () { return null; });
+      } catch (e) { return Promise.resolve(null); }
+    }
+
+    function keepCopy(job, print, bytes) {   // in place of any other
+      try {
+        caches.open(SNAPS).then(function (box) {
+          return box.keys().then(function (asks) {
+            return Promise.all(asks.map(function (ask) { return box.delete(ask); }));
+          }).then(function () {
+            return box.put(copyAt(job, print), new Response(bytes));
+          });
+        }).catch(function () { /* full, or refused: from nothing next time */ });
+      } catch (e) { /* no Cache Storage here */ }
+    }
+
+    // Python from a copy, or null if it failed or has not come in `ms`.
+    // It starts in a fraction of a second when all is well; a copy still
+    // starting after this long is one that never will.
+    function within(ms, starting) {
+      return new Promise(function (done) {
+        var late = setTimeout(function () { done(null); }, ms);
+        starting.then(function (py) { clearTimeout(late); done(py); },
+                      function () { clearTimeout(late); done(null); });
+      });
+    }
+
+    function dropCopy() {
+      try { caches.delete(SNAPS).catch(function () { /* fine */ }); }
+      catch (e) { /* no Cache Storage here */ }
+    }
+
+    // Python started from nothing: the package imported, and the copy made
+    // then, before any drawing has touched a setting.
+    function fromNothing(job, py, got, print) {
+      putThere(py, got);
+      py.runPython(SETUP);
+      if (print) {
+        try { keepCopy(job, print, py.makeMemorySnapshot()); }
+        catch (e) { /* not this time: it starts from nothing again */ }
+      }
+      return py;
+    }
+
+    // The copy is looked for, and started from, while our files are still
+    // being fetched: it is almost always the right one, and the fetching is
+    // a round trip to the server that need not hold Python up.  Once they
+    // are in, the copy is checked against them, and if it was made from
+    // other files -- or would not start -- Python is started from nothing
+    // after all.
     function start(job) {
       if (ready) { return ready; }
       ready = Promise.resolve().then(function () {
+        var files = ours(job);           // under way while Python loads,
+        files.catch(function () { /* said where it is waited on, below */ });
+        var copy = keptCopy(job);        //   and so is looking for the copy
         importScripts(job.where + "pyodide.js");
         booting(job.id, 0.08);
-        return loadPyodide({ indexURL: job.where });
-      }).then(function (py) {
-        booting(job.id, 0.75);
-        // The package, fetched a module at a time and written into
-        // Python's own filesystem, where importing it works exactly as it
-        // does on a computer.  They go at once rather than one after the
-        // other: two dozen small files over one connection is no wait at
-        // all, and it is a fifth of what one joined-up file used to cost.
-        //
-        // Each is checked with the server rather than taken from the
-        // browser's cache on trust.  Taken on trust, a page that had just
-        // been put up again ran the Python it had kept from the last visit
-        // -- new buttons, old drawing -- for hours afterwards, a file being
-        // kept for longer the longer it had gone unchanged before.  A file
-        // that has not changed still comes from the cache, after a reply
-        // that says so.
-        var fetched = 0;
-        return Promise.all(job.files.map(function (path) {
-          return fetch(job.root + path, { cache: "no-cache" }).then(function (r) {
-            if (!r.ok) { throw new Error(path + " (" + r.status + ")"); }
-            return r.text();
-          }).then(function (text) {
-            fetched += 1;
-            booting(job.id, 0.75 + 0.1 * fetched / job.files.length);
-            return [path, text];
+        return copy.then(function (kept) {
+          var py = kept
+            ? within(15000, loadPyodide({ indexURL: job.where,
+                                          _loadSnapshot: kept.bytes }))
+            : loadPyodide({ indexURL: job.where, _makeSnapshot: true });
+          return Promise.all([files, py]).then(function (both) {
+            var got = both[0], started = both[1];
+            booting(job.id, 0.75);
+            return fingerprint(job, got).then(function (print) {
+              if (!kept) { return fromNothing(job, started, got, print); }
+              if (started && print && kept.print === print) {
+                putThere(started, got);
+                // The copy carries the dice as they were when it was made,
+                // so every visit's first chart would be shaken the same
+                // way.  They are thrown afresh.
+                started.runPython("import random; random.seed()");
+                return started;
+              }
+              dropCopy();
+              return loadPyodide({ indexURL: job.where, _makeSnapshot: true })
+                .then(function (py) { return fromNothing(job, py, got, print); });
+            });
           });
-        })).then(function (got) {
-          putThere(py, got);
-          // draw_json is handed a function to tell how far each drawing
-          // has got (see progress.py), and lets go of it when done.
-          //
-          // What it hands back is bytes, not a string.  Python's string,
-          // made into the browser's, was three seconds and two gigabytes
-          // for the eighty megabytes a program of a hundred thousand lines
-          // draws; the same as bytes is a copy, handed over as it stands
-          // (see the postMessage below) and read on the page in a blink.
-          py.runPython([
-            "import sys, json, os",
-            "sys.path.insert(0, os.getcwd())",
-            "from flowchart import progress",
-            "from flowchart.studio.drawing import draw_for_studio",
-            "def draw_json(ask, hear=None):",
-            "    progress.listen(hear)",
-            "    try:",
-            "        out = json.dumps(draw_for_studio(json.loads(ask)))",
-            "    except Exception as exc:",
-            "        out = json.dumps({'ok': False,",
-            "                          'error': str(exc) or type(exc).__name__})",
-            "    finally:",
-            "        progress.listen(None)",
-            "    return out.encode()"
-          ].join("\n"));
+        }).then(function (py) {
           booting(job.id, 1);
           return py;
         });
       });
       return ready;
     }
+
+    // Every job that comes in before Python is up is told it is starting,
+    // and told again once it has: the page may have started Python before
+    // anything had asked it for a drawing (see wakePython), and a build
+    // pressed while it is still starting says so all the same.
+    var up = false;
     self.onmessage = function (ev) {
       var job = ev.data;
-      var first = !ready;
+      var waits = !up;
       var drawing = false;               // Python up, and drawing this one
-      if (first) { self.postMessage({ id: job.id, note: "starting" }); }
+      if (waits) { self.postMessage({ id: job.id, note: "starting" }); }
       start(job).then(function (py) {
-        if (first) { self.postMessage({ id: job.id, note: "ready" }); }
+        up = true;
+        if (waits) { self.postMessage({ id: job.id, note: "ready" }); }
         if (job.warm) { self.postMessage({ id: job.id, out: "" }); return; }
         var fn = py.globals.get("draw_json");
         drawing = true;
@@ -288,6 +437,26 @@
     hand.postMessage({ id: id, warm: true, where: PYODIDE,
                        root: new URL(".", location.href).href, files: PYFILES });
   }
+
+  // And started sooner than that: here, as the page's script is still
+  // setting the page up, rather than once it has finished.  Python starts
+  // in a thread of its own, so it gets on with it while the page dresses
+  // itself, puts back what was left on it and draws the paper -- which on
+  // a phone was a good part of a second that Python spent not yet asked.
+  // Every way the page can open wants Python sooner or later: a program to
+  // draw, a link or a reload to put back, a drawing by hand to check.
+  //
+  // Nothing waits on this one and nothing is told about it (it has no job
+  // here, so what the worker says back about it goes nowhere); the builds
+  // and warmAside ask for Python as they always did, and find it on its
+  // way or already up.
+  function wakePython() {
+    var hand = pythonHand();
+    if (!hand) { return; }               // no worker: warmAside does it
+    hand.postMessage({ id: 0, warm: true, where: PYODIDE,
+                       root: new URL(".", location.href).href, files: PYFILES });
+  }
+  if (MODE === "web" && has("#code")) { wakePython(); }
 
   function drawHere(ask) {               // the slow way: on the page's thread
     return startPython().then(function (py) {

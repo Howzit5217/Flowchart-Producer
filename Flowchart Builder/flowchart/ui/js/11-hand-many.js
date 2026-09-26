@@ -9,7 +9,7 @@
   // moving the bottom half of it down to make room was a dozen drags, each
   // one lined up by eye with the last, and there was no copying a piece of
   // it at all.  Every drawing program does this the same way, and this does
-  // it that way too: drag across empty paper and every shape wholly inside
+  // it that way too: drag across empty paper and every shape mostly inside
   // the box is taken up; Shift or Ctrl and a click takes one more up, or
   // lets one go; Ctrl+A takes up the lot.  Take hold of any of them and they
   // all move, and Ctrl+C, Ctrl+X and Ctrl+V copy, cut and paste them --
@@ -53,7 +53,7 @@
 
   // ---------------------------------------------------- a box round them --
   // Pressed on bare paper and dragged: a box is drawn from the press to the
-  // mouse, and every shape wholly inside it lights up as it comes in.  Let
+  // mouse, and every shape mostly inside it lights up as it comes in.  Let
   // go, and those are taken up -- added to what was taken up already, if
   // Shift or Ctrl is held.  A press let go where it was is still a click on
   // the paper (or on the arrow under it), and does what a click did.
@@ -63,6 +63,22 @@
   // did, and only Shift or Ctrl makes it a box.  With Select, a plain drag
   // is a box, a finger's too; a touch screen has no Shift to hold.
   var lassoDone = false;                 // the click that ends a box is no click
+  var boxGoing = false;                  // a box is being drawn this moment
+
+  // "Inside" is most of the way in, not all of it: a shape was left out for
+  // a corner the box fell a few pixels short of, so boxing a row meant
+  // overshooting every edge of it.  Three fifths of the shape's area (as it
+  // stands, turned or not) is in; a box that only clips a shape's edge still
+  // leaves it out (asked for, 2026-09-26: "most of the tile ... balanced").
+  var BOX_COVER = 0.6;
+
+  function mostlyIn(n, x0, x1, y0, y1) {
+    var t = turned(n);
+    var l = t.x - t.w / 2, r = t.x + t.w / 2, top = t.y - t.h / 2, foot = t.y + t.h / 2;
+    var w = Math.min(r, x1) - Math.max(l, x0), h = Math.min(foot, y1) - Math.max(top, y0);
+    if (w <= 0 || h <= 0) { return false; }
+    return w * h >= BOX_COVER * t.w * t.h;
+  }
 
   function lasso(svg) {
     svg.addEventListener("pointerdown", function (ev) {
@@ -94,6 +110,8 @@
           frame.setAttribute("class", "lasso-box");
           svg.appendChild(frame);
           svg.classList.add("lassoing");  // the one shape's dots put away
+          boxGoing = true;
+          if (!boxing) { lendSelect(); }  // a key made it a box: Select, for now
         }
         var x0 = Math.min(from.x, here.x), x1 = Math.max(from.x, here.x);
         var y0 = Math.min(from.y, here.y), y1 = Math.max(from.y, here.y);
@@ -102,9 +120,7 @@
         frame.setAttribute("width", (x1 - x0).toFixed(1));
         frame.setAttribute("height", (y1 - y0).toFixed(1));
         inside = hand.nodes.filter(function (n) {
-          var t = turned(n);
-          return t.x - t.w / 2 >= x0 && t.x + t.w / 2 <= x1 &&
-                 t.y - t.h / 2 >= y0 && t.y + t.h / 2 <= y1;
+          return mostlyIn(n, x0, x1, y0, y1);
         }).map(function (n) { return n.id; });
         all(".node[data-i]", svg).forEach(function (g) {
           var id = +g.dataset.i.slice(1);
@@ -128,6 +144,9 @@
         frame.remove();
         svg.classList.remove("lassoing");
         lassoDone = true;
+        boxGoing = false;
+        // the key already let go of while the box was drawn: Move again now
+        if (!(e && (e.shiftKey || e.ctrlKey || e.metaKey))) { giveToolBack(); }
         // A second finger made it a pinch, and a pinch chooses nothing.
         if (pinched || heldLong) { drawHand(); return; }
         takeUp(had.concat(inside));
@@ -450,21 +469,52 @@
   catch (e) { /* storage turned off: Move, as the page starts */ }
 
   function setTool(which) {
+    toolLent = false;
     handTool = which === "select" ? "select" : "move";
-    document.body.classList.toggle("tool-select", handTool === "select");
+    showTool(handTool);
+    try { localStorage.setItem("flowchart-tool", handTool); } catch (e) { /* fine */ }
+  }
+
+  // The foot bar lit, and the paper's cursor, for a tool.
+  function showTool(which) {
+    document.body.classList.toggle("tool-select", which === "select");
     [["#tool-move", "move"], ["#tool-select", "select"]].forEach(function (pair) {
       var b = el(pair[0]);
       if (!b) { return; }
-      b.classList.toggle("on", handTool === pair[1]);
-      b.setAttribute("aria-pressed", handTool === pair[1] ? "true" : "false");
+      b.classList.toggle("on", which === pair[1]);
+      b.setAttribute("aria-pressed", which === pair[1] ? "true" : "false");
     });
-    try { localStorage.setItem("flowchart-tool", handTool); } catch (e) { /* fine */ }
   }
+
+  // Ctrl (or Shift, or Cmd) held and a box drawn under Move is selecting,
+  // so for as long as the key is down the foot bar says Select and the
+  // cursor is Select's; let go of it once the box is drawn and Move comes
+  // back.  Only lent: Select pressed while it is lent is chosen, and kept
+  // (asked for, 2026-09-26).
+  var toolLent = false;
+
+  function lendSelect() {
+    if (handTool === "select" || toolLent) { return; }
+    toolLent = true;
+    showTool("select");
+  }
+
+  function giveToolBack() {
+    if (!toolLent) { return; }
+    toolLent = false;
+    showTool(handTool);
+  }
+
   if (el("#tool-move")) {
     el("#tool-move").onclick = function () { setTool("move"); };
     el("#tool-select").onclick = function () { setTool("select"); };
     setTool(handTool);
   }
+  window.addEventListener("keyup", function (ev) {
+    if (toolLent && !boxGoing && !(ev.shiftKey || ev.ctrlKey || ev.metaKey)) { giveToolBack(); }
+  });
+  // (a key let go of in another window never comes up here)
+  window.addEventListener("blur", function () { if (!boxGoing) { giveToolBack(); } });
 
   // ------------------------------------------------ moving about the paper --
   // Besides a plain drag under Move, the way every drawing program has: hold

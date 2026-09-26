@@ -49,7 +49,7 @@ FR = {
     "lock_tip": "Garder le schéma en place, en défilant dans la zone",
     "loose_tip": "Déplacez le schéma où vous voulez ; un coin reste toujours visible",
     "tool_move": "Déplacer",
-    "tool_move_tip": "Faites glisser la feuille pour vous y déplacer. Maj+glisser trace un cadre pour sélectionner des formes.",
+    "tool_move_tip": "Faites glisser la feuille pour vous y déplacer. Ctrl+glisser ou Maj+glisser trace un cadre pour sélectionner des formes.",
     "tool_select": "Sélectionner",
     "tool_select_tip": "Faites glisser sur la feuille pour sélectionner les formes qui s'y trouvent. Touchez ou cliquez des formes pour les ajouter ou les retirer.",
     "zoom_out": "Réduire", "pixels": "pixels",

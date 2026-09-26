@@ -50,7 +50,7 @@ ES = {
     "lock_tip": "Mantener el diagrama en su sitio, desplazándose dentro del área",
     "loose_tip": "Arrastra el diagrama a donde quieras; siempre queda una esquina a la vista",
     "tool_move": "Mover",
-    "tool_move_tip": "Arrastra el papel para moverte por él. Mayús+arrastrar dibuja un recuadro para seleccionar formas.",
+    "tool_move_tip": "Arrastra el papel para moverte por él. Ctrl+arrastrar o Mayús+arrastrar dibuja un recuadro para seleccionar formas.",
     "tool_select": "Seleccionar",
     "tool_select_tip": "Arrastra sobre el papel para seleccionar las formas que queden dentro. Toca o haz clic en formas para añadirlas o quitarlas.",
     "zoom_out": "Alejar", "pixels": "píxeles",

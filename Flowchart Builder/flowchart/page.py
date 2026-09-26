@@ -31,16 +31,24 @@ from .words.lookup import NAMES, WORDS, in_full, word
 # day while the page is being worked on: it went on serving the page as it
 # was that morning.  A freeze put right in the files at teatime was still
 # freezing in the studio that evening, and nothing said the page was old.
-_POURED = {"at": None, "page": "", "panel": ""}
+_POURED = {"at": None, "page": "", "panel": "", "lean": None}
 
 
-def poured():
-    """The page and the pseudocode panel, as their files stand now."""
+def poured(lean=False):
+    """The page and the pseudocode panel, as their files stand now.
+
+    Lean is the website's: poured without the explanations (parts.lean_js)."""
     at = parts.changed_at()
     if at != _POURED["at"]:
         _POURED.update(page=parts.page_html(),
-                       panel=parts.read_ui("source-panel.html"), at=at)
-    return _POURED["page"], _POURED["panel"]
+                       panel=parts.read_ui("source-panel.html"), at=at,
+                       lean=None)
+    if not lean:
+        return _POURED["page"], _POURED["panel"]
+    if _POURED["lean"] is None:
+        _POURED["lean"] = (parts.page_html(lean=True),
+                           parts.lean_html(_POURED["panel"]))
+    return _POURED["lean"]
 
 # What the website's head carries to be installable as an app (see
 # studio/site.py, which writes the manifest and the service worker beside
@@ -48,7 +56,16 @@ def poured():
 # have neither, and pointing at files that are not there only fills the
 # console with complaints.  An iPhone reads none of the manifest's icons,
 # so its own is named here.
+#
+# And the server Python comes from is connected to while the page is still
+# arriving.  On a first visit Python is megabytes from there, and could not
+# start coming until the page had arrived and its script had run -- with
+# the handshake with a server on the other side of the world still to do.
+# `crossorigin`, because its big files are fetched the open way (cors),
+# which the browser keeps a connection of its own for.
 APP_HEAD = "\n".join([
+    '<link rel="preconnect" href="%s" crossorigin>'
+    % re.match(r"https?://[^/]+", PYODIDE).group(0),
     '<link rel="manifest" href="manifest.webmanifest">',
     '<link rel="apple-touch-icon" href="%sapple-touch-icon.png">' % ICONS,
     '<meta name="mobile-web-app-capable" content="yes">',
@@ -112,7 +129,7 @@ def to_page(svg, title=None, name="flowchart", source=None, seed=None,
     .svg: the chart, the colors, and the two download links, all in the one
     file, so it still works if you move it or mail it.
     """
-    page_html, source_panel = poured()
+    page_html, source_panel = poured(lean=web)
     body = svg.split("\n", 1)[1] if svg.startswith("<?xml") else svg
     box = re.search(r'viewBox="0 0 ([\d.]+) ([\d.]+)"', body)
     size = "%s x %s" % (box.group(1), box.group(2)) if box else ""

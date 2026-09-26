@@ -49,7 +49,7 @@ DE = {
     "lock_tip": "Das Diagramm bleibt an seinem Platz und wird in der Fläche gescrollt",
     "loose_tip": "Das Diagramm frei verschieben; eine Ecke bleibt immer sichtbar",
     "tool_move": "Bewegen",
-    "tool_move_tip": "Ziehe das Blatt, um dich darauf zu bewegen. Umschalt+Ziehen zieht einen Rahmen, um Formen auszuwählen.",
+    "tool_move_tip": "Ziehe das Blatt, um dich darauf zu bewegen. Strg+Ziehen oder Umschalt+Ziehen zieht einen Rahmen, um Formen auszuwählen.",
     "tool_select": "Auswählen",
     "tool_select_tip": "Ziehe über das Blatt, um die Formen darin auszuwählen. Tippe oder klicke Formen an, um sie dazuzunehmen oder wegzulassen.",
     "zoom_out": "Verkleinern", "pixels": "Pixel",
