@@ -307,14 +307,13 @@
       var line = n.line || k.line || style.ink || "";
       var word = n.text || k.text || style.words || style.ink || "";
       // and readable on what they are on, unless turned down (02-read.js)
-      var fix = shapeReads(g.dataset.kind, fill, line, word, n);
+      // -- the words on their highlighter, where they have one, which keeps
+      // its own color
+      var look = shapeLook(g.dataset.i);
+      var fix = shapeReads(g.dataset.kind, fill, line, word, n, look.mark);
       line = fix.line;
       word = fix.word;
-      var look = shapeLook(g.dataset.i);
-      // and a highlighter behind them that they can be read on
-      fix.mark = markReads(look.mark, word, n);
-      if (fix.mark) { look.mark = fix.mark.now; }
-      g._read = fix.changed || fix.mark ? fix : null;
+      g._read = fix.changed ? fix : null;
       var dress = lookSaid(look);
       // Looking inside a shape is the expensive part of this, so a shape
       // already wearing all three of its colors, and its words already set
@@ -476,6 +475,7 @@
   // wait until every color is on.
   var coatLater = null;                  // highlighters waiting on a fresh coat
   function freshCoat() {
+    if (chart) { chart._coated = true; }   // once per drawing (see bind)
     coatLater = [];
     try { paintedThrough(); }
     finally {

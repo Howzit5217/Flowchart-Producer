@@ -348,8 +348,6 @@ EN = {
     "rd_words_light": "Words drawn lighter to stand out.",
     "rd_edge_dark": "Border drawn darker to show on the paper.",
     "rd_edge_light": "Border drawn lighter to show on the paper.",
-    "rd_mark_dark": "Highlight drawn darker so the words show.",
-    "rd_mark_light": "Highlight drawn lighter so the words show.",
     "rd_lines_dark": "Arrows drawn darker to show on the paper.",
     "rd_lines_light": "Arrows drawn lighter to show on the paper.",
     "rd_said_dark": "Arrow words drawn darker to show on the paper.",

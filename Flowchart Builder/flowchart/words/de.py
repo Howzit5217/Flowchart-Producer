@@ -349,8 +349,6 @@ DE = {
     "rd_words_light": "Schrift heller, damit sie sich abhebt.",
     "rd_edge_dark": "Rand dunkler, damit er auf dem Blatt sichtbar ist.",
     "rd_edge_light": "Rand heller, damit er auf dem Blatt sichtbar ist.",
-    "rd_mark_dark": "Markierung dunkler, damit die Schrift lesbar ist.",
-    "rd_mark_light": "Markierung heller, damit die Schrift lesbar ist.",
     "rd_lines_dark": "Pfeile dunkler, damit sie auf dem Blatt sichtbar sind.",
     "rd_lines_light": "Pfeile heller, damit sie auf dem Blatt sichtbar sind.",
     "rd_said_dark": "Pfeilbeschriftung dunkler, damit sie auf dem Blatt sichtbar ist.",

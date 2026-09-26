@@ -350,8 +350,6 @@ FR = {
     "rd_words_light": "Texte éclairci pour ressortir.",
     "rd_edge_dark": "Bordure assombrie pour se voir sur la feuille.",
     "rd_edge_light": "Bordure éclaircie pour se voir sur la feuille.",
-    "rd_mark_dark": "Surlignage assombri pour que le texte se lise.",
-    "rd_mark_light": "Surlignage éclairci pour que le texte se lise.",
     "rd_lines_dark": "Flèches assombries pour se voir sur la feuille.",
     "rd_lines_light": "Flèches éclaircies pour se voir sur la feuille.",
     "rd_said_dark": "Texte des flèches assombri pour se voir sur la feuille.",

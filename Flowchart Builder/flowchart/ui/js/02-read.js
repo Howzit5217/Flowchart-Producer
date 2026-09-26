@@ -87,13 +87,19 @@
   // be no edge to the shape at all.  `fill`, `line` and `word` are what
   // paint() has worked out, "" meaning the drawing's own white and black.
   // A shape turned down (Ignore) keeps what it was given.
-  function shapeReads(kind, fill, line, word, mine) {
+  //
+  // Highlighted words are read against the highlighter behind them, and it
+  // is the words that give way: a pen keeps the color it was picked in on
+  // any paper, white or black -- yellow stays yellow -- and light words on
+  // a dark palette are drawn darker on it, as they would be written on a
+  // real highlighter (asked for, 2026-09-25; the pen used to be darkened).
+  function shapeReads(kind, fill, line, word, mine, mark) {
     var out = { line: line, word: word, words: null, edge: null };
     if (mine.readAsIs) { return out; }
     var paper = style.sheet || "#ffffff";
     var loose = kind === "text";
     var under = loose ? paper : (fill || "#ffffff");
-    var w = word || "#000000", better = readableOn(w, under, WORDS_NEED);
+    var w = word || "#000000", better = readableOn(w, mark || under, WORDS_NEED);
     if (better) { out.word = better; out.words = { was: w, now: better }; }
     if (!loose) {
       var edge = line || "#000000";
@@ -105,18 +111,6 @@
     }
     out.changed = !!(out.words || out.edge);
     return out;
-  }
-
-  // A highlighter the words can still be read on.  The pens are pale, which
-  // is right behind dark words -- but on a dark palette the words are
-  // light, and a pale yellow behind light words hid them.  So the pen is
-  // drawn a darker shade of itself there (a lighter one behind dark words
-  // it is too dark for), only as far as the words need (asked for,
-  // 2026-09-25).  `word` is the words' color as drawn, "" being black.
-  function markReads(mark, word, mine) {
-    if (!mark || mine.readAsIs) { return null; }
-    var better = readableOn(mark, word || "#000000", WORDS_NEED);
-    return better ? { was: mark, now: better } : null;
   }
 
   // The chart's own: the arrows, and the words along them, on the paper.
@@ -215,13 +209,11 @@
       } else { select(g); }
       if (fix.words) { said.push(way(fix.words, "rd_words_dark", "rd_words_light")); }
       if (fix.edge) { said.push(way(fix.edge, "rd_edge_dark", "rd_edge_light")); }
-      if (fix.mark) { said.push(way(fix.mark, "rd_mark_dark", "rd_mark_light")); }
       var mine = function () { return (style.nodes[key] = style.nodes[key] || {}); };
       take = function () {
         keepUndo();
         if (fix.words) { mine().text = fix.words.now; }
         if (fix.edge) { mine().line = fix.edge.now; }
-        if (fix.mark) { mine().mark = fix.mark.now; }
         paint(); drawSelection(); keep();
       };
       ignore = function () { keepUndo(); mine().readAsIs = true; paint(); drawSelection(); keep(); };
@@ -230,7 +222,7 @@
     words.className = "rule-says";
     words.textContent = said.join(" ");
     var now = key === "paper" ? (chartRead.lines || chartRead.words).now
-                              : ((fix.words || fix.edge || fix.mark).now);
+                              : ((fix.words || fix.edge).now);
     openMenu(x, y, [
       { head: TXT.rd_head },
       { bit: words },

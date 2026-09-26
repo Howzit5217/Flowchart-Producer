@@ -39,6 +39,14 @@
     W = box[2] || 800; H = box[3] || 600;
     readBands();         // before anything has the page lay the chart out
     heavy = chart.querySelectorAll(".node").length > HEAVY;
+    // In the palette before anything below measures it (freshCoat,
+    // 02-paint.js) -- every drawing, however it came onto the paper.  One
+    // measured while still in its plain black and white fades across from
+    // white into its colors, because the paper is a color the stylesheet
+    // fades: Unlocked, show() measures the paper to keep it in reach, and
+    // every touch of a drawing by hand -- a click, a drag, a turn, an undo
+    // -- had the paper jump to white (Ink) and slide back to the palette.
+    if (!chart._coated) { freshCoat(); }
     sizeList();          // what a PNG of it comes to, now the chart is known
     chart.onclick = function (ev) {
       var g = ev.target.closest ? ev.target.closest(".node") : null;

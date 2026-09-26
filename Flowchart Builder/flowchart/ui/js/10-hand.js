@@ -1463,7 +1463,10 @@
     var out = ['<svg xmlns="http://www.w3.org/2000/svg" id="chart" width="' +
                wide + '" height="' + tall + '" viewBox="0 0 ' + wide + ' ' +
                tall + '">',
-               '<rect class="sheet" width="100%" height="100%" fill="#ffffff"/>'];
+               // the palette's paper from the start, never white first
+               // (see bind, 06-chart.js): there is nothing to fade from
+               '<rect class="sheet" width="100%" height="100%" fill="' +
+               escaped(style.sheet || "#ffffff") + '"/>'];
     var fine = [], major = [], i;
     var ruled = ox / HAND_RULE;        // the heavy lines stay with the shapes
     for (i = 0; i * HAND_RULE <= wide; i++) {
