@@ -59,8 +59,11 @@
   // next -- an arrow between two boxes was nearly all head, and hard to
   // follow), and the True and False measured at the size they are written
   // here, so the layout leaves them room enough.
+  // The least, that is: an arrow the layout needs longer -- one carrying a
+  // True or False down beside it, the two sides of an If coming home, a
+  // loop coming round -- is as long as it needs.
   var TIDY_ROOM = 1.5;
-  var TIDY_GAP = 40;
+  var TIDY_GAP = 1.5 * HAND_RULE;        // a square and a half of the ruling
   function tidyAsk(text, sizes) {
     var letters = lettersAsked();
     letters.size = HAND_TYPE * chartPt() / PLAIN_PT;
@@ -477,8 +480,22 @@
   // The loop every carrying goes round: `shown(t)` for each frame, until
   // `m.end`; landed at once by tidyDone, by whatever `m.listen` listens for,
   // and however the frames go (a page put away stops drawing them).
+  //
+  // Its clock can be turned round (m.turn): Undo pressed while a move is
+  // still going -- or Redo while an Undo is -- plays it backwards from
+  // where it has got to, rather than landing it and starting another from
+  // the far end.  Played all the way back, it is where it started from,
+  // and the drawing of that is put down (tidyDone).  Undo and Redo, by key
+  // or by button, are therefore not among what lands it.
+  function tidyUndoKey(ev) {
+    if (ev.type === "keydown") {
+      var k = String(ev.key || "").toLowerCase();
+      return (ev.ctrlKey || ev.metaKey) && (k === "z" || k === "y");
+    }
+    return !!(ev.target && ev.target.closest && ev.target.closest("#undo, #redo"));
+  }
   function tidyRun(m, shown, stops) {
-    function stop() { tidyDone(); }
+    function stop(ev) { if (!tidyUndoKey(ev)) { tidyDone(); } }
     m.listen = function (on) {
       var how = on ? "addEventListener" : "removeEventListener";
       stops.forEach(function (what) {
@@ -486,29 +503,47 @@
       });
     };
     m.land = function () { shown(Infinity); };
+    m.dir = 1;                           // forwards; -1 backwards
+    m.base = 0;                          // where the clock stood at `since`
+    m.since = performance.now();
+    m.now = function () {
+      return Math.max(0, Math.min(m.end, m.base + m.dir * (performance.now() - m.since)));
+    };
+    m.turn = function (way) {
+      m.base = m.now();
+      m.since = performance.now();
+      m.dir = -m.dir;
+      m.way = way;
+      clearTimeout(m.safety);
+      m.safety = setTimeout(tidyDone, (m.dir > 0 ? m.end - m.base : m.base) + 800);
+    };
     shown(0);                            // before the browser draws a frame of it
     tidyMove = m;
     m.listen(true);
-    var began = performance.now();
     function frame() {
       if (tidyMove !== m) { return; }
-      if (!m.svg.isConnected) { tidyDone(); return; }
-      var t = performance.now() - began;
+      if (!m.svg.isConnected) { tidyDone(true); return; }
+      var t = m.now();
       shown(t);
-      if (t >= m.end) { tidyDone(); return; }
+      if (m.dir > 0 ? t >= m.end : t <= 0) { tidyDone(); return; }
       m.frame = requestAnimationFrame(frame);
     }
     m.frame = requestAnimationFrame(frame);
     m.safety = setTimeout(tidyDone, m.end + 800);
   }
 
-  function tidyMotion(before, order) {
+  // `way`: "fore" for a tidy or a Redo, "back" for an Undo -- which way on
+  // the steps it went, so the step the other way can play it backwards.
+  function tidyMotion(before, order, way) {
     var svg = chart;
     if (!before || !svg || STILL || document.hidden || hand.nodes.length > TIDY_BIG) { return; }
     var box = svg.viewBox && svg.viewBox.baseVal;
     var layer = el("g[font-family]", svg);
     if (!box || !box.width || !before.w || !layer) { return; }
     var m = tidyStart(svg, before), ox = m.ox, oy = m.oy;
+    m.way = way || "fore";
+    m.from = before.at;
+    m.to = tidyWhere();
 
     // the arrows it had, where they were
     m.ghost = document.createElementNS("http://www.w3.org/2000/svg", "g");
@@ -609,20 +644,50 @@
     tidyRun(m, shown, ["pointerdown", "keydown", "wheel"]);
   }
 
-  // Whatever is still on its way lands, at once.
-  function tidyDone() {
+  // Whatever is still on its way lands, at once.  Played backwards, it
+  // is back where it started instead, and the drawing of the design as it
+  // now is -- which is how everything looks at that moment -- is put down
+  // in its place.  `quiet`: another drawing is about to replace it anyway,
+  // so it is only stopped where it is.
+  function tidyDone(quiet) {
     var m = tidyMove;
     if (!m) { return; }
     tidyMove = null;
     cancelAnimationFrame(m.frame);
     clearTimeout(m.safety);
     m.listen(false);
-    m.land();
+    var back = m.dir < 0;
+    if (!quiet && !back) { m.land(); }
+    if (m.cleanup) { m.cleanup(); }
     [m.ghost, m.paper].forEach(function (e) {
       if (e && e.parentNode) { e.parentNode.removeChild(e); }
     });
     (m.real || []).forEach(function (e) { e.style.visibility = ""; });
+    if (!quiet && back) {
+      glideHeld++;
+      try { drawHand(); } finally { glideHeld--; }
+    }
     if (loose) { holdClamp(); }          // a smaller paper has less room to roam
+  }
+
+  // Is this step the move being shown, taken back?  The step would put back
+  // where the move set out from -- or, played backwards already, where it
+  // was going -- shape for shape; anything else is a step of its own.
+  function tidyTurns(m, forward, step) {
+    if (!m || !m.way || m.way === (forward ? "fore" : "back") || !step || !step.hand ||
+        m.svg !== chart || !m.svg.isConnected) { return false; }
+    var want = m.dir > 0 ? m.from : m.to, nodes = step.hand.nodes || [];
+    if (!want || nodes.length !== Object.keys(want).length) { return false; }
+    return nodes.every(function (n) {
+      var w = want[n.id];
+      return w && Math.abs(w.x - n.x) < 0.5 && Math.abs(w.y - n.y) < 0.5;
+    });
+  }
+
+  function tidyWhere() {                 // every shape's place, as the design has it
+    var at = {};
+    hand.nodes.forEach(function (n) { at[n.id] = { x: n.x, y: n.y }; });
+    return at;
   }
 
   // ---- the button ------------------------------------------------------------
@@ -671,7 +736,7 @@
         glideHeld++;                     // it carries itself (tidyMotion)
         try { drawHand(); } finally { glideHeld--; }
         drawHandPanel();
-        if (moved) { tidyMotion(before, layout.order); }   // tidy already: nothing to see
+        if (moved) { tidyMotion(before, layout.order, "fore"); }   // tidy already: nothing to see
         showReport();
         handSays(moved ? say("h_tidied", { n: moved }) : TXT.h_tidy_done);
       })
@@ -691,23 +756,45 @@
   // and drawn in again.  Each way is marked as it is taken, so the way back
   // again goes like that too.  Any other step back or forward glides, like
   // every other move (below).
+  //
+  // And whatever move is still going when the step the other way is asked
+  // for -- Undo straight after a tidy, a fix, a nudge or a Redo; Redo
+  // straight after an Undo -- is played backwards from where it has got to
+  // (tidyTurns, m.turn), rather than landed and started again from the far
+  // end.  The design is put back at once, as a step always puts it back;
+  // only its drawing waits (glideDefer) until the move is back where it
+  // began, when it looks exactly as that drawing does.
   var stepBackPlain = stepBack;
   stepBack = function (forward) {
     var from = forward ? willBeLike : wasLike, to = forward ? wasLike : willBeLike;
     var step = from[from.length - 1];
+    var way = forward ? "fore" : "back";
+    var m = tidyMove;
+    if (byHand && tidyTurns(m, forward, step)) {
+      glideDefer++;
+      try { stepBackPlain(forward); } finally { glideDefer--; }
+      if (step.tidied && to.length) { to[to.length - 1].tidied = true; }
+      if (glideLast) { glideLast.ref = hand; }   // the same drawing, still
+      m.turn(way);
+      return;
+    }
     var carried = byHand && step && step.tidied;
     if (!carried) {
       glideAcross = true;                // another copy of the design: the same drawing
-      try { stepBackPlain(forward); } finally { glideAcross = false; }
+      glideWay = way;
+      try { stepBackPlain(forward); } finally { glideAcross = false; glideWay = "fore"; }
       return;
     }
-    tidyDone();
+    // From where everything is seen, if something is still on its way.
+    var seen = tidyMove && glideLast ? glideSeen() : null;
+    tidyDone(true);
     var before = tidyLook();
+    if (seen) { before.at = seen; }
     glideHeld++;                         // it carries itself
     try { stepBackPlain(forward); } finally { glideHeld--; }
     if (to.length) { to[to.length - 1].tidied = true; }
     var order = hand.nodes.slice().sort(function (p, q) { return (p.y - q.y) || (p.x - q.x); });
-    tidyMotion(before, order.map(function (n) { return n.id; }));
+    tidyMotion(before, order.map(function (n) { return n.id; }), way);
   };
 
   // ======================================================== every move ==
@@ -732,6 +819,8 @@
   var GLIDE_PACE = 0.6;                  // and a ms more for so many px between
   var glideHeld = 0;                     // drawings that carry themselves
   var glideAcross = false;               // a step back: a copy of the same drawing
+  var glideDefer = 0;                    // a move played backwards: drawn when it is back
+  var glideWay = "fore";                 // which way on the steps this move goes
   var glideLast = null;                  // the drawing as it was last drawn
   var glidePress = false;                // a pointer is down
 
@@ -785,6 +874,7 @@
 
   var drawHandAsked = drawHand;
   drawHand = function () {
+    if (glideDefer) { return; }          // tidyDone draws it, once the move is back
     var last = glideLast, was = chart, before = null;
     if (last && !glideHeld && !glidePress && !STILL && !document.hidden && byHand &&
         was && was.isConnected && handPaper === was && (hand === last.ref || glideAcross) &&
@@ -794,10 +884,10 @@
                  w: last.w, h: last.h, hold: [holdX, holdY],
                  scroll: stage ? [stage.scrollLeft, stage.scrollTop] : null };
     }
-    tidyDone();
+    tidyDone(true);                      // replaced below: nothing of it to land
     drawHandAsked();
     glideLast = glideSnap();
-    if (before) { glideMotion(before); }
+    if (before) { glideMotion(before, glideWay); }
   };
 
   // One line of an arrow as the same line at another place.  An arrow that
@@ -825,10 +915,13 @@
     return a.length === now.length ? { from: a, to: now } : null;
   }
 
-  function glideMotion(before) {
+  function glideMotion(before, way) {
     var svg = chart, box = svg.viewBox && svg.viewBox.baseVal;
     if (!box || !box.width || !before.w) { return; }
     var m = tidyStart(svg, before), ox = m.ox, oy = m.oy, far = 0;
+    m.way = way || "fore";               // so the step the other way plays it back
+    m.from = before.at;
+    m.to = tidyWhere();
     hand.nodes.forEach(function (n) {
       var was = before.at[n.id];
       if (!was) { return; }
@@ -937,6 +1030,14 @@
       }
     }
 
+    // The old lines that were fading, gone however it ends.
+    m.cleanup = function () {
+      m.lines.forEach(function (line) {
+        line.fades.forEach(function (f) {
+          if (f.out && f.el.parentNode) { f.el.parentNode.removeChild(f.el); }
+        });
+      });
+    };
     if (!m.same && !tidyPaper(m, before)) { m.same = true; }
     tidyRun(m, shown, ["pointerdown", "wheel"]);
   }

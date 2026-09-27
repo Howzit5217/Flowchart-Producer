@@ -444,14 +444,86 @@
     if (now) { now.moves = movesNow(); }
     return now;
   };
+  //
+  // And carried there rather than put there, the way the drawing by hand
+  // carries its shapes (13-hand-tidy.js): every block glides from where it
+  // is seen to where the step puts it, its lines laid again as it goes, the
+  // way they are while one is dragged.  A step the other way while one is
+  // still going plays it backwards from where it has got to.
   var stepBackMoved = stepBack;
   stepBack = function (forward) {
     var from = forward ? willBeLike : wasLike;
     var back = from[from.length - 1];
+    var model = back && !byHand && chart ? blocksModel() : null;
+    var seen = model ? model.shapes.map(function (s) { return [s.dx, s.dy]; }) : null;
     stepBackMoved(forward);
     if (back && !byHand && chart) {
       blockMoves = back.moves ? JSON.parse(JSON.stringify(back.moves)) : null;
       if (blockMoves && blockMoves.sign !== chartSign()) { blockMoves = null; }
-      putMoves();
+      var m = blocksModel();
+      if (m && m === model && !STILL && !document.hidden) { blockGlide(m, seen, forward ? "fore" : "back"); }
+      else { blockLand(); putMoves(); }
     }
   };
+
+  var blockGo = null;                    // the blocks' move under way, if any
+
+  function blockGlide(m, seen, way) {
+    var to = m.shapes.map(function (s) {
+      var at = blockMoves && blockMoves.at[s.i];
+      return at ? [at[0], at[1]] : [0, 0];
+    });
+    function same(a, b) {
+      return a.every(function (p, i) { return Math.abs(p[0] - b[i][0]) < 0.5 && Math.abs(p[1] - b[i][1]) < 0.5; });
+    }
+    var g = blockGo;
+    // The step the other way, of the move still going: played backwards.
+    if (g && g.m === m && g.way !== way && same(to, g.dir > 0 ? g.from : g.to)) {
+      g.base = g.now();
+      g.since = performance.now();
+      g.dir = -g.dir;
+      g.way = way;
+      return;
+    }
+    blockLand(true);
+    var far = 0;
+    seen.forEach(function (p, i) { far = Math.max(far, Math.hypot(to[i][0] - p[0], to[i][1] - p[1])); });
+    if (far < 0.5) { putMoves(); return; }
+    g = blockGo = { m: m, from: seen, to: to, way: way, dir: 1, base: 0, since: performance.now(),
+                    end: Math.min(GLIDE_LONG, GLIDE_SHORT + far * GLIDE_PACE) };
+    g.now = function () {
+      return Math.max(0, Math.min(g.end, g.base + g.dir * (performance.now() - g.since)));
+    };
+    g.show = function (t) {
+      var p = tidyEase(t / g.end);
+      m.shapes.forEach(function (s, i) {
+        var a = g.from[i], b = g.to[i];
+        shiftShape(s, +(a[0] + (b[0] - a[0]) * p).toFixed(2), +(a[1] + (b[1] - a[1]) * p).toFixed(2));
+      });
+      rerouteFlows(m);
+    };
+    (function frame() {
+      if (blockGo !== g) { return; }
+      if (!chart || chart._blocks !== m) { blockGo = null; return; }
+      var t = g.now();
+      g.show(t);
+      if (g.dir > 0 ? t >= g.end : t <= 0) { blockGo = null; return; }
+      g.frame = requestAnimationFrame(frame);
+    })();
+  }
+
+  // Whatever the blocks were on their way to, there at once -- or, with
+  // `quiet`, left for what comes next to put down.
+  function blockLand(quiet) {
+    var g = blockGo;
+    if (!g) { return; }
+    blockGo = null;
+    cancelAnimationFrame(g.frame);
+    if (!quiet && chart && chart._blocks === g.m) { g.show(g.dir > 0 ? g.end : 0); }
+  }
+  // A press lands it: a block about to be taken hold of is where it goes.
+  document.addEventListener("pointerdown", function (ev) {
+    if (blockGo && !(ev.target && ev.target.closest && ev.target.closest("#undo, #redo"))) {
+      blockLand();
+    }
+  }, true);
