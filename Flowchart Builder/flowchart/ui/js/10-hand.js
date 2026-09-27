@@ -1677,7 +1677,12 @@
     // The shapes the rules would draw otherwise, and their marks, held back
     // with the heads so no shape is drawn over them (13-hand-rules.js).
     var hints = ruleHints(), marks = [];
-    hand.nodes.forEach(function (n) {
+    // What is being carried goes over the shapes it passes, not under them
+    // (13-hand-apart.js); let go, it is back in its place in the drawing.
+    var inHand = function (n) { return picked === n.id || inMany(n.id); };
+    (shapeCarried ? hand.nodes.filter(function (n) { return !inHand(n); })
+                              .concat(hand.nodes.filter(inHand))
+                  : hand.nodes).forEach(function (n) {
       var moved = { kind: n.kind, x: n.x + ox, y: n.y + oy, w: n.w, h: n.h };
       var about = turned(n);           // what it takes up, once turned
       marks.push(ruleMark(n, moved, about, hints[n.id]));

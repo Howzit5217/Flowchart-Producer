@@ -175,10 +175,11 @@
   // outside the lot, exactly as it would alone; the rest move by just what
   // it moved, so the lot keeps its own shape.  Carried up against the top
   // of the paper the lot stops there together, rather than each shape
-  // stopping on its own and the lot squashing flat.
+  // stopping on its own and the lot squashing flat.  Over other shapes as
+  // it goes: let go, the lot is moved clear of them together (settleClear,
+  // 13-hand-apart.js).
   function carryCrowd(crowd, held, wasX, wasY, dx, dy) {
     var ids = crowd.map(function (c) { return c.node.id; });
-    var last = { x: held.x - wasX, y: held.y - wasY };   // how far, a moment ago
     held.x = Math.round((wasX + dx) / HAND_GRID) * HAND_GRID;
     held.y = Math.round((wasY + dy) / HAND_GRID) * HAND_GRID;
     lineUp(held, ids);
@@ -186,14 +187,9 @@
     crowd.forEach(function (c) {
       byY = Math.max(byY, turned(c.node).h / 2 + 20 - c.y);
     });
-    // Never onto a shape outside the lot: along it instead (13-hand-apart.js).
-    var by = slideClear({ x: byX, y: byY }, last, function (x, y) {
-      return crowd.some(function (c) { return onTopOf(c.node, c.x + x, c.y + y, ids); });
-    });
-    if (by.x !== byX || by.y !== byY) { guides = []; }
     crowd.forEach(function (c) {
-      c.node.x = c.x + by.x;
-      c.node.y = c.y + by.y;
+      c.node.x = c.x + byX;
+      c.node.y = c.y + byY;
     });
   }
 

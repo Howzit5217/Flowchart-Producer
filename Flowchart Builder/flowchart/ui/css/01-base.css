@@ -9,6 +9,7 @@
     --muted: #5d6b7a;
     --line: #d7dde5;
     --line-soft: #e8edf3;
+    --toggle-off: #cbd3dd;             /* a switch that is off */
     --accent: #14427c;
     --accent-soft: #e8effa;
     --good: #116149;
@@ -42,6 +43,7 @@
       --muted: #9aa8b8;
       --line: #2c3540;
       --line-soft: #232b35;
+      --toggle-off: #3a4553;
       --accent: #5b9bf0;
       --accent-soft: #1d2a3d;
       --code-bg: #10151b;
@@ -82,6 +84,7 @@
     --muted: #9aa8b8;
     --line: #2c3540;
     --line-soft: #232b35;
+    --toggle-off: #3a4553;
     --accent: #5b9bf0;
     --accent-soft: #1d2a3d;
     --good: #57c7a2;

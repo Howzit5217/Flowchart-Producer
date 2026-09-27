@@ -171,13 +171,14 @@
      but they are switches rather than something written in, so the sheet
      is only as tall as what is in it and never the whole screen.  Past
      that it scrolls, which on a short phone is the only thing it can do. */
-  #more-over, #eg-over, #pz-over, #keys-over {
+  #more-over, #tidy-over, #eg-over, #pz-over, #keys-over {
     position: fixed; inset: 0; z-index: 60; display: flex;
     align-items: center; justify-content: center; padding: 26px;
     background: var(--dim);
     -webkit-backdrop-filter: blur(3px); backdrop-filter: blur(3px);
   }
-  #more-over[hidden], #eg-over[hidden], #pz-over[hidden], #keys-over[hidden] {
+  #more-over[hidden], #tidy-over[hidden], #eg-over[hidden], #pz-over[hidden],
+  #keys-over[hidden] {
     display: none !important;
   }
   .more-sheet { width: min(460px, 100%); height: auto; max-height: 100%; }
@@ -333,6 +334,45 @@
   .more-part .switch.wide + h3 { margin-top: 15px; }
   .more-part .switch.wide { margin-top: 0; }
   .more-part .switch.wide:first-of-type { border-top: 0; padding-top: 4px; }
+
+  /* ------------------------------------------- options, row by row -- */
+  /* The two sheets of options (the chart's, and Tidy up's) are laid out
+     the way a phone lays out its settings: each part a heading over a
+     rounded group, and in the group one row per choice -- its name on
+     the left, what it is set to on the right, every control ending on the
+     same line and the lists and switches of three all the one width, so
+     the right-hand side reads as a column.  They were a list ruled off
+     line by line, with a list's name above it and a heading hard up
+     against the switch before it, and the rows had as many heights as
+     there were kinds of row. */
+  .more-body.opts { padding: 2px 20px 22px; }
+  .opts .more-part { padding-top: 18px; }
+  .opts .more-part h3 { margin: 0 0 8px 4px; }
+  .opt-group {
+    border: 1px solid var(--line-soft); border-radius: 12px;
+    background: var(--field); overflow: hidden;
+  }
+  .opt-row {
+    display: flex; align-items: center; justify-content: space-between;
+    gap: 16px; min-height: 52px; padding: 8px 14px;
+    font-size: 13px; color: var(--ink);
+  }
+  .opt-row + .opt-row { border-top: 1px solid var(--line-soft); }
+  label.opt-row { cursor: pointer; }
+  .opt-name { min-width: 0; line-height: 1.35; }
+  .opt-row > label.opt-name { cursor: default; }
+  .opt-sub {
+    display: block; margin-top: 1px; font-size: 11.5px; color: var(--muted);
+  }
+  .opt-row > .seg, .opt-row > .field { flex: 0 0 252px; width: 252px; }
+  .opt-row > .seg .seg-btn { padding: 6px 6px; white-space: nowrap; }
+  /* Too narrow for a name and a control side by side: the control goes
+     under its name, the whole width -- a switch stays at the side. */
+  @media (max-width: 520px) {
+    .more-body.opts { padding: 0 14px 18px; }
+    .opt-row:not(label) { flex-direction: column; align-items: stretch; gap: 8px; }
+    .opt-row > .seg, .opt-row > .field { flex: none; width: 100%; }
+  }
   .code-bar strong { font-size: 14px; }
   .mark.small { width: 26px; height: 26px; border-radius: 8px; }
   .mark.small svg { width: 16px; height: 16px; }
@@ -344,7 +384,8 @@
      before it, the count is what pushes it there; the sheets with no
      count -- Options, the examples, the keys -- push it themselves, or it
      sat in the middle of the bar, straight after the name of the sheet. */
-  #eg-done, #keys-done, #more-done { margin-left: auto; }
+  #eg-done, #keys-done, #more-done, #tidy-no { margin-left: auto; }
+  #tidy-no + #tidy-go { margin-left: -4px; }   /* the pair, a pair */
 
   /* As tall as the program in it (fitSlot in 24-scroll.js sets the
      height), so Copy and Save it follow its last line; a program taller

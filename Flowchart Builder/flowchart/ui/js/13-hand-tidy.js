@@ -62,20 +62,27 @@
   // The least, that is: an arrow the layout needs longer -- one carrying a
   // True or False down beside it, the two sides of an If coming home, a
   // loop coming round -- is as long as it needs.
+  // How much room, how long the arrows and the outline to aim at are what
+  // the Tidy up sheet was set to (`how`, below): its own, not the chart
+  // options', because a drawing by hand wants its own -- the arrow length
+  // above all, which is in squares of the ruling (1.5 unless asked).
   var TIDY_ROOM = 1.5;
   var TIDY_GAP = 1.5 * HAND_RULE;        // a square and a half of the ruling
-  function tidyAsk(text, sizes) {
+  function tidyAsk(text, sizes, how) {
     var letters = lettersAsked();
     letters.size = HAND_TYPE * chartPt() / PLAIN_PT;
     letters.own = {};                    // the pseudocode side's steps, not these
     return Object.assign(chartOptions(), {
       text: text, title: "", author: "",
-      shape: el("#f-shape") ? el("#f-shape").value : "auto",
+      shape: how.shape || "auto",
       seed: TIDY_SEED,
       lang: el("#f-lang") ? el("#f-lang").value : "",
       legend: false, grid: true, shapes: geom, letters: letters,
       everyout: true, apart: true, sizes: sizes, plan: true,
-      room: TIDY_ROOM, gap: TIDY_GAP
+      roomy: how.space === "roomy", tight: how.space === "tight",
+      chains: !!how.chains, columns: how.columns ? 1400 : 0,
+      decide: tidyDecide(how),
+      room: TIDY_ROOM, gap: (+how.arrows || TIDY_GAP / HAND_RULE) * HAND_RULE
     });
   }
 
@@ -225,8 +232,11 @@
   // to fit it -- and in the middle of the paper, where the paper is bigger
   // than that anyway.  How many shapes moved, or null when the layout had
   // nowhere for any of them.
+  //
+  // Asked to keep the chart where it is (`how.stay`), its top left corner
+  // goes where the drawing's was -- never nearer the edge than the wall.
   var TIDY_WALL = 2 * HAND_RULE;
-  function tidyApply(layout) {
+  function tidyApply(layout, how) {
     var ids = Object.keys(layout.places);
     if (!ids.length) { return null; }
     var now = { x0: Infinity, x1: -Infinity, y0: Infinity, y1: -Infinity };
@@ -271,6 +281,15 @@
     }
     var dx = onRuling(lead.x + TIDY_WALL + spareX - now.x0, spareX) - lead.x;
     var dy = onRuling(lead.y + TIDY_WALL + spareY - now.y0, spareY) - lead.y;
+    if (how && how.stay) {
+      var x0 = Infinity, y0 = Infinity;
+      hand.nodes.forEach(function (n) {
+        var t = turned(n);
+        x0 = Math.min(x0, n.x - t.w / 2); y0 = Math.min(y0, n.y - t.h / 2);
+      });
+      dx = onRuling(lead.x + Math.max(x0, TIDY_WALL) - now.x0, 0) - lead.x;
+      dy = onRuling(lead.y + Math.max(y0, TIDY_WALL) - now.y0, 0) - lead.y;
+    }
     ids.forEach(function (id) {
       var n = nodeById(+id), s = layout.places[id];
       n.x = Math.round(s.x + dx);
@@ -351,7 +370,7 @@
   function tidyLook() {
     if (!chart || !chart.isConnected || !byHand) { return null; }
     var at = {}, stage = el("#stage"), box = chart.viewBox && chart.viewBox.baseVal;
-    hand.nodes.forEach(function (n) { at[n.id] = { x: n.x, y: n.y }; });
+    hand.nodes.forEach(function (n) { at[n.id] = { x: n.x, y: n.y, turn: n.turn || 0 }; });
     return { svg: chart, at: at, origin: { x: handOrigin.x, y: handOrigin.y },
              w: box ? box.width : 0, h: box ? box.height : 0,
              scroll: stage ? [stage.scrollLeft, stage.scrollTop] : null, hold: [holdX, holdY] };
@@ -408,7 +427,18 @@
   // the dots, corners and handles it has while it is picked.
   function tidyFollowers(svg, id) {
     return all('.node[data-i="h' + id + '"], .rule-dot[data-hint="' + id + '"], [data-i="' + id + '"]', svg)
-      .map(function (e) { return { el: e, own: e.getAttribute("transform") || "" }; });
+      .map(function (e) {
+        var own = e.getAttribute("transform") || "";
+        // the shape itself, and whatever is turned along with it
+        return { el: e, own: own, spins: e.classList.contains("node") || /rotate\(/.test(own) };
+      });
+  }
+
+  // How far a shape turns on its way, the short way round: from `was` to
+  // where it is turned now.
+  function tidySpin(was, n) {
+    var d = ((((was || 0) - (n.turn || 0)) % 360) + 540) % 360 - 180;
+    return Math.abs(d) < 0.05 ? 0 : d;
   }
 
   // Each arrow's head, by the arrow's number.  The heads are drawn apart
@@ -468,11 +498,16 @@
   // One step of a shape's way, `p` of it, on it and all that goes with it.
   function tidyCarry(mv, p) {
     var x = (mv.dx * (1 - p)).toFixed(2), y = (mv.dy * (1 - p)).toFixed(2);
+    // Turned as well (Tidy up standing it upright, a turn taken back): the
+    // rest of the turn, about where the shape's middle is now.
+    var spin = mv.dturn ? " rotate(" + (mv.dturn * (1 - p)).toFixed(2) + " " +
+                          (mv.x + handOrigin.x).toFixed(1) + " " + (mv.y + handOrigin.y).toFixed(1) + ")" : "";
     mv.bits.forEach(function (b) {
       if (p >= 1) {
         if (b.own) { b.el.setAttribute("transform", b.own); } else { b.el.removeAttribute("transform"); }
       } else {
-        b.el.setAttribute("transform", "translate(" + x + " " + y + ")" + (b.own ? " " + b.own : ""));
+        b.el.setAttribute("transform", "translate(" + x + " " + y + ")" + (b.spins ? spin : "") +
+                                       (b.own ? " " + b.own : ""));
       }
     });
   }
@@ -563,9 +598,9 @@
       if (!n || !was) { return; }
       var t = turned(n);
       var mv = { n: n, x: n.x, y: n.y, w: t.w, h: t.h, dx: was.x - n.x, dy: was.y - n.y,
-                 p: -1, bits: [] };
+                 dturn: tidySpin(was.turn, n), p: -1, bits: [] };
       m.moves.push(mv);
-      var far = Math.hypot(mv.dx, mv.dy);
+      var far = Math.max(Math.hypot(mv.dx, mv.dy), Math.abs(mv.dturn));
       if (far < 0.5) { landed[id] = 0; mv.p = 1; return; }
       mv.bits = tidyFollowers(svg, id);
       mv.at = TIDY_OFF + k * gap;
@@ -690,21 +725,183 @@
     return at;
   }
 
+  // ---- how, asked first -------------------------------------------------------
+  // The button asks before it tidies (#tidy-over, studio.html): the room
+  // and the arrows and the outline, as the chart options ask them of a
+  // chart built from pseudocode, and what only a drawing by hand has to be
+  // asked -- whether a turned shape stays turned, whether a size set by
+  // hand stays, whether the shapes all take the one width, how its
+  // decisions are labelled, and whether it stays where it is on the paper.
+  // What was chosen is kept for the next time.
+  var TIDY_KEPT = "flowchart-tidy";
+  var TIDY_HOW = { space: "plain", arrows: TIDY_GAP / HAND_RULE, shape: "auto",
+                   chains: false, columns: false, turns: true, fit: false,
+                   even: false, decide: "keep", stay: false };
+  var TIDY_BOXES = { chains: "t-chains", columns: "t-columns", turns: "t-turns",
+                     fit: "t-fit", even: "t-even", stay: "t-stay" };
+  var TIDY_SEGS = { space: "#t-space", arrows: "#t-arrows", decide: "#t-decide" };
+
+  function tidyHowKept() {
+    var how = Object.assign({}, TIDY_HOW);
+    try { Object.assign(how, JSON.parse(localStorage.getItem(TIDY_KEPT) || "{}")); } catch (e) {}
+    return how;
+  }
+
+  function tidyWear(how) {               // the sheet, set the way `how` is
+    Object.keys(TIDY_SEGS).forEach(function (k) {
+      var seg = TIDY_SEGS[k], want = String(how[k]);
+      if (!el(seg + ' .seg-btn[data-v="' + want + '"]')) { want = String(TIDY_HOW[k]); }
+      sideOn(seg, want, "v");
+    });
+    Object.keys(TIDY_BOXES).forEach(function (k) {
+      var box = el("#" + TIDY_BOXES[k]);
+      if (box) { box.checked = !!how[k]; }
+    });
+    var shape = el("#t-shape");
+    if (shape) {
+      shape.value = how.shape;
+      if (shape.value !== how.shape) { shape.value = "auto"; }
+    }
+    // Its decisions offered in the words they would be given, as the chart
+    // options offer them.
+    if (el("#t-decide-tf")) { el("#t-decide-tf").textContent = TXT.yes + " / " + TXT.no; }
+    if (el("#t-decide-yn")) { el("#t-decide-yn").textContent = TXT.yes_plain + " / " + TXT.no_plain; }
+  }
+
+  function tidyRead() {                  // what the sheet is set to
+    var how = {};
+    Object.keys(TIDY_SEGS).forEach(function (k) {
+      var on = el(TIDY_SEGS[k] + " .seg-btn.on");
+      how[k] = on ? on.dataset.v : TIDY_HOW[k];
+    });
+    how.arrows = +how.arrows || TIDY_HOW.arrows;
+    Object.keys(TIDY_BOXES).forEach(function (k) { how[k] = optionOn(TIDY_BOXES[k]); });
+    how.shape = el("#t-shape") ? el("#t-shape").value : "auto";
+    return how;
+  }
+
+  function showTidy(open) {
+    var over = el("#tidy-over"), button = el("#hand-tidy");
+    if (!over) { return; }
+    if (open) { tidyWear(tidyHowKept()); }
+    over.hidden = !open;
+    if (button) { button.setAttribute("aria-expanded", open ? "true" : "false"); }
+    if (open && el("#tidy-go")) { el("#tidy-go").focus(); }
+  }
+
+  // The words a decision is labelled with, asked for: its own (as the
+  // drawing has them -- told from the first decision in it), or the pair
+  // chosen.
+  function tidyDecide(how) {
+    if (how.decide === "tf" || how.decide === "yn") { return how.decide; }
+    var plain = false, seen = false;
+    hand.links.forEach(function (l) {
+      var from = nodeById(l.from), word = String(l.label || "").trim().toLowerCase();
+      if (seen || !from || !asksKind(from.kind) || !word) { return; }
+      seen = true;
+      plain = word === String(TXT.yes_plain).toLowerCase() || word === String(TXT.no_plain).toLowerCase();
+    });
+    return seen ? (plain ? "yn" : "tf") : chartOptions().decide;
+  }
+
+  // What each shape will be once tidied, by `how`: turned or stood upright,
+  // at its own size or fitted to its words, and the one width as the
+  // widest where they all share it (a small circle, a join, keeps its own).
+  // Worked out on the shapes and put back, since the layout is asked for
+  // before anything changes.
+  function tidyShapes(how) {
+    var out = {}, widest = 0;
+    hand.nodes.forEach(function (n) {
+      var was = { w: n.w, h: n.h, own: n.own };
+      measure(n, !!how.fit);
+      out[n.id] = { turn: how.turns ? (n.turn || 0) : 0, w: n.w, h: n.h, own: n.own };
+      n.w = was.w; n.h = was.h; n.own = was.own;
+      if (n.kind !== "circle") { widest = Math.max(widest, out[n.id].w); }
+    });
+    if (how.even) {
+      hand.nodes.forEach(function (n) {
+        var one = out[n.id];
+        if (n.kind === "circle" || one.w === widest) { return; }
+        one.w = widest;
+        one.own = true;                  // set, not grown to its words
+      });
+    }
+    return out;
+  }
+
+  // ... and made so, with the decisions' words.
+  function tidyReshape(plan, how) {
+    hand.nodes.forEach(function (n) {
+      var one = plan[n.id];
+      if (!one) { return; }
+      n.w = one.w; n.h = one.h; n.own = one.own;
+      if (one.turn) { n.turn = one.turn; } else { delete n.turn; }
+    });
+    if (how.decide !== "tf" && how.decide !== "yn") { return; }
+    var yes = how.decide === "yn" ? TXT.yes_plain : TXT.yes;
+    var no = how.decide === "yn" ? TXT.no_plain : TXT.no;
+    hand.links.forEach(function (l) {
+      var from = nodeById(l.from);
+      if (!from || !asksKind(from.kind)) { return; }
+      if (isYes(l.label)) { l.label = yes; } else if (isNo(l.label)) { l.label = no; }
+    });
+  }
+
+  function tidyLooks() {                 // every shape, as the eye sees it
+    var out = {};
+    hand.nodes.forEach(function (n) {
+      out[n.id] = [n.x, n.y, n.turn || 0, n.w, n.h].join(",");
+    });
+    return out;
+  }
+
+  all("#t-space .seg-btn, #t-arrows .seg-btn, #t-decide .seg-btn").forEach(function (b) {
+    b.onclick = function () { sideOn("#" + b.parentNode.id, b.dataset.v, "v"); };
+  });
+  if (el("#tidy-go")) {
+    el("#tidy-go").onclick = function () {
+      var how = tidyRead();
+      try { localStorage.setItem(TIDY_KEPT, JSON.stringify(how)); } catch (e) {}
+      showTidy(false);
+      tidyUp(how);
+    };
+  }
+  if (el("#tidy-no")) { el("#tidy-no").onclick = function () { showTidy(false); }; }
+  if (el("#tidy-over")) {
+    // The dim behind it shuts it, the sheet itself does not.
+    el("#tidy-over").onclick = function (ev) {
+      if (ev.target === el("#tidy-over")) { showTidy(false); }
+    };
+  }
+  window.addEventListener("keydown", function (ev) {
+    if (ev.key === "Escape" && el("#tidy-over") && !el("#tidy-over").hidden) {
+      ev.preventDefault();
+      showTidy(false);
+    }
+  });
+
   // ---- the button ------------------------------------------------------------
-  function tidyUp() {
+  function tidyAskHow() {
     if (!byHand || tidyAsked) { return; }
+    if (!hand.nodes.length) { handSays(TXT.h_tidy_none, true); return; }
+    showTidy(true);
+  }
+
+  function tidyUp(how) {
+    if (!byHand || tidyAsked) { return; }
+    how = how || tidyHowKept();
     tidyDone();
     if (!hand.nodes.length) { handSays(TXT.h_tidy_none, true); return; }
     var text;
     try { text = handAsPseudocode(); }
     catch (thrown) { handSays(thrown.message || String(thrown), true); return; }
+    var plan = tidyShapes(how);
     var fromLine = {}, sizes = {};       // line -> shape, as it was written
     Object.keys(handLine).forEach(function (line) {
       var n = nodeById(+handLine[line]);
       if (!n) { return; }
       fromLine[line] = n.id;
-      measure(n);
-      var t = turned(n);
+      var t = turned(plan[n.id]);        // at the size and turn it will have
       sizes[line] = [t.w, t.h];
     });
     var asked = handKey();
@@ -715,7 +912,7 @@
       tidyAsked = false;
       if (button) { button.disabled = false; button.classList.remove("working"); }
     }
-    askFor(tidyAsk(text, sizes))
+    askFor(tidyAsk(text, sizes, how))
       .then(function (data) {
         done();
         if (!byHand) { return; }
@@ -727,9 +924,12 @@
         if (handKey() !== asked) { return; }
         var layout = tidyLayout(data, fromLine, text);
         if (!Object.keys(layout.places).length) { handSays(TXT.h_tidy_none, true); return; }
-        var before = tidyLook(), was = JSON.stringify(hand);
+        var before = tidyLook(), was = JSON.stringify(hand), looked = tidyLooks();
         keepUndo();
-        var moved = tidyApply(layout);
+        tidyReshape(plan, how);
+        tidyApply(layout, how);
+        var now = tidyLooks();           // moved, turned or resized
+        var moved = Object.keys(now).filter(function (id) { return now[id] !== looked[id]; }).length;
         // Tidy already: no step for Undo to take back that changes nothing.
         if (JSON.stringify(hand) === was) { wasLike.pop(); showUndo(); }
         else { wasLike[wasLike.length - 1].tidied = true; }   // Undo carries it back
@@ -747,7 +947,8 @@
   }
 
   if (el("#hand-tidy")) {
-    el("#hand-tidy").onclick = tidyUp;
+    el("#hand-tidy").onclick = tidyAskHow;
+    el("#hand-tidy").setAttribute("aria-haspopup", "dialog");
   }
 
   // ---- stepping back over one ----------------------------------------------
@@ -831,7 +1032,7 @@
 
   function glideSnap() {                 // the drawing just drawn
     var at = {}, box = chart && chart.viewBox && chart.viewBox.baseVal;
-    hand.nodes.forEach(function (n) { at[n.id] = { x: n.x, y: n.y }; });
+    hand.nodes.forEach(function (n) { at[n.id] = { x: n.x, y: n.y, turn: n.turn || 0 }; });
     return { ref: hand, at: at, origin: { x: handOrigin.x, y: handOrigin.y },
              w: box ? box.width : 0, h: box ? box.height : 0 };
   }
@@ -841,14 +1042,15 @@
   function glideSeen() {
     var at = {};
     Object.keys(glideLast.at).forEach(function (id) {
-      at[id] = { x: glideLast.at[id].x, y: glideLast.at[id].y };
+      at[id] = { x: glideLast.at[id].x, y: glideLast.at[id].y, turn: glideLast.at[id].turn };
     });
     var m = tidyMove;
     if (m && m.svg === chart) {
       m.moves.forEach(function (mv) {
         if (!mv.bits.length || mv.p >= 1) { return; }
         var p = mv.p < 0 ? 0 : mv.p;
-        at[mv.n.id] = { x: mv.x + mv.dx * (1 - p), y: mv.y + mv.dy * (1 - p) };
+        at[mv.n.id] = { x: mv.x + mv.dx * (1 - p), y: mv.y + mv.dy * (1 - p),
+                        turn: (mv.n.turn || 0) + (mv.dturn || 0) * (1 - p) };
       });
     }
     return at;
@@ -927,9 +1129,9 @@
       if (!was) { return; }
       var t = turned(n);
       var mv = { n: n, x: n.x, y: n.y, w: t.w, h: t.h, dx: was.x - n.x, dy: was.y - n.y,
-                 p: -1, bits: [] };
+                 dturn: tidySpin(was.turn, n), p: -1, bits: [] };
       m.moves.push(mv);
-      var d = Math.hypot(mv.dx, mv.dy);
+      var d = Math.max(Math.hypot(mv.dx, mv.dy), Math.abs(mv.dturn));
       if (d < 0.5) { mv.p = 1; return; }
       far = Math.max(far, d);
       mv.bits = tidyFollowers(svg, n.id);

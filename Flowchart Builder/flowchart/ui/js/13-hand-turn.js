@@ -62,6 +62,7 @@
     var node = nodeById(+spin.dataset.i);
     if (!node || ev.button) { return; }
     var from = spinAngle(node, ev), was = node.turn || 0, noted = false, waiting = false;
+    var room = roomToTurn(node);         // neighbours step aside (13-hand-apart.js)
     turning = true;
     function move(e) {
       if (e.pointerId !== ev.pointerId) { return; }
@@ -76,6 +77,7 @@
       if (to === (node.turn || 0)) { return; }
       if (!noted) { noted = true; keepUndo(); }
       node.turn = to;
+      room();
       if (waiting) { return; }
       waiting = true;
       requestAnimationFrame(function () { waiting = false; drawHand(); });

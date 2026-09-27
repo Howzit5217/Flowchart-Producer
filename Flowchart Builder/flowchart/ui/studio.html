@@ -405,58 +405,167 @@ __SVG__
       <strong id="more-head" data-w="more_head">__W(more_head)__</strong>
       <button class="btn small primary" id="more-done" data-w="done">__W(done)__</button>
     </div>
-    <div class="more-body">
+    <div class="more-body opts">
       <section class="more-part">
         <h3 data-w="o_words">__W(o_words)__</h3>
-        <div class="more-pick">
-          <label for="f-lang" data-w="language">__W(language)__</label>
-          <select class="field" id="f-lang">__LANGS__</select>
-        </div>
-        <div class="more-pick">
-          <label data-w="decide">__W(decide)__</label>
-          <div class="seg" id="decide-seg">
-            <button class="seg-btn on" id="decide-tf" data-decide="tf"></button>
-            <button class="seg-btn" id="decide-yn" data-decide="yn"></button>
+        <div class="opt-group">
+          <div class="opt-row">
+            <label class="opt-name" for="f-lang" data-w="language">__W(language)__</label>
+            <select class="field" id="f-lang">__LANGS__</select>
+          </div>
+          <div class="opt-row">
+            <span class="opt-name" data-w="decide">__W(decide)__</span>
+            <div class="seg" id="decide-seg">
+              <button class="seg-btn on" id="decide-tf" data-decide="tf"></button>
+              <button class="seg-btn" id="decide-yn" data-decide="yn"></button>
+            </div>
           </div>
         </div>
       </section>
 
       <section class="more-part">
         <h3 data-w="o_shapes">__W(o_shapes)__</h3>
-        <label class="switch wide">
-          <span data-w="tint_switch">__W(tint_switch)__</span>
-          <input type="checkbox" id="o-tint"></label>
-        <label class="switch wide">
-          <span data-w="o_everyout">__W(o_everyout)__</span>
-          <input type="checkbox" id="o-everyout"></label>
-        <h3 data-w="o_for">__W(o_for)__</h3>
-        <div class="seg" id="for-seg">
-          <button class="seg-btn on" data-for="wide" data-w="o_for_wide">__W(o_for_wide)__</button>
-          <button class="seg-btn" data-for="hex" data-w="o_for_hex">__W(o_for_hex)__</button>
+        <div class="opt-group">
+          <label class="opt-row">
+            <span class="opt-name" data-w="tint_switch">__W(tint_switch)__</span>
+            <input type="checkbox" id="o-tint"></label>
+          <label class="opt-row">
+            <span class="opt-name" data-w="o_everyout">__W(o_everyout)__</span>
+            <input type="checkbox" id="o-everyout"></label>
+          <div class="opt-row">
+            <span class="opt-name" data-w="o_for">__W(o_for)__</span>
+            <div class="seg" id="for-seg">
+              <button class="seg-btn on" data-for="wide" data-w="o_for_wide">__W(o_for_wide)__</button>
+              <button class="seg-btn" data-for="hex" data-w="o_for_hex">__W(o_for_hex)__</button>
+            </div>
+          </div>
         </div>
       </section>
 
       <section class="more-part">
         <h3 data-w="o_paper">__W(o_paper)__</h3>
-        <div class="more-pick">
-          <label for="f-shape" data-w="shape">__W(shape)__</label>
-          <select class="field" id="f-shape">__SHAPES__</select>
+        <div class="opt-group">
+          <div class="opt-row">
+            <label class="opt-name" for="f-shape" data-w="shape">__W(shape)__</label>
+            <select class="field" id="f-shape">__SHAPES__</select>
+          </div>
+          <!-- Roomier and compressed are the two ends of one thing, so they
+               are one switch of three places.  The two boxes behind it are
+               still what is remembered and asked for (09-build.js). -->
+          <div class="opt-row">
+            <span class="opt-name" data-w="o_space">__W(o_space)__</span>
+            <div class="seg" id="space-seg">
+              <button class="seg-btn" data-space="tight" data-w="o_space_tight"
+                      data-w-title="o_tight" title="__W(o_tight)__">__W(o_space_tight)__</button>
+              <button class="seg-btn on" data-space="plain" data-w="o_space_plain">__W(o_space_plain)__</button>
+              <button class="seg-btn" data-space="roomy" data-w="o_space_roomy"
+                      data-w-title="o_roomy" title="__W(o_roomy)__">__W(o_space_roomy)__</button>
+            </div>
+            <input type="checkbox" id="o-roomy" hidden>
+            <input type="checkbox" id="o-tight" hidden>
+          </div>
+          <label class="opt-row">
+            <span class="opt-name" data-w="o_chains">__W(o_chains)__</span>
+            <input type="checkbox" id="o-chains"></label>
+          <label class="opt-row">
+            <span class="opt-name" data-w="o_columns">__W(o_columns)__</span>
+            <input type="checkbox" id="o-columns"></label>
+          <label class="opt-row">
+            <span class="opt-name" data-w="o_steady">__W(o_steady)__</span>
+            <input type="checkbox" id="o-steady"></label>
         </div>
-        <label class="switch wide">
-          <span data-w="o_roomy">__W(o_roomy)__</span>
-          <input type="checkbox" id="o-roomy"></label>
-        <label class="switch wide">
-          <span data-w="o_tight">__W(o_tight)__</span>
-          <input type="checkbox" id="o-tight"></label>
-        <label class="switch wide">
-          <span data-w="o_chains">__W(o_chains)__</span>
-          <input type="checkbox" id="o-chains"></label>
-        <label class="switch wide">
-          <span data-w="o_columns">__W(o_columns)__</span>
-          <input type="checkbox" id="o-columns"></label>
-        <label class="switch wide">
-          <span data-w="o_steady">__W(o_steady)__</span>
-          <input type="checkbox" id="o-steady"></label>
+      </section>
+    </div>
+  </div>
+</div>
+
+<!-- Tidy up asks first how, the way a chart built from pseudocode is
+     asked how by the options above: how much room, how long the arrows,
+     the outline to aim at -- and the things only a drawing by hand has to
+     be asked, whether its turned shapes stay turned, whether the sizes set
+     by hand stay, what its decisions are labelled.  What was chosen last
+     time is what it offers next time (13-hand-tidy.js), so a second tidy
+     is one press more. -->
+<div id="tidy-over" hidden>
+  <div class="code-sheet more-sheet" role="dialog" aria-labelledby="tidy-head">
+    <div class="code-bar">
+      <span class="mark small" aria-hidden="true">
+        <svg viewBox="0 0 24 24">
+          <rect x="7.5" y="1.8" width="9" height="5.4" rx="1.4"/>
+          <path d="M12 7.2v3.1"/>
+          <path d="M12 10.3l4 3.3-4 3.3-4-3.3z"/>
+          <path d="M12 16.9v2.1H4.6v3.2M12 19h7.4v3.2"/>
+        </svg>
+      </span>
+      <strong id="tidy-head" data-w="t_head">__W(t_head)__</strong>
+      <button class="btn small" id="tidy-no" data-w="s_no">__W(s_no)__</button>
+      <button class="btn small primary" id="tidy-go" data-w="h_tidy">__W(h_tidy)__</button>
+    </div>
+    <div class="more-body opts">
+      <section class="more-part">
+        <h3 data-w="t_layout">__W(t_layout)__</h3>
+        <div class="opt-group">
+          <div class="opt-row">
+            <span class="opt-name" data-w="o_space">__W(o_space)__</span>
+            <div class="seg" id="t-space">
+              <button class="seg-btn" data-v="tight" data-w="o_space_tight">__W(o_space_tight)__</button>
+              <button class="seg-btn on" data-v="plain" data-w="o_space_plain">__W(o_space_plain)__</button>
+              <button class="seg-btn" data-v="roomy" data-w="o_space_roomy">__W(o_space_roomy)__</button>
+            </div>
+          </div>
+          <div class="opt-row">
+            <span class="opt-name"><span data-w="t_arrows">__W(t_arrows)__</span>
+              <small class="opt-sub" data-w="t_arrows_sub">__W(t_arrows_sub)__</small></span>
+            <div class="seg" id="t-arrows">
+              <button class="seg-btn" data-v="1">1</button>
+              <button class="seg-btn on" data-v="1.5">1&frac12;</button>
+              <button class="seg-btn" data-v="2">2</button>
+              <button class="seg-btn" data-v="3">3</button>
+            </div>
+          </div>
+          <div class="opt-row">
+            <label class="opt-name" for="t-shape" data-w="shape">__W(shape)__</label>
+            <select class="field" id="t-shape">__SHAPES__</select>
+          </div>
+          <label class="opt-row">
+            <span class="opt-name" data-w="o_chains">__W(o_chains)__</span>
+            <input type="checkbox" id="t-chains"></label>
+          <label class="opt-row">
+            <span class="opt-name" data-w="o_columns">__W(o_columns)__</span>
+            <input type="checkbox" id="t-columns"></label>
+        </div>
+      </section>
+
+      <section class="more-part">
+        <h3 data-w="t_shapes">__W(t_shapes)__</h3>
+        <div class="opt-group">
+          <label class="opt-row">
+            <span class="opt-name" data-w="t_turns">__W(t_turns)__</span>
+            <input type="checkbox" id="t-turns" checked></label>
+          <label class="opt-row">
+            <span class="opt-name" data-w="t_fit">__W(t_fit)__</span>
+            <input type="checkbox" id="t-fit"></label>
+          <label class="opt-row">
+            <span class="opt-name" data-w="t_even">__W(t_even)__</span>
+            <input type="checkbox" id="t-even"></label>
+          <div class="opt-row">
+            <span class="opt-name" data-w="decide">__W(decide)__</span>
+            <div class="seg" id="t-decide">
+              <button class="seg-btn on" data-v="keep" data-w="t_keep">__W(t_keep)__</button>
+              <button class="seg-btn" data-v="tf" id="t-decide-tf"></button>
+              <button class="seg-btn" data-v="yn" id="t-decide-yn"></button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="more-part">
+        <h3 data-w="t_place">__W(t_place)__</h3>
+        <div class="opt-group">
+          <label class="opt-row">
+            <span class="opt-name" data-w="t_stay">__W(t_stay)__</span>
+            <input type="checkbox" id="t-stay"></label>
+        </div>
       </section>
     </div>
   </div>

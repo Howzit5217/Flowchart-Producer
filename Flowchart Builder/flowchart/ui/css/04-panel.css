@@ -228,7 +228,30 @@
     overflow-wrap: anywhere;
   }
   .switch { display: flex; align-items: center; gap: 8px; font-size: 13px; }
-  .switch input { width: 15px; height: 15px; accent-color: var(--accent); }
+  /* Every on-or-off on the page is a switch that slides, not a box that is
+     ticked: which way it is set is read from across the panel, it is the
+     size of a fingertip, and it is the one kind of thing everywhere -- the
+     options sheets had them and the panel under them had tick boxes.  Held
+     down, the knob stretches the way it is about to go. */
+  input[type="checkbox"] {
+    -webkit-appearance: none; appearance: none; flex: none; position: relative;
+    width: 34px; height: 20px; margin: 0; border-radius: 999px; cursor: pointer;
+    background: var(--toggle-off); vertical-align: middle;
+    transition: background-color .17s ease;
+  }
+  input[type="checkbox"]::before {
+    content: ""; position: absolute; top: 2px; left: 2px;
+    width: 16px; height: 16px; border-radius: 999px; background: #ffffff;
+    box-shadow: 0 1px 2px rgba(16, 24, 40, .3);
+    transition: transform .2s cubic-bezier(.34, 1.36, .64, 1), width .12s ease;
+  }
+  input[type="checkbox"]:checked { background: var(--accent); }
+  input[type="checkbox"]:checked::before { transform: translateX(14px); }
+  input[type="checkbox"]:active:not(:disabled)::before { width: 20px; }
+  input[type="checkbox"]:checked:active:not(:disabled)::before { transform: translateX(10px); }
+  input[type="checkbox"]:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  input[type="checkbox"]:disabled { cursor: default; }
+  input[type="checkbox"][hidden] { display: none !important; }
 
   /* ----------------------------------------------------------- source -- */
   /* Where the pseudocode is written.  It was a plain gray box, which is a
@@ -369,7 +392,7 @@
     text-underline-offset: 2px; border-radius: 4px;
   }
   #starts .starts-go:hover { text-decoration-thickness: 2px; }
-  /* The last row of the grid: two tick boxes on one side, and on the other
+  /* The last row of the grid: two switches on one side, and on the other
      the way in to the settings that are not worth a box each.  Two tick
      boxes are shorter than a field, so the row they used to have to
      themselves was mostly empty; a button is the same height as one of
@@ -379,6 +402,33 @@
      they are a row again, which is why this says where rather than what. */
   #source .fields > #chart-switches {
     gap: 8px; margin-top: 0; align-content: center;
+  }
+  /* As slide switches the pair no longer fit side by side in the half a
+     row they have -- Key ran off the panel, and Cuadrícula and Leyenda
+     never had a chance -- so beside the Options button they stand one
+     over the other, each named on the left with a smaller switch on the
+     right, the two as tall as the button between them. */
+  #source .fields > #chart-switches { grid-template-columns: 1fr; gap: 6px; }
+  #source #chart-switches .switch {
+    flex-direction: row-reverse; justify-content: space-between; gap: 8px;
+    min-width: 0; line-height: 16px;
+  }
+  #source #chart-switches .switch > span {
+    min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  /* The smaller switch, here and in the run table's heading (.watch-top),
+     where a full-sized one stood taller than the small capitals it heads. */
+  #source #chart-switches input[type="checkbox"],
+  .watch-top .watch-switch input[type="checkbox"] { width: 28px; height: 16px; }
+  #source #chart-switches input[type="checkbox"]::before,
+  .watch-top .watch-switch input[type="checkbox"]::before { width: 12px; height: 12px; }
+  #source #chart-switches input[type="checkbox"]:checked::before,
+  .watch-top .watch-switch input[type="checkbox"]:checked::before { transform: translateX(12px); }
+  #source #chart-switches input[type="checkbox"]:active:not(:disabled)::before,
+  .watch-top .watch-switch input[type="checkbox"]:active:not(:disabled)::before { width: 15px; }
+  #source #chart-switches input[type="checkbox"]:checked:active:not(:disabled)::before,
+  .watch-top .watch-switch input[type="checkbox"]:checked:active:not(:disabled)::before {
+    transform: translateX(9px);
   }
   #source .more-cell { display: flex; align-items: center; }
   /* It carries no chevron.  Nothing else on this page that opens something
@@ -615,9 +665,9 @@
     font-size: 11px; letter-spacing: .07em; text-transform: uppercase;
     color: var(--muted); font-weight: 650;
   }
-  /* The heading is its own switch, a tick box like Grid and Key.  It keeps
+  /* The heading is its own switch, like Grid and Key.  It keeps
      the heading's small capitals rather than taking a switch's own size,
-     and the whole of it can be pressed, not only the box. */
+     and the whole of it can be pressed, not only the switch. */
   .watch-top .watch-switch { font-size: inherit; gap: 7px; cursor: pointer; }
   .watch-top .watch-switch input { margin: 0; flex: none; cursor: pointer; }
   /* Unticked, the table folds up under its heading rather than going: the

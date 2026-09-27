@@ -53,8 +53,7 @@
       }
       hand.nodes.forEach(function (m) {
         if (m.id <= n.id) { return; }
-        if (Math.abs(m.x - n.x) * 2 < m.w + n.w - 8 &&
-            Math.abs(m.y - n.y) * 2 < m.h + n.h - 8) {
+        if (boxesMeet(n, n.x, n.y, m, m.x, m.y, -4)) {   // turned as they are drawn (13-hand-apart.js)
           fault("p_overlap", n, null, moveApart(m));   // the later of the two
         }
       });
@@ -197,11 +196,12 @@
     hand.links.push({ from: from.id, to: to.id, label: tag });
   }
 
-  // Would a shape standing here be too near another?
+  // Would a shape standing here be too near another?  Each as it is
+  // turned (13-hand-apart.js): a neighbour put clear of a turned shape by
+  // its upright size ended up with a corner of the turned one across it.
   function crowds(node, x, y) {
     return hand.nodes.some(function (m) {
-      return m !== node && Math.abs(m.x - x) * 2 < m.w + node.w + CLEAR * 2 &&
-             Math.abs(m.y - y) * 2 < m.h + node.h + CLEAR * 2;
+      return m !== node && boxesMeet(node, x, y, m, m.x, m.y, CLEAR);
     });
   }
 
@@ -214,7 +214,7 @@
     for (var r = 1; r <= rings; r++) {
       for (var k = 0; k < ways.length; k++) {
         var x = node.x + ways[k][0] * r * step, y = node.y + ways[k][1] * r * step;
-        if (x - node.w / 2 < 20 || y - node.h / 2 < 20) { continue; }
+        if (x - turned(node).w / 2 < 20 || y - turned(node).h / 2 < 20) { continue; }
         if (crowds(node, x, y)) { continue; }
         if (ok && !ok(x, y)) { continue; }
         return { x: x, y: y };

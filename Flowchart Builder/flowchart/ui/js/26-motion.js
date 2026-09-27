@@ -469,6 +469,7 @@
     };
   }
   showMore = goingOver("#more-over", showMore);
+  showTidy = goingOver("#tidy-over", showTidy);
   showExamples = goingOver("#eg-over", showExamples);
   showPuzzles = goingOver("#pz-over", showPuzzles);
   printFull = goingOver("#print-over", printFull);

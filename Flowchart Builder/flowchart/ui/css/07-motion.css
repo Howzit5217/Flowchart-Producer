@@ -143,8 +143,12 @@
   .icon svg { transition: transform var(--move) var(--ease); }
   #collapse:hover svg { transform: translateX(-3px); }
   body[data-side="right"] #collapse:hover svg { transform: scaleX(-1) translateX(-3px); }
-  .switch input { transition: transform var(--tap) var(--ease-back); }
-  .switch input:active { transform: scale(.88); }
+  /* A switch answers a press by stretching its knob (04-panel.css), not by
+     shrinking as a whole: shrunk, the track jumped under the finger. */
+  input[type="checkbox"] { transition: background-color var(--quick) var(--ease-soft); }
+  input[type="checkbox"]::before {
+    transition: transform var(--move) var(--ease-back), width var(--tap) var(--ease-soft);
+  }
 
   /* Where the keyboard is, said the same way everywhere.  A ring rather than
      a line, so it reads as the page pointing at something rather than as a
@@ -646,11 +650,12 @@
   #code-home { transition: box-shadow var(--quick) var(--ease-soft); }
 
   /* ------------------------------------------- the settings, over the page -- */
-  #more-over:not([hidden]), #eg-over:not([hidden]), #pz-over:not([hidden]),
-  #keys-over:not([hidden]) {
+  #more-over:not([hidden]), #tidy-over:not([hidden]), #eg-over:not([hidden]),
+  #pz-over:not([hidden]), #keys-over:not([hidden]) {
     animation: dim-in var(--move) var(--ease-soft) backwards;
   }
-  #more-over:not([hidden]) .code-sheet, #eg-over:not([hidden]) .code-sheet,
+  #more-over:not([hidden]) .code-sheet, #tidy-over:not([hidden]) .code-sheet,
+  #eg-over:not([hidden]) .code-sheet,
   #pz-over:not([hidden]) .code-sheet, #keys-over:not([hidden]) .code-sheet {
     animation: sheet-rise var(--sheet-t) var(--ease) backwards;
   }
@@ -695,11 +700,13 @@
   }
   /* Each part of the list arrives just after the one above it, so the
      sheet reads as filling rather than as appearing already full. */
-  #more-over:not([hidden]) .more-part {
+  #more-over:not([hidden]) .more-part, #tidy-over:not([hidden]) .more-part {
     animation: row-in .32s var(--ease) backwards;
   }
-  #more-over:not([hidden]) .more-part:nth-child(2) { animation-delay: .05s; }
-  #more-over:not([hidden]) .more-part:nth-child(3) { animation-delay: .1s; }
+  #more-over:not([hidden]) .more-part:nth-child(2),
+  #tidy-over:not([hidden]) .more-part:nth-child(2) { animation-delay: .05s; }
+  #more-over:not([hidden]) .more-part:nth-child(3),
+  #tidy-over:not([hidden]) .more-part:nth-child(3) { animation-delay: .1s; }
 
   /* ------------------------------------ the run and the code, full screen -- */
   #tape-over:not([hidden]) { animation: dim-in var(--move) var(--ease-soft) backwards; }
@@ -736,13 +743,13 @@
      that takes and only then hides it.  While it is going it is not there
      to be pressed -- a second click landing on a sheet already on its way
      out was a click on a thing nobody could see any more. */
-  #more-over.going, #eg-over.going, #pz-over.going, #print-over.going,
+  #more-over.going, #tidy-over.going, #eg-over.going, #pz-over.going, #print-over.going,
   #sure-over.going, #code-over.going, #tape-over.going,
   #keys-over.going { pointer-events: none; }
-  #more-over.going, #eg-over.going, #pz-over.going, #keys-over.going {
+  #more-over.going, #tidy-over.going, #eg-over.going, #pz-over.going, #keys-over.going {
     animation: dim-out .19s var(--ease-soft) forwards;
   }
-  #more-over.going .code-sheet, #eg-over.going .code-sheet,
+  #more-over.going .code-sheet, #tidy-over.going .code-sheet, #eg-over.going .code-sheet,
   #pz-over.going .code-sheet, #keys-over.going .code-sheet {
     animation: sheet-fall .19s var(--ease-soft) forwards;
   }

@@ -1283,6 +1283,8 @@
   // the same as a setting hidden, and a panel that never shows a choice
   // has been made is a panel you have to open everything in to trust.
   function dressMore() {
+    sideOn("#space-seg", optionOn("o-roomy") ? "roomy" : optionOn("o-tight") ? "tight" : "plain",
+           "space");
     var button = el("#more");
     if (!button) { return; }
     var shape = el("#f-shape");
@@ -1317,14 +1319,16 @@
   all("#more-over input[type=\"checkbox\"]").forEach(function (box) {
     box.onchange = optionChanged;
   });
-  // Roomier and compressed are the two ends of one thing, so turning one
-  // on turns the other off, rather than leaving both ticked and one of
-  // them quietly doing nothing.
-  [["o-roomy", "o-tight"], ["o-tight", "o-roomy"]].forEach(function (pair) {
-    var box = el("#" + pair[0]), other = el("#" + pair[1]);
-    if (!box || !other) { return; }
-    box.onchange = function () {
-      if (box.checked) { other.checked = false; }
+  // Roomier and compressed are the two ends of one thing, so they are one
+  // switch of three places (#space-seg): the one pressed ticks its own box
+  // behind it and unticks the other, rather than leaving both ticked and one
+  // of them quietly doing nothing.  The boxes are what is remembered.
+  all("#space-seg .seg-btn").forEach(function (b) {
+    b.onclick = function () {
+      if (b.classList.contains("on")) { return; }
+      var roomy = el("#o-roomy"), tight = el("#o-tight");
+      if (roomy) { roomy.checked = b.dataset.space === "roomy"; }
+      if (tight) { tight.checked = b.dataset.space === "tight"; }
       optionChanged();
     };
   });

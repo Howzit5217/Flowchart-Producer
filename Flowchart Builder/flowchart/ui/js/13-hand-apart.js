@@ -6,23 +6,64 @@
 // ---------------------------------------------------------------------------
   // A shape on top of another was something the check found afterwards and
   // offered to put right (p_overlap, 12-check.js).  Now it does not happen:
-  // a shape carried into another slides along it instead, a new or pasted
-  // one lands on the nearest clear place, one that grows or turns into its
+  // a shape carried over others is free to pass over them, and let go on
+  // top of one it settles on the nearest clear place; a new or pasted one
+  // lands on the nearest clear place too, one that grows or turns into its
   // neighbor has the neighbor make room, and a corner pulled into another
-  // shape stops there.  A design saved from before, with shapes on top of
+  // shape stops there.  Turned, a shape is as big as its turned outline --
+  // not the upright box round it.  A design saved from before, with shapes on top of
   // each other, is left as it was until one of them is moved.
   var SHAPE_GAP = HAND_GRID;             // the least room left between two
 
-  // The shape this one would be on top of, standing at x, y -- by the boxes
-  // they take up once turned -- leaving out `skip`, the ids going with it.
-  function onTopOf(node, x, y, skip) {
-    var a = turned(node);
+  // Whether two shapes, standing at (ax, ay) and (bx, by), come within `gap`
+  // of each other (a gap below nought lets them touch that much).  By each
+  // shape's own box, turned the way the shape is turned -- not by the
+  // upright box round it, which for a shape at a slant is a good deal
+  // bigger.  Asked by the upright box, a neighbour made room for a shape
+  // turned towards it by the width of that box rather than by the shape,
+  // and came to rest with a corner of the turned one still across it.
+  function boxesMeet(a, ax, ay, b, bx, by, gap) {
+    var p = turned(a), q = turned(b);
+    // Clear even of the boxes round them: nothing more to ask.
+    if (Math.abs(ax - bx) * 2 >= p.w + q.w + gap * 2 ||
+        Math.abs(ay - by) * 2 >= p.h + q.h + gap * 2) { return false; }
+    if (!p.slant && !q.slant) { return true; }   // upright, or a quarter round: the boxes are the shapes
+    var A = boxCorners(a, ax, ay, gap / 2), B = boxCorners(b, bx, by, gap / 2);
+    // Two turned boxes are apart when some side of one has the whole of the
+    // other beyond it -- looked for along each side of each.
+    return ![A, B].some(function (box) {
+      return box.some(function (p0, i) {
+        var p1 = box[(i + 1) % 4], nx = p0[1] - p1[1], ny = p1[0] - p0[0];
+        function span(pts) {
+          var lo = Infinity, hi = -Infinity;
+          pts.forEach(function (pt) {
+            var v = pt[0] * nx + pt[1] * ny;
+            lo = Math.min(lo, v); hi = Math.max(hi, v);
+          });
+          return [lo, hi];
+        }
+        var sa = span(A), sb = span(B);
+        return sa[1] <= sb[0] || sb[1] <= sa[0];
+      });
+    });
+  }
+
+  // A shape's box, standing at x, y and grown by `grow` all round, turned.
+  function boxCorners(n, x, y, grow) {
+    var t = (n.turn || 0) * Math.PI / 180, c = Math.cos(t), s = Math.sin(t);
+    var hw = n.w / 2 + grow, hh = n.h / 2 + grow;
+    return [[-hw, -hh], [hw, -hh], [hw, hh], [-hw, hh]].map(function (k) {
+      return [x + k[0] * c - k[1] * s, y + k[0] * s + k[1] * c];
+    });
+  }
+
+  // The shape this one would be on top of, standing at x, y -- leaving out
+  // `skip`, the ids going with it -- or nearer to than `gap` (SHAPE_GAP).
+  function onTopOf(node, x, y, skip, gap) {
     for (var i = 0; i < hand.nodes.length; i++) {
       var m = hand.nodes[i];
       if (m === node || (skip && skip.indexOf(m.id) >= 0)) { continue; }
-      var b = turned(m);
-      if (Math.abs(m.x - x) * 2 < a.w + b.w + SHAPE_GAP * 2 &&
-          Math.abs(m.y - y) * 2 < a.h + b.h + SHAPE_GAP * 2) { return m; }
+      if (boxesMeet(node, x, y, m, m.x, m.y, gap === undefined ? SHAPE_GAP : gap)) { return m; }
     }
     return null;
   }
@@ -36,29 +77,43 @@
     return !!hit;
   }
 
-  // Carried: `want` is where it is being taken, `last` where it stood a
-  // moment ago, and `hits(x, y)` whether it would be on top of something
-  // there.  Clear, it goes.  In the way, it goes as far as it can the way
-  // it is mostly going, then as far as it can the other way -- which slides
-  // it along whatever is in the way, right up against it.  Taken on past,
-  // it is on the far side as soon as there is room there.  On top of
-  // something already when it was taken hold of, it goes anywhere.
-  function slideClear(want, last, hits) {
-    if (!hits(want.x, want.y) || hits(last.x, last.y)) { return want; }
-    var at = { x: last.x, y: last.y };
-    function reach(axis) {
-      var to = want[axis], step = HAND_GRID;
-      while (at[axis] !== to) {
-        var next = at[axis] + Math.max(-step, Math.min(step, to - at[axis]));
-        var tryX = axis === "x" ? next : at.x, tryY = axis === "y" ? next : at.y;
-        if (hits(tryX, tryY)) { return; }
-        at[axis] = next;
+  // Let go of: `ids` moved together, as little as they can be, to where
+  // none of them is on top of anything else, or up off the paper.  Nothing
+  // moves when they are clear already.  The places are looked at on the
+  // grid, square ring by square ring round where they were let go, the
+  // nearest first; a ring is only worth looking at while it could still
+  // hold somewhere nearer than the best found.  So a shape dropped mostly
+  // below another comes to rest below it, and one dropped mostly to its
+  // side, beside it.  (Carried, they had gone over anything in the way:
+  // stopping a shape at every other it met made it hard to take anywhere.)
+  // Moved, they are given the room a shape put right is (CLEAR, 12-check.js)
+  // rather than left touching what they were on.
+  function settleClear(ids) {
+    var lot = ids.map(nodeById).filter(Boolean), gap = SHAPE_GAP;
+    function hits(bx, by) {
+      return lot.some(function (n) {
+        return n.y + by - turned(n).h / 2 < 20 || !!onTopOf(n, n.x + bx, n.y + by, ids, gap);
+      });
+    }
+    if (!lot.length || !hits(0, 0)) { return false; }
+    gap = CLEAR;
+    var step = HAND_GRID, best = null, bestD = Infinity;
+    for (var r = 1; r <= 160 && r * step < bestD; r++) {
+      for (var i = -r; i <= r; i++) {
+        // the four sides of the ring, each place once
+        var ring = [[i, -r], [i, r]];
+        if (i > -r && i < r) { ring.push([-r, i], [r, i]); }
+        for (var k = 0; k < ring.length; k++) {
+          var bx = ring[k][0] * step, by = ring[k][1] * step, d = Math.hypot(bx, by);
+          // level: down, then right, the way a chart is read
+          if (d > bestD || (d === bestD && (by < best.y || (by === best.y && bx < best.x)))) { continue; }
+          if (!hits(bx, by)) { best = { x: bx, y: by }; bestD = d; }
+        }
       }
     }
-    var across = Math.abs(want.x - last.x) >= Math.abs(want.y - last.y);
-    reach(across ? "x" : "y");
-    reach(across ? "y" : "x");
-    return at;
+    if (!best) { return false; }
+    lot.forEach(function (n) { n.x += best.x; n.y += best.y; });
+    return true;
   }
 
   // Moved, as one, to the nearest place where none of `ids` is on top of
@@ -86,6 +141,42 @@
     }
   }
 
+  // ------------------------------------------------ making room as it turns --
+  // A shape being turned has its neighbours step aside as it comes round
+  // to them, and step back as it turns away again -- rather than going
+  // through them until it is let go.  Each keeps the room it had from the
+  // turning shape when the turn began (up to CLEAR), moved straight away
+  // from it: up or down from it if it is above or below, out to the side
+  // if it is beside.  Asked for every step of the turn, from where they all
+  // stood when it began, so nothing drifts.  A shape pushed onto a third is
+  // left for keepApart once the turn is let go.
+  function roomToTurn(node) {
+    var p = turned(node);
+    var near = hand.nodes.filter(function (m) { return m !== node; }).map(function (m) {
+      var room = -1;
+      for (var g = CLEAR; g >= 0; g -= HAND_GRID) {
+        if (!boxesMeet(node, node.x, node.y, m, m.x, m.y, g)) { room = g; break; }
+      }
+      var q = turned(m), dx = m.x - node.x, dy = m.y - node.y;
+      var side = Math.abs(dx) / (p.w + q.w) > Math.abs(dy) / (p.h + q.h);
+      return { n: m, x: m.x, y: m.y, room: room,
+               ax: side ? (dx < 0 ? -1 : 1) : 0, ay: side ? 0 : (dy < 0 ? -1 : 1) };
+    }).filter(function (o) { return o.room >= 0; });   // on top of it already: left be
+    return function () {
+      near.forEach(function (o) {
+        o.n.x = o.x; o.n.y = o.y;
+        for (var d = 0; d <= 800; d += HAND_GRID) {
+          var x = o.x + o.ax * d, y = o.y + o.ay * d;
+          if (y - turned(o.n).h / 2 < 20) { break; }   // not up off the paper
+          if (!boxesMeet(node, node.x, node.y, o.n, x, y, o.room)) {
+            o.n.x = x; o.n.y = y;
+            break;
+          }
+        }
+      });
+    };
+  }
+
   // ------------------------------------------------- making room after --
   // Whatever else changes a shape -- its words typed, made bigger or
   // bolder, turned, lined up with others, sized in the panel -- is seen
@@ -104,8 +195,7 @@
   }
 
   function onTopNow(a, b) {
-    var p = turned(a), q = turned(b);
-    return Math.abs(a.x - b.x) * 2 < p.w + q.w && Math.abs(a.y - b.y) * 2 < p.h + q.h;
+    return boxesMeet(a, a.x, a.y, b, b.x, b.y, 0);
   }
 
   function keepApart() {

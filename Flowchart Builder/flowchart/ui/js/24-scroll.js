@@ -391,7 +391,7 @@
    ["#code-files", "room strip", 0],
    ["#watch-rows", "room", 0],
    ["#pz-body", "room", 0], ["#eg-body", "room", 0], ["#keys-body", "room", 0],
-   ["#more-over .more-body", "room", 0],
+   ["#more-over .more-body", "room", 0], ["#tidy-over .more-body", "room", 0],
    [".print-side", "room", 0], ["#print-paper-area", "", 0]]
     .forEach(function (one) {
       var box = el(one[0]);

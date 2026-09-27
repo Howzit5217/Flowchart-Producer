@@ -503,17 +503,11 @@
         } else if (crowd) {
           carryCrowd(crowd, node, wasX, wasY, dx, dy);
         } else {
-          var last = { x: node.x, y: node.y };
+          // Over other shapes as it goes; where it is let go, clear of
+          // them (settleClear, 13-hand-apart.js).
           node.x = Math.round((wasX + dx) / HAND_GRID) * HAND_GRID;
           node.y = Math.round((wasY + dy) / HAND_GRID) * HAND_GRID;
           lineUp(node);                  // and settle onto anything it is near
-          // Never onto another shape: along it instead (13-hand-apart.js).
-          var clear = slideClear({ x: node.x, y: node.y }, last, function (x, y) {
-            return !!onTopOf(node, x, y);
-          });
-          if (clear.x !== node.x || clear.y !== node.y) { guides = []; }
-          node.x = clear.x;
-          node.y = clear.y;
         }
         paint();
       }
@@ -556,7 +550,12 @@
             }
           }
         }
-        else { drawHand(); drawHandPanel(); letGo(); }
+        else {
+          // Let go on top of another shape: off it, to the nearest clear
+          // place -- which the drawing glides it to (13-hand-tidy.js).
+          if (stirred && !grip) { settleClear(crowd ? crowd.map(function (c) { return c.node.id; }) : [node.id]); }
+          drawHand(); drawHandPanel(); letGo();
+        }
       }
       window.addEventListener("pointermove", move);
       window.addEventListener("pointerup", drop);
