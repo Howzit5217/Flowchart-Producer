@@ -468,12 +468,18 @@
   var R_YES = /^(y|yes|true|t)$/i;
   var R_NO = /^(n|no|false|f)$/i;
 
-  function canReach(fromId, wantId) {    // is wantId anywhere ahead of here?
+  // `past` is the tests of the loops being written out round this spot,
+  // which the flow is not followed through.  Going on through one of them
+  // is going round that loop again, and everywhere in a loop comes back to
+  // everywhere else in it that way: followed through, every If inside a
+  // While came back to itself, and was taken for a loop of its own -- with
+  // both of its ways coming back, a tangle that could not be written out.
+  function canReach(fromId, wantId, past) {   // is wantId anywhere ahead of here?
     var seen = {}, stack = [fromId];
     while (stack.length) {
       var id = stack.pop();
       if (id === wantId) { return true; }
-      if (seen[id]) { continue; }
+      if (seen[id] || (past && past.indexOf(id) >= 0)) { continue; }
       seen[id] = true;
       outOf(id).forEach(function (l) { stack.push(l.to); });
     }
@@ -481,14 +487,18 @@
   }
 
   // Where two branches come together again -- the nearest shape both of
-  // them reach.  Breadth first, so "nearest" means what it says.
-  function meetAgain(aId, bId) {
+  // them reach.  Breadth first, so "nearest" means what it says.  Not
+  // through the test of a loop round them either (`past`, as above): two
+  // ways out of an If inside a loop that meet only by going round it meet
+  // at its test, where the loop comes round.
+  function meetAgain(aId, bId, past) {
+    function stops(id) { return past && past.indexOf(id) >= 0; }
     var ahead = {}, stack = [aId];
     while (stack.length) {
       var id = stack.pop();
       if (ahead[id]) { continue; }
       ahead[id] = true;
-      outOf(id).forEach(function (l) { stack.push(l.to); });
+      if (!stops(id)) { outOf(id).forEach(function (l) { stack.push(l.to); }); }
     }
     var seen = {}, queue = [bId];
     while (queue.length) {
@@ -496,7 +506,7 @@
       if (seen[at]) { continue; }
       seen[at] = true;
       if (ahead[at]) { return at; }
-      outOf(at).forEach(function (l) { queue.push(l.to); });
+      if (!stops(at)) { outOf(at).forEach(function (l) { queue.push(l.to); }); }
     }
     return null;
   }
@@ -538,8 +548,11 @@
 
     function step(deep) { return new Array(deep + 1).join("    "); }
 
-    function write(id, stopId, deep) {
+    // `loops`: the tests of the loops this is inside (see canReach).
+    function write(id, stopId, deep, loops) {
+      loops = loops || [];
       while (id && id !== stopId) {
+        if (loops.indexOf(id) >= 0) { return; }   // round the loop again: its body is done
         been[id] = (been[id] || 0) + 1;
         if (been[id] > 3) { throw new Error(TXT.h_tangled); }
         var node = nodeById(id);
@@ -552,24 +565,24 @@
         if (asksKind(node.kind)) {
           var ways = bothWays(id), yes = ways[0], no = ways[1];
           var asked = saidIn(node);
-          var yesBack = canReach(yes.to, id), noBack = canReach(no.to, id);
+          var yesBack = canReach(yes.to, id, loops), noBack = canReach(no.to, id, loops);
           if (yesBack && noBack) { throw new Error(TXT.h_tangled); }
           if (yesBack || noBack) {       // a question you come back to: a loop
             var body = yesBack ? yes : no, on = yesBack ? no : yes;
             put(step(deep) +
                 (yesBack ? "While " + asked
                          : "While NOT (" + asked + ")"), node.id);
-            write(body.to, id, deep + 1);
+            write(body.to, id, deep + 1, loops.concat([id]));
             put(step(deep) + "End While");
             id = on.to;
             continue;
           }
-          var join = meetAgain(yes.to, no.to);
+          var join = meetAgain(yes.to, no.to, loops);
           put(step(deep) + "If " + asked + " Then", node.id);
-          write(yes.to, join, deep + 1);
+          write(yes.to, join, deep + 1, loops);
           if (no.to !== join) {
             put(step(deep) + "Else");
-            write(no.to, join, deep + 1);
+            write(no.to, join, deep + 1, loops);
           }
           put(step(deep) + "End If");
           if (!join) { return; }         // both ways ended on their own
@@ -713,196 +726,6 @@
     }, HAND_SETTLE);
   }
 
-  // ---- tidying a drawing up ----------------------------------------------
-  // The best thing this package owns is the way it lays a chart out: nothing
-  // overlapping, no arrow doubling back on itself, every shape on the
-  // ruling, branches given columns of their own.  There are tests for all
-  // three.  A chart drawn by hand could reach none of it -- you moved every
-  // shape yourself and it looked like it.
-  //
-  // It can reach it now, because the drawing can be written out as
-  // pseudocode: the writing goes to the very same drawing code the
-  // pseudocode side uses, the chart that comes back says where each shape
-  // wants to be, and those places are handed to the shapes on the paper.
-  // The shapes themselves do not change -- their words, their colors, their
-  // kind and the arrows between them are all left exactly as they are.
-  // Only where they stand changes, which is the whole of what is being
-  // asked for.
-  var TIDY_GAP = 26;                     // the least room between two shapes
-  // And more again where the arrow between two of them carries a word.
-  // True and False are written along the line that carries them, so two
-  // shapes parted by exactly the length of the arrow leave the word lying
-  // over one of them -- which is how False came to be written across the
-  // front of the box it was pointing at.
-  var TIDY_WORD = 46;
-  var TIDY_STRETCH = 3;                  // and the most it may pull them apart
-
-  // The line each statement of the built program came from, by its number
-  // in the chart -- which is the same number the drawn shapes carry.
-  function linesById(ast) {
-    var found = {};
-    function walk(items) {
-      (items || []).forEach(function (item) {
-        if (item.id && item.line) { found[item.id] = item.line; }
-        ["then", "else", "body"].forEach(function (key) {
-          if (item[key]) { walk(item[key]); }
-        });
-        (item.cases || []).forEach(function (one) { walk(one.body); });
-      });
-    }
-    walk(ast.main);
-    (ast.modules || []).forEach(function (mod) { walk(mod.body); });
-    return found;
-  }
-
-  // Where each shape of a drawn chart stands, measured off the drawing
-  // itself rather than read out of its attributes: a shape is a rectangle
-  // in one chart and a six-sided thing in the next, and the browser knows
-  // the size of both.  It has to be on the page to be measured, so it is
-  // put somewhere nobody is looking and taken away again.
-  function spotsIn(svgText) {
-    var hidden = document.createElement("div");
-    hidden.style.cssText = "position:fixed; left:-99999px; top:0;" +
-                           " width:1px; height:1px; overflow:hidden";
-    hidden.innerHTML = svgText;
-    document.body.appendChild(hidden);
-    var found = {};
-    try {
-      all(".node", hidden).forEach(function (g) {
-        var box = g.getBBox();
-        if (!box.width && !box.height) { return; }
-        found[g.dataset.i] = { x: box.x + box.width / 2,
-                               y: box.y + box.height / 2 };
-      });
-    } catch (e) { found = {}; }          // an SVG the browser would not measure
-    hidden.remove();
-    return found;
-  }
-
-  // The shapes on the paper are drawn a good deal bigger than the ones in a
-  // built chart -- a box is 170 by 58 here and 140 by 40 there -- so the
-  // places that came back can be too close together to put these in.  Every
-  // pair that would sit on top of another says how much further apart it
-  // needs to be; the worst of them stretches the whole arrangement by that
-  // much, which keeps every row and every column exactly as the drawing
-  // code arranged them.  Stretching one pair on its own would not.
-  function wordBetween(a, b) {           // is the arrow between them labelled?
-    return hand.links.some(function (l) {
-      return String(l.label || "").trim() &&
-             ((l.from === a && l.to === b) || (l.from === b && l.to === a));
-    });
-  }
-
-  function tidyStretch(places) {
-    var ids = Object.keys(places), worst = 1;
-    for (var i = 0; i < ids.length; i++) {
-      for (var j = i + 1; j < ids.length; j++) {
-        var a = places[ids[i]], b = places[ids[j]];
-        var word = wordBetween(a.node.id, b.node.id) ? TIDY_WORD : 0;
-        var needX = (a.node.w + b.node.w) / 2 + TIDY_GAP + word;
-        var needY = (a.node.h + b.node.h) / 2 + TIDY_GAP;
-        var gotX = Math.abs(a.x - b.x), gotY = Math.abs(a.y - b.y);
-        if (gotX >= needX || gotY >= needY) { continue; }
-        // Apart on whichever axis is the cheaper of the two: two shapes
-        // side by side want the columns widened, not the rows.
-        var by = Math.min(gotX > 0.5 ? needX / gotX : Infinity,
-                          gotY > 0.5 ? needY / gotY : Infinity);
-        if (by > worst) { worst = by; }
-      }
-    }
-    return Math.min(worst, TIDY_STRETCH);
-  }
-
-  function tidySays(what, bad) {
-    handSays(what, bad);
-  }
-
-  var tidying = false;
-  function tidyUp() {
-    if (!byHand || tidying) { return; }
-    if (!hand.nodes.length) { tidySays(TXT.h_tidy_none, true); return; }
-    var text;
-    try { text = handAsPseudocode(); }
-    catch (thrown) { tidySays(thrown.message || String(thrown), true); return; }
-    var fromLine = {};                   // line -> shape, as it was written
-    Object.keys(handLine).forEach(function (at) { fromLine[at] = handLine[at]; });
-    var button = el("#hand-tidy");
-    tidying = true;
-    if (button) { button.disabled = true; button.classList.add("working"); }
-    function done() {
-      tidying = false;
-      if (button) { button.disabled = false; button.classList.remove("working"); }
-    }
-    // Drawn by the same code the pseudocode side draws with, and asked for
-    // the same way -- so a chart tidied here stands where the very same
-    // chart built from writing would stand.
-    askFor({ text: text, title: "", author: "", shape: "auto", seed: "",
-             lang: el("#f-lang") ? el("#f-lang").value : "",
-             legend: false, grid: true, shapes: geom })
-      .then(function (data) {
-        done();
-        if (!byHand) { return; }
-        if (!data || !data.ok || !data.ast || !data.svg) {
-          tidySays((data && data.error) || TXT.h_not_a_program, true);
-          return;
-        }
-        var lineOfShape = linesById(data.ast);
-        var spots = spotsIn(data.svg);
-        var places = {};
-        Object.keys(spots).forEach(function (drawn) {
-          var line = lineOfShape[drawn];
-          var mine = line && fromLine[line];
-          var node = mine && nodeById(+mine);
-          // The first place a shape is named wins.  A shape a flow comes
-          // back to is written out more than once -- the line before a
-          // loop's End While is the same shape as the one after it -- and
-          // it can only stand in one of the places that came back.
-          if (node && !places[node.id]) {
-            places[node.id] = { x: spots[drawn].x, y: spots[drawn].y, node: node };
-          }
-        });
-        var moving = Object.keys(places);
-        if (!moving.length) { tidySays(TXT.h_tidy_none, true); return; }
-        var by = tidyStretch(places);
-        // Kept where it already is on the paper, near enough: a tidy up
-        // that also threw the whole chart into a corner would be two
-        // things happening at once, and only one of them was asked for.
-        var least = { x: Infinity, y: Infinity };
-        moving.forEach(function (id) {
-          least.x = Math.min(least.x, places[id].x * by - places[id].node.w / 2);
-          least.y = Math.min(least.y, places[id].y * by - places[id].node.h / 2);
-        });
-        var was = { x: Infinity, y: Infinity };
-        moving.forEach(function (id) {
-          var n = places[id].node;
-          was.x = Math.min(was.x, n.x - n.w / 2);
-          was.y = Math.min(was.y, n.y - n.h / 2);
-        });
-        keepUndo();
-        // Sides an arrow was drawn to keep were picked for where the shapes
-        // stood; tidied, they stand somewhere else, so every arrow finds
-        // its way again (and still keeps off a side another arrow is on).
-        hand.links.forEach(function (l) { delete l.fromSide; delete l.toSide; });
-        moving.forEach(function (id) {
-          var spot = places[id], node = spot.node;
-          node.x = Math.round((spot.x * by - least.x + was.x) / HAND_GRID) * HAND_GRID;
-          node.y = Math.round((spot.y * by - least.y + was.y) / HAND_GRID) * HAND_GRID;
-        });
-        drawHand();
-        drawHandPanel();
-        showReport();
-        el("#fit").click();              // and put the whole of it in view
-        tidySays(say("h_tidied", { n: moving.length }));
-      })
-      .catch(function (err) {
-        done();
-        tidySays(String(err && err.message ? err.message : err), true);
-      });
-  }
-
-  if (el("#hand-tidy")) {
-    el("#hand-tidy").onclick = tidyUp;
-  }
   if (el("#hand-code")) {
     el("#hand-code").onclick = showHandCode;
   }

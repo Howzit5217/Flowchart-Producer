@@ -767,9 +767,23 @@
       if (j >= 0) { note(link.to, j); }
     });
     var ways = {};
+    // The arrows Tidy up laid go down first, as they were laid (laidRoute),
+    // so that every other arrow finds its way round them.
     var routes = hand.links.map(function (link) {
       var a = nodeById(link.from), b = nodeById(link.to);
-      if (!a || !b) { return null; }
+      return a && b ? laidRoute(link, a, b) : null;
+    });
+    laidJoined(routes);
+    routes.forEach(function (pts, li) {
+      if (!pts) { return; }
+      var link = hand.links[li];
+      waysAdd(ways, pts, sideKey(nodeById(link.from), pts.sides[0]),
+              pts.meets ? MEET : sideKey(nodeById(link.to), pts.sides[1]));
+    });
+    hand.links.forEach(function (link, li) {
+      if (routes[li]) { return; }
+      var a = nodeById(link.from), b = nodeById(link.to);
+      if (!a || !b) { return; }
       var i = PORT_SIDES.indexOf(link.fromSide), j = PORT_SIDES.indexOf(link.toSide);
       var lean = link.pin ? null : { from: i, to: j };
       // Its own sides are not another arrow's to keep off.
@@ -779,9 +793,62 @@
       if (lean || i < 0) { note(link.from, pts.sides[0]); }
       if (lean || j < 0) { note(link.to, pts.sides[1]); }
       waysAdd(ways, pts, sideKey(a, pts.sides[0]), sideKey(b, pts.sides[1]));
-      return pts;
+      routes[li] = pts;
     });
     return spreadEnds(routes);
+  }
+
+  // ---- the arrows Tidy up laid --------------------------------------------
+  // Tidy up (13-hand-tidy.js) lays every arrow along the line the pseudocode
+  // side's own layout drew for it, and keeps that line on the arrow
+  // (link.laid) rather than handing the arrow to the router.  It is the line
+  // a chart built from pseudocode has -- the two sides of an If coming home
+  // down one line, a loop coming round into the line above its test -- which
+  // no router working one arrow at a time would find.  It is kept for as
+  // long as it still fits: both its shapes where they were, and the size
+  // they were; its sides the ones it was laid by; no shape put down across
+  // it since; and, for one that ends on another arrow's line rather than on
+  // a shape, that line still there.  From then on the arrow finds its own
+  // way, as every other arrow does.
+  function laidSign(a, b) {
+    var p = turned(a), q = turned(b);
+    return [a.id, a.x, a.y, p.w, p.h, b.id, b.x, b.y, q.w, q.h].join(",");
+  }
+
+  function laidRoute(link, a, b) {
+    var laid = link.laid;
+    if (!laid || !laid.pts || laid.pts.length < 2 || laid.sign !== laidSign(a, b) ||
+        laid.from !== link.fromSide || laid.to !== link.toSide) { return null; }
+    for (var i = 0; i < hand.nodes.length; i++) {
+      var n = hand.nodes[i];
+      if (n.id !== a.id && n.id !== b.id && cutsThrough(laid.pts, n)) { return null; }
+    }
+    var pts = laid.pts.map(function (p) { return [p[0], p[1]]; });
+    pts.sides = [PORT_SIDES.indexOf(laid.from), PORT_SIDES.indexOf(laid.to)];
+    pts.laid = true;
+    pts.meets = !!laid.meets;
+    pts.word = laid.word || null;
+    return pts;
+  }
+
+  // One that ends on another arrow's line only stands while that line does.
+  function laidJoined(routes) {
+    routes.forEach(function (pts, li) {
+      if (!pts || !pts.meets) { return; }
+      var end = pts[pts.length - 1];
+      var on = routes.some(function (other, k) {
+        if (!other || k === li) { return false; }
+        for (var i = 1; i < other.length; i++) {
+          var p = other[i - 1], q = other[i];
+          if (Math.abs(p[0] - q[0]) < 0.6 && Math.abs(end[0] - p[0]) < 0.6 &&
+              end[1] >= Math.min(p[1], q[1]) - 0.6 && end[1] <= Math.max(p[1], q[1]) + 0.6) { return true; }
+          if (Math.abs(p[1] - q[1]) < 0.6 && Math.abs(end[1] - p[1]) < 0.6 &&
+              end[0] >= Math.min(p[0], q[0]) - 0.6 && end[0] <= Math.max(p[0], q[0]) + 0.6) { return true; }
+        }
+        return false;
+      });
+      if (!on) { routes[li] = null; }
+    });
   }
 
   // Two or more arrows at one side of a shape meet it at points spread along
@@ -801,15 +868,19 @@
       var last = pts.length - 1;
       [[link.from, pts.sides[0], "from", pts[2] || pts[last]],
        [link.to, pts.sides[1], "to", pts[last - 2] || pts[0]]].forEach(function (end) {
+        if (end[2] === "to" && pts.meets) { return; }   // on a line, not the shape
         var key = end[0] + ":" + end[1];
         (at[key] = at[key] || []).push({ li: li, id: end[0], side: end[1],
-                                         end: end[2], toward: end[3] });
+                                         end: end[2], toward: end[3], laid: !!pts.laid });
       });
     });
     var shift = {};
     Object.keys(at).forEach(function (key) {
       var ends = at[key];
       if (ends.length < 2) { return; }
+      // Ends Tidy up laid stay where it laid them: two sides of an If meet
+      // a shape in the one place on purpose.
+      if (ends.every(function (e) { return e.laid; })) { return; }
       var node = nodeById(ends[0].id), side = ends[0].side;
       var room = node ? spreadRoom(node, side) : 0;
       if (room <= 0) { return; }
@@ -838,8 +909,20 @@
       var span = (ends.length - 1) * step / 2;
       var middle = Math.max(-room + span, Math.min(room - span, mean));
       ends = leastCrossed(ends, step, routes, middle);
-      ends.forEach(function (e, n) {
-        (shift[e.li] = shift[e.li] || {})[e.end] = middle + (n - (ends.length - 1) / 2) * step;
+      var slots = ends.map(function (e, n) { return middle + (n - (ends.length - 1) / 2) * step; });
+      // and the rest take the places the laid ones do not stand in
+      ends.forEach(function (e) {
+        if (!e.laid) { return; }
+        var pts = routes[e.li], here = (e.end === "from" ? pts[0] : pts[pts.length - 1])[axis] - centre;
+        var best = -1;
+        slots.forEach(function (s, k) {
+          if (s !== null && (best < 0 || Math.abs(s - here) < Math.abs(slots[best] - here))) { best = k; }
+        });
+        if (best >= 0) { slots[best] = null; }
+      });
+      slots = slots.filter(function (s) { return s !== null; });
+      ends.filter(function (e) { return !e.laid; }).forEach(function (e, n) {
+        (shift[e.li] = shift[e.li] || {})[e.end] = slots[n];
       });
     });
     hand.links.forEach(function (link, li) {
@@ -1405,14 +1488,27 @@
     return best;
   }
 
-  function labelSpot(pts, words, keep) {
+  // `fixed` is where the layout put the word on an arrow Tidy up laid (a
+  // point on its baseline, and which end of the word is at it): beside the
+  // way out of the diamond, where a chart built from pseudocode has it.
+  // Taken if the word, at the size it is here, stands clear there.
+  function labelSpot(pts, words, keep, fixed) {
     var size = HAND_TYPE * chartPt() / PLAIN_PT;
     var pen = measure.pen || (measure.pen = document.createElement("canvas")
                               .getContext("2d"));
     pen.font = "bold " + size + "px " + (FACES[lettersOf().face] || FACES.sans);
     var wide = pen.measureText(words).width;
     var drop = LABEL_HANGS.test(words) ? size * 0.21 : 0;
-    var spot = labelPlace(pts, wide, size, drop, keep);
+    var spot = null;
+    if (fixed) {
+      var x0 = fixed.anchor === "end" ? fixed.x - wide
+                                      : fixed.anchor === "middle" ? fixed.x - wide / 2 : fixed.x;
+      var box = { x0: x0, y0: fixed.y - size * 0.72, x1: x0 + wide, y1: fixed.y + drop };
+      if (!keep || labelClearance(box, labelNearby(keep, pts, wide + size), 0) >= 0) {
+        spot = { x: x0, y: fixed.y };
+      }
+    }
+    spot = spot || labelPlace(pts, wide, size, drop, keep);
     return { x: spot.x, y: spot.y, wide: wide, size: size, drop: drop };
   }
 
@@ -1448,6 +1544,18 @@
       least = Math.min(least, n.x - room.w / 2);
       maxx = Math.max(maxx, n.x + room.w / 2);
       maxy = Math.max(maxy, n.y + room.h / 2);
+    });
+    // Every arrow is routed before any is drawn (see below), and before the
+    // paper is sized too: a line that goes round the outside of every shape
+    // -- a loop coming back up the side of a tidied chart -- has paper under
+    // it, rather than running off the edge.
+    var routed = routeAll();
+    routed.forEach(function (pts) {
+      (pts || []).forEach(function (p) {
+        least = Math.min(least, p[0] - 8);
+        maxx = Math.max(maxx, p[0] + 8);
+        maxy = Math.max(maxy, p[1] + 8);
+      });
     });
     if (least < 20) {                  // out past the left edge: more paper
       ox = Math.ceil((20 - least) / HAND_RULE) * HAND_RULE;
@@ -1488,8 +1596,13 @@
     var tips = [];                     // held back so nothing paints over them
     // Every arrow is routed before any is drawn, so that the word on one
     // can keep clear of all the others, and of their heads.
-    var routes = routeAll().map(function (pts) {
-      return pts && pts.map(function (p) { return [p[0] + ox, p[1] + oy]; });
+    var routes = routed.map(function (pts) {
+      if (!pts) { return pts; }
+      var moved = pts.map(function (p) { return [p[0] + ox, p[1] + oy]; });
+      if (pts.word) {                  // where the layout put its word (labelSpot)
+        moved.word = { x: pts.word.x + ox, y: pts.word.y + oy, anchor: pts.word.anchor };
+      }
+      return moved;
     });
     var keep = null;
     if (hand.links.some(function (link) { return link.label; })) {
@@ -1541,7 +1654,7 @@
         // at, where the shape is drawn over the top of it and nobody ever
         // saw it.  Which is why the False on a decision could be read going
         // one way and not the other.  See labelSpot for where, exactly.
-        var spot = labelSpot(pts, link.label, keep);
+        var spot = labelSpot(pts, link.label, keep, pts.word);
         // The patch is measured from the words too, as the drawn charts'
         // are: a guess at seven pixels a letter left the end of a wide
         // word bare, with the line showing through it.

@@ -171,6 +171,12 @@ AREA_COST = 0.35                    # how much a compact layout is marked
                                     #   out bigger than the smallest one
                                     #   tried, so a block is not bought with
                                     #   a sheet of empty lanes
+SIZES = {}                          # line -> (w, h): a shape that must be
+                                    #   exactly this big, whatever its words
+                                    #   would make it.  The studio's Tidy up
+                                    #   lays a chart drawn by hand out with
+                                    #   the shapes it already has, so every
+                                    #   one lands where one that size would
 
 # The two other ways of drawing a chart are two other designs, not only two
 # other spacings: each changes what goes in a shape and how the shapes are

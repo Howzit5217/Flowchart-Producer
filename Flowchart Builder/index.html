@@ -8776,7 +8776,19 @@
     var ways = {};
     var routes = hand.links.map(function (link) {
       var a = nodeById(link.from), b = nodeById(link.to);
-      if (!a || !b) { return null; }
+      return a && b ? laidRoute(link, a, b) : null;
+    });
+    laidJoined(routes);
+    routes.forEach(function (pts, li) {
+      if (!pts) { return; }
+      var link = hand.links[li];
+      waysAdd(ways, pts, sideKey(nodeById(link.from), pts.sides[0]),
+              pts.meets ? MEET : sideKey(nodeById(link.to), pts.sides[1]));
+    });
+    hand.links.forEach(function (link, li) {
+      if (routes[li]) { return; }
+      var a = nodeById(link.from), b = nodeById(link.to);
+      if (!a || !b) { return; }
       var i = PORT_SIDES.indexOf(link.fromSide), j = PORT_SIDES.indexOf(link.toSide);
       var lean = link.pin ? null : { from: i, to: j };
       if (lean && i >= 0) { note(link.from, i, -1); }
@@ -8785,9 +8797,49 @@
       if (lean || i < 0) { note(link.from, pts.sides[0]); }
       if (lean || j < 0) { note(link.to, pts.sides[1]); }
       waysAdd(ways, pts, sideKey(a, pts.sides[0]), sideKey(b, pts.sides[1]));
-      return pts;
+      routes[li] = pts;
     });
     return spreadEnds(routes);
+  }
+
+  function laidSign(a, b) {
+    var p = turned(a), q = turned(b);
+    return [a.id, a.x, a.y, p.w, p.h, b.id, b.x, b.y, q.w, q.h].join(",");
+  }
+
+  function laidRoute(link, a, b) {
+    var laid = link.laid;
+    if (!laid || !laid.pts || laid.pts.length < 2 || laid.sign !== laidSign(a, b) ||
+        laid.from !== link.fromSide || laid.to !== link.toSide) { return null; }
+    for (var i = 0; i < hand.nodes.length; i++) {
+      var n = hand.nodes[i];
+      if (n.id !== a.id && n.id !== b.id && cutsThrough(laid.pts, n)) { return null; }
+    }
+    var pts = laid.pts.map(function (p) { return [p[0], p[1]]; });
+    pts.sides = [PORT_SIDES.indexOf(laid.from), PORT_SIDES.indexOf(laid.to)];
+    pts.laid = true;
+    pts.meets = !!laid.meets;
+    pts.word = laid.word || null;
+    return pts;
+  }
+
+  function laidJoined(routes) {
+    routes.forEach(function (pts, li) {
+      if (!pts || !pts.meets) { return; }
+      var end = pts[pts.length - 1];
+      var on = routes.some(function (other, k) {
+        if (!other || k === li) { return false; }
+        for (var i = 1; i < other.length; i++) {
+          var p = other[i - 1], q = other[i];
+          if (Math.abs(p[0] - q[0]) < 0.6 && Math.abs(end[0] - p[0]) < 0.6 &&
+              end[1] >= Math.min(p[1], q[1]) - 0.6 && end[1] <= Math.max(p[1], q[1]) + 0.6) { return true; }
+          if (Math.abs(p[1] - q[1]) < 0.6 && Math.abs(end[1] - p[1]) < 0.6 &&
+              end[0] >= Math.min(p[0], q[0]) - 0.6 && end[0] <= Math.max(p[0], q[0]) + 0.6) { return true; }
+        }
+        return false;
+      });
+      if (!on) { routes[li] = null; }
+    });
   }
 
   var SPREAD = 18;                        // at most this far apart
@@ -8800,15 +8852,17 @@
       var last = pts.length - 1;
       [[link.from, pts.sides[0], "from", pts[2] || pts[last]],
        [link.to, pts.sides[1], "to", pts[last - 2] || pts[0]]].forEach(function (end) {
+        if (end[2] === "to" && pts.meets) { return; }   // on a line, not the shape
         var key = end[0] + ":" + end[1];
         (at[key] = at[key] || []).push({ li: li, id: end[0], side: end[1],
-                                         end: end[2], toward: end[3] });
+                                         end: end[2], toward: end[3], laid: !!pts.laid });
       });
     });
     var shift = {};
     Object.keys(at).forEach(function (key) {
       var ends = at[key];
       if (ends.length < 2) { return; }
+      if (ends.every(function (e) { return e.laid; })) { return; }
       var node = nodeById(ends[0].id), side = ends[0].side;
       var room = node ? spreadRoom(node, side) : 0;
       if (room <= 0) { return; }
@@ -8832,8 +8886,19 @@
       var span = (ends.length - 1) * step / 2;
       var middle = Math.max(-room + span, Math.min(room - span, mean));
       ends = leastCrossed(ends, step, routes, middle);
-      ends.forEach(function (e, n) {
-        (shift[e.li] = shift[e.li] || {})[e.end] = middle + (n - (ends.length - 1) / 2) * step;
+      var slots = ends.map(function (e, n) { return middle + (n - (ends.length - 1) / 2) * step; });
+      ends.forEach(function (e) {
+        if (!e.laid) { return; }
+        var pts = routes[e.li], here = (e.end === "from" ? pts[0] : pts[pts.length - 1])[axis] - centre;
+        var best = -1;
+        slots.forEach(function (s, k) {
+          if (s !== null && (best < 0 || Math.abs(s - here) < Math.abs(slots[best] - here))) { best = k; }
+        });
+        if (best >= 0) { slots[best] = null; }
+      });
+      slots = slots.filter(function (s) { return s !== null; });
+      ends.filter(function (e) { return !e.laid; }).forEach(function (e, n) {
+        (shift[e.li] = shift[e.li] || {})[e.end] = slots[n];
       });
     });
     hand.links.forEach(function (link, li) {
@@ -9267,14 +9332,23 @@
     return best;
   }
 
-  function labelSpot(pts, words, keep) {
+  function labelSpot(pts, words, keep, fixed) {
     var size = HAND_TYPE * chartPt() / PLAIN_PT;
     var pen = measure.pen || (measure.pen = document.createElement("canvas")
                               .getContext("2d"));
     pen.font = "bold " + size + "px " + (FACES[lettersOf().face] || FACES.sans);
     var wide = pen.measureText(words).width;
     var drop = LABEL_HANGS.test(words) ? size * 0.21 : 0;
-    var spot = labelPlace(pts, wide, size, drop, keep);
+    var spot = null;
+    if (fixed) {
+      var x0 = fixed.anchor === "end" ? fixed.x - wide
+                                      : fixed.anchor === "middle" ? fixed.x - wide / 2 : fixed.x;
+      var box = { x0: x0, y0: fixed.y - size * 0.72, x1: x0 + wide, y1: fixed.y + drop };
+      if (!keep || labelClearance(box, labelNearby(keep, pts, wide + size), 0) >= 0) {
+        spot = { x: x0, y: fixed.y };
+      }
+    }
+    spot = spot || labelPlace(pts, wide, size, drop, keep);
     return { x: spot.x, y: spot.y, wide: wide, size: size, drop: drop };
   }
 
@@ -9300,6 +9374,14 @@
       least = Math.min(least, n.x - room.w / 2);
       maxx = Math.max(maxx, n.x + room.w / 2);
       maxy = Math.max(maxy, n.y + room.h / 2);
+    });
+    var routed = routeAll();
+    routed.forEach(function (pts) {
+      (pts || []).forEach(function (p) {
+        least = Math.min(least, p[0] - 8);
+        maxx = Math.max(maxx, p[0] + 8);
+        maxy = Math.max(maxy, p[1] + 8);
+      });
     });
     if (least < 20) {                  // out past the left edge: more paper
       ox = Math.ceil((20 - least) / HAND_RULE) * HAND_RULE;
@@ -9334,8 +9416,13 @@
              'stroke-linecap="round" stroke-linejoin="round">');
 
     var tips = [];                     // held back so nothing paints over them
-    var routes = routeAll().map(function (pts) {
-      return pts && pts.map(function (p) { return [p[0] + ox, p[1] + oy]; });
+    var routes = routed.map(function (pts) {
+      if (!pts) { return pts; }
+      var moved = pts.map(function (p) { return [p[0] + ox, p[1] + oy]; });
+      if (pts.word) {                  // where the layout put its word (labelSpot)
+        moved.word = { x: pts.word.x + ox, y: pts.word.y + oy, anchor: pts.word.anchor };
+      }
+      return moved;
     });
     var keep = null;
     if (hand.links.some(function (link) { return link.label; })) {
@@ -9376,7 +9463,7 @@
                  'stroke-width="0.6" stroke-linejoin="miter"/>');
       }
       if (link.label) {
-        var spot = labelSpot(pts, link.label, keep);
+        var spot = labelSpot(pts, link.label, keep, pts.word);
         out.push('<rect class="patch" x="' + (spot.x - 4).toFixed(1) + '" y="' +
                  (spot.y - spot.size + 1).toFixed(1) + '" width="' +
                  (spot.wide + 8).toFixed(1) + '" height="' +
@@ -11033,25 +11120,26 @@
   var R_YES = /^(y|yes|true|t)$/i;
   var R_NO = /^(n|no|false|f)$/i;
 
-  function canReach(fromId, wantId) {    // is wantId anywhere ahead of here?
+  function canReach(fromId, wantId, past) {   // is wantId anywhere ahead of here?
     var seen = {}, stack = [fromId];
     while (stack.length) {
       var id = stack.pop();
       if (id === wantId) { return true; }
-      if (seen[id]) { continue; }
+      if (seen[id] || (past && past.indexOf(id) >= 0)) { continue; }
       seen[id] = true;
       outOf(id).forEach(function (l) { stack.push(l.to); });
     }
     return false;
   }
 
-  function meetAgain(aId, bId) {
+  function meetAgain(aId, bId, past) {
+    function stops(id) { return past && past.indexOf(id) >= 0; }
     var ahead = {}, stack = [aId];
     while (stack.length) {
       var id = stack.pop();
       if (ahead[id]) { continue; }
       ahead[id] = true;
-      outOf(id).forEach(function (l) { stack.push(l.to); });
+      if (!stops(id)) { outOf(id).forEach(function (l) { stack.push(l.to); }); }
     }
     var seen = {}, queue = [bId];
     while (queue.length) {
@@ -11059,7 +11147,7 @@
       if (seen[at]) { continue; }
       seen[at] = true;
       if (ahead[at]) { return at; }
-      outOf(at).forEach(function (l) { queue.push(l.to); });
+      if (!stops(at)) { outOf(at).forEach(function (l) { queue.push(l.to); }); }
     }
     return null;
   }
@@ -11095,8 +11183,10 @@
 
     function step(deep) { return new Array(deep + 1).join("    "); }
 
-    function write(id, stopId, deep) {
+    function write(id, stopId, deep, loops) {
+      loops = loops || [];
       while (id && id !== stopId) {
+        if (loops.indexOf(id) >= 0) { return; }   // round the loop again: its body is done
         been[id] = (been[id] || 0) + 1;
         if (been[id] > 3) { throw new Error(TXT.h_tangled); }
         var node = nodeById(id);
@@ -11109,24 +11199,24 @@
         if (asksKind(node.kind)) {
           var ways = bothWays(id), yes = ways[0], no = ways[1];
           var asked = saidIn(node);
-          var yesBack = canReach(yes.to, id), noBack = canReach(no.to, id);
+          var yesBack = canReach(yes.to, id, loops), noBack = canReach(no.to, id, loops);
           if (yesBack && noBack) { throw new Error(TXT.h_tangled); }
           if (yesBack || noBack) {       // a question you come back to: a loop
             var body = yesBack ? yes : no, on = yesBack ? no : yes;
             put(step(deep) +
                 (yesBack ? "While " + asked
                          : "While NOT (" + asked + ")"), node.id);
-            write(body.to, id, deep + 1);
+            write(body.to, id, deep + 1, loops.concat([id]));
             put(step(deep) + "End While");
             id = on.to;
             continue;
           }
-          var join = meetAgain(yes.to, no.to);
+          var join = meetAgain(yes.to, no.to, loops);
           put(step(deep) + "If " + asked + " Then", node.id);
-          write(yes.to, join, deep + 1);
+          write(yes.to, join, deep + 1, loops);
           if (no.to !== join) {
             put(step(deep) + "Else");
-            write(no.to, join, deep + 1);
+            write(no.to, join, deep + 1, loops);
           }
           put(step(deep) + "End If");
           if (!join) { return; }         // both ways ended on their own
@@ -11240,147 +11330,6 @@
     }, HAND_SETTLE);
   }
 
-  var TIDY_GAP = 26;                     // the least room between two shapes
-  var TIDY_WORD = 46;
-  var TIDY_STRETCH = 3;                  // and the most it may pull them apart
-
-  function linesById(ast) {
-    var found = {};
-    function walk(items) {
-      (items || []).forEach(function (item) {
-        if (item.id && item.line) { found[item.id] = item.line; }
-        ["then", "else", "body"].forEach(function (key) {
-          if (item[key]) { walk(item[key]); }
-        });
-        (item.cases || []).forEach(function (one) { walk(one.body); });
-      });
-    }
-    walk(ast.main);
-    (ast.modules || []).forEach(function (mod) { walk(mod.body); });
-    return found;
-  }
-
-  function spotsIn(svgText) {
-    var hidden = document.createElement("div");
-    hidden.style.cssText = "position:fixed; left:-99999px; top:0;" +
-                           " width:1px; height:1px; overflow:hidden";
-    hidden.innerHTML = svgText;
-    document.body.appendChild(hidden);
-    var found = {};
-    try {
-      all(".node", hidden).forEach(function (g) {
-        var box = g.getBBox();
-        if (!box.width && !box.height) { return; }
-        found[g.dataset.i] = { x: box.x + box.width / 2,
-                               y: box.y + box.height / 2 };
-      });
-    } catch (e) { found = {}; }          // an SVG the browser would not measure
-    hidden.remove();
-    return found;
-  }
-
-  function wordBetween(a, b) {           // is the arrow between them labelled?
-    return hand.links.some(function (l) {
-      return String(l.label || "").trim() &&
-             ((l.from === a && l.to === b) || (l.from === b && l.to === a));
-    });
-  }
-
-  function tidyStretch(places) {
-    var ids = Object.keys(places), worst = 1;
-    for (var i = 0; i < ids.length; i++) {
-      for (var j = i + 1; j < ids.length; j++) {
-        var a = places[ids[i]], b = places[ids[j]];
-        var word = wordBetween(a.node.id, b.node.id) ? TIDY_WORD : 0;
-        var needX = (a.node.w + b.node.w) / 2 + TIDY_GAP + word;
-        var needY = (a.node.h + b.node.h) / 2 + TIDY_GAP;
-        var gotX = Math.abs(a.x - b.x), gotY = Math.abs(a.y - b.y);
-        if (gotX >= needX || gotY >= needY) { continue; }
-        var by = Math.min(gotX > 0.5 ? needX / gotX : Infinity,
-                          gotY > 0.5 ? needY / gotY : Infinity);
-        if (by > worst) { worst = by; }
-      }
-    }
-    return Math.min(worst, TIDY_STRETCH);
-  }
-
-  function tidySays(what, bad) {
-    handSays(what, bad);
-  }
-
-  var tidying = false;
-  function tidyUp() {
-    if (!byHand || tidying) { return; }
-    if (!hand.nodes.length) { tidySays(TXT.h_tidy_none, true); return; }
-    var text;
-    try { text = handAsPseudocode(); }
-    catch (thrown) { tidySays(thrown.message || String(thrown), true); return; }
-    var fromLine = {};                   // line -> shape, as it was written
-    Object.keys(handLine).forEach(function (at) { fromLine[at] = handLine[at]; });
-    var button = el("#hand-tidy");
-    tidying = true;
-    if (button) { button.disabled = true; button.classList.add("working"); }
-    function done() {
-      tidying = false;
-      if (button) { button.disabled = false; button.classList.remove("working"); }
-    }
-    askFor({ text: text, title: "", author: "", shape: "auto", seed: "",
-             lang: el("#f-lang") ? el("#f-lang").value : "",
-             legend: false, grid: true, shapes: geom })
-      .then(function (data) {
-        done();
-        if (!byHand) { return; }
-        if (!data || !data.ok || !data.ast || !data.svg) {
-          tidySays((data && data.error) || TXT.h_not_a_program, true);
-          return;
-        }
-        var lineOfShape = linesById(data.ast);
-        var spots = spotsIn(data.svg);
-        var places = {};
-        Object.keys(spots).forEach(function (drawn) {
-          var line = lineOfShape[drawn];
-          var mine = line && fromLine[line];
-          var node = mine && nodeById(+mine);
-          if (node && !places[node.id]) {
-            places[node.id] = { x: spots[drawn].x, y: spots[drawn].y, node: node };
-          }
-        });
-        var moving = Object.keys(places);
-        if (!moving.length) { tidySays(TXT.h_tidy_none, true); return; }
-        var by = tidyStretch(places);
-        var least = { x: Infinity, y: Infinity };
-        moving.forEach(function (id) {
-          least.x = Math.min(least.x, places[id].x * by - places[id].node.w / 2);
-          least.y = Math.min(least.y, places[id].y * by - places[id].node.h / 2);
-        });
-        var was = { x: Infinity, y: Infinity };
-        moving.forEach(function (id) {
-          var n = places[id].node;
-          was.x = Math.min(was.x, n.x - n.w / 2);
-          was.y = Math.min(was.y, n.y - n.h / 2);
-        });
-        keepUndo();
-        hand.links.forEach(function (l) { delete l.fromSide; delete l.toSide; });
-        moving.forEach(function (id) {
-          var spot = places[id], node = spot.node;
-          node.x = Math.round((spot.x * by - least.x + was.x) / HAND_GRID) * HAND_GRID;
-          node.y = Math.round((spot.y * by - least.y + was.y) / HAND_GRID) * HAND_GRID;
-        });
-        drawHand();
-        drawHandPanel();
-        showReport();
-        el("#fit").click();              // and put the whole of it in view
-        tidySays(say("h_tidied", { n: moving.length }));
-      })
-      .catch(function (err) {
-        done();
-        tidySays(String(err && err.message ? err.message : err), true);
-      });
-  }
-
-  if (el("#hand-tidy")) {
-    el("#hand-tidy").onclick = tidyUp;
-  }
   if (el("#hand-code")) {
     el("#hand-code").onclick = showHandCode;
   }
@@ -12033,6 +11982,513 @@
     window.addEventListener("pointercancel", up);
     drawHand();                          // the angle, shown from the start
   }, true);
+  var TIDY_SEED = "20260101";            // one layout, however often it is asked
+  var TIDY_ASIDE = 60;                   // room beside the chart for shapes it leaves out
+  var tidyAsked = false;                 // waiting on the layout
+
+  function linesById(ast) {
+    var found = {};
+    function walk(items) {
+      (items || []).forEach(function (item) {
+        if (item.id && item.line) { found[item.id] = item.line; }
+        ["then", "else", "body"].forEach(function (key) {
+          if (item[key]) { walk(item[key]); }
+        });
+        (item.cases || []).forEach(function (one) { walk(one.body); });
+      });
+    }
+    walk(ast.main);
+    (ast.modules || []).forEach(function (mod) { walk(mod.body); });
+    return found;
+  }
+
+  function tidyAsk(text, sizes) {
+    return Object.assign(chartOptions(), {
+      text: text, title: "", author: "",
+      shape: el("#f-shape") ? el("#f-shape").value : "auto",
+      seed: TIDY_SEED,
+      lang: el("#f-lang") ? el("#f-lang").value : "",
+      legend: false, grid: true, shapes: geom, letters: lettersAsked(),
+      everyout: true, apart: true, sizes: sizes, plan: true
+    });
+  }
+
+  function tidyLayout(data, fromLine, text) {
+    var plan = data.plan, lineOf = linesById(data.ast);
+    var written = String(text).split("\n");
+    var shapes = [], first = {}, order = [];
+    (plan.shapes || []).forEach(function (s) {
+      var line = lineOf[s[0]], id = line ? fromLine[line] : null;
+      var one = { x: s[2], y: s[3], w: s[4], h: s[5], line: line,
+                  node: id ? nodeById(+id) : null };
+      shapes.push(one);
+      if (one.node && !first[one.node.id]) {
+        first[one.node.id] = one;
+        order.push(one.node.id);
+      }
+    });
+    var routes = (plan.routes || []).filter(function (r) { return r[0].length > 1; })
+                                    .map(function (r) { return { pts: r[0], head: r[1] }; });
+
+    function on(s, p) {                  // on a shape, or on its outline
+      return Math.abs(p[0] - s.x) <= s.w / 2 + 1.5 && Math.abs(p[1] - s.y) <= s.h / 2 + 1.5;
+    }
+    function shapeAt(p) {
+      for (var i = 0; i < shapes.length; i++) { if (on(shapes[i], p)) { return shapes[i]; } }
+      return null;
+    }
+    function same(p, q) { return Math.abs(p[0] - q[0]) < 0.6 && Math.abs(p[1] - q[1]) < 0.6; }
+    function along(p, a, b) {            // somewhere on the run from a to b, short of b
+      if (same(p, b)) { return false; }
+      if (Math.abs(a[0] - b[0]) < 0.6) {
+        return Math.abs(p[0] - a[0]) < 0.6 && (p[1] - a[1]) * (p[1] - b[1]) <= 0.4;
+      }
+      return Math.abs(a[1] - b[1]) < 0.6 && Math.abs(p[1] - a[1]) < 0.6 &&
+             (p[0] - a[0]) * (p[0] - b[0]) <= 0.4;
+    }
+    function onward(p, from) {
+      var k, j;
+      for (k = 0; k < routes.length; k++) {
+        if (routes[k] !== from && same(routes[k].pts[0], p)) { return { r: routes[k], at: 0 }; }
+      }
+      for (k = 0; k < routes.length; k++) {
+        if (routes[k] === from) { continue; }
+        for (j = 0; j < routes[k].pts.length - 1; j++) {
+          if (along(p, routes[k].pts[j], routes[k].pts[j + 1])) { return { r: routes[k], at: j }; }
+        }
+      }
+      return null;
+    }
+    function follow(r0) {
+      var pts = r0.pts.map(function (p) { return [p[0], p[1]]; });
+      var r = r0, drawn = 0;
+      for (var hops = 0; hops < 40; hops++) {
+        var end = pts[pts.length - 1];
+        var hit = shapeAt(end);
+        if (hit) {
+          return { to: hit, full: pts, drawn: drawn ? pts.slice(0, drawn) : pts, meets: !!drawn };
+        }
+        if (r.head && !drawn) { drawn = pts.length; }
+        var next = onward(end, r);
+        if (!next) { return null; }
+        next.r.pts.slice(next.at + 1).forEach(function (p) { pts.push([p[0], p[1]]); });
+        r = next.r;
+      }
+      return null;
+    }
+    function wordBy(start) {             // the True or False beside a way out
+      var best = null, far = 90;
+      (plan.labels || []).forEach(function (l) {
+        var d = Math.hypot(l[1] - start[0], l[2] - start[1]);
+        if (d < far) { far = d; best = l; }
+      });
+      return best;
+    }
+
+    var laid = {};
+    order.forEach(function (id) {
+      var node = nodeById(id), from = first[id];
+      var asks = asksKind(node.kind);
+      var ways = routes.filter(function (r) { return on(from, r.pts[0]); })
+                       .map(function (r) {
+                         return { walk: follow(r), word: asks ? wordBy(r.pts[0]) : null };
+                       })
+                       .filter(function (w) { return w.walk; });
+      var outs = [];
+      hand.links.forEach(function (link, li) { if (link.from === id) { outs.push(li); } });
+      var yes = null;
+      if (asks && outs.length === 2) {
+        var both = bothWays(id);
+        yes = /^\s*While NOT \(/.test(written[from.line - 1] || "") ? both[1] : both[0];
+      }
+      outs.forEach(function (li) {
+        var link = hand.links[li], to = first[link.to];
+        var fits = ways.filter(function (w) { return !w.used && w.walk.to === to; });
+        if (fits.length > 1 && yes) {
+          var want = link === yes ? plan.yes : plan.no;
+          fits.sort(function (p, q) {
+            return (q.word && q.word[0] === want ? 1 : 0) - (p.word && p.word[0] === want ? 1 : 0);
+          });
+        }
+        if (!fits.length) { return; }
+        var way = fits[0], full = tidy(way.walk.full), pts = tidy(way.walk.drawn);
+        way.used = true;
+        if (full.length < 2 || pts.length < 2) { return; }
+        laid[li] = { full: full, pts: pts, meets: way.walk.meets,
+                     word: link.label && way.word
+                       ? { x: way.word[1], y: way.word[2], anchor: way.word[3] } : null };
+      });
+    });
+    hand.nodes.forEach(function (n) {    // and the shapes it left out, after
+      if (!first[n.id]) { order.push(n.id); }
+    });
+    return { places: first, laid: laid, order: order };
+  }
+
+  function tidyOnPort(pts, k, node, side) {
+    var port = ports(node)[side], at = pts[k], next = pts[k ? k - 1 : 1];
+    var axis = side < 2 ? 1 : 0, was = at[axis];
+    at[axis] = Math.round((axis ? port.y : port.x) * 2) / 2;
+    if ((next[axis] - at[axis]) * (next[axis] - was) <= 0) { at[axis] = was; }
+  }
+
+  var TIDY_WALL = 2 * HAND_RULE;
+  function tidyApply(layout) {
+    var ids = Object.keys(layout.places);
+    if (!ids.length) { return null; }
+    var now = { x0: Infinity, x1: -Infinity, y0: Infinity, y1: -Infinity };
+    var before = {};
+    hand.nodes.forEach(function (n) { before[n.id] = [n.x, n.y]; });
+    ids.forEach(function (id) {
+      var s = layout.places[id];
+      now.x0 = Math.min(now.x0, s.x - s.w / 2); now.x1 = Math.max(now.x1, s.x + s.w / 2);
+      now.y0 = Math.min(now.y0, s.y - s.h / 2); now.y1 = Math.max(now.y1, s.y + s.h / 2);
+    });
+    Object.keys(layout.laid).forEach(function (li) {
+      layout.laid[li].full.forEach(function (p) {
+        now.x0 = Math.min(now.x0, p[0]); now.x1 = Math.max(now.x1, p[0]);
+        now.y0 = Math.min(now.y0, p[1]); now.y1 = Math.max(now.y1, p[1]);
+      });
+    });
+    var lead = layout.places[layout.order[0]];
+    var dx = Math.ceil((lead.x + TIDY_WALL - now.x0) / HAND_GRID - 0.001) * HAND_GRID - lead.x;
+    var dy = Math.ceil((lead.y + TIDY_WALL - now.y0) / HAND_GRID - 0.001) * HAND_GRID - lead.y;
+    ids.forEach(function (id) {
+      var n = nodeById(+id), s = layout.places[id];
+      n.x = Math.round(s.x + dx);
+      n.y = Math.round(s.y + dy);
+    });
+    var stray = hand.nodes.filter(function (n) { return !layout.places[n.id]; });
+    stray.sort(function (p, q) { return (p.y - q.y) || (p.x - q.x); });
+    var aside = now.x1 + dx + TIDY_ASIDE, down = now.y0 + dy;
+    stray.forEach(function (n) {
+      var t = turned(n);
+      n.x = Math.round((aside + t.w / 2) / HAND_GRID) * HAND_GRID;
+      n.y = Math.round((down + t.h / 2) / HAND_GRID) * HAND_GRID;
+      down += t.h + CLEAR;
+    });
+    hand.links.forEach(function (link, li) {
+      var lay = layout.laid[li], a = nodeById(link.from), b = nodeById(link.to);
+      delete link.laid;
+      if (!lay || !a || !b) { delete link.fromSide; delete link.toSide; return; }
+      function moved(p) { return [Math.round(p[0] + dx), Math.round(p[1] + dy)]; }
+      var full = lay.full.map(moved), pts = lay.pts.map(moved), n = full.length - 1;
+      var sides = [sideFrom(full[1][0] - full[0][0], full[1][1] - full[0][1]),
+                   sideFrom(full[n][0] - full[n - 1][0], full[n][1] - full[n - 1][1], true)];
+      tidyOnPort(pts, 0, a, sides[0]);
+      if (!lay.meets) { tidyOnPort(pts, pts.length - 1, b, sides[1]); }
+      link.fromSide = PORT_SIDES[sides[0]];
+      link.toSide = PORT_SIDES[sides[1]];
+      link.laid = { pts: pts, from: link.fromSide, to: link.toSide, meets: lay.meets,
+                    sign: laidSign(a, b),
+                    word: lay.word ? { x: lay.word.x + dx, y: lay.word.y + dy,
+                                       anchor: lay.word.anchor } : null };
+    });
+    return hand.nodes.filter(function (n) {
+      var b = before[n.id];
+      return b && (Math.abs(b[0] - n.x) > 0.5 || Math.abs(b[1] - n.y) > 0.5);
+    }).length;
+  }
+
+  var TIDY_FADE = 180;                   // ms the old arrows take to go
+  var TIDY_OFF = 70;                     // ms before the first shape sets off
+  var TIDY_STEP = 40;                    // and between one setting off and the next,
+  var TIDY_STEPS = 440;                  //   however many there are, all told
+  var TIDY_SHORT = 380, TIDY_LONG = 780; // ms a move takes, nearest to furthest,
+  var TIDY_PACE = 0.45;                  //   a ms for so many px of the way between
+  var TIDY_PEN = 1.8;                    // px a ms an arrow is drawn at
+  var TIDY_LEAST = 110, TIDY_MOST = 440; // ms, the least and the most one takes
+  var TIDY_POP = 150;                    // ms a head or a word takes to land
+  var TIDY_BIG = 300;                    // shapes, past which it simply arrives
+  var TIDY_LIFT = 60;                    // and past which none is lifted as it goes
+  var tidyMove = null;                   // the move under way, if one is
+
+  function tidyEase(t) {
+    if (t <= 0) { return 0; }
+    if (t >= 1) { return 1; }
+    function bez(u, a, b) { return 3 * a * u * (1 - u) * (1 - u) + 3 * b * u * u * (1 - u) + u * u * u; }
+    var lo = 0, hi = 1, u = t;
+    for (var i = 0; i < 24; i++) {       // where along the curve x is t
+      u = (lo + hi) / 2;
+      if (bez(u, 0.4, 0.15) < t) { lo = u; } else { hi = u; }
+    }
+    return bez(u, 0, 1);
+  }
+
+  function tidyLook() {
+    if (!chart || !chart.isConnected || !byHand) { return null; }
+    var at = {}, stage = el("#stage"), box = chart.viewBox && chart.viewBox.baseVal;
+    hand.nodes.forEach(function (n) { at[n.id] = { x: n.x, y: n.y }; });
+    return { svg: chart, at: at, origin: { x: handOrigin.x, y: handOrigin.y },
+             w: box ? box.width : 0, h: box ? box.height : 0,
+             scroll: stage ? [stage.scrollLeft, stage.scrollTop] : null, hold: [holdX, holdY] };
+  }
+
+  function tidyPaper(m, before) {
+    var svg = m.svg, NS = "http://www.w3.org/2000/svg";
+    var real = [el("rect.sheet", svg), el(".grid.fine", svg), el(".grid.major", svg)];
+    if (real.some(function (e) { return !e; })) { return false; }
+    var u = m.all;
+    var paper = document.createElementNS(NS, "g");
+    paper.setAttribute("class", "tidy-paper");
+    var sheet = real[0].cloneNode(false);
+    [["x", u.x0], ["y", u.y0], ["width", u.x1 - u.x0], ["height", u.y1 - u.y0]].forEach(function (a) {
+      sheet.setAttribute(a[0], a[1]);
+    });
+    paper.appendChild(sheet);
+    var fine = [], major = [], ruled = handOrigin.x / HAND_RULE, k;
+    for (k = Math.ceil(u.x0 / HAND_RULE); k * HAND_RULE <= u.x1; k++) {   // as drawHand rules it
+      ((((k - ruled) % 5) + 5) % 5 ? fine : major).push("M" + k * HAND_RULE + "," + u.y0 + "V" + u.y1);
+    }
+    for (k = Math.ceil(u.y0 / HAND_RULE); k * HAND_RULE <= u.y1; k++) {
+      ((k % 5 + 5) % 5 ? fine : major).push("M" + u.x0 + "," + k * HAND_RULE + "H" + u.x1);
+    }
+    [[real[1], fine], [real[2], major]].forEach(function (pair) {
+      var lines = pair[0].cloneNode(false);
+      lines.setAttribute("d", pair[1].join(""));
+      paper.appendChild(lines);
+    });
+    svg.insertBefore(paper, real[0]);
+    real.forEach(function (e) { e.style.visibility = "hidden"; });
+    m.paper = paper;
+    m.real = real;
+    var stage = el("#stage"), wrap = el("#sheet");
+    if (wrap) { wrap.style.transition = "none"; wrap.style.transform = ""; }
+    m.sheetAt(0);
+    if (loose) { holdX = before.hold[0]; holdY = before.hold[1]; holdApply(); }
+    else if (stage && before.scroll) {
+      stage.scrollLeft = before.scroll[0];
+      stage.scrollTop = before.scroll[1];
+    }
+    return true;
+  }
+
+  function tidyMotion(before, order) {
+    var svg = chart;
+    if (!before || !svg || STILL || document.hidden || hand.nodes.length > TIDY_BIG) { return; }
+    var box = svg.viewBox && svg.viewBox.baseVal;
+    var layer = el("g[font-family]", svg);
+    if (!box || !box.width || !before.w || !layer) { return; }
+    var ox = handOrigin.x - before.origin.x, oy = handOrigin.y - before.origin.y;
+    var W1 = box.width, H1 = box.height;
+    var m = { svg: svg, viewBox: svg.getAttribute("viewBox"), width: svg.style.width,
+              moves: [], lines: [], end: 0, shift: 0,
+              all: { x0: Math.min(0, ox), y0: Math.min(0, oy),
+                     x1: Math.max(W1, ox + before.w), y1: Math.max(H1, oy + before.h) } };
+
+    m.ghost = document.createElementNS("http://www.w3.org/2000/svg", "g");
+    m.ghost.setAttribute("class", "tidy-ghost");
+    m.ghost.setAttribute("pointer-events", "none");
+    m.ghost.setAttribute("transform", "translate(" + ox + " " + oy + ")");
+    all(".link .flow, .link .patch, .link .label, .tips .head", before.svg).forEach(function (e) {
+      m.ghost.appendChild(e.cloneNode(true));
+    });
+    layer.insertBefore(m.ghost, layer.firstChild);
+
+    var landed = {}, count = order.length;
+    var gap = Math.min(TIDY_STEP, TIDY_STEPS / Math.max(1, count - 1));
+    order.forEach(function (id, k) {
+      var n = nodeById(id), was = before.at[id];
+      if (!n || !was) { return; }
+      var t = turned(n);
+      var mv = { n: n, w: t.w, h: t.h, dx: was.x - n.x, dy: was.y - n.y, p: -1 };
+      m.moves.push(mv);
+      var far = Math.hypot(mv.dx, mv.dy);
+      if (far < 0.5) { landed[id] = 0; mv.p = 1; mv.bits = []; return; }
+      mv.bits = all('.node[data-i="h' + id + '"], .rule-dot[data-hint="' + id + '"], [data-i="' + id + '"]', svg)
+        .map(function (e) { return { el: e, own: e.getAttribute("transform") || "" }; });
+      mv.at = TIDY_OFF + k * gap;
+      mv.takes = Math.min(TIDY_LONG, TIDY_SHORT + far * TIDY_PACE);
+      landed[id] = mv.at + mv.takes;
+      m.shift = Math.max(m.shift, mv.at + mv.takes);
+    });
+    m.end = m.shift;
+    m.lift = m.moves.length <= TIDY_LIFT;
+
+    m.sheetAt = function (e) {
+      var q = 1 - e;
+      var x0 = ox * q, y0 = oy * q;
+      var x1 = (ox + before.w) * q + W1 * e, y1 = (oy + before.h) * q + H1 * e;
+      m.moves.forEach(function (mv) {
+        var p = mv.p < 0 ? 0 : mv.p;
+        var cx = mv.n.x + mv.dx * (1 - p) + handOrigin.x, cy = mv.n.y + mv.dy * (1 - p) + handOrigin.y;
+        x0 = Math.min(x0, cx - mv.w / 2 - 40); x1 = Math.max(x1, cx + mv.w / 2 + 40);
+        y0 = Math.min(y0, cy - mv.h / 2 - 20); y1 = Math.max(y1, cy + mv.h / 2 + 40);
+      });
+      x0 = Math.max(x0, m.all.x0); y0 = Math.max(y0, m.all.y0);
+      x1 = Math.min(x1, m.all.x1); y1 = Math.min(y1, m.all.y1);
+      svg.setAttribute("viewBox", x0.toFixed(2) + " " + y0.toFixed(2) + " " +
+                       (x1 - x0).toFixed(2) + " " + (y1 - y0).toFixed(2));
+      svg.style.width = ((x1 - x0) * zoom).toFixed(2) + "px";
+    };
+
+    var heads = all(".tips .head", svg), headTaken = [];
+    all(".link[data-link]", svg).forEach(function (g) {
+      var link = hand.links.filter(function (l) { return String(l.id) === g.dataset.link; })[0];
+      var flow = el(".flow", g);
+      if (!link || !flow) { return; }
+      var len = flow.getTotalLength ? flow.getTotalLength() : 0;
+      var end = (flow.getAttribute("d") || "").split(/[ML]/).pop().trim(), head = null;
+      for (var k = 0; k < heads.length && end; k++) {
+        if (headTaken.indexOf(k) < 0 &&
+            (heads[k].getAttribute("points") || "").indexOf(end + " ") === 0) {
+          head = heads[k];
+          headTaken.push(k);
+          break;
+        }
+      }
+      var at = Math.max(landed[link.from] || 0, landed[link.to] || 0, TIDY_FADE * 0.6);
+      var takes = Math.max(TIDY_LEAST, Math.min(TIDY_MOST, len / TIDY_PEN));
+      m.lines.push({ flow: flow, len: len, head: head, words: all(".patch, .label", g),
+                     dashed: !!flow.getAttribute("stroke-dasharray") || !len,
+                     at: at, takes: takes, p: -1 });
+      m.end = Math.max(m.end, at + takes + TIDY_POP);
+    });
+    m.end = Math.max(m.end, TIDY_FADE);
+
+    function shown(t) {
+      m.ghost.setAttribute("opacity", Math.max(0, 1 - t / TIDY_FADE).toFixed(3));
+      m.moves.forEach(function (mv) {
+        if (!mv.bits.length) { return; }
+        var p = tidyEase((t - mv.at) / mv.takes);
+        if (p === mv.p) { return; }
+        mv.p = p;
+        var x = (mv.dx * (1 - p)).toFixed(2), y = (mv.dy * (1 - p)).toFixed(2);
+        mv.bits.forEach(function (b) {
+          if (p >= 1) {
+            if (b.own) { b.el.setAttribute("transform", b.own); } else { b.el.removeAttribute("transform"); }
+          } else {
+            b.el.setAttribute("transform", "translate(" + x + " " + y + ")" + (b.own ? " " + b.own : ""));
+          }
+        });
+        var shape = mv.bits[0].el, lift = m.lift && p > 0 && p < 1 ? Math.sin(Math.PI * p) : 0;
+        shape.style.transition = lift > 0.01 ? "none" : "";
+        shape.style.filter = lift > 0.01
+          ? "drop-shadow(0 " + (1 + 4 * lift).toFixed(1) + "px " + (2 + 7 * lift).toFixed(1) +
+            "px rgba(16, 24, 40, " + (0.24 * lift).toFixed(3) + "))"
+          : "";
+      });
+      m.lines.forEach(function (l) {
+        var p = Math.max(0, Math.min(1, (t - l.at) / l.takes));
+        var pop = Math.max(0, Math.min(1, (t - l.at - l.takes + 40) / TIDY_POP));
+        var said = Math.max(0, Math.min(1, (t - l.at - l.takes) / TIDY_POP));
+        if (p === l.p && said === l.said) { return; }
+        l.p = p; l.said = said;
+        if (l.dashed) {                  // drawn with dashes, so it fades in instead
+          l.flow.style.opacity = p < 1 ? p.toFixed(3) : "";
+        } else if (p < 1) {              // the round end of it kept out of sight too
+          l.flow.style.strokeDasharray = l.len.toFixed(1) + " " + (l.len + 4).toFixed(1);
+          l.flow.style.strokeDashoffset = ((l.len + 2) * (1 - p)).toFixed(1);
+        } else {
+          l.flow.style.strokeDasharray = "";
+          l.flow.style.strokeDashoffset = "";
+        }
+        if (l.head) { l.head.style.opacity = pop < 1 ? pop.toFixed(3) : ""; }
+        l.words.forEach(function (w) { w.style.opacity = said < 1 ? said.toFixed(3) : ""; });
+      });
+      if (t < m.shift) {
+        m.sheetAt(tidyEase((t - TIDY_OFF) / Math.max(1, m.shift - TIDY_OFF)));
+      } else if (!m.settled) {           // the paper as the drawing has it, exactly
+        m.settled = true;
+        svg.setAttribute("viewBox", m.viewBox);
+        svg.style.width = m.width;
+      }
+    }
+
+    function stop() { tidyDone(); }
+    m.listen = function (on) {
+      var how = on ? "addEventListener" : "removeEventListener";
+      window[how]("pointerdown", stop, true);
+      window[how]("keydown", stop, true);
+      window[how]("wheel", stop, { capture: true, passive: true });
+    };
+    m.land = function () { shown(Infinity); };
+    if (!tidyPaper(m, before)) { m.shift = 0; }   // no paper to change: it simply is the new one
+    shown(0);                            // before the browser draws a frame of it
+    tidyMove = m;
+    m.listen(true);
+    var began = performance.now();
+    function frame() {
+      if (tidyMove !== m) { return; }
+      if (!svg.isConnected) { tidyDone(); return; }
+      var t = performance.now() - began;
+      shown(t);
+      if (t >= m.end) { tidyDone(); return; }
+      m.frame = requestAnimationFrame(frame);
+    }
+    m.frame = requestAnimationFrame(frame);
+    m.safety = setTimeout(tidyDone, m.end + 800);
+  }
+
+  function tidyDone() {
+    var m = tidyMove;
+    if (!m) { return; }
+    tidyMove = null;
+    cancelAnimationFrame(m.frame);
+    clearTimeout(m.safety);
+    m.listen(false);
+    m.land();
+    [m.ghost, m.paper].forEach(function (e) {
+      if (e && e.parentNode) { e.parentNode.removeChild(e); }
+    });
+    (m.real || []).forEach(function (e) { e.style.visibility = ""; });
+    if (loose) { holdClamp(); }          // a smaller paper has less room to roam
+  }
+
+  function tidyUp() {
+    if (!byHand || tidyAsked) { return; }
+    tidyDone();
+    if (!hand.nodes.length) { handSays(TXT.h_tidy_none, true); return; }
+    var text;
+    try { text = handAsPseudocode(); }
+    catch (thrown) { handSays(thrown.message || String(thrown), true); return; }
+    var fromLine = {}, sizes = {};       // line -> shape, as it was written
+    Object.keys(handLine).forEach(function (line) {
+      var n = nodeById(+handLine[line]);
+      if (!n) { return; }
+      fromLine[line] = n.id;
+      measure(n);
+      var t = turned(n);
+      sizes[line] = [t.w, t.h];
+    });
+    var asked = handKey();
+    var button = el("#hand-tidy");
+    tidyAsked = true;
+    if (button) { button.disabled = true; button.classList.add("working"); }
+    function done() {
+      tidyAsked = false;
+      if (button) { button.disabled = false; button.classList.remove("working"); }
+    }
+    askFor(tidyAsk(text, sizes))
+      .then(function (data) {
+        done();
+        if (!byHand) { return; }
+        if (!data || !data.ok || !data.ast || !data.plan) {
+          handSays((data && data.error) || TXT.h_not_a_program, true);
+          return;
+        }
+        if (handKey() !== asked) { return; }
+        var layout = tidyLayout(data, fromLine, text);
+        if (!Object.keys(layout.places).length) { handSays(TXT.h_tidy_none, true); return; }
+        var before = tidyLook(), was = JSON.stringify(hand);
+        keepUndo();
+        var moved = tidyApply(layout);
+        if (JSON.stringify(hand) === was) { wasLike.pop(); showUndo(); }
+        drawHand();
+        drawHandPanel();
+        if (moved) { tidyMotion(before, layout.order); }   // tidy already: nothing to see
+        showReport();
+        handSays(say("h_tidied", { n: moved }));
+      })
+      .catch(function (err) {
+        done();
+        handSays(String(err && err.message ? err.message : err), true);
+      });
+  }
+
+  if (el("#hand-tidy")) {
+    el("#hand-tidy").onclick = tidyUp;
+  }
   var AST = null;                        // the program, as data
   var running = false, stopping = false, waiting = null;
   var stepOn = null;                     // set while it stands waiting to be

@@ -12,6 +12,15 @@ from ..measure import FONT, line_h, text_w, type_of
 from ..shapes import SHAPES, arrow_parts, geom_of, table_plan
 from ..words.lookup import word
 
+# Where everything went, as numbers, for whoever asks: set PLAN to a dict
+# before drawing and to_svg fills it in -- every shape's number, kind,
+# middle and size, every route's corners and whether it ends in a head,
+# and every label -- in the drawing's own coordinates.  The studio's Tidy
+# up reads it to stand shapes drawn by hand where these ones stand, and
+# to lay their arrows the way these are laid.  Nothing is written when
+# nobody asks.
+PLAN = None
+
 
 def middle_words(lines, x, y, size, tall):
     """Lines of words, each in the middle across and the lot in the middle
@@ -426,13 +435,23 @@ def to_svg(elems, title=None, author=None, paper=None):
     # drawing the routes the next quarter, and the shapes and their words
     # the rest.
     routes = chain_lines(segs)
+    if PLAN is not None:
+        PLAN["shapes"] = [[e[7] if len(e) > 7 else 0, e[1], e[2], e[3], e[4], e[5]]
+                          for e in elems if e[0] == "shape"]
+        PLAN["labels"] = [[e[3], e[1], e[2], e[4]] for e in elems
+                          if e[0] == "text" and e[3]]
+        PLAN["routes"] = []
     for done, (pts, arrow) in enumerate(routes):
         if not done & 255:
             progress.say("draw", 0.35 + 0.25 * done / len(routes))
         head = None
         end = pts[-1][1]
         if reaches_a_shape(pts) or joins_a_line(pts):
+            if PLAN is not None:
+                PLAN["routes"].append([[list(p) for p in pts], True])
             head, pts = arrow_head(pts)
+        elif PLAN is not None:
+            PLAN["routes"].append([[list(p) for p in pts], False])
         d = path_d(pts)
         if d:
             ys = [p[1] for p in pts]

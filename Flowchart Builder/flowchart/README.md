@@ -100,6 +100,7 @@ the `@@CSS@@` and `@@JS@@` marks in `studio.html` and hands back the page.
 | `ui/js/13-hand-keep.js` | Remembering a design |
 | `ui/js/13-hand-apart.js` | Shapes kept off one another: carried, added, pasted, grown or turned |
 | `ui/js/13-hand-turn.js` | Turning a shape to any angle by the round handle over it |
+| `ui/js/13-hand-tidy.js` | Tidy up: a drawing laid out, arrows and all, the way the pseudocode side lays one out, and carried there |
 | `ui/js/14-run.js` | Running the program |
 | `ui/js/15-sums.js` | Working out what an expression comes to |
 | `ui/js/16-wrong.js` | Where a run stopped, and why |

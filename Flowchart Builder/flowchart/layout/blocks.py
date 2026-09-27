@@ -394,6 +394,12 @@ def node_block(node):
     if settings.GRID_STEP > 0:
         step = settings.GRID_STEP * 2            # so h / 2 is a whole step as well
         h = math.ceil(h / step - 0.001) * step
+    # Or exactly the size it was asked to be (settings.SIZES): a shape drawn
+    # by hand, being laid out as it stands.  Its words are still set out as
+    # above; only the room it takes up is the one it already has.
+    own = settings.SIZES.get(getattr(node, "line", 0)) if settings.SIZES else None
+    if own:
+        w, h = float(own[0]), float(own[1])
     return Block(w, h, w / 2.0,
                  [("shape", node.shape, w / 2.0, h / 2.0, w, h, lines,
                    getattr(node, "node_id", 0))],

@@ -2,6 +2,7 @@
 import re
 
 from .. import progress, settings
+from ..draw import svg as svg_out
 from ..make.chart import make_flowchart
 from ..make.shake import style_variety
 from ..measure import set_type
@@ -75,6 +76,19 @@ def draw_for_studio(ask):
         vars(settings).update(settings.TIGHT)
     elif ask.get("roomy"):                              # the airier spacing
         vars(settings).update(settings.ROOMY)
+    # A chart drawn by hand, being tidied up (the studio's Tidy up): every
+    # statement is a shape of its own, because every one is a shape on the
+    # paper already, and each is exactly the size it is there -- so the
+    # layout leaves room for the shapes that will actually stand in it.
+    settings.SIZES = {}
+    if ask.get("apart"):
+        settings.GROUP_OUTPUT = settings.GROUP_DECLARES = False
+        settings.GROUP_STEPS = False
+    for line, size in (ask.get("sizes") or {}).items():
+        try:
+            settings.SIZES[int(line)] = (float(size[0]), float(size[1]))
+        except (TypeError, ValueError, IndexError):
+            pass
     # A chain of If / Else If forks sideways until it is wider than this,
     # and queues down the page after that.  Nought queues every one of
     # them, which is what a narrow page wants and what a class reading the
@@ -111,14 +125,24 @@ def draw_for_studio(ask):
     progress.say("read")
     charts = parse_program(text)
     progress.say("lay")
-    svg = make_flowchart(text, title, author, max_h=settings.COLUMN_H,
-                         charts=charts)
+    # Where everything went, as numbers, when asked (see draw/svg.py PLAN).
+    svg_out.PLAN = {"yes": settings.YES, "no": settings.NO} if ask.get("plan") else None
+    try:
+        svg = make_flowchart(text, title, author, max_h=settings.COLUMN_H,
+                             charts=charts)
+        plan, svg_out.PLAN = svg_out.PLAN, None
+    finally:
+        svg_out.PLAN = None
+        settings.SIZES = {}
     progress.say("send")
     box = re.search(r'viewBox="0 0 ([\d.]+) ([\d.]+)"', svg)
     ast = program_json(charts)
-    return {"ok": True, "svg": svg.split("\n", 1)[1], "seed": seed,
-            "w": box.group(1) if box else "", "h": box.group(2) if box else "",
-            "title": title or "Flowchart", "name": file_name(title),
-            "ast": ast, "problems": ast["problems"]}
+    out = {"ok": True, "svg": svg.split("\n", 1)[1], "seed": seed,
+           "w": box.group(1) if box else "", "h": box.group(2) if box else "",
+           "title": title or "Flowchart", "name": file_name(title),
+           "ast": ast, "problems": ast["problems"]}
+    if plan is not None:
+        out["plan"] = plan
+    return out
 
 

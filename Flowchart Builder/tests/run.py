@@ -27,6 +27,8 @@ What is beside this file
     router.js     the by-hand arrow router, lifted out of the page's script
                   and tried in every arrangement.  Only where node is
                   installed.
+    writer.js     a drawing by hand written out as pseudocode, by the
+                  writer lifted out of the page's script the same way.
     program.js    the runner itself, lifted out the same way: it runs real
                   programs with a stand-in for the browser and reads the
                   tape afterwards, which is the only way to tell a chart
@@ -1298,6 +1300,54 @@ def _():
             len(listed), quiet.group(1) if quiet else "?")
 
 
+@check("Tidy up is handed the whole of the layout")
+def _():
+    """Tidy up, on the by-hand side, lays a drawing out with the pseudocode
+    side's own layout: every shape where the layout stands it, every arrow
+    along the line the layout draws for it.  So it asks for every statement
+    to be a shape of its own -- a run of Displays sharing one box, the way
+    the pseudocode side draws them, left most of a drawing of Displays with
+    nowhere to go -- each exactly the size it is on the paper, and for
+    where everything went as numbers.  None of that may be left behind for
+    the next drawing, which groups its Displays as it always has."""
+    fb = builder()
+    import copy
+    from flowchart import settings
+    kept = {k: copy.deepcopy(v) for k, v in vars(settings).items()
+            if not k.startswith("__") and not callable(v)
+            and type(v).__name__ != "module"}
+    prog = ('Start\nDisplay "a"\nDisplay "b"\nDisplay "c"\nWhile n > 0\n'
+            '    Display n\n    Set n = n - 1\nEnd While\nEnd')
+    sizes = {str(i): [170 + 10 * i, 60 + 2 * i] for i in range(1, 10)}
+    try:
+        got = fb.draw_for_studio({"text": prog, "apart": True, "sizes": sizes,
+                                  "plan": True, "steady": True})
+        again = fb.draw_for_studio({"text": prog, "steady": True})
+        leaked = dict(fb.SIZES), fb.PLAN
+    finally:
+        vars(settings).update(kept)
+    line_of = {}
+
+    def walk(items):
+        for item in items or []:
+            if item.get("id") and item.get("line"):
+                line_of[item["id"]] = item["line"]
+            for key in ("then", "else", "body"):
+                walk(item.get(key))
+    walk(got["ast"]["main"])
+    plan = got.get("plan") or {}
+    shapes, routes = plan.get("shapes") or [], plan.get("routes") or []
+    wrong = [s for s in shapes if sizes.get(str(line_of.get(s[0]))) != [s[4], s[5]]]
+    heads = sum(1 for r in routes if r[1])
+    grouped = again["svg"].count('class="node"')
+    ok = (len(shapes) == 8 and not wrong and heads >= 7 and "plan" not in again
+          and grouped < 8 and leaked == ({}, None))
+    return ok, "%d shapes, %d the wrong size, %d routes with %d heads; " \
+               "the next drawing %d shapes%s" % (
+                   len(shapes), len(wrong), len(routes), heads, grouped,
+                   "" if leaked == ({}, None) else " -- left behind: %r" % (leaked,))
+
+
 @check("the website's page leaves the explaining out, and still runs")
 def _():
     """The website is poured without the parts' comments, so a phone has
@@ -2399,6 +2449,20 @@ def _():
     if got.returncode:
         return False, (got.stderr.strip().split(chr(10)) or ["failed"])[-1][:90]
     return True, got.stdout.strip().replace(chr(10), "; ")
+
+
+@check("a drawing by hand is written out as the program it draws")
+def _():
+    """What Check, Run, As pseudocode and Tidy up all start from.  An If
+    inside a While, and a While inside another, were refused as loops that
+    crossed: everywhere in a loop comes back round to everywhere else in it,
+    and that was taken for a loop of their own."""
+    if not node_there():
+        return None, "node is not installed -- skipped"
+    got = subprocess.run(["node", os.path.join(HERE, "writer.js")],
+                         cwd=HOME, capture_output=True, text=True)
+    said = (got.stdout.strip() or got.stderr.strip() or "failed").split(chr(10))[-1]
+    return not got.returncode, said[:300]
 
 
 # -------------------------------------------------------------------- go --
