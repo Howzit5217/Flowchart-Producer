@@ -273,6 +273,23 @@
     };
   }
 
+  // A key held down comes again thirty times a second, whatever the page is
+  // doing.  Held on Paste, each one put a whole copy down and drew the
+  // chart again, and once the chart was big they came faster than it could
+  // be drawn: they queued up behind each other, the chart grew by hundreds
+  // of shapes nobody had seen yet, and the page stopped answering -- even
+  // to being reloaded.  So a held key goes again only once what it did last
+  // is on the screen (a frame drawn since), and those that came while it
+  // was not are let go.  A key pressed afresh is always done.
+  var heldBusy = false;
+  function heldTooSoon(ev) { return !!ev.repeat && heldBusy; }
+  function heldDone() {
+    heldBusy = true;
+    requestAnimationFrame(function () {
+      setTimeout(function () { heldBusy = false; }, 0);   // after that frame is painted
+    });
+  }
+
   window.addEventListener("keydown", function (ev) {
     var ctrl = ev.ctrlKey || ev.metaKey;
 
@@ -327,12 +344,16 @@
     // being nothing it was willing to undo.
     if (ctrl && (ev.key === "z" || ev.key === "Z")) {
       ev.preventDefault();
+      if (heldTooSoon(ev)) { return; }
       stepBack(ev.shiftKey);
+      heldDone();
       return;
     }
     if (ctrl && (ev.key === "y" || ev.key === "Y")) {
       ev.preventDefault();
+      if (heldTooSoon(ev)) { return; }
       stepBack(true);
+      heldDone();
       return;
     }
 
@@ -380,12 +401,15 @@
       return;
     }
     if (ctrl && !ev.altKey && key === "v") {
-      if (pasteShapes()) { ev.preventDefault(); }
+      if (heldTooSoon(ev)) { ev.preventDefault(); return; }
+      if (pasteShapes()) { ev.preventDefault(); heldDone(); }
       return;
     }
     if (ctrl && key === "d" && lot.length) {
       ev.preventDefault();               // another one like each of these
+      if (heldTooSoon(ev)) { return; }
       duplicateShapes(lot);
+      heldDone();
       return;
     }
 
@@ -454,14 +478,18 @@
                  ArrowUp: [0, -1], ArrowDown: [0, 1] };
     if (WAYS[ev.key] && many.length > 1) {
       ev.preventDefault();
+      if (heldTooSoon(ev)) { return; }
       keepUndo();
       nudgeMany(many, WAYS[ev.key][0] * keyStep(ev), WAYS[ev.key][1] * keyStep(ev));
       drawHand();
       drawHandPanel();
+      heldDone();
       return;
     }
     if (WAYS[ev.key] && node) {
       ev.preventDefault();
+      if (heldTooSoon(ev)) { return; }
+      heldDone();
       var by = keyStep(ev);
       var toX = node.x + WAYS[ev.key][0] * by;   // the paper grows to the left too
       var toY = Math.max(node.h / 2 + 20, node.y + WAYS[ev.key][1] * by);

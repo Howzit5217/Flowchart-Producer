@@ -370,7 +370,7 @@
   function tidyLook() {
     if (!chart || !chart.isConnected || !byHand) { return null; }
     var at = {}, stage = el("#stage"), box = chart.viewBox && chart.viewBox.baseVal;
-    hand.nodes.forEach(function (n) { at[n.id] = { x: n.x, y: n.y, turn: n.turn || 0 }; });
+    hand.nodes.forEach(function (n) { at[n.id] = { x: n.x, y: n.y, turn: n.turn || 0, w: n.w, h: n.h }; });
     return { svg: chart, at: at, origin: { x: handOrigin.x, y: handOrigin.y },
              w: box ? box.width : 0, h: box ? box.height : 0,
              scroll: stage ? [stage.scrollLeft, stage.scrollTop] : null, hold: [holdX, holdY] };
@@ -496,6 +496,53 @@
   }
 
   // One step of a shape's way, `p` of it, on it and all that goes with it.
+  function tidyGrew(was, now) {          // how much bigger it was, if it was
+    return typeof was === "number" && Math.abs(was - now) >= 0.5 ? was - now : 0;
+  }
+
+  // A shape made bigger or smaller on the way -- fitted to its words, made
+  // as wide as the rest, a size taken back -- grows or shrinks as it goes,
+  // rather than being the new size from the first frame (or the old one
+  // until the last).  Its outline is drawn again at the size it has got to:
+  // the numbers that place it (points, d, rx, width ...) taken from
+  // shapeArt at that size and put on the very elements the drawing made,
+  // so their colors and lines stay theirs.  Not scaled: a scaled shape
+  // stretched its words and thinned or thickened its line.  The words stay
+  // where they are, in the middle of it.
+  var TIDY_GEOM = ["points", "d", "cx", "cy", "rx", "ry", "r", "x", "y", "width", "height",
+                   "x1", "y1", "x2", "y2"];
+  function tidyGrow(b, mv, p) {
+    var n = mv.n, g = b.el;
+    if (!b.art) {
+      var outline = Array.prototype.filter.call(g.children, function (e) { return !withTheWords(e); });
+      b.art = outline.map(function (e) {
+        return { el: e, was: TIDY_GEOM.map(function (name) { return e.getAttribute(name); }) };
+      });
+    }
+    if (p >= 1) {                        // exactly as the drawing drew it
+      b.art.forEach(function (one) {
+        TIDY_GEOM.forEach(function (name, k) {
+          if (one.was[k] === null) { one.el.removeAttribute(name); } else { one.el.setAttribute(name, one.was[k]); }
+        });
+      });
+      return;
+    }
+    var type = handType(n);
+    var made = document.createElementNS("http://www.w3.org/2000/svg", "g");
+    made.innerHTML = shapeArt(n.kind, mv.x + handOrigin.x, mv.y + handOrigin.y,
+                              Math.max(4, n.w + mv.dw * (1 - p)), Math.max(4, n.h + mv.dh * (1 - p)),
+                              "#ffffff", shownLines(n, type), type.line);
+    var fresh = made.children;
+    if (fresh.length !== b.art.length) { return; }
+    b.art.forEach(function (one, k) {
+      if (fresh[k].tagName !== one.el.tagName) { return; }
+      TIDY_GEOM.forEach(function (name) {
+        var v = fresh[k].getAttribute(name);
+        if (v !== null) { one.el.setAttribute(name, v); }
+      });
+    });
+  }
+
   function tidyCarry(mv, p) {
     var x = (mv.dx * (1 - p)).toFixed(2), y = (mv.dy * (1 - p)).toFixed(2);
     // Turned as well (Tidy up standing it upright, a turn taken back): the
@@ -503,6 +550,7 @@
     var spin = mv.dturn ? " rotate(" + (mv.dturn * (1 - p)).toFixed(2) + " " +
                           (mv.x + handOrigin.x).toFixed(1) + " " + (mv.y + handOrigin.y).toFixed(1) + ")" : "";
     mv.bits.forEach(function (b) {
+      if ((mv.dw || mv.dh) && b.el.classList.contains("node")) { tidyGrow(b, mv, p); }
       if (p >= 1) {
         if (b.own) { b.el.setAttribute("transform", b.own); } else { b.el.removeAttribute("transform"); }
       } else {
@@ -598,9 +646,10 @@
       if (!n || !was) { return; }
       var t = turned(n);
       var mv = { n: n, x: n.x, y: n.y, w: t.w, h: t.h, dx: was.x - n.x, dy: was.y - n.y,
-                 dturn: tidySpin(was.turn, n), p: -1, bits: [] };
+                 dturn: tidySpin(was.turn, n), dw: tidyGrew(was.w, n.w), dh: tidyGrew(was.h, n.h),
+                 p: -1, bits: [] };
       m.moves.push(mv);
-      var far = Math.max(Math.hypot(mv.dx, mv.dy), Math.abs(mv.dturn));
+      var far = Math.max(Math.hypot(mv.dx, mv.dy), Math.abs(mv.dturn), Math.abs(mv.dw), Math.abs(mv.dh));
       if (far < 0.5) { landed[id] = 0; mv.p = 1; return; }
       mv.bits = tidyFollowers(svg, id);
       mv.at = TIDY_OFF + k * gap;
@@ -1032,7 +1081,7 @@
 
   function glideSnap() {                 // the drawing just drawn
     var at = {}, box = chart && chart.viewBox && chart.viewBox.baseVal;
-    hand.nodes.forEach(function (n) { at[n.id] = { x: n.x, y: n.y, turn: n.turn || 0 }; });
+    hand.nodes.forEach(function (n) { at[n.id] = { x: n.x, y: n.y, turn: n.turn || 0, w: n.w, h: n.h }; });
     return { ref: hand, at: at, origin: { x: handOrigin.x, y: handOrigin.y },
              w: box ? box.width : 0, h: box ? box.height : 0 };
   }
@@ -1042,7 +1091,8 @@
   function glideSeen() {
     var at = {};
     Object.keys(glideLast.at).forEach(function (id) {
-      at[id] = { x: glideLast.at[id].x, y: glideLast.at[id].y, turn: glideLast.at[id].turn };
+      var was = glideLast.at[id];
+      at[id] = { x: was.x, y: was.y, turn: was.turn, w: was.w, h: was.h };
     });
     var m = tidyMove;
     if (m && m.svg === chart) {
@@ -1050,7 +1100,8 @@
         if (!mv.bits.length || mv.p >= 1) { return; }
         var p = mv.p < 0 ? 0 : mv.p;
         at[mv.n.id] = { x: mv.x + mv.dx * (1 - p), y: mv.y + mv.dy * (1 - p),
-                        turn: (mv.n.turn || 0) + (mv.dturn || 0) * (1 - p) };
+                        turn: (mv.n.turn || 0) + (mv.dturn || 0) * (1 - p),
+                        w: mv.n.w + (mv.dw || 0) * (1 - p), h: mv.n.h + (mv.dh || 0) * (1 - p) };
       });
     }
     return at;
@@ -1129,9 +1180,10 @@
       if (!was) { return; }
       var t = turned(n);
       var mv = { n: n, x: n.x, y: n.y, w: t.w, h: t.h, dx: was.x - n.x, dy: was.y - n.y,
-                 dturn: tidySpin(was.turn, n), p: -1, bits: [] };
+                 dturn: tidySpin(was.turn, n), dw: tidyGrew(was.w, n.w), dh: tidyGrew(was.h, n.h),
+                 p: -1, bits: [] };
       m.moves.push(mv);
-      var d = Math.max(Math.hypot(mv.dx, mv.dy), Math.abs(mv.dturn));
+      var d = Math.max(Math.hypot(mv.dx, mv.dy), Math.abs(mv.dturn), Math.abs(mv.dw), Math.abs(mv.dh));
       if (d < 0.5) { mv.p = 1; return; }
       far = Math.max(far, d);
       mv.bits = tidyFollowers(svg, n.id);

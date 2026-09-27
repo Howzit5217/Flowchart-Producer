@@ -103,14 +103,15 @@
             <span data-w="more">__W(more)__</span>
           </button>
         </div>
-        <!-- Grid and Key one over the other in the cell to the right of it,
+        <!-- Grid and Key side by side in the cell to the right of it, each
+             named and then its switch,
              rather than a row of their own: two switches are shorter than
              a field, so the row they used to have was mostly empty.  They
              start here rather than being moved here, because the mode only
              moves them when it changes and it does not change on opening. -->
         <div class="switches" id="chart-switches">
-          <label class="switch"><input type="checkbox" id="f-grid" checked><span data-w="grid">__W(grid)__</span></label>
-          <label class="switch"><input type="checkbox" id="f-legend"><span data-w="key_switch">__W(key_switch)__</span></label>
+          <label class="switch"><span data-w="grid">__W(grid)__</span><input type="checkbox" id="f-grid" checked></label>
+          <label class="switch"><span data-w="key_switch">__W(key_switch)__</span><input type="checkbox" id="f-legend"></label>
         </div>
       </div>
       <div class="go build-row">

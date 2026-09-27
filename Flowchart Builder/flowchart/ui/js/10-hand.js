@@ -98,8 +98,22 @@
   function kindName(kind) {
     return TXT["n_" + kind] || TXT["key_" + kind] || kind;
   }
+  // Looked up by number, through an index of the list rather than a walk
+  // along it: asked for every arrow end, every shape taken up and every
+  // check, a walk made a chart of a few thousand shapes (a copy pasted over
+  // and over) take seconds to draw.  The list is only ever replaced (filter,
+  // a design put back) or grown and shrunk at its end (push), so the index
+  // holds while the list is the same one at the same length.
+  var nodeSpot = { list: null, size: -1, at: {} };
   function nodeById(id) {
-    return hand.nodes.filter(function (n) { return n.id === id; })[0] || null;
+    var list = hand.nodes;
+    if (nodeSpot.list !== list || nodeSpot.size !== list.length) {
+      var at = {};
+      for (var k = list.length - 1; k >= 0; k--) { at[list[k].id] = k; }   // the first of any two
+      nodeSpot = { list: list, size: list.length, at: at };
+    }
+    var i = nodeSpot.at[id], n = i === undefined ? null : list[i];
+    return n && n.id === id ? n : null;
   }
   function outOf(id) {
     return hand.links.filter(function (l) { return l.from === id; });
@@ -247,6 +261,83 @@
              w: over ? n.h : n.w, h: over ? n.w : n.h, sideways: over };
   }
 
+  // The shapes other than `ids`, filed by the squares of paper they stand
+  // on, for asking over and over which of them are near a place: whether a
+  // lot being put down is on top of any (settleClear, moveClear,
+  // 13-hand-apart.js), which a way an arrow might take runs through
+  // (priceOf), which are on top of each other (checkDesign).  Walking every
+  // shape on the paper for every one of those questions was what made a
+  // copy of a few hundred shapes, pasted onto a chart of a few thousand,
+  // stop the page: hundreds of millions of pairs.  Filed, only the shapes
+  // near each place are asked.
+  // Each is filed by the larger of its box as drawn and its box turned, so
+  // the check's own test of a line through a shape (throughBox, which goes
+  // by the box as drawn) finds it here too.
+  // A box reaching over more squares than there are shapes (or one with no
+  // sensible size at all) is not worth going square by square: every shape
+  // is looked at instead, as before, which is never more.
+  function shapesNear(ids) {
+    var CELL = 160, skip = {}, cells = {}, others = [], wide = [];
+    (ids || []).forEach(function (id) { skip[typeof id + ":" + id] = true; });
+    function span(x0, y0, x1, y1) {
+      var s = [Math.floor(x0 / CELL), Math.floor(x1 / CELL), Math.floor(y0 / CELL), Math.floor(y1 / CELL)];
+      var many = (s[1] - s[0] + 1) * (s[3] - s[2] + 1);
+      return many >= 1 && many <= Math.max(others.length, 16) ? s : null;
+    }
+    hand.nodes.forEach(function (m, at) {
+      if (skip[typeof m.id + ":" + m.id]) { return; }
+      others.push(m);
+    });
+    hand.nodes.forEach(function (m, at) {
+      if (skip[typeof m.id + ":" + m.id]) { return; }
+      var t = turned(m), hw = Math.max(t.w, m.w || 0) / 2, hh = Math.max(t.h, m.h || 0) / 2;
+      var s = span(m.x - hw, m.y - hh, m.x + hw, m.y + hh);
+      if (!s) { wide.push([m, at]); return; }          // in every answer
+      for (var cx = s[0]; cx <= s[1]; cx++) {
+        for (var cy = s[2]; cy <= s[3]; cy++) {
+          (cells[cx + "," + cy] = cells[cx + "," + cy] || []).push([m, at]);
+        }
+      }
+    });
+    // Every one of them filed over any part of this box, once each, in the
+    // order they stand in the design.
+    function around(x0, y0, x1, y1) {
+      var s = span(x0, y0, x1, y1), had = {}, out = wide.slice();
+      if (!s) { return others.slice(); }
+      for (var cx = s[0]; cx <= s[1]; cx++) {
+        for (var cy = s[2]; cy <= s[3]; cy++) {
+          var here = cells[cx + "," + cy];
+          for (var i = 0; here && i < here.length; i++) {
+            if (!had[here[i][1]]) { had[here[i][1]] = true; out.push(here[i]); }
+          }
+        }
+      }
+      return out.sort(function (p, q) { return p[1] - q[1]; })
+                .map(function (one) { return one[0]; });
+    }
+    return {
+      others: others,
+      around: around,
+      // whether `node`, standing at x, y, comes within `gap` of any of them
+      meets: function (node, x, y, gap) {
+        var t = turned(node), grow = Math.max(gap, 0) + 1;
+        function hit(m) { return m !== node && boxesMeet(node, x, y, m, m.x, m.y, gap); }
+        var s = span(x - t.w / 2 - grow, y - t.h / 2 - grow, x + t.w / 2 + grow, y + t.h / 2 + grow);
+        if (!s) { return others.some(hit); }
+        for (var w = 0; w < wide.length; w++) { if (hit(wide[w][0])) { return true; } }
+        for (var cx = s[0]; cx <= s[1]; cx++) {
+          for (var cy = s[2]; cy <= s[3]; cy++) {
+            var here = cells[cx + "," + cy];
+            for (var i = 0; here && i < here.length; i++) {
+              if (hit(here[i][0])) { return true; }
+            }
+          }
+        }
+        return false;
+      }
+    };
+  }
+
   // Turned at a slant, an arrow still meets the middle of a side, where
   // that side now is -- the side of it that faces most nearly up meets
   // arrows from above, and so on round -- and still leaves it square to
@@ -267,6 +358,126 @@
       return { x: node.x + rx * cos - ry * sin, y: node.y + rx * sin + ry * cos,
                dx: way[0], dy: way[1] };
     });
+  }
+
+  // ---- where a turned shape's edge really is --------------------------------
+  // An arrow at a shape turned at a slant ends on the edge of the shape, not
+  // on the box round it.  Tidy up lays arrows by that box (the layout knows
+  // nothing of turning), so one came to a stop in the air short of a shape
+  // turned across its way, and the next ran on into the one after -- the
+  // box's top is not where the shape is under a straight line down.  So
+  // every arrow's end at a turned shape is slid along its own last run --
+  // its way unchanged, only how far -- to where that run meets the shape's
+  // outline (slantEnds, after routeAll has everything).
+
+  // A shape's own edge, as points round its middle, the way shapeArt
+  // (03-shapes.js) draws it: its corners where it has corners, and its
+  // curves walked in short steps.  A shape drawn round its words (a person,
+  // a table) and the stack of papers are near enough their box.
+  function outlineOf(kind, w, h) {
+    var l = -w / 2, r = w / 2, t = -h / 2, b = h / 2, lean = Math.min(12, w / 4);
+    function arc(cx, cy, rx, ry, from, to, out) {   // degrees, clockwise on the page
+      for (var i = 0; i <= 16; i++) {
+        var a = (from + (to - from) * i / 16) * Math.PI / 180;
+        out.push([cx + rx * Math.cos(a), cy + ry * Math.sin(a)]);
+      }
+      return out;
+    }
+    function curve(p0, p1, p2, p3, out) {         // a cubic, past its first point
+      for (var i = 1; i <= 12; i++) {
+        var u = i / 12, v = 1 - u;
+        out.push([v * v * v * p0[0] + 3 * v * v * u * p1[0] + 3 * v * u * u * p2[0] + u * u * u * p3[0],
+                  v * v * v * p0[1] + 3 * v * v * u * p1[1] + 3 * v * u * u * p2[1] + u * u * u * p3[1]]);
+      }
+      return out;
+    }
+    var box = [[l, t], [r, t], [r, b], [l, b]], k;
+    switch (kind) {
+      case "oval": case "circle": case "cloud": return arc(0, 0, r, b, 0, 360, []);
+      case "io": return [[l + lean, t], [r, t], [r - lean, b], [l, b]];
+      case "io_back": return [[l, t], [r - lean, t], [r, b], [l + lean, b]];
+      case "trap": return [[l + lean, t], [r - lean, t], [r, b], [l, b]];
+      case "hex": return [[l + lean, t], [r - lean, t], [r, 0], [r - lean, b], [l + lean, b], [l, 0]];
+      case "manual": return [[l, t + Math.min(11, h * 0.28)], [r, t], [r, b], [l, b]];
+      case "card": k = Math.min(14, h * 0.34); return [[l + k, t], [r, t], [r, b], [l, b], [l, t + k]];
+      case "note": k = Math.min(14, h * 0.34); return [[l, t], [r - k, t], [r, t + k], [r, b], [l, b]];
+      case "doc": {
+        k = Math.min(10, h * 0.18);
+        var wavy = [[l, t], [r, t], [r, b - k]];
+        curve([r, b - k], [r - w * 0.25, b - k * 2.2], [r - w * 0.4, b + k * 0.9], [0, b - k * 0.2], wavy);
+        return curve([0, b - k * 0.2], [l + w * 0.32, b - k * 1.6], [l + w * 0.18, b + k * 0.7], [l, b - k], wavy);
+      }
+      case "store": k = Math.min(11, h * 0.24);
+        return arc(0, t + k, r, k, 0, -180, arc(0, b - k, r, k, 180, 0, []));
+      case "delay": k = Math.min(h / 2, w / 2);
+        return arc(r - k, 0, k, b, -90, 90, [[l, t]]).concat([[l, b]]);
+      case "screen": {
+        k = Math.min(16, w * 0.16);
+        var bowed = arc(r - k, 0, k, b, -90, 90, [[l + k, t]]);
+        bowed.push([l + k, b]);
+        return curve([l + k, b], [l, h * 0.28], [l, -h * 0.28], [l + k, t], bowed);
+      }
+      case "offpage": k = Math.min(18, h * 0.42); return [[l, t], [r, t], [r, b - k], [0, b], [l, b - k]];
+      case "loop": k = Math.min(14, h * 0.34, w / 5);
+        return [[l + k, t], [r - k, t], [r, t + k], [r, b], [l, b], [l, t + k]];
+      case "callout": k = b - Math.min(16, h * 0.28);
+        return [[l, t], [r, t], [r, k], [l + w * 0.34, k], [l + w * 0.2, b], [l + w * 0.24, k], [l, k]];
+      case "cube": k = Math.min(14, h * 0.26, w * 0.14);
+        return [[l, t + k], [l + k, t], [r, t], [r, b - k], [r - k, b], [l, b]];
+      case "step": k = Math.min(22, w * 0.16);
+        return [[l, t], [r - k, t], [r, 0], [r - k, b], [l, b], [l + k, 0]];
+      case "arrow": {
+        var ap = arrowParts(w, h);
+        return [[l, t + ap.wing], [r - ap.head, t + ap.wing], [r - ap.head, t], [r, 0],
+                [r - ap.head, b], [r - ap.head, b - ap.wing], [l, b - ap.wing]];
+      }
+      case "actor": return null;          // met at its hands, inside the box (ports)
+      case "rect": case "sub": case "roundrect": case "parallel": case "stored":
+      case "table": case "docs": case "text": return box;
+      default: return [[0, t], [r, 0], [0, b], [l, 0]];   // shapeArt's own default
+    }
+  }
+
+  function slantOutline(n) {             // that edge, turned and on the paper
+    var a = (n.turn || 0) * Math.PI / 180, c = Math.cos(a), s = Math.sin(a);
+    var edge = outlineOf(n.kind, n.w, n.h);
+    return edge && edge.map(function (p) {
+      return [n.x + p[0] * c - p[1] * s, n.y + p[0] * s + p[1] * c];
+    });
+  }
+
+  // Where a line from `q`, on through `p` and past it if need be, first
+  // meets the edge of the turned shape `n`; or null, if it never does, or
+  // if it starts inside the shape (and so is not coming to it).
+  function edgeMeet(n, q, p) {
+    var pts = slantOutline(n), dx = p[0] - q[0], dy = p[1] - q[1];
+    if (!pts || (!dx && !dy)) { return null; }
+    var inside = false, best = Infinity;
+    for (var i = 0, j = pts.length - 1; i < pts.length; j = i++) {
+      var a = pts[j], b = pts[i];
+      if ((a[1] > q[1]) !== (b[1] > q[1]) &&
+          q[0] < a[0] + (b[0] - a[0]) * (q[1] - a[1]) / (b[1] - a[1])) { inside = !inside; }
+      var ex = b[0] - a[0], ey = b[1] - a[1], across = dx * ey - dy * ex;
+      if (Math.abs(across) < 1e-9) { continue; }
+      var t = ((a[0] - q[0]) * ey - (a[1] - q[1]) * ex) / across;
+      var u = ((a[0] - q[0]) * dy - (a[1] - q[1]) * dx) / across;
+      if (t > 1e-6 && u >= -1e-9 && u <= 1 + 1e-9) { best = Math.min(best, t); }
+    }
+    if (inside || best === Infinity) { return null; }
+    return [+(q[0] + dx * best).toFixed(2), +(q[1] + dy * best).toFixed(2)];
+  }
+
+  function slantEnds(routes) {
+    routes.forEach(function (pts, li) {
+      if (!pts || pts.length < 2) { return; }
+      var link = hand.links[li], a = nodeById(link.from), b = nodeById(link.to);
+      var last = pts.length - 1, at;
+      if (b && !pts.meets && turned(b).slant && (at = edgeMeet(b, pts[last - 1], pts[last]))) {
+        pts[last] = at;
+      }
+      if (a && turned(a).slant && (at = edgeMeet(a, pts[1], pts[0]))) { pts[0] = at; }
+    });
+    return routes;
   }
 
   function ports(node) {
@@ -398,7 +609,10 @@
       if (pts[p][0] < x0) { x0 = pts[p][0]; } else if (pts[p][0] > x1) { x1 = pts[p][0]; }
       if (pts[p][1] < y0) { y0 = pts[p][1]; } else if (pts[p][1] > y1) { y1 = pts[p][1]; }
     }
-    hand.nodes.forEach(function (n) {
+    // Routing them all, only the shapes filed near it are even looked at
+    // (routeScene): looking at every shape for every way tried, for every
+    // arrow, made a chart of a thousand shapes take seconds to draw.
+    (routeScene ? routeScene.near.around(x0, y0, x1, y1) : hand.nodes).forEach(function (n) {
       var t = turned(n);
       if (t.x + t.w / 2 < x0 || t.x - t.w / 2 > x1 ||
           t.y + t.h / 2 < y0 || t.y - t.h / 2 > y1) { return; }
@@ -499,6 +713,65 @@
   // as one arrow, and nobody can tell which way either of them goes.
   var CROWD = 3000;
 
+  // The lanes a blocked arrow may go round by: just clear of the edges of
+  // every shape, across and down, and halfway between neighbouring edges,
+  // which is where a gap is.  Each list carries its own order by where the
+  // lanes are (`byValue`), so the nearest few to any point can be found
+  // without sorting all of them again (nearestLanes).
+  function shapeLanes() {
+    var lanesY = [], lanesX = [];
+    hand.nodes.forEach(function (n) {
+      var t = turned(n);
+      lanesY.push(t.y - t.h / 2 - STAND, t.y + t.h / 2 + STAND);
+      lanesX.push(t.x - t.w / 2 - STAND, t.x + t.w / 2 + STAND);
+    });
+    [lanesY, lanesX].forEach(function (lanes) {
+      var sorted = lanes.slice().sort(function (p, q) { return p - q; });
+      for (var i = 1; i < sorted.length; i++) {
+        if (sorted[i] - sorted[i - 1] > 6) {
+          lanes.push((sorted[i] + sorted[i - 1]) / 2);
+        }
+      }
+      lanes.byValue = lanes.map(function (v, i) { return i; })
+        .sort(function (p, q) { return lanes[p] - lanes[q] || p - q; });
+    });
+    return { y: lanesY, x: lanesX };
+  }
+
+  // The `k` lanes nearest `to`, nearest first -- and of two as near, the
+  // one earlier in the list, as a sort of the whole list by nearness would
+  // give them.  Found from where `to` falls among them, walking outwards
+  // both ways, rather than by sorting thousands of lanes for every arrow.
+  function nearestLanes(lanes, to, k) {
+    var order = lanes.byValue;
+    if (!order) {                          // a list of lanes put together elsewhere
+      return lanes.slice().sort(function (p, q) {
+        return Math.abs(p - to) - Math.abs(q - to);
+      }).slice(0, k);
+    }
+    var lo = 0, hi = order.length;
+    while (lo < hi) {
+      var mid = (lo + hi) >> 1;
+      if (lanes[order[mid]] < to) { lo = mid + 1; } else { hi = mid; }
+    }
+    var left = lo - 1, right = lo, got = [];
+    while (left >= 0 || right < order.length) {
+      var dl = left >= 0 ? to - lanes[order[left]] : Infinity;
+      var dr = right < order.length ? lanes[order[right]] - to : Infinity;
+      // once there are k, only another just as near can still count
+      if (got.length >= k && Math.min(dl, dr) > got[got.length - 1].d) { break; }
+      if (right >= order.length || (left >= 0 && dl <= dr)) { got.push({ d: dl, at: order[left--] }); }
+      else { got.push({ d: dr, at: order[right++] }); }
+    }
+    return got.sort(function (p, q) { return p.d - q.d || p.at - q.at; })
+              .slice(0, k).map(function (g) { return lanes[g.at]; });
+  }
+
+  // What routing every arrow at once works out a single time rather than
+  // once an arrow: the lanes, and the shapes filed by where they stand
+  // (shapesNear, 13-hand-apart.js).  Only there while routeAll is.
+  var routeScene = null;
+
   // `link` holds the arrow to the sides it names (fromSide, toSide), where
   // it was pinned to them.  The rest are for routeAll: `taken`, the sides
   // other arrows are on; `lean`, the sides it was drawn between, which it
@@ -596,33 +869,18 @@
     // way through is if there is one.  Only ever reached when the simple
     // ways are all blocked, so the usual case pays nothing for it.
     // Just clear of every shape's edges -- its own two included, since a
-    // line should not cut back over the shape it came from either.
-    var lanesY = [], lanesX = [];
-    hand.nodes.forEach(function (n) {
-      var t = turned(n);
-      lanesY.push(t.y - t.h / 2 - STAND, t.y + t.h / 2 + STAND);
-      lanesX.push(t.x - t.w / 2 - STAND, t.x + t.w / 2 + STAND);
-    });
-    // and halfway between neighbouring edges, which is where a gap is
-    [lanesY, lanesX].forEach(function (lanes) {
-      var sorted = lanes.slice().sort(function (p, q) { return p - q; });
-      for (var i = 1; i < sorted.length; i++) {
-        if (sorted[i] - sorted[i - 1] > 6) {
-          lanes.push((sorted[i] + sorted[i - 1]) / 2);
-        }
-      }
-    });
+    // line should not cut back over the shape it came from either.  They
+    // are the same lanes for every arrow, so routing them all works them
+    // out once (routeScene, shapeLanes).
+    var lanes = routeScene ? routeScene.lanes : shapeLanes();
+    var lanesY = lanes.y, lanesX = lanes.x;
     // The way round is nearly always close to the way through, so the lanes
     // are tried nearest-first and the far ones are not tried at all.  On a
     // chart with dozens of shapes that is the difference between a redraw
     // you can feel while dragging and one you cannot.
     var NEAREST = 10;
-    function closest(lanes, to) {
-      return lanes.sort(function (p, q) {
-        return Math.abs(p - to) - Math.abs(q - to);
-      }).slice(0, NEAREST);
-    }
-    var allY = lanesY.slice(), allX = lanesX.slice();
+    function closest(list, to) { return nearestLanes(list, to, NEAREST); }
+    var allY = lanes.y, allX = lanes.x;
     // Here only because the way it would take lies along another arrow,
     // with nothing in its way: the halfway line between the two shapes is
     // where every arrow crossing that gap goes, so it is tried a little
@@ -673,8 +931,8 @@
       lanesX = merged(lanesX, endsX);
     }
     function nearBoth(lanes, one, two) {
-      return merged(closest(lanes.slice(), one).slice(0, NEAREST / 2),
-                    closest(lanes.slice(), two).slice(0, NEAREST / 2));
+      return merged(closest(lanes, one).slice(0, NEAREST / 2),
+                    closest(lanes, two).slice(0, NEAREST / 2));
     }
     function merged(one, two) {
       return one.concat(two.filter(function (v) { return one.indexOf(v) < 0; }));
@@ -756,7 +1014,27 @@
   // fewest crossings came without more lines through shapes or along each
   // other; much higher and those started to rise.
   var CROSS = 600;
+  // Asked for by the drawing, then by the check straight after it, then by
+  // a click on the paper looking for the arrow under it: the same arrows
+  // routed three times over for one change, which on a big chart was
+  // seconds each.  So the last answer is kept, with what it was worked out
+  // from -- the whole design, and the type the shapes' words are set in
+  // (a person's arms are placed by its name) -- and handed out again until
+  // either changes.  Nothing that asks changes what it is handed.
+  var routedLast = { key: null, routes: null };
   function routeAll() {
+    var key;
+    try { key = JSON.stringify(hand) + "|" + JSON.stringify(style); }
+    catch (e) { key = null; }
+    if (key !== null && key === routedLast.key) { return routedLast.routes; }
+    routeScene = { lanes: shapeLanes(), near: shapesNear([]) };
+    try {
+      var routes = routeEvery();
+      routedLast = { key: key, routes: routes };
+      return routes;
+    } finally { routeScene = null; }
+  }
+  function routeEvery() {
     var taken = {};
     function note(id, side, by) {
       (taken[id] = taken[id] || [0, 0, 0, 0])[side] += by || 1;
@@ -795,7 +1073,7 @@
       waysAdd(ways, pts, sideKey(a, pts.sides[0]), sideKey(b, pts.sides[1]));
       routes[li] = pts;
     });
-    return spreadEnds(routes);
+    return slantEnds(spreadEnds(routes));   // on a turned shape's own edge
   }
 
   // ---- the arrows Tidy up laid --------------------------------------------
@@ -1371,8 +1649,36 @@
     routes.forEach(function (pts) {
       for (var i = 0; pts && i < pts.length - 1; i++) { runs.push([pts[i], pts[i + 1]]); }
     });
-    return { shapes: shapes, runs: runs, heads: heads,
+    // Each of them filed by the squares of paper it crosses, so that the
+    // few near one arrow's words are found without going through all of
+    // them for every word (labelNearby): thousands of words on a chart of
+    // thousands of arrows was tens of millions of looks.
+    var cells = {};
+    function file(kind, at, x0, y0, x1, y1) {
+      // one with no sensible size, and it is all looked through whole
+      if (!labelCells(x0, y0, x1, y1)) { cells = null; }
+      if (!cells) { return; }
+      for (var cx = Math.floor(x0 / LABEL_CELL); cx <= Math.floor(x1 / LABEL_CELL); cx++) {
+        for (var cy = Math.floor(y0 / LABEL_CELL); cy <= Math.floor(y1 / LABEL_CELL); cy++) {
+          (cells[cx + "," + cy] = cells[cx + "," + cy] || []).push(kind, at);
+        }
+      }
+    }
+    function fileRun(kind, seg, at) {
+      file(kind, at, Math.min(seg[0][0], seg[1][0]), Math.min(seg[0][1], seg[1][1]),
+           Math.max(seg[0][0], seg[1][0]), Math.max(seg[0][1], seg[1][1]));
+    }
+    shapes.forEach(function (s, at) { file(0, at, s.box.x0, s.box.y0, s.box.x1, s.box.y1); });
+    runs.forEach(function (seg, at) { fileRun(1, seg, at); });
+    heads.forEach(function (seg, at) { fileRun(2, seg, at); });
+    return { shapes: shapes, runs: runs, heads: heads, cells: cells,
              paper: { x0: 0, y0: dy, x1: wide, y1: tall } };
+  }
+  var LABEL_CELL = 200;
+  function labelCells(x0, y0, x1, y1) {  // how many squares a box is over, if sensibly few
+    var many = (Math.floor(x1 / LABEL_CELL) - Math.floor(x0 / LABEL_CELL) + 1) *
+               (Math.floor(y1 / LABEL_CELL) - Math.floor(y0 / LABEL_CELL) + 1);
+    return many >= 1 && many <= 40000 ? many : 0;
   }
 
   // The part of all that within reach of one arrow's words: a word never
@@ -1389,6 +1695,28 @@
     function along(seg) {
       return meets(Math.min(seg[0][0], seg[1][0]), Math.min(seg[0][1], seg[1][1]),
                    Math.max(seg[0][0], seg[1][0]), Math.max(seg[0][1], seg[1][1]));
+    }
+    var over = labelCells(x0, y0, x1, y1);   // squares, or looking at everything if fewer
+    if (keep.cells && over && over <= keep.shapes.length + keep.runs.length + keep.heads.length + 16) {
+      // only what is filed near it, each once, in the order they were kept
+      var had = [{}, {}, {}], got = [[], [], []];
+      for (var cx = Math.floor(x0 / LABEL_CELL); cx <= Math.floor(x1 / LABEL_CELL); cx++) {
+        for (var cy = Math.floor(y0 / LABEL_CELL); cy <= Math.floor(y1 / LABEL_CELL); cy++) {
+          var here = keep.cells[cx + "," + cy] || [];
+          for (var k = 0; k < here.length; k += 2) {
+            if (!had[here[k]][here[k + 1]]) { had[here[k]][here[k + 1]] = true; got[here[k]].push(here[k + 1]); }
+          }
+        }
+      }
+      var inOrder = function (list, all) {
+        return list.sort(function (p, q) { return p - q; }).map(function (at) { return all[at]; });
+      };
+      return { paper: keep.paper,
+               shapes: inOrder(got[0], keep.shapes).filter(function (s) {
+                 return meets(s.box.x0, s.box.y0, s.box.x1, s.box.y1);
+               }),
+               runs: inOrder(got[1], keep.runs).filter(along),
+               heads: inOrder(got[2], keep.heads).filter(along) };
     }
     return { paper: keep.paper,
              shapes: keep.shapes.filter(function (s) {

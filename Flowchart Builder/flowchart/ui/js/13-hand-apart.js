@@ -89,10 +89,10 @@
   // Moved, they are given the room a shape put right is (CLEAR, 12-check.js)
   // rather than left touching what they were on.
   function settleClear(ids) {
-    var lot = ids.map(nodeById).filter(Boolean), gap = SHAPE_GAP;
+    var lot = ids.map(nodeById).filter(Boolean), gap = SHAPE_GAP, near = shapesNear(ids);
     function hits(bx, by) {
       return lot.some(function (n) {
-        return n.y + by - turned(n).h / 2 < 20 || !!onTopOf(n, n.x + bx, n.y + by, ids, gap);
+        return n.y + by - turned(n).h / 2 < 20 || near.meets(n, n.x + bx, n.y + by, gap);
       });
     }
     if (!lot.length || !hits(0, 0)) { return false; }
@@ -119,12 +119,16 @@
   // Moved, as one, to the nearest place where none of `ids` is on top of
   // anything else -- looked for in rings round where they are, down and to
   // the right first, the way a chart is read, and never up off the paper.
-  // Nothing is moved if they are clear already.
+  // Nothing is moved if they are clear already.  With nowhere clear that
+  // near -- a big copy pasted into a crowded chart -- they go below
+  // everything, where nothing is: left where they were, copy after copy
+  // was piled on the one before, and the check had thousands of shapes on
+  // top of each other to list.
   function moveClear(ids) {
-    var lot = ids.map(nodeById).filter(Boolean);
+    var lot = ids.map(nodeById).filter(Boolean), near = shapesNear(ids);
     function hits(bx, by) {
       return lot.some(function (n) {
-        return n.y + by - turned(n).h / 2 < 20 || !!onTopOf(n, n.x + bx, n.y + by, ids);
+        return n.y + by - turned(n).h / 2 < 20 || near.meets(n, n.x + bx, n.y + by, SHAPE_GAP);
       });
     }
     if (!lot.length || !hits(0, 0)) { return; }
@@ -139,6 +143,11 @@
         }
       }
     }
+    var floor = -Infinity, top = Infinity;
+    near.others.forEach(function (m) { floor = Math.max(floor, m.y + turned(m).h / 2); });
+    lot.forEach(function (n) { top = Math.min(top, n.y - turned(n).h / 2); });
+    var down = Math.max(floor + CLEAR * 2 - top, 20 - top);
+    lot.forEach(function (n) { n.y += Math.ceil(down / HAND_GRID) * HAND_GRID; });
   }
 
   // ------------------------------------------------ making room as it turns --

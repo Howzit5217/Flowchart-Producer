@@ -5,7 +5,12 @@
 //  in the order parts.py lists them, and share everything between them.
 // ---------------------------------------------------------------------------
   // ---- does it actually work? -------------------------------------------
-  function checkDesign() {
+  // `leaveOut` leaves out what costs the most to look for.  "looks" is the
+  // two that are only about how it reads (ONLY_LOOKS), for asking only
+  // whether it can be run (readyHandProgram); "lines" is the lines through
+  // shapes, which wants every arrow routed, and which come after everything
+  // else that can be put right (handMendAll).
+  function checkDesign(leaveOut) {
     var found = [];
     // `fix`, where there is one, is what would put it right (see the
     // putting-right part below).
@@ -17,6 +22,16 @@
     // Start and End, and a decision, are whatever the shape rules draw them
     // as as well as an oval and a diamond (endsKind, asksKind: 13-hand-rules.js).
     var endShape = { shape: kindName(ruleShape("oval")) };
+    // The arrows out of and into each shape, gathered in one pass rather
+    // than looked for again for every shape (outOf, intoOf): on a chart of
+    // thousands of shapes that was millions of looks, on every redraw.
+    var outsBy = {}, insBy = {};
+    hand.links.forEach(function (l) {
+      (outsBy[typeof l.from + ":" + l.from] = outsBy[typeof l.from + ":" + l.from] || []).push(l);
+      (insBy[typeof l.to + ":" + l.to] = insBy[typeof l.to + ":" + l.to] || []).push(l);
+    });
+    function outOf(id) { return outsBy[typeof id + ":" + id] || []; }
+    function intoOf(id) { return insBy[typeof id + ":" + id] || []; }
 
     var heads = hand.nodes.filter(function (n) { return !intoOf(n.id).length; });
     if (!heads.length) { fault("p_no_start", null); }
@@ -31,6 +46,11 @@
     var endFix = ends.length ? null : endBelow();
     if (!ends.length) { fault("p_no_end", null, endShape, endFix); }
 
+    // Shapes on top of each other are looked for among the shapes near
+    // each one (shapesNear, 10-hand.js), and each shape that would be moved off
+    // is said once: said for every pair, a stack of pasted copies was a
+    // list of eighteen thousand.
+    var near = shapesNear([]), onTop = {};
     hand.nodes.forEach(function (n) {
       var outs = outOf(n.id), ins = intoOf(n.id), asks = asksKind(n.kind);
       if (!String(n.text || "").trim()) { fault("p_empty", n, null, fillEmpty(n)); }
@@ -51,9 +71,12 @@
           fault("p_same_labels", n, null, labelOther(outs));
         }
       }
-      hand.nodes.forEach(function (m) {
-        if (m.id <= n.id) { return; }
+      if (leaveOut === "looks") { return; }
+      var t = turned(n);
+      near.around(n.x - t.w / 2, n.y - t.h / 2, n.x + t.w / 2, n.y + t.h / 2).forEach(function (m) {
+        if (m.id <= n.id || onTop[typeof m.id + ":" + m.id]) { return; }
         if (boxesMeet(n, n.x, n.y, m, m.x, m.y, -4)) {   // turned as they are drawn (13-hand-apart.js)
+          onTop[typeof m.id + ":" + m.id] = true;
           fault("p_overlap", n, null, moveApart(m));   // the later of the two
         }
       });
@@ -61,12 +84,17 @@
 
     // a line that runs through a shape on its way past is not wrong, but it
     // is the thing that makes a hand-drawn chart hard to follow
-    var routes = routeAll();              // the lines as they are drawn
+    var routes = leaveOut ? [] : routeAll();    // the lines as they are drawn
     hand.links.forEach(function (link, li) {
       var a = nodeById(link.from), b = nodeById(link.to);
       var pts = routes[li];
       if (!a || !b || !pts) { return; }
-      hand.nodes.forEach(function (n) {
+      var x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+      pts.forEach(function (p) {
+        x0 = Math.min(x0, p[0]); x1 = Math.max(x1, p[0]);
+        y0 = Math.min(y0, p[1]); y1 = Math.max(y1, p[1]);
+      });
+      near.around(x0, y0, x1, y1).forEach(function (n) {   // only shapes it could reach
         if (n.id === a.id || n.id === b.id) { return; }
         for (var i = 0; i < pts.length - 1; i++) {
           if (throughBox(pts[i], pts[i + 1], n)) {
@@ -92,14 +120,15 @@
     }
     // ...and from everything, an End has to be reachable, or the flow is
     // caught in a loop it can never leave
+    // (walked back from the Ends along the arrows into each shape, once --
+    // not every arrow over again for every step of the longest way round)
     if (ends.length) {
-      var safe = {};
-      ends.forEach(function (n) { safe[n.id] = true; });
-      var moved = true;
-      while (moved) {
-        moved = false;
-        hand.links.forEach(function (l) {
-          if (safe[l.to] && !safe[l.from]) { safe[l.from] = true; moved = true; }
+      var safe = {}, back = {}, todo = [];
+      hand.links.forEach(function (l) { (back[l.to] = back[l.to] || []).push(l.from); });
+      ends.forEach(function (n) { safe[n.id] = true; todo.push(n.id); });
+      while (todo.length) {
+        (back[todo.pop()] || []).forEach(function (from) {
+          if (!safe[from]) { safe[from] = true; todo.push(from); }
         });
       }
       hand.nodes.forEach(function (n) {
@@ -123,6 +152,7 @@
     return false;
   }
 
+  var REPORT_ROWS = 40;                  // rows of the list drawn, at most
   function showReport() {
     var box = el("#report");
     var found = checkDesign();
@@ -139,7 +169,11 @@
                                 ? "bad" : "warn");
     head.textContent = say("problems", { n: found.length });
     box.appendChild(head);
-    found.forEach(function (bit) {
+    // The first few dozen, and how many more: a row and a button each for
+    // thousands was tens of thousands of buttons made on every change,
+    // which nobody reads past the first screenful of anyway.  Put all right
+    // below still puts every one of them right.
+    found.slice(0, REPORT_ROWS).forEach(function (bit) {
       var row = document.createElement("button");
       row.className = "fault " + (bit.warn ? "warn" : "bad");
       row.textContent = bit.text;
@@ -149,6 +183,12 @@
       box.appendChild(row);
       if (bit.fix) { offerHandMend(row, box, bit.fix); }
     });
+    if (found.length > REPORT_ROWS) {
+      var rest = document.createElement("p");
+      rest.className = "hint";
+      rest.textContent = say("problems_more", { n: found.length - REPORT_ROWS });
+      box.appendChild(rest);
+    }
     var can = found.filter(function (bit) { return bit.fix && bit.fix.auto; });
     if (can.length > 1) {
       var every = document.createElement("button");
@@ -362,14 +402,36 @@
   }
 
   // A shape on top of another: the later of the two, moved to the nearest
-  // place clear of everything.
+  // place clear of everything.  In a crowd with nowhere clear that near --
+  // copies pasted onto copies -- it goes with every shape it is joined to,
+  // wherever a paste of them would have gone (moveClear, 13-hand-apart.js),
+  // below everything if need be: left where it was, the fix did nothing,
+  // and taken off alone, its arrows ran the length of the chart.
   function moveApart(node) {
     var id = node.id;
     return { auto: true, says: TXT.hf_apart, go: function () {
       var n = nodeById(id);
       var spot = n && freeSpot(n, 40);
       if (spot) { n.x = spot.x; n.y = spot.y; }
+      else if (n) { moveClear(joinedWith(id)); }
     } };
+  }
+
+  // A shape and every shape it is joined to, by arrows either way.
+  function joinedWith(id) {
+    var next = {}, seen = {}, todo = [id], out = [];
+    hand.links.forEach(function (l) {
+      (next[l.from] = next[l.from] || []).push(l.to);
+      (next[l.to] = next[l.to] || []).push(l.from);
+    });
+    while (todo.length) {
+      var at = todo.pop();
+      if (seen[at]) { continue; }
+      seen[at] = true;
+      out.push(at);
+      (next[at] || []).forEach(function (to) { if (!seen[to]) { todo.push(to); } });
+    }
+    return out;
   }
 
   // How many times, all told, an arrow runs through a shape on its way past.
@@ -397,8 +459,12 @@
     return { auto: true, says: TXT.hf_clear, go: function () {
       var n = nodeById(id);
       if (!n) { return; }
-      var was = { x: n.x, y: n.y }, before = crossings();
+      // On a big chart each place tried is every arrow routed again, and a
+      // dozen rings of them was seconds for one shape with the page stood
+      // still: so it looks for a third of a second, and no longer.
+      var was = { x: n.x, y: n.y }, before = crossings(), until = Date.now() + 300;
       var spot = freeSpot(n, 12, function (x, y) {
+        if (Date.now() > until) { return false; }
         n.x = x; n.y = y;
         var now = crossings();
         n.x = was.x; n.y = was.y;
@@ -435,15 +501,19 @@
   // one fix can settle another -- an End put in stops every shape that was
   // stopping dead -- and one step for Undo to take back.  A fix that turns
   // out to change nothing is not tried twice, and the whole of it gives up
-  // after a second and a half rather than keep the page.
+  // after a second and a half rather than keep the page.  The lines through
+  // shapes come last in the list, so they are only looked for (every arrow
+  // routed) once there is nothing before them left to put right: looked for
+  // every time, a chart of stacked copies put right a dozen a press.
   function handMendAll() {
     if (!byHand) { return; }
     keepUndo();
     var tried = {}, began = Date.now();
+    function fixable(bit) {
+      return bit.fix && bit.fix.auto && !tried[bit.key + ":" + bit.id + ":" + bit.fix.says];
+    }
     for (var turn = 0; turn < 60 && Date.now() - began < 1500; turn++) {
-      var next = checkDesign().filter(function (bit) {
-        return bit.fix && bit.fix.auto && !tried[bit.key + ":" + bit.id + ":" + bit.fix.says];
-      })[0];
+      var next = checkDesign("lines").filter(fixable)[0] || checkDesign().filter(fixable)[0];
       if (!next) { break; }
       var was = JSON.stringify(hand);
       next.fix.go();
@@ -671,7 +741,7 @@
     // Only what stops it working stops it: a shape overlapping another is
     // said in amber and runs the same.
     if (!hand.nodes.length ||
-        checkDesign().some(function (bit) { return !bit.warn; })) { return; }
+        checkDesign("looks").some(function (bit) { return !bit.warn; })) { return; }
     var text;
     try { text = handAsPseudocode(); }
     catch (thrown) { tell(thrown.message || String(thrown)); return; }

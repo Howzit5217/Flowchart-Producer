@@ -495,6 +495,66 @@ function onSideAt(n, side, p) {
               bent + " with corners");
 })();
 
+// ---- an arrow at a turned shape ends on its edge --------------------------
+// Tidy up lays arrows by the box round each shape, and a shape turned at a
+// slant is nowhere near the box's top under a straight line down: arrows
+// stopped in the air short of one and ran on into the next (slantEnds).
+// Every kind, at slants either way, with the arrows laid straight down
+// through the boxes as Tidy up lays them and as the router finds them:
+// each end on the outline, and the run into it not through the shape.
+(function () {
+  function dist(p, pts) {
+    var best = Infinity;
+    for (var i = 0, j = pts.length - 1; i < pts.length; j = i++) {
+      var a = pts[j], b = pts[i], ex = b[0] - a[0], ey = b[1] - a[1];
+      var u = Math.max(0, Math.min(1, ((p[0] - a[0]) * ex + (p[1] - a[1]) * ey) / (ex * ex + ey * ey || 1)));
+      best = Math.min(best, Math.hypot(p[0] - a[0] - ex * u, p[1] - a[1] - ey * u));
+    }
+    return best;
+  }
+  function inside(p, pts) {
+    var yes = false;
+    for (var i = 0, j = pts.length - 1; i < pts.length; j = i++) {
+      var a = pts[j], b = pts[i];
+      if ((a[1] > p[1]) !== (b[1] > p[1]) &&
+          p[0] < a[0] + (b[0] - a[0]) * (p[1] - a[1]) / (b[1] - a[1])) yes = !yes;
+    }
+    return yes;
+  }
+  var off = 0, through = 0, tried = 0;
+  KINDS.forEach(function (kind) {
+    if (kind === "actor") return;       // met at its hands, inside its box
+    [25, 45, 70, 135, 200, 330].forEach(function (turn) {
+      var mid = { id: 2, kind: kind, x: 300, y: 300, w: 150, h: 70, turn: turn };
+      hand.nodes = [{ id: 1, kind: "rect", x: 300, y: 60, w: 140, h: 50, turn: 0 }, mid,
+                    { id: 3, kind: "rect", x: 300, y: 540, w: 140, h: 50, turn: 0 }];
+      hand.links = [{ from: 1, to: 2 }, { from: 2, to: 3 }];
+      var box = turned(mid), edge = slantOutline(mid);
+      var laid = [[[300, 85], [300, 300 - box.h / 2]], [[300, 300 + box.h / 2], [300, 515]]];
+      [slantEnds(laid), routeAll()].forEach(function (routes) {
+        var into = routes[0], out = routes[1];
+        [[into[into.length - 1], into[into.length - 2]], [out[0], out[1]]].forEach(function (end) {
+          var p = end[0], q = end[1], len = Math.hypot(p[0] - q[0], p[1] - q[1]);
+          tried++;
+          if (dist(p, edge) > 0.05) off++;
+          for (var s = 0; s < len - 1; s += 1) {
+            if (inside([q[0] + (p[0] - q[0]) * s / len, q[1] + (p[1] - q[1]) * s / len], edge)) {
+              through++;
+              break;
+            }
+          }
+        });
+      });
+    });
+  });
+  hand.nodes = [];
+  hand.links = [];
+  if (off) bad.push(off + " of " + tried + " arrow ends at a turned shape off its edge");
+  if (through) bad.push(through + " of " + tried + " arrows into a turned shape through it first");
+  console.log(tried + " arrow ends at turned shapes: " + off + " off the edge, " +
+              through + " through the shape");
+})();
+
 if (bad.length) {
   console.error(bad.join("; "));
   process.exit(1);

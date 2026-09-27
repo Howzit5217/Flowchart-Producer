@@ -19,7 +19,17 @@
   // One shape is still `picked`, with its dots and corners and its own
   // panel, as it always was; the two are never both in use at once.
 
-  function inMany(id) { return many.indexOf(id) >= 0; }
+  // Asked for every shape and arrow drawn, so it is looked up rather than
+  // searched for: `many` is only ever replaced, never changed in place.
+  var manySeen = { list: null, size: -1, has: {} };
+  function inMany(id) {
+    if (manySeen.list !== many || manySeen.size !== many.length) {
+      var has = {};
+      many.forEach(function (one) { has[typeof one + ":" + one] = true; });
+      manySeen = { list: many, size: many.length, has: has };
+    }
+    return manySeen.has[typeof id + ":" + id] === true;
+  }
 
   // What is taken up, whichever way: the several, the one, or nothing.
   function takenIds() {
@@ -30,9 +40,10 @@
   // Take up exactly these.  One of them is the ordinary picked shape; two or
   // more are taken up together; none is nothing in hand at all.
   function takeUp(ids) {
-    var mine = [];
+    var mine = [], had = {};
     ids.forEach(function (id) {
-      if (mine.indexOf(id) < 0 && nodeById(id)) { mine.push(id); }
+      var key = typeof id + ":" + id;
+      if (!had[key] && nodeById(id)) { had[key] = true; mine.push(id); }
     });
     chosen = null;
     joining = false;
@@ -196,10 +207,10 @@
   // An arrow key moves the lot a step, as it moves one shape -- and not
   // onto anything outside the lot.
   function nudgeMany(ids, dx, dy) {
-    var lot = crowdOf(ids);
+    var lot = crowdOf(ids), near = shapesNear(ids);   // 10-hand.js
     lot.forEach(function (c) { dy = Math.max(dy, turned(c.node).h / 2 + 20 - c.y); });
     function hits(x, y) {
-      return lot.some(function (c) { return onTopOf(c.node, c.x + x, c.y + y, ids); });
+      return lot.some(function (c) { return near.meets(c.node, c.x + x, c.y + y, SHAPE_GAP); });
     }
     if (hits(dx, dy) && !hits(0, 0)) { return; }
     lot.forEach(function (c) { c.node.x += dx; c.node.y += dy; });
@@ -275,9 +286,27 @@
     return true;
   }
 
+  // A copy of everything, pasted, doubles the chart: Ctrl+A, Ctrl+C, Ctrl+V
+  // a dozen times over is tens of thousands of shapes, which no page can
+  // draw, keep or step back through.  So copies stop going down past this
+  // many shapes, and the check's list says why.
+  var MOST_SHAPES = 2000;
+  function tooManyShapes() {
+    var box = el("#report");
+    if (!box) { return; }
+    var line = el(".too-many", box) || document.createElement("p");
+    line.className = "hint bad too-many";
+    line.textContent = say("h_too_many", { n: MOST_SHAPES });
+    box.insertBefore(line, box.firstChild);
+  }
+
   // Put copies down, moved by dx, dy from where the originals stood, and
   // take them up -- so the next thing done is done to the copies.
   function placeCopies(clip, dx, dy) {
+    if (hand.nodes.length + clip.nodes.length > MOST_SHAPES) {
+      tooManyShapes();
+      return [];
+    }
     keepUndo();
     clip.nodes.forEach(function (one) {  // none above the top of the paper
       dy = Math.max(dy, turned(one).h / 2 + 20 - one.y);
@@ -310,7 +339,29 @@
     drawHandPanel();
     showReport();
     if (looked) { keep(); }              // their colors are the chart's now too
+    copiesInSight(made);
     return made;
+  }
+
+  // Moved clear of everything, a big copy can end up further off than the
+  // stage reaches -- below the whole chart, when nowhere nearer is clear --
+  // and a paste nobody can see looks like one that did not work, and gets
+  // pressed again.  So if none of it is showing, the view goes to it: its
+  // first shape to the middle of the stage, the stage scrolled -- or,
+  // Unlocked, the chart carried (holdBy, 06-chart.js).
+  function copiesInSight(made) {
+    var view = viewOnDesign(), nodes = made.map(nodeById).filter(Boolean);
+    var stage = el("#stage");
+    if (!view || !nodes.length || !stage) { return; }
+    var box = clipBox(nodes);
+    if (box.x1 >= view.x0 && box.x0 <= view.x1 && box.y1 >= view.y0 && box.y0 <= view.y1) { return; }
+    var g = chart && el('.node[data-i="h' + nodes[0].id + '"]', chart);
+    if (!g) { return; }
+    var s = stage.getBoundingClientRect(), r = g.getBoundingClientRect();
+    var dx = r.left + r.width / 2 - (s.left + s.width / 2);
+    var dy = r.top + r.height / 2 - (s.top + s.height / 2);
+    if (loose) { holdBy(-dx, -dy); }
+    else { stage.scrollLeft += dx; stage.scrollTop += dy; }
   }
 
   // The box round a copy's shapes, on the design.

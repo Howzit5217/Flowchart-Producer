@@ -403,19 +403,19 @@
   #source .fields > #chart-switches {
     gap: 8px; margin-top: 0; align-content: center;
   }
-  /* As slide switches the pair no longer fit side by side in the half a
-     row they have -- Key ran off the panel, and Cuadrícula and Leyenda
-     never had a chance -- so beside the Options button they stand one
-     over the other, each named on the left with a smaller switch on the
-     right, the two as tall as the button between them. */
-  #source .fields > #chart-switches { grid-template-columns: 1fr; gap: 6px; }
-  #source #chart-switches .switch {
-    flex-direction: row-reverse; justify-content: space-between; gap: 8px;
-    min-width: 0; line-height: 16px;
+  /* Read as the user asked for it: Grid (switch)  Key (switch), each
+     named and then its switch, side by side in the half row beside the
+     Options button.  Stood one over the other with the names out at one
+     edge and the switches at the other, the pair read as a list rather
+     than as two switches.  The smaller switch lets both fit on the one
+     line; a language whose words are too long for that puts the second
+     under the first, still named and then switched. */
+  #source .fields > #chart-switches {
+    display: flex; flex-wrap: wrap; align-items: center; align-content: center;
+    gap: 4px 12px;
   }
-  #source #chart-switches .switch > span {
-    min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-  }
+  #source #chart-switches .switch { gap: 6px; line-height: 16px; }
+  #source #chart-switches .switch > span { white-space: nowrap; }
   /* The smaller switch, here and in the run table's heading (.watch-top),
      where a full-sized one stood taller than the small capitals it heads. */
   #source #chart-switches input[type="checkbox"],

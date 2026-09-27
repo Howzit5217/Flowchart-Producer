@@ -264,6 +264,8 @@ ES = {
     "check": "Comprobar el diseño",
     "checked_good": "No se encontraron problemas.",
     "problems": "{n} cosas que revisar",
+    "problems_more": "y {n} más",
+    "h_too_many": "Demasiadas formas (máximo {n})",
     "h_info": "Cómo dibujar a mano",
     "h_add_how": "Haz clic en una forma para añadirla debajo de la actual, o arrástrala al papel. Básicas, Flujo, Datos y Otras tienen más formas.",
     "h_mouse": "Ratón y pantalla táctil",

@@ -264,6 +264,8 @@ EN = {
     "check": "Check the design",
     "checked_good": "No problems found.",
     "problems": "{n} to look at",
+    "problems_more": "and {n} more",
+    "h_too_many": "Too many shapes (limit {n})",
     "h_info": "How to draw by hand",
     "h_add_how": "Click a shape to add it below the one you're on, or drag it onto the paper. Basic, Flow, Data and Other have more shapes.",
     "h_mouse": "Mouse and touch",

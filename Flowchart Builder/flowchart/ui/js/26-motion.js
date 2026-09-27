@@ -1140,8 +1140,16 @@
       Object.keys(here).forEach(function (key) {
         if (!handSeen[key]) { handBorn[key] = now; }
       });
+      var oldBits = null;                // the drawing before, looked through once if asked
       Object.keys(handSeen).forEach(function (key) {
-        var ghost = !here[key] && old && ghostOf(old, key);
+        if (!here[key] && old && !oldBits) {
+          oldBits = { heads: headsOf(old), pieces: {} };
+          all(".node[data-i], .link[data-link]", old).forEach(function (g) {
+            var at = g.dataset.link ? "l" + g.dataset.link : "n" + g.dataset.i;
+            if (!oldBits.pieces[at]) { oldBits.pieces[at] = g; }
+          });
+        }
+        var ghost = !here[key] && old && ghostOf(old, key, oldBits);
         if (ghost) {
           handGone.push({ el: ghost, at: now });
           setTimeout(function () { ghost.remove(); }, 260);
@@ -1151,6 +1159,7 @@
     handSeen = {};
     Object.keys(here).forEach(function (key) { handSeen[key] = true; });
 
+    var heads = null;                    // headsOf(svg), once asked for
     Object.keys(handBorn).forEach(function (key) {
       var age = now - handBorn[key], g = here[key];
       if (age > 440 || !g) { delete handBorn[key]; return; }
@@ -1160,9 +1169,9 @@
       var how = line && line.getAttribute("stroke-dasharray") ? "born-soft" : "born";
       g.classList.add(how);
       g.style.setProperty("--born", -age + "ms");
-      var head = line ? headOf(svg, line) : null;
-      if (line && how === "born" && line.getTotalLength) {
-        line.style.setProperty("--len", (line.getTotalLength() + 2).toFixed(1));
+      var head = line ? headOf(svg, line, heads = heads || headsOf(svg)) : null;
+      if (line && how === "born") {
+        line.style.setProperty("--len", (lineLength(line) + 2).toFixed(1));
       }
       if (head) {
         head.classList.add("born");
@@ -1190,23 +1199,27 @@
   // no longer a shape or a line as far as anything else on the page is
   // concerned -- nothing counts it, saves it or can click it -- only a
   // picture of one on its way out.
-  function ghostOf(old, key) {
+  // `bits` is what is in that drawing, looked up once for every piece gone
+  // from it (its heads, and its pieces by key) -- a paste cut back out again
+  // is thousands gone at once.
+  function ghostOf(old, key, bits) {
     var id = key.slice(1), NS = "http://www.w3.org/2000/svg";
+    var heads = bits ? bits.heads : null;
     if (key.charAt(0) === "n") {
-      var shape = el('.node[data-i="' + id + '"]', old);
+      var shape = bits ? bits.pieces[key] : el('.node[data-i="' + id + '"]', old);
       if (!shape) { return null; }
       var copy = shape.cloneNode(true);
       copy.setAttribute("class", "node-gone");
       copy.removeAttribute("data-i");
       return copy;
     }
-    var link = el('.link[data-link="' + id + '"]', old);
+    var link = bits ? bits.pieces[key] : el('.link[data-link="' + id + '"]', old);
     var line = link && el(".flow", link);
     if (!line) { return null; }
     var pair = document.createElementNS(NS, "g");
     pair.setAttribute("class", "link-gone");
     pair.appendChild(line.cloneNode(true));
-    var head = headOf(old, line);
+    var head = headOf(old, line, heads);
     if (head) { pair.appendChild(head.cloneNode(true)); }
     return pair;
   }
@@ -1214,13 +1227,40 @@
   // The arrowheads are drawn apart from their lines, all together, so that
   // nothing paints over one.  Each starts at the very point its line ends
   // on, written the same way, which is how one is found from the other.
-  function headOf(svg, line) {
+  // `heads` is headsOf(svg), for asking of many lines in one drawing: a
+  // look through every head for every line was millions of looks when a
+  // paste brought in thousands of lines at once.
+  function headOf(svg, line, heads) {
     var d = line.getAttribute("d") || "";
     var end = d.split(/[ML]/).pop().trim();
     if (!end) { return null; }
-    return all(".tips .head", svg).filter(function (head) {
-      return (head.getAttribute("points") || "").indexOf(end + " ") === 0;
-    })[0] || null;
+    return (heads || headsOf(svg))["@" + end] || null;
+  }
+
+  // Every head in a drawing, by the point it starts on (the first of any
+  // two on the same point, as a look along them in order would find).
+  function headsOf(svg) {
+    var heads = {};
+    all(".tips .head", svg).forEach(function (head) {
+      var points = head.getAttribute("points") || "", gap = points.indexOf(" ");
+      if (gap > 0 && !heads["@" + points.slice(0, gap)]) { heads["@" + points.slice(0, gap)] = head; }
+    });
+    return heads;
+  }
+
+  // How long a line is, from its own points: straight runs exactly, and a
+  // corner eased round (easedPath, 10-hand.js) by the two sides of the
+  // bend it is eased within -- a pixel or two long, which the drawing-out
+  // needs a little of anyway.  Asking the browser (getTotalLength) had it
+  // lay the line out first, one line at a time, and a paste of a thousand
+  // lines spent seconds in it.
+  function lineLength(line) {
+    var pts = (line.getAttribute("d") || "").match(/-?\d*\.?\d+(?:e[-+]?\d+)?/gi) || [];
+    var len = 0;
+    for (var i = 2; i + 1 < pts.length; i += 2) {
+      len += Math.hypot(pts[i] - pts[i - 2], pts[i + 1] - pts[i - 1]);
+    }
+    return len;
   }
 
   // Zoom glides when a button asked for it.  Not when a drag did: the chart

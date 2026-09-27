@@ -262,6 +262,8 @@ DE = {
     "check": "Entwurf prüfen",
     "checked_good": "Keine Probleme gefunden.",
     "problems": "{n} zum Ansehen",
+    "problems_more": "und {n} weitere",
+    "h_too_many": "Zu viele Formen (höchstens {n})",
     "h_info": "So zeichnest du von Hand",
     "h_add_how": "Klicke auf eine Form, um sie unter die aktuelle zu setzen, oder ziehe sie aufs Blatt. Basis, Ablauf, Daten und Weitere haben mehr Formen.",
     "h_mouse": "Maus und Touch",

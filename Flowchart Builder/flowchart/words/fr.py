@@ -264,6 +264,8 @@ FR = {
     "check": "Vérifier le schéma",
     "checked_good": "Aucun problème trouvé.",
     "problems": "{n} choses à revoir",
+    "problems_more": "et {n} de plus",
+    "h_too_many": "Trop de formes (maximum {n})",
     "h_info": "Comment dessiner à la main",
     "h_add_how": "Cliquez sur une forme pour l’ajouter sous celle en cours, ou faites-la glisser sur la feuille. Base, Flux, Données et Autres en ont d’autres.",
     "h_mouse": "Souris et tactile",
