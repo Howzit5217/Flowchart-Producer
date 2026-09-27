@@ -89,6 +89,14 @@ def draw_for_studio(ask):
             settings.SIZES[int(line)] = (float(size[0]), float(size[1]))
         except (TypeError, ValueError, IndexError):
             pass
+    # And the room between them in step with them: shapes drawn by hand are a
+    # good deal bigger than the ones the layout sizes for itself, and the same
+    # gaps between bigger shapes left arrows that were nearly all head.  Every
+    # one of these is set afresh on the next drawing (SPACING, and the shake).
+    room = ask.get("room")
+    if isinstance(room, (int, float)) and 1 < room <= 3:
+        for name in ("VGAP", "HGAP", "LOOP_UP", "COL_GAP", "LABEL_PAD"):
+            setattr(settings, name, getattr(settings, name) * room)
     # A chain of If / Else If forks sideways until it is wider than this,
     # and queues down the page after that.  Nought queues every one of
     # them, which is what a narrow page wants and what a class reading the

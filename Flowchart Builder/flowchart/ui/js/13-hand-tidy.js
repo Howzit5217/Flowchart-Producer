@@ -52,14 +52,24 @@
   // drawing tidied here stands the way the same program built from writing
   // would.  From the one seed, so the same drawing tidies the same way
   // every time and a second press moves nothing.
+  //
+  // Two things are asked differently, because the shapes here are bigger
+  // than the ones the layout draws for itself: more room between them
+  // (TIDY_ROOM, or an arrow between two boxes was nearly all head), and
+  // the True and False measured at the size they are written here, so the
+  // layout leaves them room enough.
+  var TIDY_ROOM = 1.5;
   function tidyAsk(text, sizes) {
+    var letters = lettersAsked();
+    letters.size = HAND_TYPE * chartPt() / PLAIN_PT;
+    letters.own = {};                    // the pseudocode side's steps, not these
     return Object.assign(chartOptions(), {
       text: text, title: "", author: "",
       shape: el("#f-shape") ? el("#f-shape").value : "auto",
       seed: TIDY_SEED,
       lang: el("#f-lang") ? el("#f-lang").value : "",
-      legend: false, grid: true, shapes: geom, letters: lettersAsked(),
-      everyout: true, apart: true, sizes: sizes, plan: true
+      legend: false, grid: true, shapes: geom, letters: letters,
+      everyout: true, apart: true, sizes: sizes, plan: true, room: TIDY_ROOM
     });
   }
 
@@ -599,11 +609,12 @@
         var moved = tidyApply(layout);
         // Tidy already: no step for Undo to take back that changes nothing.
         if (JSON.stringify(hand) === was) { wasLike.pop(); showUndo(); }
+        else { wasLike[wasLike.length - 1].tidied = true; }   // Undo carries it back
         drawHand();
         drawHandPanel();
         if (moved) { tidyMotion(before, layout.order); }   // tidy already: nothing to see
         showReport();
-        handSays(say("h_tidied", { n: moved }));
+        handSays(moved ? say("h_tidied", { n: moved }) : TXT.h_tidy_done);
       })
       .catch(function (err) {
         done();
@@ -614,3 +625,24 @@
   if (el("#hand-tidy")) {
     el("#hand-tidy").onclick = tidyUp;
   }
+
+  // ---- stepping back over one ----------------------------------------------
+  // Undo takes a tidy back the way it came, and Redo does it again: the
+  // shapes carried back, not simply found where they were, which on a
+  // drawing that has just moved all over is the only way to see what went
+  // where.  Only a tidy: any other step back is a shape or an arrow, and
+  // snapping back is how that should look.  Each way is marked as it is
+  // taken, so the way back again is carried too.
+  var stepBackPlain = stepBack;
+  stepBack = function (forward) {
+    var from = forward ? willBeLike : wasLike, to = forward ? wasLike : willBeLike;
+    var step = from[from.length - 1];
+    var carried = byHand && step && step.tidied;
+    tidyDone();
+    var before = carried ? tidyLook() : null;
+    stepBackPlain(forward);
+    if (!carried) { return; }
+    if (to.length) { to[to.length - 1].tidied = true; }
+    var order = hand.nodes.slice().sort(function (p, q) { return (p.y - q.y) || (p.x - q.x); });
+    tidyMotion(before, order.map(function (n) { return n.id; }));
+  };
