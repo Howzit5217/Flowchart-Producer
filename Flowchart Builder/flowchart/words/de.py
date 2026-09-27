@@ -573,7 +573,7 @@ DE = {
     "o_steady": "Jedes Mal dieselbe Zeichnung",
     "o_space": "Abstände", "o_space_tight": "Kompakt",
     "o_space_plain": "Normal", "o_space_roomy": "Großzügig",
-    "t_head": "Aufräum-Optionen", "t_layout": "Anordnung", "t_shapes": "Formen",
+    "tidy_head": "Aufräum-Optionen", "t_layout": "Anordnung", "t_shapes": "Formen",
     "t_place": "Auf dem Papier",
     "t_arrows": "Pfeillänge", "t_arrows_sub": "In Kästchen, mindestens",
     "t_turns": "Drehung behalten", "t_fit": "Formen an ihre Wörter anpassen",

@@ -575,7 +575,7 @@ ES = {
     "o_steady": "El mismo dibujo siempre",
     "o_space": "Espaciado", "o_space_tight": "Compacto",
     "o_space_plain": "Normal", "o_space_roomy": "Amplio",
-    "t_head": "Opciones de ordenar", "t_layout": "Disposición", "t_shapes": "Formas",
+    "tidy_head": "Opciones de ordenar", "t_layout": "Disposición", "t_shapes": "Formas",
     "t_place": "En el papel",
     "t_arrows": "Largo de las flechas", "t_arrows_sub": "En cuadros, como mínimo",
     "t_turns": "Mantener el giro", "t_fit": "Ajustar las formas a sus palabras",

@@ -951,6 +951,32 @@ def _():
         len(have), "" if not bad else " -- " + ", ".join(sorted(set(bad))[:4]))
 
 
+@check("no word is written twice under one name")
+def _():
+    """A language's words are one long dict, and a name written twice in
+    it is not an error Python mentions: the later one quietly wins.  Tidy
+    up's sheet was given the name the Style panel's Words card already
+    had, and the card came out headed "Tidy up options" in every language
+    -- nothing failed, it was simply wrong.  So every dict in the word
+    files is read for a name it has twice."""
+    import ast as _ast
+    import glob as _glob
+    twice = []
+    for name in sorted(_glob.glob(os.path.join(HOME, "flowchart", "words", "*.py"))):
+        with open(name, encoding="utf-8") as f:
+            tree = _ast.parse(f.read())
+        for node in _ast.walk(tree):
+            if not isinstance(node, _ast.Dict):
+                continue
+            seen = set()
+            for key in node.keys:
+                if isinstance(key, _ast.Constant) and isinstance(key.value, str):
+                    if key.value in seen:
+                        twice.append("%s:%d %s" % (os.path.basename(name), key.lineno, key.value))
+                    seen.add(key.value)
+    return not twice, "%s" % ("none twice" if not twice else ", ".join(twice[:4]))
+
+
 @check("every language says everything")
 def _():
     fb = builder()

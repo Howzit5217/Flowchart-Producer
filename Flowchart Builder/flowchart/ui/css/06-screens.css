@@ -60,6 +60,10 @@
   @media (max-width: 599px) {
     #panel { width: min(400px, 100vw); }
     .bar { padding: 8px 10px; gap: 8px 10px; }
+    /* The top bar stays one row: the chart's name gives way (it ends in
+       an ellipsis) rather than Settings being pushed onto a row of its
+       own, alone at the far left, under everything it belongs with. */
+    header.bar { flex-wrap: nowrap; }
     .brand { font-size: 14px; }
     .mark { width: 28px; height: 28px; border-radius: 8px; }
     .mark svg { width: 17px; height: 17px; }
@@ -95,6 +99,8 @@
      row of its own.  Fit, and two fingers, do what it does. */
   @media (max-width: 439px) {
     body.by-hand #actual { display: none; }
+    header.bar { gap: 6px; }
+    header.bar .btn { padding-left: 10px; padding-right: 10px; }
   }
   /* The smallest phones, while a run stands waiting for its next step: the
      bar has Next step in it as well, and Done was being pushed onto a row

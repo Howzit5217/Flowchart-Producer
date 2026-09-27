@@ -575,7 +575,7 @@ FR = {
     "o_steady": "Le même dessin à chaque fois",
     "o_space": "Espacement", "o_space_tight": "Compact",
     "o_space_plain": "Normal", "o_space_roomy": "Aéré",
-    "t_head": "Options de rangement", "t_layout": "Disposition", "t_shapes": "Formes",
+    "tidy_head": "Options de rangement", "t_layout": "Disposition", "t_shapes": "Formes",
     "t_place": "Sur le papier",
     "t_arrows": "Longueur des flèches", "t_arrows_sub": "En carreaux, au minimum",
     "t_turns": "Garder la rotation", "t_fit": "Ajuster les formes à leurs mots",

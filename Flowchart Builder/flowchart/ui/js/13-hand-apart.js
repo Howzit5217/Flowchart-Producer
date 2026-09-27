@@ -123,8 +123,10 @@
   // near -- a big copy pasted into a crowded chart -- they go below
   // everything, where nothing is: left where they were, copy after copy
   // was piled on the one before, and the check had thousands of shapes on
-  // top of each other to list.
-  function moveClear(ids) {
+  // top of each other to list.  Given a way -- a step [x, y] -- they go
+  // on along it, step after step, till they are clear: copies pasted in a
+  // row stay in the row, rather than each going wherever was nearest.
+  function moveClear(ids, way) {
     var lot = ids.map(nodeById).filter(Boolean), near = shapesNear(ids);
     function hits(bx, by) {
       return lot.some(function (n) {
@@ -132,6 +134,14 @@
       });
     }
     if (!lot.length || !hits(0, 0)) { return; }
+    if (way && (way[0] || way[1])) {
+      for (var w = 1; w <= 200; w++) {
+        if (!hits(way[0] * w, way[1] * w)) {
+          lot.forEach(function (n) { n.x += way[0] * w; n.y += way[1] * w; });
+          return;
+        }
+      }
+    }
     var step = HAND_GRID * 4;
     var ways = [[0, 1], [1, 0], [1, 1], [-1, 0], [0, -1], [-1, 1], [1, -1], [-1, -1]];
     for (var r = 1; r <= 80; r++) {

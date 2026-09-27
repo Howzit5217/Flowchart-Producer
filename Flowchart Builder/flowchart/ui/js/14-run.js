@@ -126,6 +126,18 @@
     dressRunner();
   }
 
+  // A run still going when its chart is put away -- sat at an Input, or
+  // waiting to take its next step -- is let go of, quietly.  Left, it sat
+  // there for good, and Run stayed Stop, switched off, on the other side.
+  var runDropped = false;
+  function dropRun() {
+    if (!running) { return; }
+    runDropped = true;
+    stopping = true;
+    if (waiting) { waiting(); }
+    if (stepOn) { stepOn(); }
+  }
+
   function forgetProgram() {
     AST = null;
     forgetLines();
@@ -1179,7 +1191,7 @@
       talk(TXT.r_done, "good");
     } catch (thrown) {
       if (thrown instanceof Stop || thrown instanceof Returned) {
-        talk(TXT.r_done, "good");
+        if (!runDropped) { talk(TXT.r_done, "good"); }
       } else {
         broke = thrown;
       }
@@ -1199,13 +1211,13 @@
     if (broke) { sayFault(broke, "bad"); }
     var over = false;
     for (var key in stepped) { if (stepped[key]) { over = true; } }
-    if (over) { talk(TXT.r_stepped_over, "warn"); }
+    if (over && !runDropped) { talk(TXT.r_stepped_over, "warn"); }
     // Left showing where it stopped.  An error you have to catch as it
     // flies past is not much better than no error at all: the shape stays
     // red in the chart and the line stays red in the pseudocode until the
     // next run, so there is something to go and look at afterwards.
     if (!quiet) { markFault(broke ? broke.at : null); }
-    running = false; stopping = false;
+    running = false; stopping = false; runDropped = false;
     stepOn = null;
     if (!quiet) {
       showNext(false);                   // however it ended, nothing is waiting

@@ -112,6 +112,10 @@
   }
   .sheet-menu h3:first-child { margin-top: 0; }
   .sheet-menu .seg { margin-bottom: 4px; }
+  /* A heading after a switch of places starts a group of its own, and
+     gets the air to say so -- Panel side sat as close under Appearance's
+     switch as Appearance's own heading did over it. */
+  .sheet-menu .seg + h3 { margin-top: 16px; }
   .switch.wide {
     display: flex; align-items: center; justify-content: space-between;
     gap: 10px; width: 100%; margin-top: 12px; padding-top: 12px;

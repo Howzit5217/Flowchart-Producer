@@ -578,7 +578,7 @@ EN = {
     "o_steady": "The same drawing every time",
     "o_space": "Spacing", "o_space_tight": "Compressed",
     "o_space_plain": "Normal", "o_space_roomy": "Roomy",
-    "t_head": "Tidy up options", "t_layout": "Layout", "t_shapes": "Shapes",
+    "tidy_head": "Tidy up options", "t_layout": "Layout", "t_shapes": "Shapes",
     "t_place": "On the paper",
     "t_arrows": "Arrow length", "t_arrows_sub": "In squares, at least",
     "t_turns": "Keep rotation", "t_fit": "Fit shapes to their words",

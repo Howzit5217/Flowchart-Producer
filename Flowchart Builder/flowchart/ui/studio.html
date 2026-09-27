@@ -497,7 +497,7 @@ __SVG__
           <path d="M12 16.9v2.1H4.6v3.2M12 19h7.4v3.2"/>
         </svg>
       </span>
-      <strong id="tidy-head" data-w="t_head">__W(t_head)__</strong>
+      <strong id="tidy-head" data-w="tidy_head">__W(tidy_head)__</strong>
       <button class="btn small" id="tidy-no" data-w="s_no">__W(s_no)__</button>
       <button class="btn small primary" id="tidy-go" data-w="h_tidy">__W(h_tidy)__</button>
     </div>
@@ -598,12 +598,12 @@ __SVG__
           <option value="letter">Letter</option>
           <option value="legal">Legal</option>
         </select>
-        <label class="switch"><input type="checkbox" id="print-wide">
-          <span data-w="print_wide">__W(print_wide)__</span></label>
-        <label class="switch"><input type="checkbox" id="print-fit" checked>
-          <span data-w="print_fit">__W(print_fit)__</span></label>
-        <label class="switch"><input type="checkbox" id="print-grid">
-          <span data-w="grid">__W(grid)__</span></label>
+        <label class="switch"><span data-w="print_wide">__W(print_wide)__</span>
+          <input type="checkbox" id="print-wide"></label>
+        <label class="switch"><span data-w="print_fit">__W(print_fit)__</span>
+          <input type="checkbox" id="print-fit" checked></label>
+        <label class="switch"><span data-w="grid">__W(grid)__</span>
+          <input type="checkbox" id="print-grid"></label>
         <p class="hint" data-w="print_note">__W(print_note)__</p>
       </div>
       <div id="print-paper-area"><div id="print-page" class="no-ink"></div></div>

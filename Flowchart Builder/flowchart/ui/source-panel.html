@@ -89,32 +89,29 @@
           <input type="text" id="f-title" value="__T__"></div>
         <div><label for="f-author" data-w="your_name">__W(your_name)__</label>
           <input type="text" id="f-author" value="__A__"></div>
-        <!-- And the small choices that are not worth a box each live behind
-             this one.  A setting given its own labelled row in the panel
-             costs the same room as Title or Language however small it is,
-             and there is a queue of them: which two words a decision
-             answers with is only the first.  Under here they cost a button
-             between them, and the button says when one of them has been
-             moved off what it started as, so nothing is hidden by being
-             put away. -->
-        <div class="more-cell">
-          <button class="btn wide" id="more" aria-expanded="false"
-                  data-w-title="more_tip" title="__W(more_tip)__">
-            <span data-w="more">__W(more)__</span>
-          </button>
-        </div>
-        <!-- Grid and Key side by side in the cell to the right of it, each
-             named and then its switch,
-             rather than a row of their own: two switches are shorter than
-             a field, so the row they used to have was mostly empty.  They
-             start here rather than being moved here, because the mode only
-             moves them when it changes and it does not change on opening. -->
+        <!-- Grid and Key, side by side under the fields, each named and
+             then its switch -- a row of their own, as they have drawing by
+             hand, so the switches here are the size they are everywhere
+             else.  In the half row beside Options they had to be smaller.
+             They start here rather than being moved here, because the mode
+             only moves them when it changes and it does not change on
+             opening. -->
         <div class="switches" id="chart-switches">
           <label class="switch"><span data-w="grid">__W(grid)__</span><input type="checkbox" id="f-grid" checked></label>
           <label class="switch"><span data-w="key_switch">__W(key_switch)__</span><input type="checkbox" id="f-legend"></label>
         </div>
       </div>
+      <!-- And the small choices that are not worth a box each live behind
+           Options, beside the button they shape.  A setting given its own
+           labelled row in the panel costs the same room as Title however
+           small it is, and there is a queue of them.  Under here they cost
+           a button, and the button says when one of them has been moved
+           off what it started as, so nothing is hidden by being put away. -->
       <div class="go build-row">
+        <button class="btn" id="more" aria-expanded="false"
+                data-w-title="more_tip" title="__W(more_tip)__">
+          <span data-w="more">__W(more)__</span>
+        </button>
         <button class="btn primary wide" id="build" data-w="build">__W(build)__</button>
       </div>
       <div id="build-note"></div>
@@ -184,8 +181,8 @@
         <div class="watch-top">
           <label class="switch watch-switch" data-w-title="held_switch"
                  title="__W(held_switch)__">
-            <input type="checkbox" id="held-on" checked>
             <span data-w="held_head">__W(held_head)__</span>
+            <input type="checkbox" id="held-on" checked>
           </label>
           <span class="watch-where" id="watch-where"></span>
         </div>

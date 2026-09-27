@@ -446,8 +446,10 @@
     trio.appendChild(paint);
     box.appendChild(trio);
 
+    // Each named and then its switch, the way every switch on the page is
+    // (Grid and Key under it most of all), in a row as they are.
     var switches = document.createElement("div");
-    switches.style.cssText = "display:flex; gap:14px; margin-top:10px; flex-wrap:wrap";
+    switches.className = "switch-row";
     [[TXT.dashed, "dash", !!link.dash],
      [TXT.with_head, "head", link.head !== false]].forEach(function (item) {
       var one = document.createElement("label");
@@ -459,8 +461,8 @@
         link[item[1]] = item[1] === "head" ? tick.checked : tick.checked;
         drawHand();
       };
-      one.appendChild(tick);
       one.appendChild(document.createTextNode(item[0]));
+      one.appendChild(tick);
       switches.appendChild(one);
     });
     // Pinned, it keeps the two sides it is on now however the shapes are
@@ -471,8 +473,8 @@
     held.type = "checkbox";
     held.checked = !!link.pin;
     held.onchange = function () { pinLink(link, held.checked); };
-    pin.appendChild(held);
     pin.appendChild(document.createTextNode(TXT.m_pin));
+    pin.appendChild(held);
     switches.appendChild(pin);
     box.appendChild(switches);
 

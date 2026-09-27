@@ -234,7 +234,7 @@
   // here, so a piece of one chart can be pasted into another tab's.
   var CLIP_KEY = "flowchart-hand-clip";
   var clipHeld = null;                   // for when storage will not keep it
-  var pasteRound = { stamp: 0, n: 0 };   // which copy of the same clip is next
+  var pasteRound = { stamp: 0, last: null };   // where the last paste of this clip went
 
   function clipOf(ids) {
     return {
@@ -301,8 +301,9 @@
   }
 
   // Put copies down, moved by dx, dy from where the originals stood, and
-  // take them up -- so the next thing done is done to the copies.
-  function placeCopies(clip, dx, dy) {
+  // take them up -- so the next thing done is done to the copies.  Landing
+  // on something, they go on along `way` (moveClear) if one is given.
+  function placeCopies(clip, dx, dy, way) {
     if (hand.nodes.length + clip.nodes.length > MOST_SHAPES) {
       tooManyShapes();
       return [];
@@ -333,7 +334,7 @@
     // Landing on anything, the copies go on together to the nearest place
     // clear of it all (13-hand-apart.js).
     made.forEach(function (id) { measure(nodeById(id)); });
-    moveClear(made);
+    moveClear(made, way);
     takeUp(made);
     drawHand();
     drawHandPanel();
@@ -385,41 +386,59 @@
     return a && b ? { x0: a.x, y0: a.y, x1: b.x, y1: b.y } : null;
   }
 
-  // Pasted a step down and across from the last paste of the same copy, so
-  // one paste never lands exactly on another -- except the first paste of
-  // something cut, which goes back where it came from.  Asked for at a spot
-  // (the menu on the paper), it goes there instead.  And wherever it would
-  // go, if that is nowhere the stage is showing, it comes to the middle of
-  // what is: a paste nobody can see looks like a paste that did not work.
+  // Copies go in a row, to the right: the first beside what was copied, each
+  // after it beside the paste before, their tops level -- and, landing on
+  // something, on along the row till clear (moveClear), never off wherever
+  // happened to be nearest.  The first paste of something cut goes back
+  // where it came from.  Asked for at a spot (the menu on the paper), it
+  // goes there, and the row goes on from there.  A row running off the
+  // stage is followed (copiesInSight); but if the last paste -- or, the
+  // first time, what was copied -- is nowhere the stage is showing, the
+  // view was taken elsewhere, and the row starts again in the middle of it.
+  function rowStep(box) {
+    return Math.ceil((box.x1 - box.x0 + HAND_RULE * 2) / HAND_GRID) * HAND_GRID;
+  }
+
   function pasteShapes(spot) {
     var clip = clipNow();
     if (!clip || !clip.nodes || !clip.nodes.length) { return false; }
-    if (pasteRound.stamp !== clip.stamp) {
-      pasteRound = { stamp: clip.stamp, n: clip.cut ? -1 : 0 };
-    }
-    pasteRound.n++;
     var box = clipBox(clip.nodes);
-    var midX = (box.x0 + box.x1) / 2, midY = (box.y0 + box.y1) / 2;
-    var dx = pasteRound.n * HAND_RULE, dy = pasteRound.n * HAND_RULE;
+    var step = rowStep(box);
+    if (pasteRound.stamp !== clip.stamp) {
+      pasteRound = { stamp: clip.stamp, last: null };
+    }
+    // where the row goes on from: the last paste, or else the originals
+    var from = pasteRound.last || box;
+    var dx = from.x0 - box.x0 + step, dy = from.y0 - box.y0;
+    if (!pasteRound.last && clip.cut) { dx = 0; dy = 0; }
     var view = spot ? null : viewOnDesign();
     if (spot) {
-      dx = spot.x - midX;
-      dy = spot.y - midY;
-    } else if (view && (box.x1 + dx < view.x0 || box.x0 + dx > view.x1 ||
-                        box.y1 + dy < view.y0 || box.y0 + dy > view.y1)) {
-      dx = (view.x0 + view.x1) / 2 - midX;
-      dy = (view.y0 + view.y1) / 2 - midY;
+      dx = spot.x - (box.x0 + box.x1) / 2;
+      dy = spot.y - (box.y0 + box.y1) / 2;
+    } else if (view && (from.x1 < view.x0 || from.x0 > view.x1 ||
+                        from.y1 < view.y0 || from.y0 > view.y1)) {
+      dx = (view.x0 + view.x1) / 2 - (box.x0 + box.x1) / 2;
+      dy = (view.y0 + view.y1) / 2 - (box.y0 + box.y1) / 2;
     }
     dx = Math.round(dx / HAND_GRID) * HAND_GRID;
     dy = Math.round(dy / HAND_GRID) * HAND_GRID;
-    placeCopies(clip, dx, dy);
+    var made = placeCopies(clip, dx, dy, [step, 0]);
+    if (made.length) {
+      // where the originals' corner went, so the next is beside this one
+      // even if this one was moved on along the row
+      var one = nodeById(made[0]), was = clip.nodes[0];
+      var mx = one.x - was.x, my = one.y - was.y;
+      pasteRound.last = { x0: box.x0 + mx, y0: box.y0 + my, x1: box.x1 + mx, y1: box.y1 + my };
+    }
     return true;
   }
 
-  // Another of each, beside them, and the clipboard left as it was.
+  // Another of each, beside them in a row to the right, and the clipboard
+  // left as it was.
   function duplicateShapes(ids) {
     if (!ids.length) { return; }
-    placeCopies(clipOf(ids), 30, 30);
+    var clip = clipOf(ids), step = rowStep(clipBox(clip.nodes));
+    placeCopies(clip, step, 0, [step, 0]);
   }
 
   function selectAll() {

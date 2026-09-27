@@ -51,6 +51,7 @@
   }
   function setMode(toHand) {
     var wasHand = byHand;
+    if (toHand !== byHand) { dropRun(); }   // the run goes with the chart it ran (14-run.js)
     if (toHand && !byHand) { keepCodeSide(); }
     byHand = toHand;
     // said on the page too, for what only drawing by hand has: the tools in

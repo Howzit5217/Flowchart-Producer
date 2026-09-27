@@ -364,7 +364,7 @@
   .opt-sub {
     display: block; margin-top: 1px; font-size: 11.5px; color: var(--muted);
   }
-  .opt-row > .seg, .opt-row > .field { flex: 0 0 252px; width: 252px; }
+  .opt-row > .seg, .opt-row > .field { flex: 0 0 272px; width: 272px; }
   .opt-row > .seg .seg-btn { padding: 6px 6px; white-space: nowrap; }
   /* Too narrow for a name and a control side by side: the control goes
      under its name, the whole width -- a switch stays at the side. */
@@ -736,6 +736,7 @@
     display: block; font-size: 11.5px; color: var(--muted); margin-bottom: 4px;
   }
   .print-side .switch { display: flex; align-items: center; gap: 8px;
+                        justify-content: space-between;
                         margin-top: 12px; font-size: 13px; }
   .print-side .hint { margin-top: 16px; }
   #print-paper-area {
