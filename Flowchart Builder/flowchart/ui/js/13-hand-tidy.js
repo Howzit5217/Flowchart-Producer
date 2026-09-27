@@ -55,10 +55,12 @@
   //
   // Two things are asked differently, because the shapes here are bigger
   // than the ones the layout draws for itself: more room between them
-  // (TIDY_ROOM, or an arrow between two boxes was nearly all head), and
-  // the True and False measured at the size they are written here, so the
-  // layout leaves them room enough.
+  // (TIDY_ROOM, and never less than TIDY_GAP from one shape down to the
+  // next -- an arrow between two boxes was nearly all head, and hard to
+  // follow), and the True and False measured at the size they are written
+  // here, so the layout leaves them room enough.
   var TIDY_ROOM = 1.5;
+  var TIDY_GAP = 40;
   function tidyAsk(text, sizes) {
     var letters = lettersAsked();
     letters.size = HAND_TYPE * chartPt() / PLAIN_PT;
@@ -69,7 +71,8 @@
       seed: TIDY_SEED,
       lang: el("#f-lang") ? el("#f-lang").value : "",
       legend: false, grid: true, shapes: geom, letters: letters,
-      everyout: true, apart: true, sizes: sizes, plan: true, room: TIDY_ROOM
+      everyout: true, apart: true, sizes: sizes, plan: true,
+      room: TIDY_ROOM, gap: TIDY_GAP
     });
   }
 
@@ -214,10 +217,11 @@
   }
 
   // The layout, put on the paper the way the pseudocode side puts a chart
-  // on its paper: in the corner, with the same wall of paper round it on
-  // every side (TIDY_WALL, as MARGIN in settings.py), so the paper shrinks
-  // or grows to fit it.  Its first shape lands on the ruling.  How many
-  // shapes moved, or null when the layout had nowhere for any of them.
+  // on its paper: with the same wall of paper round it on every side
+  // (TIDY_WALL, as MARGIN in settings.py), so the paper shrinks or grows
+  // to fit it -- and in the middle of the paper, where the paper is bigger
+  // than that anyway.  How many shapes moved, or null when the layout had
+  // nowhere for any of them.
   var TIDY_WALL = 2 * HAND_RULE;
   function tidyApply(layout) {
     var ids = Object.keys(layout.places);
@@ -237,22 +241,38 @@
         now.y0 = Math.min(now.y0, p[1]); now.y1 = Math.max(now.y1, p[1]);
       });
     });
-    var lead = layout.places[layout.order[0]];
-    // up to the ruling rather than to the nearest line of it: never nearer
-    // the edge than the wall
-    var dx = Math.ceil((lead.x + TIDY_WALL - now.x0) / HAND_GRID - 0.001) * HAND_GRID - lead.x;
-    var dy = Math.ceil((lead.y + TIDY_WALL - now.y0) / HAND_GRID - 0.001) * HAND_GRID - lead.y;
-    ids.forEach(function (id) {
-      var n = nodeById(+id), s = layout.places[id];
-      n.x = Math.round(s.x + dx);
-      n.y = Math.round(s.y + dy);
-    });
     // A shape the flow never reaches -- an arrow not drawn yet, a note off
     // to one side -- goes down the side of the chart, in the order it stood
     // in from the top, rather than being left somewhere out across the
     // paper with the chart gone from round it.
     var stray = hand.nodes.filter(function (n) { return !layout.places[n.id]; });
     stray.sort(function (p, q) { return (p.y - q.y) || (p.x - q.x); });
+    var strayW = 0, strayH = 0;
+    stray.forEach(function (n) {
+      var t = turned(n);
+      strayW = Math.max(strayW, t.w);
+      strayH += (strayH ? CLEAR : 0) + t.h;
+    });
+    // A chart smaller than the least paper a drawing is given (drawHand)
+    // stands in the middle of it, rather than in its corner beside a
+    // stretch of bare paper; a bigger one has the wall round it and no more.
+    var wide = now.x1 - now.x0 + (stray.length ? TIDY_ASIDE + strayW : 0);
+    var tall = Math.max(now.y1 - now.y0, strayH);
+    var spareX = Math.max(0, HAND_LEAST_W + HAND_PAD - wide - 2 * TIDY_WALL) / 2;
+    var spareY = Math.max(0, HAND_LEAST_H + HAND_PAD - tall - 2 * TIDY_WALL) / 2;
+    // Its first shape on the ruling: up to it, never nearer the edge than
+    // the wall; or, standing in the middle, to the nearest line of it.
+    var lead = layout.places[layout.order[0]];
+    function onRuling(at, spare) {
+      return (spare ? Math.round(at / HAND_GRID) : Math.ceil(at / HAND_GRID - 0.001)) * HAND_GRID;
+    }
+    var dx = onRuling(lead.x + TIDY_WALL + spareX - now.x0, spareX) - lead.x;
+    var dy = onRuling(lead.y + TIDY_WALL + spareY - now.y0, spareY) - lead.y;
+    ids.forEach(function (id) {
+      var n = nodeById(+id), s = layout.places[id];
+      n.x = Math.round(s.x + dx);
+      n.y = Math.round(s.y + dy);
+    });
     var aside = now.x1 + dx + TIDY_ASIDE, down = now.y0 + dy;
     stray.forEach(function (n) {
       var t = turned(n);
@@ -381,20 +401,114 @@
     return true;
   }
 
+  // A shape, and whatever stands round it on the paper: its rule mark, and
+  // the dots, corners and handles it has while it is picked.
+  function tidyFollowers(svg, id) {
+    return all('.node[data-i="h' + id + '"], .rule-dot[data-hint="' + id + '"], [data-i="' + id + '"]', svg)
+      .map(function (e) { return { el: e, own: e.getAttribute("transform") || "" }; });
+  }
+
+  // Each arrow's head, by the arrow's number.  The heads are drawn apart
+  // from their lines, all together, each starting at the very point its line
+  // ends on (drawHand); two lines ending on one point -- the two sides of an
+  // If coming home -- take the two heads there in turn.
+  function tidyHeads(svg) {
+    var heads = all(".tips .head", svg), taken = [], out = {};
+    all(".link[data-link]", svg).forEach(function (g) {
+      var flow = el(".flow", g);
+      var end = flow ? (flow.getAttribute("d") || "").split(/[ML]/).pop().trim() : "";
+      for (var k = 0; k < heads.length && end; k++) {
+        if (taken.indexOf(k) < 0 && (heads[k].getAttribute("points") || "").indexOf(end + " ") === 0) {
+          out[g.dataset.link] = heads[k];
+          taken.push(k);
+          return;
+        }
+      }
+    });
+    return out;
+  }
+
+  // Where the paper it had is, in the new paper's numbers -- more paper on
+  // the left, or a key along the top, moves where the drawing's own 0 is --
+  // and the least paper that holds both, for the sheet that stands in under
+  // it while it changes (tidyPaper).
+  function tidyStart(svg, before) {
+    var box = svg.viewBox && svg.viewBox.baseVal;
+    var ox = handOrigin.x - before.origin.x, oy = handOrigin.y - before.origin.y;
+    var W1 = box.width, H1 = box.height;
+    var m = { svg: svg, viewBox: svg.getAttribute("viewBox"), width: svg.style.width,
+              moves: [], lines: [], end: 0, shift: 0, ox: ox, oy: oy,
+              same: ox === 0 && oy === 0 && W1 === before.w && H1 === before.h,
+              all: { x0: Math.min(0, ox), y0: Math.min(0, oy),
+                     x1: Math.max(W1, ox + before.w), y1: Math.max(H1, oy + before.h) } };
+    // The paper, `e` of the way from the one it had to the one it has now,
+    // and big enough for every shape where it has got to.
+    m.sheetAt = function (e) {
+      var q = 1 - e;
+      var x0 = ox * q, y0 = oy * q;
+      var x1 = (ox + before.w) * q + W1 * e, y1 = (oy + before.h) * q + H1 * e;
+      m.moves.forEach(function (mv) {
+        var p = mv.p < 0 ? 0 : mv.p;
+        var cx = mv.x + mv.dx * (1 - p) + handOrigin.x, cy = mv.y + mv.dy * (1 - p) + handOrigin.y;
+        x0 = Math.min(x0, cx - mv.w / 2 - 40); x1 = Math.max(x1, cx + mv.w / 2 + 40);
+        y0 = Math.min(y0, cy - mv.h / 2 - 20); y1 = Math.max(y1, cy + mv.h / 2 + 40);
+      });
+      x0 = Math.max(x0, m.all.x0); y0 = Math.max(y0, m.all.y0);
+      x1 = Math.min(x1, m.all.x1); y1 = Math.min(y1, m.all.y1);
+      svg.setAttribute("viewBox", x0.toFixed(2) + " " + y0.toFixed(2) + " " +
+                       (x1 - x0).toFixed(2) + " " + (y1 - y0).toFixed(2));
+      svg.style.width = ((x1 - x0) * zoom).toFixed(2) + "px";
+    };
+    return m;
+  }
+
+  // One step of a shape's way, `p` of it, on it and all that goes with it.
+  function tidyCarry(mv, p) {
+    var x = (mv.dx * (1 - p)).toFixed(2), y = (mv.dy * (1 - p)).toFixed(2);
+    mv.bits.forEach(function (b) {
+      if (p >= 1) {
+        if (b.own) { b.el.setAttribute("transform", b.own); } else { b.el.removeAttribute("transform"); }
+      } else {
+        b.el.setAttribute("transform", "translate(" + x + " " + y + ")" + (b.own ? " " + b.own : ""));
+      }
+    });
+  }
+
+  // The loop every carrying goes round: `shown(t)` for each frame, until
+  // `m.end`; landed at once by tidyDone, by whatever `m.listen` listens for,
+  // and however the frames go (a page put away stops drawing them).
+  function tidyRun(m, shown, stops) {
+    function stop() { tidyDone(); }
+    m.listen = function (on) {
+      var how = on ? "addEventListener" : "removeEventListener";
+      stops.forEach(function (what) {
+        window[how](what, stop, what === "wheel" ? { capture: true, passive: true } : true);
+      });
+    };
+    m.land = function () { shown(Infinity); };
+    shown(0);                            // before the browser draws a frame of it
+    tidyMove = m;
+    m.listen(true);
+    var began = performance.now();
+    function frame() {
+      if (tidyMove !== m) { return; }
+      if (!m.svg.isConnected) { tidyDone(); return; }
+      var t = performance.now() - began;
+      shown(t);
+      if (t >= m.end) { tidyDone(); return; }
+      m.frame = requestAnimationFrame(frame);
+    }
+    m.frame = requestAnimationFrame(frame);
+    m.safety = setTimeout(tidyDone, m.end + 800);
+  }
+
   function tidyMotion(before, order) {
     var svg = chart;
     if (!before || !svg || STILL || document.hidden || hand.nodes.length > TIDY_BIG) { return; }
     var box = svg.viewBox && svg.viewBox.baseVal;
     var layer = el("g[font-family]", svg);
     if (!box || !box.width || !before.w || !layer) { return; }
-    // Where the paper it had is, in the new paper's numbers: more paper on
-    // the left, or a key along the top, moves where the drawing's own 0 is.
-    var ox = handOrigin.x - before.origin.x, oy = handOrigin.y - before.origin.y;
-    var W1 = box.width, H1 = box.height;
-    var m = { svg: svg, viewBox: svg.getAttribute("viewBox"), width: svg.style.width,
-              moves: [], lines: [], end: 0, shift: 0,
-              all: { x0: Math.min(0, ox), y0: Math.min(0, oy),
-                     x1: Math.max(W1, ox + before.w), y1: Math.max(H1, oy + before.h) } };
+    var m = tidyStart(svg, before), ox = m.ox, oy = m.oy;
 
     // the arrows it had, where they were
     m.ghost = document.createElementNS("http://www.w3.org/2000/svg", "g");
@@ -413,12 +527,12 @@
       var n = nodeById(id), was = before.at[id];
       if (!n || !was) { return; }
       var t = turned(n);
-      var mv = { n: n, w: t.w, h: t.h, dx: was.x - n.x, dy: was.y - n.y, p: -1 };
+      var mv = { n: n, x: n.x, y: n.y, w: t.w, h: t.h, dx: was.x - n.x, dy: was.y - n.y,
+                 p: -1, bits: [] };
       m.moves.push(mv);
       var far = Math.hypot(mv.dx, mv.dy);
-      if (far < 0.5) { landed[id] = 0; mv.p = 1; mv.bits = []; return; }
-      mv.bits = all('.node[data-i="h' + id + '"], .rule-dot[data-hint="' + id + '"], [data-i="' + id + '"]', svg)
-        .map(function (e) { return { el: e, own: e.getAttribute("transform") || "" }; });
+      if (far < 0.5) { landed[id] = 0; mv.p = 1; return; }
+      mv.bits = tidyFollowers(svg, id);
       mv.at = TIDY_OFF + k * gap;
       mv.takes = Math.min(TIDY_LONG, TIDY_SHORT + far * TIDY_PACE);
       landed[id] = mv.at + mv.takes;
@@ -427,41 +541,14 @@
     m.end = m.shift;
     m.lift = m.moves.length <= TIDY_LIFT;
 
-    // The paper, `e` of the way from the one it had to the one it has now,
-    // and big enough for every shape where it has got to.
-    m.sheetAt = function (e) {
-      var q = 1 - e;
-      var x0 = ox * q, y0 = oy * q;
-      var x1 = (ox + before.w) * q + W1 * e, y1 = (oy + before.h) * q + H1 * e;
-      m.moves.forEach(function (mv) {
-        var p = mv.p < 0 ? 0 : mv.p;
-        var cx = mv.n.x + mv.dx * (1 - p) + handOrigin.x, cy = mv.n.y + mv.dy * (1 - p) + handOrigin.y;
-        x0 = Math.min(x0, cx - mv.w / 2 - 40); x1 = Math.max(x1, cx + mv.w / 2 + 40);
-        y0 = Math.min(y0, cy - mv.h / 2 - 20); y1 = Math.max(y1, cy + mv.h / 2 + 40);
-      });
-      x0 = Math.max(x0, m.all.x0); y0 = Math.max(y0, m.all.y0);
-      x1 = Math.min(x1, m.all.x1); y1 = Math.min(y1, m.all.y1);
-      svg.setAttribute("viewBox", x0.toFixed(2) + " " + y0.toFixed(2) + " " +
-                       (x1 - x0).toFixed(2) + " " + (y1 - y0).toFixed(2));
-      svg.style.width = ((x1 - x0) * zoom).toFixed(2) + "px";
-    };
-
     // and the arrows it has now, each drawn once both its shapes are down
-    var heads = all(".tips .head", svg), headTaken = [];
+    var heads = tidyHeads(svg);
     all(".link[data-link]", svg).forEach(function (g) {
       var link = hand.links.filter(function (l) { return String(l.id) === g.dataset.link; })[0];
       var flow = el(".flow", g);
       if (!link || !flow) { return; }
       var len = flow.getTotalLength ? flow.getTotalLength() : 0;
-      var end = (flow.getAttribute("d") || "").split(/[ML]/).pop().trim(), head = null;
-      for (var k = 0; k < heads.length && end; k++) {
-        if (headTaken.indexOf(k) < 0 &&
-            (heads[k].getAttribute("points") || "").indexOf(end + " ") === 0) {
-          head = heads[k];
-          headTaken.push(k);
-          break;
-        }
-      }
+      var head = heads[g.dataset.link] || null;
       var at = Math.max(landed[link.from] || 0, landed[link.to] || 0, TIDY_FADE * 0.6);
       var takes = Math.max(TIDY_LEAST, Math.min(TIDY_MOST, len / TIDY_PEN));
       m.lines.push({ flow: flow, len: len, head: head, words: all(".patch, .label", g),
@@ -478,14 +565,7 @@
         var p = tidyEase((t - mv.at) / mv.takes);
         if (p === mv.p) { return; }
         mv.p = p;
-        var x = (mv.dx * (1 - p)).toFixed(2), y = (mv.dy * (1 - p)).toFixed(2);
-        mv.bits.forEach(function (b) {
-          if (p >= 1) {
-            if (b.own) { b.el.setAttribute("transform", b.own); } else { b.el.removeAttribute("transform"); }
-          } else {
-            b.el.setAttribute("transform", "translate(" + x + " " + y + ")" + (b.own ? " " + b.own : ""));
-          }
-        });
+        tidyCarry(mv, p);
         // Lifted off the paper while it is carried, and set down again: a
         // shadow that grows as it goes and goes as it lands, which is what
         // says which of two shapes crossing is the one on its way.
@@ -525,30 +605,8 @@
       }
     }
 
-    function stop() { tidyDone(); }
-    m.listen = function (on) {
-      var how = on ? "addEventListener" : "removeEventListener";
-      window[how]("pointerdown", stop, true);
-      window[how]("keydown", stop, true);
-      window[how]("wheel", stop, { capture: true, passive: true });
-    };
-    m.land = function () { shown(Infinity); };
     if (!tidyPaper(m, before)) { m.shift = 0; }   // no paper to change: it simply is the new one
-    shown(0);                            // before the browser draws a frame of it
-    tidyMove = m;
-    m.listen(true);
-    var began = performance.now();
-    function frame() {
-      if (tidyMove !== m) { return; }
-      if (!svg.isConnected) { tidyDone(); return; }
-      var t = performance.now() - began;
-      shown(t);
-      if (t >= m.end) { tidyDone(); return; }
-      m.frame = requestAnimationFrame(frame);
-    }
-    m.frame = requestAnimationFrame(frame);
-    // and lands however the frames go: a page put away stops drawing them
-    m.safety = setTimeout(tidyDone, m.end + 800);
+    tidyRun(m, shown, ["pointerdown", "keydown", "wheel"]);
   }
 
   // Whatever is still on its way lands, at once.
@@ -610,7 +668,8 @@
         // Tidy already: no step for Undo to take back that changes nothing.
         if (JSON.stringify(hand) === was) { wasLike.pop(); showUndo(); }
         else { wasLike[wasLike.length - 1].tidied = true; }   // Undo carries it back
-        drawHand();
+        glideHeld++;                     // it carries itself (tidyMotion)
+        try { drawHand(); } finally { glideHeld--; }
         drawHandPanel();
         if (moved) { tidyMotion(before, layout.order); }   // tidy already: nothing to see
         showReport();
@@ -627,22 +686,257 @@
   }
 
   // ---- stepping back over one ----------------------------------------------
-  // Undo takes a tidy back the way it came, and Redo does it again: the
-  // shapes carried back, not simply found where they were, which on a
-  // drawing that has just moved all over is the only way to see what went
-  // where.  Only a tidy: any other step back is a shape or an arrow, and
-  // snapping back is how that should look.  Each way is marked as it is
-  // taken, so the way back again is carried too.
+  // Undo takes a tidy back the way it came, and Redo does it again, the way
+  // a tidy goes: one shape after another down the chart, the arrows let go
+  // and drawn in again.  Each way is marked as it is taken, so the way back
+  // again goes like that too.  Any other step back or forward glides, like
+  // every other move (below).
   var stepBackPlain = stepBack;
   stepBack = function (forward) {
     var from = forward ? willBeLike : wasLike, to = forward ? wasLike : willBeLike;
     var step = from[from.length - 1];
     var carried = byHand && step && step.tidied;
+    if (!carried) {
+      glideAcross = true;                // another copy of the design: the same drawing
+      try { stepBackPlain(forward); } finally { glideAcross = false; }
+      return;
+    }
     tidyDone();
-    var before = carried ? tidyLook() : null;
-    stepBackPlain(forward);
-    if (!carried) { return; }
+    var before = tidyLook();
+    glideHeld++;                         // it carries itself
+    try { stepBackPlain(forward); } finally { glideHeld--; }
     if (to.length) { to[to.length - 1].tidied = true; }
     var order = hand.nodes.slice().sort(function (p, q) { return (p.y - q.y) || (p.x - q.x); });
     tidyMotion(before, order.map(function (n) { return n.id; }));
   };
+
+  // ======================================================== every move ==
+  // A shape moved by anything but a hand on it -- Undo and Redo, a fix from
+  // the check, the arrow keys, lining up and spacing out, one pushed off
+  // another it was put down on -- used to simply be somewhere else, the
+  // whole drawing jumping at once.  Now every one is carried from where it
+  // was seen to where it goes, all together, its arrows bending with it and
+  // the paper growing or shrinking under it.  How long it takes goes with
+  // how far: a nudge is a blink, a long way a little longer.
+  //
+  // Three things are left alone.  A shape under the mouse or a finger
+  // follows it, as it always has (nothing glides while a pointer is down).
+  // Another drawing -- one opened, loaded, put back from a reload -- simply
+  // arrives: only the design the last drawing was of, or a copy of it put
+  // back by Undo, glides.  And a tidy carries itself (tidyMotion).
+  //
+  // A move made while the last is still going -- Ctrl+Z held down, the
+  // arrow keys -- goes on from where everything is seen, not from where it
+  // was bound for, so it never jumps; a press, or the wheel, lands it.
+  var GLIDE_SHORT = 170, GLIDE_LONG = 420;   // ms, a nudge to a long way
+  var GLIDE_PACE = 0.6;                  // and a ms more for so many px between
+  var glideHeld = 0;                     // drawings that carry themselves
+  var glideAcross = false;               // a step back: a copy of the same drawing
+  var glideLast = null;                  // the drawing as it was last drawn
+  var glidePress = false;                // a pointer is down
+
+  window.addEventListener("pointerdown", function () { glidePress = true; }, true);
+  ["pointerup", "pointercancel", "blur"].forEach(function (what) {
+    window.addEventListener(what, function () { glidePress = false; }, true);
+  });
+
+  function glideSnap() {                 // the drawing just drawn
+    var at = {}, box = chart && chart.viewBox && chart.viewBox.baseVal;
+    hand.nodes.forEach(function (n) { at[n.id] = { x: n.x, y: n.y }; });
+    return { ref: hand, at: at, origin: { x: handOrigin.x, y: handOrigin.y },
+             w: box ? box.width : 0, h: box ? box.height : 0 };
+  }
+
+  // Where each shape is seen now: where it was drawn -- or, part way along
+  // being carried, part way.
+  function glideSeen() {
+    var at = {};
+    Object.keys(glideLast.at).forEach(function (id) {
+      at[id] = { x: glideLast.at[id].x, y: glideLast.at[id].y };
+    });
+    var m = tidyMove;
+    if (m && m.svg === chart) {
+      m.moves.forEach(function (mv) {
+        if (!mv.bits.length || mv.p >= 1) { return; }
+        var p = mv.p < 0 ? 0 : mv.p;
+        at[mv.n.id] = { x: mv.x + mv.dx * (1 - p), y: mv.y + mv.dy * (1 - p) };
+      });
+    }
+    return at;
+  }
+
+  // Every arrow's line, head and words, as they are seen now, by number.
+  function glideLines(svg) {
+    var out = {}, heads = tidyHeads(svg);
+    all(".link[data-link]", svg).forEach(function (g) {
+      var flow = el(".flow", g);
+      if (!flow) { return; }
+      out[g.dataset.link] = {
+        d: flow.getAttribute("d"),
+        head: heads[g.dataset.link] ? heads[g.dataset.link].getAttribute("points") : null,
+        words: all(".label", g).map(function (e) { return [+e.getAttribute("x"), +e.getAttribute("y")]; }),
+        patches: all(".patch", g).map(function (e) {
+          return ["x", "y", "width", "height"].map(function (a) { return +e.getAttribute(a); });
+        })
+      };
+    });
+    return out;
+  }
+
+  var drawHandAsked = drawHand;
+  drawHand = function () {
+    var last = glideLast, was = chart, before = null;
+    if (last && !glideHeld && !glidePress && !STILL && !document.hidden && byHand &&
+        was && was.isConnected && handPaper === was && (hand === last.ref || glideAcross) &&
+        hand.nodes.length <= TIDY_BIG) {
+      var stage = el("#stage");
+      before = { svg: was, at: glideSeen(), lines: glideLines(was), origin: last.origin,
+                 w: last.w, h: last.h, hold: [holdX, holdY],
+                 scroll: stage ? [stage.scrollLeft, stage.scrollTop] : null };
+    }
+    tidyDone();
+    drawHandAsked();
+    glideLast = glideSnap();
+    if (before) { glideMotion(before); }
+  };
+
+  // One line of an arrow as the same line at another place.  An arrow that
+  // keeps its shape -- as many corners, each run still going the same way
+  // -- has each corner slid from where it was to where it goes, so its runs
+  // stay square and its corners eased the whole way.  One that has taken
+  // another shape (a corner more or less, a run turned) is not bent from the
+  // one into the other, which could only go through slants no arrow here
+  // ever has: the old line fades as the new one comes in.  The old one is in
+  // the old paper's numbers.
+  function glidePath(was, now, ox, oy) {
+    var a = cornersOf(was), b = cornersOf(now);
+    if (a.length < 2 || a.length !== b.length) { return null; }
+    function ways(pts) {
+      return pts.slice(1).map(function (p, i) {
+        return Math.abs(p[0] - pts[i][0]) < 0.5 ? "|" : Math.abs(p[1] - pts[i][1]) < 0.5 ? "-" : "/";
+      }).join("");
+    }
+    if (ways(a) !== ways(b)) { return null; }
+    return { from: a.map(function (p) { return [p[0] + ox, p[1] + oy]; }), to: b };
+  }
+
+  function glideNums(was, now, shift) {  // numbers, the old ones moved by `shift`
+    var a = was.map(function (v, i) { return v + (shift[i % shift.length] || 0); });
+    return a.length === now.length ? { from: a, to: now } : null;
+  }
+
+  function glideMotion(before) {
+    var svg = chart, box = svg.viewBox && svg.viewBox.baseVal;
+    if (!box || !box.width || !before.w) { return; }
+    var m = tidyStart(svg, before), ox = m.ox, oy = m.oy, far = 0;
+    hand.nodes.forEach(function (n) {
+      var was = before.at[n.id];
+      if (!was) { return; }
+      var t = turned(n);
+      var mv = { n: n, x: n.x, y: n.y, w: t.w, h: t.h, dx: was.x - n.x, dy: was.y - n.y,
+                 p: -1, bits: [] };
+      m.moves.push(mv);
+      var d = Math.hypot(mv.dx, mv.dy);
+      if (d < 0.5) { mv.p = 1; return; }
+      far = Math.max(far, d);
+      mv.bits = tidyFollowers(svg, n.id);
+    });
+    if (!far) { return; }                // nothing moved: nothing to carry
+    m.end = m.shift = Math.min(GLIDE_LONG, GLIDE_SHORT + far * GLIDE_PACE);
+
+    // The arrows that were there, from how they were seen to how they are.
+    var heads = tidyHeads(svg);
+    all(".link[data-link]", svg).forEach(function (g) {
+      var was = before.lines[g.dataset.link], flow = el(".flow", g);
+      if (!was || !flow) { return; }
+      var line = { flow: flow, done: flow.getAttribute("d"), path: glidePath(was.d, flow.getAttribute("d"), ox, oy),
+                   bits: [], fades: [] };
+      var head = heads[g.dataset.link];
+      if (!line.path) {                  // another shape of arrow: the old one fades
+        var old = flow.cloneNode(false);
+        old.setAttribute("d", was.d);
+        old.setAttribute("transform", "translate(" + ox + " " + oy + ")");
+        old.removeAttribute("class");
+        g.insertBefore(old, flow);
+        line.fades.push({ el: old, out: true }, { el: flow });
+        if (head && was.head) {
+          var oldHead = head.cloneNode(false);
+          oldHead.setAttribute("points", was.head);
+          oldHead.setAttribute("transform", "translate(" + ox + " " + oy + ")");
+          oldHead.removeAttribute("class");
+          head.parentNode.insertBefore(oldHead, head);
+          line.fades.push({ el: oldHead, out: true }, { el: head });
+        }
+      } else if (head && was.head) {
+        line.bits.push({ el: head, name: "points", done: head.getAttribute("points"), pairs: true,
+                         nums: glideNums(numsIn(was.head), numsIn(head.getAttribute("points")), [ox, oy]) });
+      }
+      all(".label", g).forEach(function (e, i) {
+        if (!was.words[i]) { return; }
+        ["x", "y"].forEach(function (name, k) {
+          line.bits.push({ el: e, name: name, done: e.getAttribute(name),
+                           nums: glideNums([was.words[i][k]], [+e.getAttribute(name)], [k ? oy : ox]) });
+        });
+      });
+      all(".patch", g).forEach(function (e, i) {
+        if (!was.patches[i]) { return; }
+        ["x", "y", "width", "height"].forEach(function (name, k) {
+          line.bits.push({ el: e, name: name, done: e.getAttribute(name),
+                           nums: glideNums([was.patches[i][k]], [+e.getAttribute(name)],
+                                           [k === 0 ? ox : k === 1 ? oy : 0]) });
+        });
+      });
+      m.lines.push(line);
+    });
+
+    function between(nums, p) {
+      return nums.from.map(function (v, i) { return v + (nums.to[i] - v) * p; });
+    }
+    function shown(t) {
+      var p = tidyEase(t / m.end);
+      m.moves.forEach(function (mv) {
+        if (!mv.bits.length || p === mv.p) { return; }
+        mv.p = p;
+        tidyCarry(mv, p);
+      });
+      m.lines.forEach(function (line) {
+        if (p >= 1 || !line.path) {
+          line.flow.setAttribute("d", line.done);
+        } else {
+          line.flow.setAttribute("d", easedPath(line.path.from.map(function (a, i) {
+            var b = line.path.to[i];
+            return [+(a[0] + (b[0] - a[0]) * p).toFixed(1), +(a[1] + (b[1] - a[1]) * p).toFixed(1)];
+          })));
+        }
+        line.fades.forEach(function (f) {
+          if (p >= 1) {
+            if (f.out) { if (f.el.parentNode) { f.el.parentNode.removeChild(f.el); } }
+            else { f.el.style.opacity = ""; }
+          } else {
+            f.el.style.opacity = (f.out ? 1 - p : p).toFixed(3);
+          }
+        });
+        line.bits.forEach(function (bit) {
+          if (p >= 1 || !bit.nums) { bit.el.setAttribute(bit.name, bit.done); return; }
+          var v = between(bit.nums, p).map(function (n) { return n.toFixed(1); });
+          if (bit.pairs) {
+            var pts = [];
+            for (var k = 0; k + 1 < v.length; k += 2) { pts.push(v[k] + "," + v[k + 1]); }
+            bit.el.setAttribute(bit.name, pts.join(" "));
+          } else {
+            bit.el.setAttribute(bit.name, v[0]);
+          }
+        });
+      });
+      if (m.same) { return; }            // the paper stays as it is
+      if (p < 1) { m.sheetAt(p); }
+      else if (!m.settled) {
+        m.settled = true;
+        svg.setAttribute("viewBox", m.viewBox);
+        svg.style.width = m.width;
+      }
+    }
+
+    if (!m.same && !tidyPaper(m, before)) { m.same = true; }
+    tidyRun(m, shown, ["pointerdown", "wheel"]);
+  }

@@ -1523,6 +1523,9 @@
   // else.  (The top stays put: that is where the flow starts from.)
   var handOrigin = { x: 0, y: 0 };
   var handPaper = null;                  // the drawing that was drawn last
+  // The least paper a drawing is given, and the paper kept past its
+  // furthest shape (Tidy up centres a small chart on the least of it).
+  var HAND_LEAST_W = 520, HAND_LEAST_H = 280, HAND_PAD = 40;
 
   function handScreenX() {               // the design's 0, across the screen
     var r = chart.getBoundingClientRect();
@@ -1536,7 +1539,8 @@
   function drawHand() {
     tidyMany();                          // only shapes still on the paper
     keepApart();                         // and none on top of another (13-hand-apart.js)
-    var pad = 40, maxx = 520, maxy = 280, ox = 0, oy = 0, least = Infinity;
+    var pad = HAND_PAD, maxx = HAND_LEAST_W, maxy = HAND_LEAST_H, ox = 0, oy = 0;
+    var least = Infinity;
     hand.nodes.forEach(function (n) {
       measure(n);
       var room = turned(n);

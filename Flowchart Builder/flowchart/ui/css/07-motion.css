@@ -191,6 +191,32 @@
   .seg-btn.on { background: none; box-shadow: none; }
   .seg-btn:hover { color: var(--ink); }
 
+  /* Move and Select are in the foot bar only while drawing by hand, and
+     they used to blink into it, the padlocks beside them jumping left to
+     make room.  Now the pair opens out from nothing while the padlocks
+     glide over and its two buttons rise into it, and it folds away again
+     on the way back to pseudocode.  The pair's width is its own in every
+     language, so it is measured (26-motion.js) as --tools-w, with the
+     bar's gap as --tools-gap, which it gives back while it has no width.
+     Its block is held at its full-size width meanwhile, or it would
+     squeeze out from under the lit button as the pair narrowed. */
+  body:not(.by-hand) #tool-seg.folding { display: flex; }
+  #tool-seg.opening, #tool-seg.folding { overflow: hidden; }
+  #tool-seg.opening { animation: tools-open .34s var(--ease) both; }
+  #tool-seg.folding { animation: tools-fold .24s var(--ease-soft) both; }
+  #tool-seg.opening .seg-btn { animation: row-up .3s var(--ease) .08s backwards; }
+  #tool-seg.opening::before, #tool-seg.folding::before {
+    width: calc((var(--tools-w) - 6px) / 2);
+  }
+  @keyframes tools-open {
+    from { width: 0; padding: 2px 0; margin-left: calc(-1 * var(--tools-gap)); opacity: 0; }
+    to { width: var(--tools-w); }
+  }
+  @keyframes tools-fold {
+    from { width: var(--tools-w); }
+    to { width: 0; padding: 2px 0; margin-left: calc(-1 * var(--tools-gap)); opacity: 0; }
+  }
+
   /* ------------------------------------------------------- the sheets -- */
   /* Both of the sheets that hang off the bar come down out of the button
      that opened them, and go back up into it.  Which point they come out of

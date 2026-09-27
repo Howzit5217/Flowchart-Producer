@@ -424,11 +424,16 @@
       var wasHoldX = holdX, wasHoldY = holdY;
       var at = { x: ev.clientX, y: ev.clientY };
       var pressed = onPaper(ev);         // where on the design it was taken up
+      // Ctrl (or Shift, or Cmd) held while a shape is carried under Select:
+      // this is moving, so the foot bar says Move until the key comes up
+      // (11-hand-many.js) -- the other way round from a box under Move.
+      var keyed = ev.shiftKey || ev.ctrlKey || ev.metaKey, lent = false;
 
       function move(e) {
         if (pinched) { return; }         // a second finger made it a pinch
         if (heldLong) { return; }        // held still for its menu: not carried
         at = { x: e.clientX, y: e.clientY };
+        keyed = e.shiftKey || e.ctrlKey || e.metaKey;
         carry();
       }
       function carry() {
@@ -451,8 +456,14 @@
         }
         if (!stirred && Math.abs(dx) < NUDGE && Math.abs(dy) < NUDGE) { return; }
         if (!noted) { noted = true; keepUndo(); }
+        if (!stirred && !grip) { document.body.classList.add("carrying-shape"); }
         stirred = true;
         shapeCarried = true;                // the view is kept still under it
+        if (!lent && keyed && !grip && handTool === "select") {
+          lent = true;
+          toolBusy = true;
+          lendTool("move");
+        }
         chase(at, carry);
         if (grip) {
           // The corner opposite the one being held stays where it is, so the
@@ -506,12 +517,14 @@
         }
         paint();
       }
-      function drop() {
+      function drop(e) {
         chaseStop();
         guides = [];                     // the red lines go with the holding
         shapeCarried = false;
         window.removeEventListener("pointermove", move);
         window.removeEventListener("pointerup", drop);
+        if (stirred && !grip) { document.body.classList.remove("carrying-shape"); }
+        if (lent) { dragLent(e); }       // Select again, once the key is up
         // A long press opened its menu, and the menu is what it was for.
         if (heldLong && !stirred) { return; }
         // Shift or Ctrl and a click: in, or out again if it was in already.

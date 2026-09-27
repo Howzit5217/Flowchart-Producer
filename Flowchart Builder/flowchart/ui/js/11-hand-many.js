@@ -63,14 +63,16 @@
   // did, and only Shift or Ctrl makes it a box.  With Select, a plain drag
   // is a box, a finger's too; a touch screen has no Shift to hold.
   var lassoDone = false;                 // the click that ends a box is no click
-  var boxGoing = false;                  // a box is being drawn this moment
+  var toolBusy = false;                  // a drag that lent a tool is going
 
-  // "Inside" is most of the way in, not all of it: a shape was left out for
-  // a corner the box fell a few pixels short of, so boxing a row meant
-  // overshooting every edge of it.  Three fifths of the shape's area (as it
-  // stands, turned or not) is in; a box that only clips a shape's edge still
-  // leaves it out (asked for, 2026-09-26: "most of the tile ... balanced").
-  var BOX_COVER = 0.6;
+  // "Inside" is only a little of the way in, not all of it: a shape was left
+  // out for a corner the box fell a few pixels short of, so boxing a row
+  // meant overshooting every edge of it.  It was most of the way in (three
+  // fifths) for a while, and that still meant dragging well over every
+  // shape; asked for again (2026-09-26), a box that reaches a little way
+  // into a shape takes it -- a sixth or so of it, as it stands, turned or
+  // not -- while one that only grazes a neighbour's edge leaves it out.
+  var BOX_COVER = 0.15;
 
   function mostlyIn(n, x0, x1, y0, y1) {
     var t = turned(n);
@@ -110,8 +112,10 @@
           frame.setAttribute("class", "lasso-box");
           svg.appendChild(frame);
           svg.classList.add("lassoing");  // the one shape's dots put away
-          boxGoing = true;
-          if (!boxing) { lendSelect(); }  // a key made it a box: Select, for now
+          if (!boxing) {                  // a key made it a box: Select, for now
+            toolBusy = true;
+            lendTool("select");
+          }
         }
         var x0 = Math.min(from.x, here.x), x1 = Math.max(from.x, here.x);
         var y0 = Math.min(from.y, here.y), y1 = Math.max(from.y, here.y);
@@ -144,9 +148,8 @@
         frame.remove();
         svg.classList.remove("lassoing");
         lassoDone = true;
-        boxGoing = false;
         // the key already let go of while the box was drawn: Move again now
-        if (!(e && (e.shiftKey || e.ctrlKey || e.metaKey))) { giveToolBack(); }
+        if (toolBusy) { dragLent(e); }
         // A second finger made it a pinch, and a pinch chooses nothing.
         if (pinched || heldLong) { drawHand(); return; }
         takeUp(had.concat(inside));
@@ -469,7 +472,7 @@
   catch (e) { /* storage turned off: Move, as the page starts */ }
 
   function setTool(which) {
-    toolLent = false;
+    toolLent = "";
     handTool = which === "select" ? "select" : "move";
     showTool(handTool);
     try { localStorage.setItem("flowchart-tool", handTool); } catch (e) { /* fine */ }
@@ -486,23 +489,31 @@
     });
   }
 
-  // Ctrl (or Shift, or Cmd) held and a box drawn under Move is selecting,
-  // so for as long as the key is down the foot bar says Select and the
-  // cursor is Select's; let go of it once the box is drawn and Move comes
-  // back.  Only lent: Select pressed while it is lent is chosen, and kept
-  // (asked for, 2026-09-26).
-  var toolLent = false;
+  // A key can lend the other tool for as long as it is held.  Ctrl (or
+  // Shift, or Cmd) and a box drawn under Move is selecting, so the foot bar
+  // says Select and the cursor is Select's; Ctrl and a shape dragged under
+  // Select is moving (06-chart.js), so it says Move.  Let go of the key once
+  // the drag is done and the chosen tool comes back.  Only lent: the lent
+  // one pressed while it is lent is chosen, and kept (asked for, 2026-09-26).
+  var toolLent = "";                     // the tool a key has lent, if any
 
-  function lendSelect() {
-    if (handTool === "select" || toolLent) { return; }
-    toolLent = true;
-    showTool("select");
+  function lendTool(which) {
+    if (handTool === which || toolLent) { return; }
+    toolLent = which;
+    showTool(which);
   }
 
   function giveToolBack() {
     if (!toolLent) { return; }
-    toolLent = false;
+    toolLent = "";
     showTool(handTool);
+  }
+
+  // The drag that borrowed it is over: given back, unless the key is still
+  // down, and then when it comes up.
+  function dragLent(e) {
+    toolBusy = false;
+    if (!(e && (e.shiftKey || e.ctrlKey || e.metaKey))) { giveToolBack(); }
   }
 
   if (el("#tool-move")) {
@@ -511,10 +522,10 @@
     setTool(handTool);
   }
   window.addEventListener("keyup", function (ev) {
-    if (toolLent && !boxGoing && !(ev.shiftKey || ev.ctrlKey || ev.metaKey)) { giveToolBack(); }
+    if (toolLent && !toolBusy && !(ev.shiftKey || ev.ctrlKey || ev.metaKey)) { giveToolBack(); }
   });
   // (a key let go of in another window never comes up here)
-  window.addEventListener("blur", function () { if (!boxGoing) { giveToolBack(); } });
+  window.addEventListener("blur", function () { if (!toolBusy) { giveToolBack(); } });
 
   // ------------------------------------------------ moving about the paper --
   // Besides a plain drag under Move, the way every drawing program has: hold

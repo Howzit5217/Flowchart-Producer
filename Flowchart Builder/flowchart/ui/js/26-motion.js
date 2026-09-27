@@ -65,6 +65,31 @@
     segAt[segKey(seg)] = at;
   }
 
+  // ------------------------------------------ Move and Select, by hand --
+  // The pair of tools opens out into the foot bar going over to drawing by
+  // hand, and folds away coming back (07-motion.css).  The stylesheet only
+  // needs telling how wide the pair is, which depends on the language, and
+  // how wide the bar's gap is.  Not while the bar is still arriving with the
+  // page, which is the pair arriving too, with it.
+  var setModePlain = setMode;
+  setMode = function (toHand) {
+    var seg = el("#tool-seg"), foot = seg && seg.parentNode;
+    var go = !!seg && !STILL && !!toHand !== byHand &&
+             !(foot.getAnimations && foot.getAnimations().length);
+    if (go && !toHand) { toolsGo(seg, "folding"); }
+    var out = setModePlain.apply(this, arguments);
+    if (go && toHand) { toolsGo(seg, "opening"); }
+    return out;
+  };
+
+  function toolsGo(seg, how) {
+    seg.classList.remove("opening", "folding");
+    seg.style.setProperty("--tools-w", seg.getBoundingClientRect().width + "px");
+    seg.style.setProperty("--tools-gap",
+      (parseFloat(getComputedStyle(seg.parentNode).columnGap) || 0) + "px");
+    briefly(seg, how, how === "opening" ? 420 : 260);
+  }
+
   // Some switches are not there when the page starts.  The typeface and
   // how heavy a line is are built by the script, and built again every
   // time one of their buttons is pressed -- so the watching done at the

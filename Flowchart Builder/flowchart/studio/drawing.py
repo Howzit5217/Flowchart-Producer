@@ -97,6 +97,11 @@ def draw_for_studio(ask):
     if isinstance(room, (int, float)) and 1 < room <= 3:
         for name in ("VGAP", "HGAP", "LOOP_UP", "COL_GAP", "LABEL_PAD"):
             setattr(settings, name, getattr(settings, name) * room)
+    # and never less than this down the page, so an arrow from one shape to
+    # the one under it is a line with a head on it, not a head on its own
+    gap = ask.get("gap")
+    if isinstance(gap, (int, float)) and 0 < gap <= 200:
+        settings.VGAP = max(settings.VGAP, gap)
     # A chain of If / Else If forks sideways until it is wider than this,
     # and queues down the page after that.  Nought queues every one of
     # them, which is what a narrow page wants and what a class reading the
