@@ -632,7 +632,8 @@
     // all the way down the sheet: a press there carries on at the end.
     var sheet = el("#code-over .code-sheet");
     sheet.addEventListener("mousedown", function (ev) {
-      if (ev.target !== sheet && ev.target !== el("#code-keep")) { return; }
+      if (ev.target !== sheet && ev.target !== el("#code-keep") &&
+          ev.target !== el("#own-col")) { return; }
       ev.preventDefault();               // or the press takes the caret away
       var box = el("#code"), end = box.value.length;
       box.focus();

@@ -287,7 +287,43 @@
   }
   /* the frame the box's own slider bar hangs in, which is the box's size */
   #code-home > .slide-frame { flex: 1; min-width: 0; display: flex; }
-  #source textarea {
+  /* The Code box is the same box, for code: the same ruled paper and
+     type, the same room to grow into, under the language it is in. */
+  #lang-home {
+    position: relative; display: flex; resize: vertical; overflow: hidden;
+    border-radius: 8px; margin-top: 10px;
+    height: 240px; min-height: 120px; max-height: 640px;
+  }
+  #lang-home > .slide-frame { flex: 1; min-width: 0; display: flex; }
+  /* What a story in the box was read as, under it (33-told.js): the same
+     paper, not to be typed on, and shorter to begin with. */
+  #told { margin-top: 10px; }
+  #told[hidden], body.by-lang #told { display: none; }
+  .told-top {
+    display: flex; align-items: center; justify-content: space-between;
+    gap: 8px; margin-bottom: 6px;
+  }
+  .told-name {
+    font-size: 11.5px; font-weight: 700; letter-spacing: .06em;
+    text-transform: uppercase; color: var(--muted);
+  }
+  #told-home {
+    position: relative; display: flex; resize: vertical; overflow: hidden;
+    border-radius: 8px; height: 180px; min-height: 80px; max-height: 520px;
+  }
+  #told-home > .slide-frame { flex: 1; min-width: 0; display: flex; }
+  #told-box { cursor: default; }
+  #told-box:focus { border-color: var(--line); box-shadow: inset 0 1px 2px var(--code-well); }
+  #lang-note:not(:empty) { margin-top: 8px; }
+  #lang-note .hint { margin: 0 0 4px; }
+  #lang-note .btn { margin-top: 4px; }
+  /* What the code was read into.  It is the chart's program still --
+     the run lights its lines, a click on a shape finds its line -- but
+     it is written from the code, so it is read here, not typed in. */
+  body.by-lang #code { cursor: default; }
+  body.by-lang #code:focus { border-color: var(--line); box-shadow: inset 0 1px 2px var(--code-well); }
+  body.by-lang #starts { display: none; }
+  :is(#source, #lang-src) textarea {
     display: block; flex: 1; width: 100%; height: 100%; resize: none;
     min-width: 0;
     border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px;
@@ -310,7 +346,7 @@
      sit where the wrapped words actually are and cover as many rows as they
      take.  It is laid on the same local attachment as the ruling, so it
      scrolls with the words rather than sitting still while they move. */
-  #source textarea.at {
+  :is(#source, #lang-src) textarea.at {
     background:
       linear-gradient(var(--at-ink, var(--code-at)), var(--at-ink, var(--code-at)))
         0 var(--at-top, 10px) / 100% var(--at-tall, 20px) no-repeat,
@@ -321,22 +357,22 @@
   /* The same band, in red, for the line a run stopped at.  It is left
      there when the run ends: an error you have to catch as it flies past is
      hardly better than no error at all. */
-  #source textarea.at.wrong { --at-ink: var(--code-bad); }
+  :is(#source, #lang-src) textarea.at.wrong { --at-ink: var(--code-bad); }
   /* And the same band again, quieter, for the line that drew the shape you
      have just picked on the paper.  A run takes the band back the moment it
      has anything of its own to mark. */
-  #source textarea.at.spot { --at-ink: var(--accent-soft); }
-  #source textarea::placeholder { color: var(--muted); }
-  #source textarea:focus {
+  :is(#source, #lang-src) textarea.at.spot { --at-ink: var(--accent-soft); }
+  :is(#source, #lang-src) textarea::placeholder { color: var(--muted); }
+  :is(#source, #lang-src) textarea:focus {
     outline: 0; border-color: var(--accent);
     box-shadow: inset 0 1px 2px var(--code-well), 0 0 0 3px var(--accent-soft);
   }
   #code-slot #code { border-radius: 10px; }
-  #source .fields {
+  :is(#source, #lang-src) .fields {
     display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 12px;
   }
-  #source .fields > div { min-width: 0; }   /* a long word cannot widen a column */
-  #source input[type="text"], #source select, .field {
+  :is(#source, #lang-src) .fields > div { min-width: 0; }   /* a long word cannot widen a column */
+  :is(#source, #lang-src) input[type="text"], :is(#source, #lang-src) select, .field {
     width: 100%; border: 1px solid var(--line); border-radius: 8px; padding: 7px 9px;
     background-color: var(--field); color: var(--ink);
   }
@@ -351,23 +387,23 @@
      The room on the right is kept clear of the words, and is a little
      wider than the chevron needs: a name that runs right up to the arrow
      looks like a mistake even when it fits. */
-  #source select, select.field {
+  :is(#source, #lang-src) select, select.field {
     padding-right: 34px;
     background-color: var(--panel);
     background-position: right 11px center;
     background-size: 14px 14px;
   }
-  #source select:hover, select.field:hover,
-  #source select:focus, select.field:focus {
+  :is(#source, #lang-src) select:hover, select.field:hover,
+  :is(#source, #lang-src) select:focus, select.field:focus {
     border-color: var(--accent);
     background-image: var(--pick-arrow-lit);
   }
-  #source select:hover, select.field:hover { background-color: var(--accent-soft); }
+  :is(#source, #lang-src) select:hover, select.field:hover { background-color: var(--accent-soft); }
   /* The label over a field and the label beside a switch are different
      things.  This one is for the field labels; saying so keeps it from
      taking the switches with it, which is what made Grid and Key come out
      small and gray while Step slowly, sitting outside #source, did not. */
-  #source label:not(.switch) {
+  :is(#source, #lang-src) label:not(.switch) {
     display: block; font-size: 11.5px; color: var(--muted); margin-bottom: 3px;
   }
   /* Three short programs, under the box, for anybody who has never seen
@@ -401,8 +437,8 @@
   }
   /* Options and Build side by side: the choices beside the button they
      shape, Build taking the room that is left. */
-  #source .build-row #more { flex: none; padding-left: 18px; padding-right: 18px; }
-  #source .build-row #build { flex: 1; width: auto; min-width: 0; }
+  :is(#source, #lang-src) .build-row #more { flex: none; padding-left: 18px; padding-right: 18px; }
+  :is(#source, #lang-src) .build-row #build { flex: 1; width: auto; min-width: 0; }
   /* It carries no chevron.  Nothing else on this page that opens something
      does -- Files opens a sheet with nothing but its name on it -- and one
      button wearing a little arrow among a panel of buttons that do not is
@@ -444,11 +480,11 @@
     display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 12px;
     align-items: center;
   }
-  #source .go {
+  :is(#source, #lang-src) .go {
     margin-top: 12px; display: flex; gap: 10px; align-items: center;
     justify-content: space-between;
   }
-  #source .go .btn { flex: none; }
+  :is(#source, #lang-src) .go .btn { flex: none; }
   /* two buttons of equal weight, filling the width between them */
   .pair-wide {
     display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 12px;
@@ -518,7 +554,7 @@
   }
   #puzzles.some::after { opacity: 1; transform: scale(1); }
   #puzzles.won { border-color: var(--good); color: var(--good); }
-  #source .build-row { margin-top: 12px; }
+  :is(#source, #lang-src) .build-row { margin-top: 12px; }
   /* The two things to do with a finished drawing, in a row of their own
      above the one that says whether it works.  Plain buttons, because
      Check is the thing this card is for and only one button on a card

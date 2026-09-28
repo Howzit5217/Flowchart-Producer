@@ -35,8 +35,10 @@
   // broken on purpose and putting it right is the puzzle: a button that
   // did it for you would be handing over the answer.  What is wrong is
   // still said, in the same colors -- only the button is kept back.
+  // Nor in Code: the pseudocode there is read from the code, so a fix
+  // made to it would be made to the wrong one of the two.
   function mendsOff() {
-    return !byHand && !!onPuzzle;
+    return (!byHand && !!onPuzzle) || byLang;
   }
 
   // Where line `at` starts and ends in the box, counted in characters.

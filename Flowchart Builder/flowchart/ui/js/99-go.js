@@ -47,6 +47,9 @@
       setMode(true);
       return;                            // by hand: nothing to draw from code
     }
+    // Code: its box opens empty like the pseudocode's, on the tab it was
+    // left on (32-code-side.js).
+    if (lastMode === "lang" && el("#tab-lang")) { setMode(false, true); }
   }
   // Whatever is in the box on arrival is drawn.  Nothing is, ordinarily --
   // the box opens empty and stays empty until somebody writes in it -- but

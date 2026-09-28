@@ -1056,7 +1056,10 @@
     // of it written as a title (titleFor, 09-names.js).  Only the top of it
     // is read: a chart of a hundred thousand lines is named by its first
     // few, like any other.
-    var named = titleFor(code);
+    // A story is named by the pseudocode it was last read as (33-told.js):
+    // what the words amount to says what the program does, where the words
+    // themselves are sentences, not a program to be read.
+    var named = titleFor(toldText || code);
     return named ? { text: named, guess: true } : null;
   }
 
@@ -1489,6 +1492,7 @@
                                  data.h + " px";
         AST = data.ast || null;
         builtText = asked;
+        showTold(AST && AST.retold);     // a story, and what it was read as (33-told.js)
         dressRunner();                   // there is something to run now
         forgetLines();
         if (AST) {

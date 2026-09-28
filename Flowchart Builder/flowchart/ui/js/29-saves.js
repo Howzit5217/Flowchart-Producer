@@ -710,6 +710,7 @@
 
   function aughtToSave() {
     if (byHand) { return !!(hand && hand.nodes && hand.nodes.length); }
+    if (byLang && langData()) { return true; }
     return !!(el("#code") && el("#code").value.trim());
   }
 
@@ -1085,7 +1086,8 @@
     bin.setAttribute("aria-label", TXT.delete);
     bin.innerHTML = BIN_ART;
     top.appendChild(bin);
-    var how = one.project.mode === "hand" ? TXT.mode_hand : TXT.mode_code;
+    var how = one.project.mode === "hand" ? TXT.mode_hand
+            : one.project.mode === "lang" ? TXT.mode_lang : TXT.mode_code;
     row.appendChild(keptBit("p", "kept-what", how + " · " + statusOf(one.run)));
     row.appendChild(keptBit("p", "kept-when", whenSaid(one.at)));
     var does = keptBit("div", "kept-do");

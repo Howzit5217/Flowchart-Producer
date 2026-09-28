@@ -45,6 +45,10 @@
       [[["Tab"], ["shift", "Tab"]], "k_indent"],
       [[["enter"]], "k_enter"]
     ]],
+    ["k_lang", "#lang-code", [
+      [[["Tab"], ["shift", "Tab"]], "k_indent"],
+      [[["enter"]], "k_enter"]
+    ]],
     ["k_shape", "", [
       [[["ctrl", "B"], ["ctrl", "I"], ["ctrl", "U"]], "k_look"],
       [[["ctrl", "shift", ">"], ["ctrl", "shift", "<"]], "k_size"]

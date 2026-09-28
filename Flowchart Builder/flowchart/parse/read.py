@@ -13,6 +13,7 @@ from ..parse.data import R_SET
 from ..parse.statements import (
     Chart, Frame, ends_flow, make_module, parse_for, simple_node,
     split_outside_quotes, strip_then)
+from ..parse.story import TOLD, retell
 from ..parse.trouble import OPEN_TROUBLE, PROBLEMS, trouble
 from ..words.lookup import word
 
@@ -56,6 +57,13 @@ def parse_program(text):
     room_to_nest()
     del PROBLEMS[:]
     lines = join_lines(text.splitlines())
+    # Told as a story rather than written as pseudocode: read what it was
+    # retold as, each line still numbered by the sentence it came from, so
+    # the chart, the run and every warning point back into the story.
+    told = retell(lines)
+    TOLD[0] = told[1] if told else ""
+    if told:
+        lines = told[0]
     top, modules, declares, outs = [], [], [], []
     at_declares, at_outs = [], []       # and the line each of them came from
     counted, here = [0], [0]            # statement numbers, and where we are
@@ -498,6 +506,11 @@ def parse_program(text):
         if not ends_flow(items):
             items.append(stamp(Node("oval", word("end") if chart.is_main
                                     else word("ret"), terminal=True), 0))
+    # A fix is a change to a line of what was typed, and a story's lines are
+    # not the pseudocode the fix was worked out on: said, but not offered.
+    if told:
+        for problem in PROBLEMS:
+            problem["fix"] = {}
     return charts
 
 

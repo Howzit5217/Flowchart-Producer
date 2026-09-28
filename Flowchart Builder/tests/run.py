@@ -2116,6 +2116,205 @@ def _():
     return not wrong, note
 
 
+# ------------------------------------------------ code and stories, read in --
+# The Code tab reads a program in Python, Java, C#, C++ or JavaScript back
+# into pseudocode (ui/js/18-from-code.js), and the pseudocode box reads a
+# program told in plain words (parse/story.py).  Both are only as good as
+# what the pseudocode they make does when it is run, so that is what these
+# check: every one is read, run by the runner, and compared.
+def shelf_run(cases, folder, name):
+    """program.js over a shelf of programs: what each printed, and each one
+    written out in every language."""
+    asked = {"words": builder().WORDS["en"], "cases": [], "shelf": cases,
+             "shelfOut": os.path.join(folder, name + ".json")}
+    with io.open(os.path.join(folder, name + "-asked.json"), "w", encoding="utf-8") as f:
+        f.write(json.dumps(asked))
+    got = subprocess.run(["node", os.path.join(HERE, "program.js"),
+                          os.path.join(folder, name + "-asked.json")],
+                         capture_output=True, text=True)
+    if got.returncode:
+        raise RuntimeError((got.stdout + got.stderr).strip()[-300:])
+    with io.open(asked["shelfOut"], encoding="utf-8") as f:
+        return json.load(f)
+
+
+def read_code_in(reads, folder):
+    """from-code.js over [{lang, code}]: the pseudocode each came to, or why not."""
+    asked = os.path.join(folder, "reads-asked.json")
+    answer = os.path.join(folder, "reads.json")
+    with io.open(asked, "w", encoding="utf-8") as f:
+        f.write(json.dumps({"words": builder().WORDS["en"], "cases": reads}))
+    got = subprocess.run(["node", os.path.join(HERE, "from-code.js"), asked, answer],
+                         capture_output=True, text=True)
+    if got.returncode:
+        raise RuntimeError((got.stdout + got.stderr).strip()[-300:])
+    with io.open(answer, encoding="utf-8") as f:
+        return json.load(f)
+
+
+# Programs that hand a module something to change by reference, which Java,
+# Python and JavaScript have no way to say: the code written for them hands
+# it back in an array or a tuple, and reading that back is refused, cleanly.
+READ_REFUSED = {("handed over by reference", "java"),
+                ("handed over by reference", "python"),
+                ("handed over by reference", "javascript")}
+
+
+@check("code the page writes out reads back in, and runs the same")
+def _():
+    """Every program on the shelf, written out in all five languages by the
+    page's own writer, read back into pseudocode, and run again.
+
+    Round the whole way, it has to print what it printed to begin with.
+    That is a program written in five different ways, in the habits of each
+    language -- a Scanner and a switch in Java, cin and a helper function in
+    C++, range() and f-strings in Python -- and read back from all of them.
+    """
+    if not node_there():
+        return None, "node is not installed -- skipped"
+    shelf = []
+    for program in PROGRAMS:
+        text = io.open(os.path.join(HERE, "programs", program), encoding="utf-8").read()
+        shelf.append((program, text, written.TYPED.get(program, [])))
+    shelf += [(name, text, typed) for name, text, typed, want, trail in RUNS]
+    shelf += written.SHELF
+    cases = [{"name": name, "typed": typed, "title": "Shelf %02d" % n,
+              "ast": read_as_data(text.strip("\n"))}
+             for n, (name, text, typed) in enumerate(shelf)]
+    folder = tempfile.mkdtemp(prefix="_out-read-", dir=HERE)
+    try:
+        first = shelf_run(cases, folder, "first")
+        reads = []
+        for n, result in enumerate(first):
+            for lang in sorted(result["code"]):
+                if "error" not in result["code"][lang]:
+                    reads.append({"n": n, "lang": lang, "code": result["code"][lang]["text"]})
+        back = read_code_in(reads, folder)
+        again, sent, wrong, refused = [], [], [], 0
+        for one, got in zip(reads, back):
+            name = shelf[one["n"]][0]
+            if "error" in got:
+                if got.get("stack") or (name, one["lang"]) not in READ_REFUSED:
+                    wrong.append("%s, from %s: %s (line %s)" % (name, one["lang"], got["error"],
+                                                                 got.get("line")))
+                else:
+                    refused += 1
+                continue
+            again.append({"name": name, "typed": shelf[one["n"]][2], "title": "x",
+                          "ast": read_as_data(got["text"])})
+            sent.append((one, got))
+        second = shelf_run(again, folder, "second")
+        for (one, got), result in zip(sent, second):
+            before = first[one["n"]]
+            if result["said"] != before["said"] or bool(result["faults"]) != bool(before["faults"]):
+                wrong.append("%s, from %s:\n      it printed %r\n      read back  %r"
+                             % (shelf[one["n"]][0], one["lang"], before["said"][:6],
+                                result["said"][:6]))
+    except RuntimeError as e:
+        return False, str(e)
+    finally:
+        shutil.rmtree(folder, ignore_errors=True)
+    note = "%d programs in %d languages: %d read back and ran the same, %d refused" % (
+        len(shelf), len(set(r["lang"] for r in reads)), len(sent) - len(wrong), refused)
+    if wrong:
+        note += "\n       " + "\n       ".join(wrong[:6])
+    return not wrong, note
+
+
+@check("code written by hand reads in, and runs the same")
+def _():
+    """Code the way people write it, not the way the page writes it: see
+    tests/coded.py, where each program says what it prints."""
+    if not node_there():
+        return None, "node is not installed -- skipped"
+    import coded
+    folder = tempfile.mkdtemp(prefix="_out-coded-", dir=HERE)
+    wrong = []
+    try:
+        back = read_code_in([{"lang": lang, "code": code}
+                             for name, lang, code, typed, want in coded.CODED], folder)
+        cases, kept = [], []
+        for (name, lang, code, typed, want), got in zip(coded.CODED, back):
+            if "error" in got:
+                wrong.append("%s (%s): %s, line %s" % (name, lang, got["error"], got.get("line")))
+                continue
+            cases.append({"name": name, "typed": typed, "title": "x",
+                          "ast": read_as_data(got["text"])})
+            kept.append((name, lang, want))
+        for (name, lang, want), result in zip(kept, shelf_run(cases, folder, "coded")):
+            if result["said"] != want or result["faults"]:
+                wrong.append("%s (%s):\n      wanted %r\n      got    %r"
+                             % (name, lang, want, result["said"]))
+    except RuntimeError as e:
+        return False, str(e)
+    finally:
+        shutil.rmtree(folder, ignore_errors=True)
+    return not wrong, "%d programs in %d languages%s" % (
+        len(coded.CODED), len(set(c[1] for c in coded.CODED)),
+        "" if not wrong else "\n       " + "\n       ".join(wrong[:6]))
+
+
+@check("a program told in plain words runs as the program it tells")
+def _():
+    """See tests/told.py: each story is read, run with its answers typed in,
+    and has to print what it says it prints -- with nothing in it the
+    reading could only leave as words."""
+    if not node_there():
+        return None, "node is not installed -- skipped"
+    import told
+    fb = builder()
+    wrong, cases = [], []
+    for name, text, typed, want, has in told.STORIES:
+        data = read_as_data(text.strip("\n"))
+        retold = data.get("retold") or ""
+        if not retold:
+            wrong.append("%s: not read as a story" % name)
+        missing = [line for line in has if line not in [l.strip() for l in retold.splitlines()]]
+        if missing:
+            wrong.append("%s: the pseudocode has no %r\n%s" % (name, missing[0], retold))
+        cases.append({"name": name, "typed": typed, "title": "x", "ast": data})
+    folder = tempfile.mkdtemp(prefix="_out-told-", dir=HERE)
+    try:
+        results = shelf_run(cases, folder, "told")
+    except RuntimeError as e:
+        return False, str(e)
+    finally:
+        shutil.rmtree(folder, ignore_errors=True)
+    for (name, text, typed, want, has), result in zip(told.STORIES, results):
+        if result["said"] != want or result["faults"]:
+            wrong.append("%s:\n      wanted %r\n      got    %r %s"
+                         % (name, want, result["said"], result["faults"][:1]))
+    del fb
+    return not wrong, "%d stories%s" % (
+        len(told.STORIES), "" if not wrong else "\n       " + "\n       ".join(wrong[:5]))
+
+
+@check("nothing written as pseudocode is read as a story")
+def _():
+    """The story reading only starts on a line that is plainly words.  Every
+    program on the page and on the shelves here is pseudocode, and every one
+    has to be read exactly as it always was -- in all four languages."""
+    from flowchart.parse import story
+    fb = builder()
+    texts = []
+    for lang, words in fb.WORDS.items():
+        for key, value in words.items():
+            if key.endswith("_p") and isinstance(value, str) and "\n" in value:
+                texts.append(("%s %s" % (lang, key), value))
+    for program in PROGRAMS:
+        texts.append((program, io.open(os.path.join(HERE, "programs", program),
+                                       encoding="utf-8").read()))
+    texts += [(name, text) for name, text, typed, want, trail in RUNS]
+    texts += [(name, text) for name, text, typed in written.SHELF]
+    fixed = os.path.join(HERE, "puzzles")
+    if os.path.isdir(fixed):
+        for one in sorted(os.listdir(fixed)):
+            texts.append((one, io.open(os.path.join(fixed, one), encoding="utf-8").read()))
+    misread = [name for name, text in texts if story.is_story(text)]
+    return not misread, "%d programs%s" % (
+        len(texts), "" if not misread else " -- read as stories: " + ", ".join(misread[:6]))
+
+
 @check("the page's script reads as one script")
 def _():
     """Every part poured together, and node asked whether it parses.

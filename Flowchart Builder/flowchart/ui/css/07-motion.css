@@ -164,7 +164,7 @@
                 box-shadow var(--quick) var(--ease-soft),
                 background-color var(--quick) var(--ease-soft);
   }
-  #source input[type="text"]:focus, #source select:focus,
+  :is(#source, #lang-src) input[type="text"]:focus, :is(#source, #lang-src) select:focus,
   .field:focus, textarea.field:focus {
     outline: 0; border-color: var(--accent);
     box-shadow: 0 0 0 3px var(--accent-soft);
@@ -443,7 +443,9 @@
   /* what is selected, when it becomes something else */
   #sel-card.swap #sel-body { animation: swap-in .3s var(--ease) backwards; }
   /* and the two ways of working, as one gives way to the other */
-  #source:not([hidden]), #hand:not([hidden]) { animation: swap-in .3s var(--ease) backwards; }
+  #source:not([hidden]), #hand:not([hidden]), #lang-src:not([hidden]) {
+    animation: swap-in .3s var(--ease) backwards;
+  }
   @keyframes swap-in { from { opacity: 0; transform: translateY(6px); } }
   /* The two sides of the panel sit next to each other, the chart's on the
      left, so the one arriving comes in from its own side.  Leftward only

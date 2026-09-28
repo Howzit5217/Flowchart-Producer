@@ -17,8 +17,9 @@
   function projectData() {
     return {
       what: "flowchart-builder", version: 1,
-      mode: byHand ? "hand" : "code",
+      mode: byHand ? "hand" : byLang ? "lang" : "code",
       hand: hand,
+      written: langData(),               // the Code box, where it has anything (32-code-side.js)
       source: el("#code") ? {
         code: el("#code").value, title: el("#f-title").value,
         author: el("#f-author").value, shape: el("#f-shape").value,
@@ -77,6 +78,13 @@
   function openWritten(name, text) {
     if (!el("#code")) { fileSays(TXT.f_not_ours, true); return; }
     if (!String(text).trim()) { fileSays(TXT.f_empty, true); return; }
+    // A program in a language -- a .py, a .java -- goes into the Code box
+    // and is read from there, not into the pseudocode as if it were some.
+    var lang = langOfFile(name);
+    if (lang && openCodeFile(name, text, lang)) {
+      fileSays(say("f_opened", { name: name }));
+      return;
+    }
     el("#code").value = String(text).replace(/\r\n?/g, "\n");
     showStarts();                        // there is pseudocode now: fold the offer away
     // Called what the file is called, made into a title (tuition_increase
@@ -122,13 +130,14 @@
       wearOptions(was.source.options || { decide: was.source.decide });
     }
     if (was.hand && was.hand.nodes) { hand = was.hand; }
+    wearLang(was.written);               // the Code box: what it held, or nothing
     picked = chosen = null;
     many = [];                           // numbers that mean other shapes now
     // What was open before this file is not behind it: stepping back into
     // another piece of work's colors and shapes would be a stranger thing
     // to be handed than having nothing to step back to.
     forgetUndo();
-    setMode(was.mode === "hand");
+    setMode(was.mode === "hand", was.mode === "lang");
     // Same again: the chart in the file is not the one that was on the
     // paper, so it is drawn -- from the seed its moved blocks were moved
     // on, where it has any, so they go back on it (30-blocks.js).

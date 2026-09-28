@@ -43,6 +43,8 @@ Each folder is one stage of the job.
 | `parse/trouble.py` | What the reading had to paper over, and where |
 | `parse/read.py` | The whole thing: blocks, branches, loops |
 | `parse/data.py` | The same program as data, for running it and for code |
+| `parse/story.py` | Whether a text is a story rather than pseudocode, and the pseudocode it is retold as |
+| `parse/teller.py` | Reading a story a sentence at a time: asking, telling, setting, deciding, going round |
 | **`layout/`** — where everything goes | |
 | `layout/blocks.py` | A block of chart, a run of steps, and who lays out what |
 | `layout/branches.py` | If/else, and the lanes they need |
@@ -70,7 +72,7 @@ Each folder is one stage of the job.
 ### The page
 
 `ui/` is the studio itself: `studio.html`, the stylesheet in seven parts and
-the script in twenty-eight. `parts.py` pours the `.css` and the `.js` into
+the script in forty-eight. `parts.py` pours the `.css` and the `.js` into
 the `@@CSS@@` and `@@JS@@` marks in `studio.html` and hands back the page.
 
 | File | What is in it |
@@ -108,6 +110,7 @@ the `@@CSS@@` and `@@JS@@` marks in `studio.html` and hands back the page.
 | `ui/js/18-ahead.js` | Reading the program through before writing it: what kind of thing every name holds, and where it has to be declared |
 | `ui/js/18-code.js` | What Python, Java, C#, C++ and JavaScript each do differently — a block each |
 | `ui/js/18-write.js` | The writer, which knows no language by name, and the screen the code is written in on |
+| `ui/js/18-from-code.js` | The other way: Python, Java, C#, C++ or JavaScript read back into pseudocode |
 | `ui/js/19-files.js` | Saving a design to a file, and opening it again |
 | `ui/js/19-folder.js` | Saving into a folder picked in Files instead of the browser's downloads |
 | `ui/js/20-menu.js` | The right button, and the menus opened beside its rows |
@@ -122,6 +125,8 @@ the `@@CSS@@` and `@@JS@@` marks in `studio.html` and hands back the page.
 | `ui/js/27-mend.js` | Putting right what a warning already worked out |
 | `ui/js/29-saves.js` | A few places to keep your progress, and picking a run up again where it stood |
 | `ui/js/31-app.js` | Installing the website as an app, and keeping it for offline |
+| `ui/js/32-code-side.js` | The Code tab: the box code is written in, read into the pseudocode on Build |
+| `ui/js/33-told.js` | A story in the pseudocode box, and the pseudocode it was read as beside it |
 | `ui/js/99-go.js` | Starting it all up |
 | `ui/app/sw.js` | The service worker `--site` writes beside the page, so the app opens and draws offline |
 | `ui/app/*.png` | The app's icons, named by the manifest `--site` writes |
@@ -282,6 +287,37 @@ more than one chart in it is then written out a second time, a file for each
 chart, and that way round is compiled and run as well — which is the half of
 a split nothing can check by reading: whether what the files say about one
 another is true.
+
+## Reading code and stories in
+
+The page reads in as well as writing out, two ways, and both come to the
+pseudocode everything else already knows how to draw, run and write.
+
+**Code** (the Code tab, `ui/js/18-from-code.js`) is read by one small
+parser that knows Python by its indenting and the other four by their
+braces, into one tree, and said again as textbook pseudocode: Declares at
+the top, `Set` for every change, `For i = 1 To 10` for a counting loop,
+`Do ... Until` for Python's `while True` with a break at the foot.  What it
+can draw but the runner cannot run -- a list, a method of an object -- is
+written down anyway and noted; what no chart can say (a class, a lambda, a
+`break` from the middle of a loop that is not the ask-then-check shape) is
+refused with the line it is on.  `tests/run.py` writes every program on the
+shelf out in all five languages with the page's own writer, reads each one
+back, runs it, and compares; `tests/coded.py` does the same for code written
+the way people write it.
+
+**A story** (plain English in the pseudocode box, `parse/story.py` and
+`parse/teller.py`) is read in Python, as part of the reading, so a statement
+made from a sentence carries the number of the line that sentence is on:
+running the chart lights the sentence, and a step it could not make sense
+of is pointed at in the story.  The box is never written over; what the
+story was read as goes back with the chart (`retold`) and is shown beside
+it (`ui/js/33-told.js`).  A line that is pseudocode already is kept as it
+is, so a program that is mostly pseudocode with the odd sentence in it
+comes back with those lines put right.  English only: in another language a
+sentence becomes a step in its own words.  `tests/told.py` is the shelf of
+stories, each run and compared, and a check makes sure no program written
+as pseudocode -- in any of the four languages -- is ever read as a story.
 
 ## Checking it
 

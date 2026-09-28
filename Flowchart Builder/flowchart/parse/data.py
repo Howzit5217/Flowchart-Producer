@@ -167,7 +167,12 @@ def items_json(items):
 
 def program_json(charts):
     """The whole program as data: the main flow, and every module in it."""
-    out = {"main": [], "modules": [], "problems": list(PROBLEMS)}
+    # Asked for here rather than at the top: story.py reads its patterns out
+    # of this module, so the two cannot both import the other first.
+    from ..parse.story import TOLD
+    out = {"main": [], "modules": [], "problems": list(PROBLEMS),
+           # a story, as the pseudocode it was retold as (parse/story.py)
+           "retold": TOLD[0]}
     for chart in charts:
         body = items_json(chart.items)
         if chart.is_main:

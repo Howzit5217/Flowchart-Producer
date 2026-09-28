@@ -49,6 +49,7 @@ function runner(WORDS) {
   var faults = [];
   var chart = null;                      // eslint-disable-line no-unused-vars
   var byHand = false;                    // eslint-disable-line no-unused-vars
+  var byLang = false;                    // eslint-disable-line no-unused-vars
   var lineOf = {};                       // eslint-disable-line no-unused-vars
   var document = { createElement: function () { return madeUp(); } };
 

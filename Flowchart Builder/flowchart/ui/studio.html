@@ -116,7 +116,7 @@ __OPTIONS__
     <p class="hint" id="link-note"></p>
     <button class="btn wide file-btn" id="print-open" data-w="print_it">__W(print_it)__</button>
     <input type="file" id="file-in" hidden
-           accept=".json,.txt,.text,.md,.pseudo,.flowchart,application/json,text/plain">
+           accept=".json,.txt,.text,.md,.pseudo,.flowchart,.py,.java,.cs,.cpp,.cc,.cxx,.h,.hpp,.js,application/json,text/plain">
     <!-- Where all of the above goes: the browser's downloads, or a folder
          picked here.  A setting rather than something to do, so it sits
          apart at the foot.  19-folder.js says which, and says so instead
@@ -307,14 +307,32 @@ __SVG__
       <span class="code-count" id="code-count"></span>
       <button class="btn small primary" id="code-done" data-w="done">__W(done)__</button>
     </div>
-    <div id="code-slot"><pre class="code-rule" id="code-rule" aria-hidden="true"></pre></div>
-    <!-- Copy and Save it, under the program the way the code screen has
-         them under the code.  The program is the thing being written up
-         here, and taking it somewhere else was Ctrl+A, Ctrl+C or the Files
-         menu, which saves the whole piece of work rather than the text. -->
-    <div id="code-keep">
-      <button class="btn small" id="code-copy" data-w="r_copy">__W(r_copy)__</button>
-      <button class="btn small" id="code-save" data-w="r_save_code">__W(r_save_code)__</button>
+    <!-- Two columns while the box holds a story: what was written, and the
+         pseudocode it was read as, side by side (33-told.js).  One column,
+         exactly as before, the rest of the time. -->
+    <div class="code-cols">
+      <div class="code-col" id="own-col">
+        <div class="col-head" id="own-head" data-w="told_yours" hidden>__W(told_yours)__</div>
+        <div id="code-slot"><pre class="code-rule" id="code-rule" aria-hidden="true"></pre></div>
+        <!-- Copy and Save it, under the program the way the code screen has
+             them under the code.  The program is the thing being written up
+             here, and taking it somewhere else was Ctrl+A, Ctrl+C or the Files
+             menu, which saves the whole piece of work rather than the text. -->
+        <div id="code-keep">
+          <button class="btn small" id="code-copy" data-w="r_copy">__W(r_copy)__</button>
+          <button class="btn small" id="code-save" data-w="r_save_code">__W(r_save_code)__</button>
+        </div>
+      </div>
+      <div class="code-col" id="told-col" hidden>
+        <div class="col-head" data-w="told_head" data-w-title="told_tip"
+             title="__W(told_tip)__">__W(told_head)__</div>
+        <div id="told-slot"><pre class="code-rule" id="told-rule" aria-hidden="true"></pre>
+          <textarea id="told-full" readonly spellcheck="false"></textarea></div>
+        <div class="told-keep">
+          <button class="btn small" id="told-full-copy" data-w="r_copy">__W(r_copy)__</button>
+          <button class="btn small" id="told-full-save" data-w="r_save_code">__W(r_save_code)__</button>
+        </div>
+      </div>
     </div>
   </div>
 </div>

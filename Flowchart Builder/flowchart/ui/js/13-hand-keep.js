@@ -49,18 +49,30 @@
     }
     restoreProgram();
   }
-  function setMode(toHand) {
+  // Three ways of working, two papers.  Pseudocode and Code share one: code
+  // is read into the pseudocode and drawn from there (32-code-side.js), so
+  // going between the two leaves the chart and its run where they are.
+  // `toLang` only means anything when it is not by hand.
+  var byLang = false;
+  function setMode(toHand, toLang) {
+    toHand = !!toHand;
+    toLang = !toHand && !!toLang;
     var wasHand = byHand;
     if (toHand !== byHand) { dropRun(); }   // the run goes with the chart it ran (14-run.js)
     if (toHand && !byHand) { keepCodeSide(); }
     byHand = toHand;
+    byLang = toLang;
     // said on the page too, for what only drawing by hand has: the tools in
     // the foot bar, the bar over the paper, shapes a finger can carry
     document.body.classList.toggle("by-hand", toHand);
-    el("#tab-code").classList.toggle("on", !toHand);
+    document.body.classList.toggle("by-lang", toLang);
+    el("#tab-code").classList.toggle("on", !toHand && !toLang);
     el("#tab-hand").classList.toggle("on", toHand);
+    if (el("#tab-lang")) { el("#tab-lang").classList.toggle("on", toLang); }
     el("#source").hidden = toHand;
     el("#hand").hidden = !toHand;
+    if (el("#lang-src")) { el("#lang-src").hidden = !toLang; }
+    langSide(toLang);                    // the box, and what moves up beside it
     // Grid and Key belong to the chart, not to the way it was made, so the
     // one pair of switches goes with the sheet of choices the chart is being
     // made with: Chart options from pseudocode, Tidy up's by hand -- at the
@@ -93,13 +105,14 @@
       showCodeSide();
     }
     dressPuzzleButton();                 // offered only where they are solved
-    try { localStorage.setItem("flowchart-mode", toHand ? "hand" : "code"); }
+    try { localStorage.setItem("flowchart-mode", toHand ? "hand" : toLang ? "lang" : "code"); }
     catch (e) { /* fine */ }
   }
 
   if (el("#tab-hand")) {
     el("#tab-code").onclick = function () { setMode(false); };
     el("#tab-hand").onclick = function () { setMode(true); };
+    if (el("#tab-lang")) { el("#tab-lang").onclick = function () { setMode(false, true); }; }
     el("#check").onclick = function () {
       showReport();
       readyHandProgram("check");       // passed? then it can be run

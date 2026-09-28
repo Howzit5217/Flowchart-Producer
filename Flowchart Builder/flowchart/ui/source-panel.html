@@ -1,7 +1,13 @@
+    <!-- Three ways into one chart: writing the pseudocode, drawing the
+         flowchart, or writing the program in a language the page can read
+         back into pseudocode (18-from-code.js).  The third is the first
+         one with a reader in front of it, so it shares the first one's
+         paper, its runner and its Build. -->
     <section class="card" id="modes">
       <div class="tabs">
         <button class="tab on" id="tab-code" data-w="mode_code">__W(mode_code)__</button>
         <button class="tab" id="tab-hand" data-w="mode_hand">__W(mode_hand)__</button>
+        <button class="tab" id="tab-lang" data-w="mode_lang">__W(mode_lang)__</button>
       </div>
     </section>
 
@@ -67,6 +73,24 @@
       </div>
       <div id="report"></div>
     </section>
+
+    <!-- The program as written in a language.  Build reads it into the
+         pseudocode card underneath and draws that, so the two boxes are
+         the same program twice.  Title, Your name, Options and Build are
+         moved up here while this is the way of working (32-code-side.js):
+         there is one of each, and they go with the box being written in. -->
+    <section class="card" id="lang-src" hidden>
+      <h2><span data-w="lang_head">__W(lang_head)__</span></h2>
+      <!-- Filled from the table in 18-code.js: every language the page
+           writes out, it reads back in. -->
+      <select class="field" id="lang-pick" data-w-title="lang_pick"
+              title="__W(lang_pick)__" aria-label="__W(lang_pick)__"></select>
+      <div id="lang-home"><textarea id="lang-code" spellcheck="false"
+        autocapitalize="off" autocomplete="off"></textarea></div>
+      <div id="lang-note"></div>
+      <div id="lang-slot"></div>
+    </section>
+
     <section class="card" id="source">
       <h2><span data-w="pseudocode">__W(pseudocode)__</span>
         <button class="icon small" id="code-big" data-w-title="code_big"
@@ -76,6 +100,19 @@
         </button>
       </h2>
       <div id="code-home"><textarea id="code" spellcheck="false">__CODE__</textarea></div>
+      <!-- What a story in the box was read as (parse/story.py): the box
+           keeps every word that was written, and this is the pseudocode
+           the chart was drawn from, made again on every Build.  Only there
+           while what is in the box is a story (33-told.js). -->
+      <div id="told" hidden>
+        <div class="told-top">
+          <span class="told-name" id="told-name" data-w="told_head" data-w-title="told_tip"
+                title="__W(told_tip)__">__W(told_head)__</span>
+          <button class="btn small" id="told-copy" data-w="r_copy">__W(r_copy)__</button>
+        </div>
+        <div id="told-home"><textarea id="told-box" readonly spellcheck="false"
+          aria-labelledby="told-name"></textarea></div>
+      </div>
       <!-- The first minute used to be an empty box and an instruction to
            paste something into it, with nothing anywhere on the page saying
            what this pseudocode looks like -- the keywords are in --help and

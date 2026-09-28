@@ -121,7 +121,7 @@
     footer.bar { padding: 5px 12px; --foot-h: 24px; }
     .btn.small { padding: 3px 8px; }
     section.card { padding: 10px 14px; }
-    #code-home { height: 120px; min-height: 90px; }
+    #code-home, #lang-home { height: 120px; min-height: 90px; }
     #code-over, #tape-over { padding: 10px; }
     .code-bar { padding: 8px 12px; }
   }

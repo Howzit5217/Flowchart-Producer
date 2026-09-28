@@ -13,7 +13,7 @@
 // Python itself is ten megabytes that only change when PYODIDE points at a
 // new version, and is kept across every other change so nobody fetches it
 // twice.  The names are what tell an old store from the current one.
-var OURS = "flowchart-builder-site-e035e90b89";
+var OURS = "flowchart-builder-site-9f6cb48e79";
 var PYTHON = "flowchart-builder-python-0.27.7";
 var PYODIDE = "https://cdn.jsdelivr.net/pyodide/v0.27.7/full/";
 var HOME = [
@@ -48,6 +48,8 @@ var HOME = [
   "flowchart/parse/nodes.py",
   "flowchart/parse/read.py",
   "flowchart/parse/statements.py",
+  "flowchart/parse/story.py",
+  "flowchart/parse/teller.py",
   "flowchart/parse/trouble.py",
   "flowchart/progress.py",
   "flowchart/settings.py",
