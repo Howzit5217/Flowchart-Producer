@@ -125,7 +125,7 @@ the `@@CSS@@` and `@@JS@@` marks in `studio.html` and hands back the page.
 | `ui/js/27-mend.js` | Putting right what a warning already worked out |
 | `ui/js/29-saves.js` | A few places to keep your progress, and picking a run up again where it stood |
 | `ui/js/31-app.js` | Installing the website as an app, and keeping it for offline |
-| `ui/js/32-code-side.js` | The Code tab: the box code is written in, read into the pseudocode on Build, filling the screen, and translated into the other languages |
+| `ui/js/32-code-side.js` | The Code tab: the box code is written in (a tab per file), its language found from the code, read into the pseudocode on Build, filling the screen, and translated into the other languages |
 | `ui/js/33-told.js` | A story in the pseudocode box, and the pseudocode it was read as beside it |
 | `ui/js/99-go.js` | Starting it all up |
 | `ui/app/sw.js` | The service worker `--site` writes beside the page, so the app opens and draws offline |
@@ -295,7 +295,13 @@ pseudocode everything else already knows how to draw, run and write.
 
 **Code** (the Code tab, `ui/js/18-from-code.js`) is read by one small
 parser that knows Python by its indenting and the other four by their
-braces, into one tree, and said again as textbook pseudocode: Declares at
+braces, into one tree, and said again as textbook pseudocode.  Which of
+the five it is, is found from the code (`codeToPseudo.detect`: the things
+only one language says, and a file's name above all).  A program may be
+several files -- a class each, a module it imports, a header and its
+code -- read as the one program: what the files call each other by
+(`Shared.sold`, `helpers.area(w, h)`) is dropped, the file that does the
+work at the top is main, and the others' set-up runs first.  It reads: Declares at
 the top, `Set` for every change, `For i = 1 To 10` for a counting loop,
 `Do ... Until` for Python's `while True` with a break at the foot.  What it
 can draw but the runner cannot run -- a list, a method of an object -- is
@@ -303,8 +309,9 @@ written down anyway and noted; what no chart can say (a class, a lambda, a
 `break` from the middle of a loop that is not the ask-then-check shape) is
 refused with the line it is on.  `tests/run.py` writes every program on the
 shelf out in all five languages with the page's own writer, reads each one
-back, runs it, and compares; `tests/coded.py` does the same for code written
-the way people write it.
+back, runs it, and compares -- as one file and as a file each -- and every
+one has to be taken for the language it is in; `tests/coded.py` does the
+same for code written the way people write it, in one file or several.
 
 **A story** (plain English in the pseudocode box, `parse/story.py` and
 `parse/teller.py`) is read in Python, as part of the reading, so a statement

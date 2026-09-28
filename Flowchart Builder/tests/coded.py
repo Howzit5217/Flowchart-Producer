@@ -14,6 +14,9 @@ line of its own, as a Display does, and numbers the runner's way (212, not
 prints -- found by running it, in Python, JavaScript, Java and C#, with the
 same answers typed in; C++ had no compiler to hand, and its lines were
 worked out from the same program in Java.
+
+The code is a string, or for a program in several files a list of (file
+name, text); no language is handed to the reader -- it has to tell.
 """
 
 # (what it is about, language, the code, what gets typed, what it prints)
@@ -316,4 +319,138 @@ while (i < people) {
   }
 }
 ''', ["50", "4"], ["Bill?", "People?", "Tip: 10", "Each pays 15", "second person"]),
+
+    # ---- programs in several files: the code is a list of (name, text) ----
+    ("a main file and a module it imports", "python", [
+        ("main.py", '''
+import helpers
+from helpers import area
+
+width = int(input("Width? "))
+height = int(input("Height? "))
+print("Area:", area(width, height))
+print("Perimeter:", helpers.perimeter(width, height))
+if helpers.is_square(width, height):
+    print("A square")
+'''),
+        ("helpers.py", '''
+# Sums about rectangles
+def area(w, h):
+    return w * h
+
+def perimeter(w, h):
+    return 2 * (w + h)
+
+def is_square(w, h):
+    return w == h
+''')], ["3", "3"], ["Width? ", "Height? ", "Area: 9", "Perimeter: 12", "A square"]),
+
+    ("a count kept in one module and changed from another", "python", [
+        ("counter.py", '''
+count = 0
+
+def bump(by):
+    global count
+    count = count + by
+'''),
+        ("app.py", '''
+import counter
+
+def main():
+    for i in range(1, 4):
+        counter.bump(i)
+    print("Count is", counter.count)
+
+if __name__ == "__main__":
+    main()
+''')], [], ["Count is 6"]),
+
+    ("a class for main and a class of helpers", "java", [
+        ("Main.java", '''
+import java.util.Scanner;
+
+public class Main {
+    public static void main(String[] args) {
+        Scanner sc = new Scanner(System.in);
+        System.out.print("Number? ");
+        int n = sc.nextInt();
+        System.out.println(n + " squared is " + MathUtil.square(n));
+        if (MathUtil.isEven(n)) {
+            System.out.println("even");
+        } else {
+            System.out.println("odd");
+        }
+        System.out.println("Limit: " + MathUtil.LIMIT);
+    }
+}
+'''),
+        ("MathUtil.java", '''
+public class MathUtil {
+    public static final int LIMIT = 100;
+
+    public static int square(int x) {
+        return x * x;
+    }
+
+    public static boolean isEven(int x) {
+        return x % 2 == 0;
+    }
+}
+''')], ["7"], ["Number? ", "7 squared is 49", "odd", "Limit: 100"]),
+
+    ("a script and a module it requires", "javascript", [
+        ("main.js", '''
+const util = require("./util.js");
+
+const n = 5;
+console.log("Total:", util.total(n));
+console.log(util.shout("done"));
+'''),
+        ("util.js", '''
+function total(n) {
+  let sum = 0;
+  for (let i = 1; i <= n; i++) {
+    sum += i;
+  }
+  return sum;
+}
+
+function shout(word) {
+  return word.toUpperCase() + "!";
+}
+
+module.exports = { total, shout };
+''')], [], ["Total: 15", "DONE!"]),
+
+    ("a main file, a header and its code", "cpp", [
+        ("main.cpp", '''
+#include <iostream>
+#include "grades.h"
+using namespace std;
+
+int main() {
+    int score;
+    cout << "Score: ";
+    cin >> score;
+    cout << "Grade " << letter(score) << endl;
+    return 0;
+}
+'''),
+        ("grades.h", '''
+#pragma once
+#include <string>
+std::string letter(int score);
+'''),
+        ("grades.cpp", '''
+#include "grades.h"
+
+std::string letter(int score) {
+    if (score >= 90) {
+        return "A";
+    } else if (score >= 80) {
+        return "B";
+    }
+    return "C";
+}
+''')], ["85"], ["Score: ", "Grade B"]),
 ]

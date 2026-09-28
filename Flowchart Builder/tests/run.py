@@ -2189,10 +2189,19 @@ def _():
             for lang in sorted(result["code"]):
                 if "error" not in result["code"][lang]:
                     reads.append({"n": n, "lang": lang, "code": result["code"][lang]["text"]})
+            # and written out as a file each, read back as the files they are
+            for lang, files in sorted((result.get("apart") or {}).items()):
+                if isinstance(files, list) and len(files) > 1:
+                    reads.append({"n": n, "lang": lang, "apart": True,
+                                  "files": [{"name": f["file"] + "." + f["ext"], "text": f["text"]}
+                                            for f in files]})
         back = read_code_in(reads, folder)
         again, sent, wrong, refused = [], [], [], 0
         for one, got in zip(reads, back):
             name = shelf[one["n"]][0]
+            # what language it is in is found from the code alone
+            if got.get("detected") != one["lang"]:
+                wrong.append("%s, from %s: taken for %s" % (name, one["lang"], got.get("detected")))
             if "error" in got:
                 if got.get("stack") or (name, one["lang"]) not in READ_REFUSED:
                     wrong.append("%s, from %s: %s (line %s)" % (name, one["lang"], got["error"],
@@ -2214,8 +2223,9 @@ def _():
         return False, str(e)
     finally:
         shutil.rmtree(folder, ignore_errors=True)
-    note = "%d programs in %d languages: %d read back and ran the same, %d refused" % (
-        len(shelf), len(set(r["lang"] for r in reads)), len(sent) - len(wrong), refused)
+    note = "%d programs in %d languages, %d of them also in a file each: %d read back and ran the same, %d refused" % (
+        len(shelf), len(set(r["lang"] for r in reads)),
+        len([r for r in reads if r.get("apart")]), len(sent) - len(wrong), refused)
     if wrong:
         note += "\n       " + "\n       ".join(wrong[:6])
     return not wrong, note
@@ -2231,10 +2241,14 @@ def _():
     folder = tempfile.mkdtemp(prefix="_out-coded-", dir=HERE)
     wrong = []
     try:
-        back = read_code_in([{"lang": lang, "code": code}
+        # no language given: the reader is to find it from the code
+        back = read_code_in([{"files": [{"name": n, "text": t} for n, t in code]}
+                             if isinstance(code, list) else {"code": code}
                              for name, lang, code, typed, want in coded.CODED], folder)
         cases, kept = [], []
         for (name, lang, code, typed, want), got in zip(coded.CODED, back):
+            if got.get("detected") != lang:
+                wrong.append("%s: taken for %s, not %s" % (name, got.get("detected"), lang))
             if "error" in got:
                 wrong.append("%s (%s): %s, line %s" % (name, lang, got["error"], got.get("line")))
                 continue
@@ -2249,8 +2263,9 @@ def _():
         return False, str(e)
     finally:
         shutil.rmtree(folder, ignore_errors=True)
-    return not wrong, "%d programs in %d languages%s" % (
+    return not wrong, "%d programs in %d languages, %d in several files%s" % (
         len(coded.CODED), len(set(c[1] for c in coded.CODED)),
+        len([c for c in coded.CODED if isinstance(c[2], list)]),
         "" if not wrong else "\n       " + "\n       ".join(wrong[:6]))
 
 

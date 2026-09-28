@@ -63,11 +63,14 @@
                "||", "=>", "??", "?."];
     var R_NUM = /^(?:0[xX][0-9a-fA-F_']+|0[bB][01_']+|\d[\d_']*(?:\.\d[\d_']*)?(?:[eE][+-]?\d+)?|\.\d[\d_']*(?:[eE][+-]?\d+)?|\d+\.(?![\w.]))[lLfFdDmMuU]*/;
 
-    function lexCode(src, lang) {
+    // `base` is how many lines of other files come before this one: a
+    // program in several files is numbered straight through, so a line
+    // number says which file as well as where in it (translate undoes it).
+    function lexCode(src, lang, base) {
       var py = lang === "python", js = lang === "javascript";
       var cs = lang === "csharp";
       var s = String(src || "").replace(/\r\n?/g, "\n").replace(/\t/g, "    ");
-      var n = s.length, i = 0, line = 1, col0 = 0;
+      var n = s.length, i = 0, line = 1 + (base || 0), col0 = 0;
       var toks = [], notes = [];
       var depth = 0, indents = [0], atStart = true, codeOnLine = false;
 
@@ -342,6 +345,9 @@
       var toks = lexed.toks, notes = lexed.notes.slice(), pos = 0;
       var py = lang === "python", js = lang === "javascript";
       var cpp = lang === "cpp", cs = lang === "csharp", java = lang === "java";
+      // what this file names that another file might: the modules it
+      // imports (Python) and the classes it defines (Java, C#)
+      var imports = [], classes = [];
 
       function peek(k) { return toks[Math.min(pos + (k || 0), toks.length - 1)]; }
       function next() { var t = toks[Math.min(pos, toks.length - 1)]; pos++; return t; }
@@ -728,6 +734,21 @@
           expect("]");
           return { k: "list", items: list, line: t.line };
         }
+        // {} and nothing in it: the object a JavaScript file keeps what it
+        // shares in (const shared = {}), which is a file's name, not a list
+        if (t.t === "op" && t.v === "{" && isOp("}")) { next(); return { k: "obj", line: t.line }; }
+        // { total, shout }: what a JavaScript file hands the others
+        // (module.exports = ...), stepped over; used as a value anywhere
+        // else, it is a list of a kind no chart holds
+        if (t.t === "op" && t.v === "{" && js) {
+          for (var deep = 1; deep > 0;) {
+            var in_ = next();
+            if (in_.t === "eof") { throw oops("cm_expected", t.line, { what: "}" }); }
+            if (in_.t === "op" && in_.v === "{") { deep++; }
+            if (in_.t === "op" && in_.v === "}") { deep--; }
+          }
+          return { k: "obj", full: true, line: t.line };
+        }
         if (t.t === "op" && t.v === "{") { throw oops("cm_lists", t.line); }
         throw odd(t);
       }
@@ -1065,9 +1086,26 @@
               do { names.push(next().v); } while (accept(","));
               return [{ k: "global", names: names, line: t.line }];
             }
-            case "import": case "from":
-              while (peek().t !== "nl" && peek().t !== "eof" && !isOp(";")) { next(); }
+            case "import": case "from": {
+              // import helpers, shared as s / from . import helpers: the
+              // names the code will reach the other files by
+              var words = [];
+              while (peek().t !== "nl" && peek().t !== "eof" && !isOp(";")) { words.push(next()); }
+              var after = t.v === "import" ? words
+                : words.slice(words.map(function (w) { return w.v; }).indexOf("import") + 1);
+              var bits = [[]];
+              after.forEach(function (w) {
+                if (w.t === "op" && w.v === ",") { bits.push([]); } else { bits[bits.length - 1].push(w); }
+              });
+              bits.forEach(function (bit) {
+                var named = bit.filter(function (w) { return w.t === "name"; });
+                if (!named.length) { return; }
+                var as = named.map(function (w) { return w.v; }).indexOf("as");
+                imports.push(as >= 0 && named[as + 1] ? named[as + 1].v : named[0].v);
+              });
+              if (t.v === "from" && words[0] && words[0].t === "name") { imports.push(words[0].v); }
               return [];
+            }
             case "raise": {
               next();
               var what = (peek().t === "nl" || peek().t === "eof") ? null : expr();
@@ -1249,7 +1287,7 @@
           while (accept("[")) { if (!isOp("]")) { cAssign(); } expect("]"); dims++; }
           var value = null;
           if (accept("=")) {
-            if (isOp("{")) { throw oops("cm_lists", nm.line); }
+            if (isOp("{") && !js) { throw oops("cm_lists", nm.line); }
             value = cAssign();
           } else if (isOp("(") && !js) {        // C++: int x(5);  or a prototype
             next();
@@ -1429,6 +1467,7 @@
             var kind = next().v;
             if (kind === "enum" || kind === "interface" || cpp || js) { throw oops("cm_class", t.line); }
             out.className = next().v;        // its name: a method of that name is a constructor
+            classes.push(out.className);
             while (!isOp("{")) {
               if (peek().t === "eof") { throw odd(peek()); }
               next();
@@ -1537,7 +1576,12 @@
       }
 
       return {
-        program: function () { return py ? topPy() : topC(); },
+        program: function () {
+          var got = py ? topPy() : topC();
+          got.imports = imports;
+          got.classes = classes;
+          return got;
+        },
         expression: function () {
           var e = expr();
           if (peek().t !== "eof") { throw odd(); }
@@ -1595,17 +1639,153 @@
     function stripParens(e) { while (e && e.k === "paren") { e = e.e; } return e; }
 
     // ============================================= saying it again ==
+    // One program, in one piece of text or in several files: [{name, text}].
+    // The files are numbered straight through while they are read, and
+    // every line number that comes back -- in a note, or on an error -- is
+    // turned back into the file it is in and the line of that file.
     function translate(src, lang) {
+      var files = typeof src === "string" ? [{ name: "", text: src }] : (src || []);
+      var spans = [], base = 0;
+      files.forEach(function (one, k) {
+        var rows = String(one.text || "").split(/\r\n?|\n/).length;
+        spans.push({ file: k, from: base + 1, to: base + rows });
+        base += rows + 1;
+      });
+      function where(line) {
+        for (var k = 0; k < spans.length; k++) {
+          if (line >= spans[k].from && line <= spans[k].to) {
+            return { file: k, line: line - spans[k].from + 1 };
+          }
+        }
+        return { file: 0, line: line };
+      }
+      try {
+        return translateFiles(files, spans, where, lang);
+      } catch (err) {
+        if (err.line) {
+          var at = where(err.line);
+          err.file = at.file;
+          err.line = at.line;
+        }
+        throw err;
+      }
+    }
+
+    function translateFiles(files, spans, where, lang) {
       var py = lang === "python", js = lang === "javascript";
       var cpp = lang === "cpp", cs = lang === "csharp", java = lang === "java";
-      if (!String(src || "").trim()) { throw oops("cm_empty", 0); }
-      var lexed = lexCode(src, lang);
-      var top = parserFor(lexed, lang).program();
+      var some = files.map(function (one, k) { return { one: one, k: k }; })
+                      .filter(function (x) { return String(x.one.text || "").trim(); });
+      if (!some.length) { throw oops("cm_empty", 0); }
+      var tops = some.map(function (x) {
+        var read = parserFor(lexCode(x.one.text, lang, spans[x.k].from - 1), lang).program();
+        read.name = String(x.one.name || "").replace(/^.*[\\/]/, "").replace(/\.\w+$/, "");
+        return read;
+      });
+      // Names reached through another file -- shared.n -- are that file's:
+      // set from inside a function, they are set for the whole program, as
+      // a Python `global` would say
+      var viaModule = {};
+      var top = oneProgram(tops);
       var notes = [];                        // said beside the pseudocode
       function note(line, bit) {
         if (notes.length < 6 && !notes.some(function (n) { return n.line === line; })) {
-          notes.push({ line: line, text: say("cm_wont_run", { n: line, bit: bit }) });
+          var at = where(line);
+          notes.push({ line: at.line, file: at.file,
+                       text: say("cm_wont_run", { n: at.line, bit: bit }) });
         }
+      }
+
+      // ---- several files, one program -------------------------------------
+      // What each file calls the others by -- a module it imports, a class,
+      // an object it keeps its shared names in, the file's own name -- is
+      // how it gets at their functions and names: Shared.sold, helpers.add(x),
+      // receipt.receipt(n).  Read as one program, those are simply sold,
+      // add(x) and receipt(n), and the first word goes.  The file that does
+      // the work at the top is main; what the others set up at theirs is
+      // done first, as importing them would do it.
+      function oneProgram(parts) {
+        var reached = {}, imported = {}, defined = {};
+        parts.forEach(function (one) {
+          if (one.name) { reached[one.name] = true; }
+          one.classes.forEach(function (n) { reached[n] = true; });
+          one.imports.forEach(function (n) { imported[n] = true; });
+          one.funcs.forEach(function (fn) { defined[fn.name] = true; });
+          one.globals.forEach(function (d) { d.names.forEach(function (x) { defined[x.name] = true; }); });
+        });
+        parts.forEach(function (one) {
+          one.main = one.main.filter(function (st) {
+            if (st.k === "decl" && st.names.length === 1) {
+              var v = stripParens(st.names[0].value);
+              // const shared = {}, const shared = require("./shared.js")
+              if (v && ((v.k === "obj" && !v.full) || (v.k === "call" && pathOf(v.fn) === "require" &&
+                  /^\.{1,2}\//.test(String(v.args[0] && v.args[0].v || ""))))) {
+                reached[st.names[0].name] = true;
+                return false;
+              }
+            }
+            // module.exports = shared, exports.receipt = receipt -- in
+            // JavaScript, where exports is the language's; in C++ it is a name
+            if (js && st.k === "expr" && st.e.k === "assignx" &&
+                /^(module\.exports|exports)(\.|$)/.test(pathOf(st.e.target) || "")) {
+              return false;
+            }
+            return true;
+          });
+          one.main.forEach(function (st) {
+            var target = st.k === "assign" ? st.target : st.k === "expr" && st.e.k === "assignx" ? st.e.target : null;
+            target = stripParens(target);
+            if (target && target.k === "name") { defined[target.v] = true; }
+            if (target && target.k === "member") { defined[target.name] = true; }
+          });
+        });
+        function unprefix(x) {
+          if (!x || typeof x !== "object") { return x; }
+          if (Array.isArray(x)) {
+            for (var i = 0; i < x.length; i++) { x[i] = unprefix(x[i]); }
+            return x;
+          }
+          if (x.k === "member" && x.obj && x.obj.k === "name" &&
+              (reached[x.obj.v] || (imported[x.obj.v] && defined[x.name]))) {
+            viaModule[x.name] = true;
+            return { k: "name", v: x.name, line: x.line };
+          }
+          for (var key in x) {
+            if (key !== "line" && x[key] && typeof x[key] === "object") { x[key] = unprefix(x[key]); }
+          }
+          return x;
+        }
+        parts.forEach(unprefix);
+        var chief;
+        if (py || js) {
+          var best = -1;
+          parts.forEach(function (one) {
+            var score = 0;
+            one.main.forEach(function (st) {
+              if (st.k === "note") { return; }
+              if (st.k === "if" && py && pathOf(st.cond.a) === "__name__") { score += 1000; return; }
+              if (st.k === "expr" && st.e.k === "call" && pathOf(st.e.fn) === "main") { score += 500; return; }
+              score += st.k === "assign" || st.k === "decl" ||
+                       (st.k === "expr" && st.e.k === "assignx") ? 0.1 : 1;
+            });
+            if (score > best) { best = score; chief = one; }
+          });
+        } else {
+          chief = parts.filter(function (one) { return one.mainFound; })[0] ||
+                  parts.filter(function (one) { return one.main.length; })[0] || parts[0];
+        }
+        var merged = { funcs: [], globals: [], main: [], head: chief.head || [],
+                       trailing: chief.trailing || [], imports: [], classes: [],
+                       mainFound: chief.mainFound };
+        parts.forEach(function (one) {
+          merged.funcs = merged.funcs.concat(one.funcs);
+          merged.globals = merged.globals.concat(one.globals);
+          if (one !== chief) {
+            merged.main = merged.main.concat(one.main.filter(function (st) { return st.k !== "note"; }));
+          }
+        });
+        merged.main = merged.main.concat(chief.main);
+        return merged;
       }
 
       // ---- the writer's own helpers, and the devices --------------------
@@ -2714,6 +2894,11 @@
         fn.params.forEach(function (p) {
           ch.params[p.name] = { name: p.name, kind: p.dims ? "list" : kindOfType(p.type), ref: p.ref };
         });
+        if (py) {
+          Object.keys(viaModule).forEach(function (n) {
+            if (!ch.params[n]) { ch.globalsHere[n] = true; }
+          });
+        }
         charts.push(ch);
         fn.chart = ch;
         kindChart = ch;
@@ -2746,8 +2931,12 @@
         decl.names.forEach(function (one) {
           var kind = one.dims || decl.dims ? "list" : kindOfType(decl.type);
           var g = globalChart.meet(one.name, { kind: kind, declared: true, konst: decl.konst, type: decl.type });
-          g.value = one.value;
-          g.line = one.line;
+          // declared again without a value -- a C++ header's extern -- it
+          // keeps the value the other declaration gave it
+          if (one.value || !g.value) {
+            g.value = one.value;
+            g.line = one.line;
+          }
           if (one.value) { g.values = [one.value]; }
         });
       });
@@ -2972,6 +3161,7 @@
         }
         switch (s.k) {
           case "fn": throw oops("cm_lambda", s.line);
+          case "obj": throw oops("cm_lists", s.line);
           case "num": return { t: String(s.v), r: /^-/.test(String(s.v)) ? 8 : 9 };
           case "str": return { t: quoted(s.v), r: 9 };
           case "bool": return { t: s.v ? "True" : "False", r: 9 };
@@ -3383,6 +3573,61 @@
       notes.sort(function (a, b) { return a.line - b.line; });
       return { text: rows.join("\n") + "\n", notes: notes.filter(function (n) { return n.line; }) };
     }
+
+    // ==================================================== which language ==
+    // Code is its own best label.  Each language has things only it says --
+    // System.out.println, Console.WriteLine, #include, console.log, a def
+    // ending in a colon -- and whichever language the code says most of the
+    // things of is the one it is written in.  A file's name says it outright
+    // (.py, .java), and outweighs all of them.  None of the signs at all, and
+    // there is no telling: null, and whoever asked goes by what they had.
+    var SIGNS = {
+      python: [[/^\s*def\s+\w+\s*\([^)]*\)\s*(?:->\s*[\w\[\], ]+\s*)?:\s*(?:#.*)?$/m, 8],
+               [/^\s*(?:if|while|elif|else|for|try|except)\b[^\n{};]*:\s*(?:#.*)?$/m, 5],
+               [/^\s*elif\b/m, 6], [/^\s*for\s+\w+\s+in\s+/m, 5],
+               [/^\s*(?:import\s+\w+(?:\s*,\s*\w+)*|from\s+[\w.]+\s+import\s+.+)\s*$/m, 4],
+               [/\bprint\s*\(/, 2], [/\binput\s*\(/, 3], [/\brange\s*\(/, 3],
+               [/\bf"[^"]*\{/, 4], [/\b(?:True|False|None)\b/, 2], [/\b(?:and|or|not)\s/, 1],
+               [/\blen\s*\(/, 2], [/^\s*#(?!include|define|pragma|region)/m, 1],
+               [/;\s*$/m, -4], [/\{\s*$/m, -5]],
+      java: [[/\bSystem\.out\.print/, 9], [/\bpublic\s+static\s+void\s+main\s*\(\s*String/, 10],
+             [/\bimport\s+java\./, 10], [/\bnew\s+Scanner\s*\(/, 8], [/\bString\[\]/, 4],
+             [/\b(?:Integer|Double)\.parse\w+/, 6], [/\bboolean\b/, 4], [/\bString\s+\w+\s*=/, 3],
+             [/\.equals\s*\(/, 3], [/\.length\(\)/, 2], [/\bclass\s+\w+/, 1]],
+      csharp: [[/\bConsole\.(?:WriteLine|Write|ReadLine|ReadKey)\b/, 10], [/\busing\s+System\b/, 9],
+               [/\bstatic\s+void\s+Main\s*\(/, 9], [/\bnamespace\s+\w+/, 4], [/\bstring\[\]/, 5],
+               [/\b(?:int|double|bool|decimal)\.(?:Parse|TryParse)\b/, 7], [/\$"[^"]*\{/, 5],
+               [/\bConvert\.To\w+/, 6], [/\bstring\s+\w+\s*=/, 3], [/\.Length\b/, 2], [/\bclass\s+\w+/, 1]],
+      cpp: [[/^\s*#include\s*[<"]/m, 10], [/\bstd::/, 8], [/\bcout\s*<</, 9], [/\bcin\s*>>/, 9],
+            [/\busing\s+namespace\s+std\b/, 10], [/\bint\s+main\s*\(/, 5], [/\bendl\b/, 5]],
+      javascript: [[/\bconsole\.(?:log|error|warn|info)\s*\(/, 10], [/\b(?:let|const|var)\s+\w+\s*=/, 4],
+                   [/\bfunction\s+\w+\s*\(/, 4], [/=>/, 3], [/===|!==/, 5], [/\bprompt\s*\(/, 5],
+                   [/\brequire\s*\(/, 6], [/\bdocument\./, 6], [/\x60[^\x60]*\$\{/, 6],
+                   [/\b(?:parseInt|parseFloat|Number)\s*\(/, 3], [/\bmodule\.exports\b/, 8],
+                   [/\.toFixed\s*\(/, 4]]
+    };
+    var EXT_LANG = { py: "python", pyw: "python", java: "java", cs: "csharp", cpp: "cpp",
+                     cc: "cpp", cxx: "cpp", hpp: "cpp", h: "cpp", js: "javascript",
+                     mjs: "javascript", cjs: "javascript" };
+    function detect(src) {
+      var files = typeof src === "string" ? [{ name: "", text: src }] : (src || []);
+      var score = {};
+      Object.keys(SIGNS).forEach(function (lang) { score[lang] = 0; });
+      files.forEach(function (one) {
+        var ext = /\.([A-Za-z0-9]+)$/.exec(String(one.name || ""));
+        if (ext && EXT_LANG[ext[1].toLowerCase()]) { score[EXT_LANG[ext[1].toLowerCase()]] += 50; }
+        var text = String(one.text || "");
+        Object.keys(SIGNS).forEach(function (lang) {
+          SIGNS[lang].forEach(function (sign) { if (sign[0].test(text)) { score[lang] += sign[1]; } });
+        });
+      });
+      var best = null;
+      Object.keys(score).forEach(function (lang) {
+        if (score[lang] > 0 && (!best || score[lang] > score[best])) { best = lang; }
+      });
+      return best;
+    }
+    translate.detect = detect;
 
     return translate;
   })();

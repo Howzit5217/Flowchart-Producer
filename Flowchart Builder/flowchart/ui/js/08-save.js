@@ -291,8 +291,27 @@
     el("#save-file").onclick = saveProject;
     el("#open-file").onclick = function () { el("#file-in").click(); };
     el("#file-in").onchange = function () {
-      var one = el("#file-in").files[0];
+      var picked = [].slice.call(el("#file-in").files || []);
+      var one = picked[0];
       if (!one) { return; }
+      // Several files of code at once are one program in several files:
+      // all of them go into the Code tab, a tab each (32-code-side.js).
+      // Anything else opens the first, as it always has.
+      if (picked.length > 1 && picked.every(function (f) { return langOfFile(f.name); })) {
+        Promise.all(picked.map(function (f) {
+          return new Promise(function (done) {
+            var each = new FileReader();
+            each.onload = function () { done({ name: f.name, text: String(each.result) }); };
+            each.onerror = function () { done({ name: f.name, text: "" }); };
+            each.readAsText(f);
+          });
+        })).then(function (files) {
+          openCodeFiles(files);
+          fileSays(say("f_opened", { name: files.map(function (f) { return f.name; }).join(", ") }));
+        });
+        el("#file-in").value = "";
+        return;
+      }
       var reader = new FileReader();
       reader.onload = function () {
         openFile(one.name, String(reader.result));

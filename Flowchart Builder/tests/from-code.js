@@ -51,13 +51,17 @@ if (process.argv.length === 3) {
 
 var asked = JSON.parse(fs.readFileSync(process.argv[2], "utf8"));
 var read = reader(asked.words);
+// A case is {lang, code} or {lang, files: [{name, text}]} -- a program in
+// several files -- and with no lang the reader is asked which it is too.
 var out = asked.cases.map(function (one) {
+  var src = one.files || one.code;
+  var lang = one.lang || read.detect(src);
   try {
-    var got = read(one.code, one.lang);
-    return { text: got.text, notes: got.notes };
+    var got = read(src, lang);
+    return { text: got.text, notes: got.notes, detected: read.detect(src) };
   } catch (e) {
-    return { error: e.message, line: e.line || 0, said: e.said || "",
-             stack: e.said ? "" : String(e.stack || e) };
+    return { error: e.message, line: e.line || 0, file: e.file || 0, said: e.said || "",
+             detected: read.detect(src), stack: e.said ? "" : String(e.stack || e) };
   }
 });
 fs.writeFileSync(process.argv[3], JSON.stringify(out));

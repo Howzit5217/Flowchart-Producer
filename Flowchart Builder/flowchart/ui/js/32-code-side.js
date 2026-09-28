@@ -14,31 +14,51 @@
   // the run and the code written out from it are the pseudocode side's,
   // and what the code amounts to is on the page to be read beside it.
   //
+  // Which language it is written in is found from the code itself (unless
+  // somebody picks one), and a program can be in several files -- a tab
+  // each over the box -- which are read together as the one program.
+  //
   // The two boxes are one program for as long as nobody changes the
   // pseudocode under the other tab.  When somebody does, this box says so
   // and offers to write the pseudocode out in the language again -- the
   // page's own writer (18-write.js), the same one Export code uses.
   //
   // Like the pseudocode, what is written here is not kept between visits,
-  // only through a reload, a save or a file (19-files.js carries it); which
-  // language it is written in is a preference, and is.
+  // only through a reload, a save or a file (19-files.js carries it); how
+  // the language is chosen is a preference, and is.
   var langFrom = null;                   // the code the pseudocode was last read from
   var langMade = null;                   // and the pseudocode that reading made
   var langAsked = false;                 // Build asked for by its keys, not its button
+  var langFiles = [{ name: "", text: "" }];   // the program's files; the box holds one
+  var langAt = 0;                        // which one
+  var langSeen = null;                   // the language the code was last found to be in
 
   function langBox() { return el("#lang-code"); }
 
-  // Which language: the picker, filled from the table in 18-code.js -- so
-  // whatever the page can write out, it offers to read back in.
+  // ------------------------------------------------ which language --
+  // Found from what is written (codeToPseudo.detect): the picker's first
+  // choice, and the one it starts on.  Picking a language by name says
+  // which one it is when the code alone cannot -- a few lines any of them
+  // might have written -- and holds until it is set back.
   function langNow() {
     var pick = el("#lang-pick");
-    return pick && LANGS[pick.value] ? pick.value : "python";
+    if (pick && LANGS[pick.value]) { return pick.value; }
+    if (langSeen) { return langSeen; }
+    try {
+      var last = localStorage.getItem("flowchart-code-seen");
+      if (last && LANGS[last]) { return last; }
+    } catch (e) { /* nothing kept */ }
+    return "python";
   }
 
   function dressLangPick() {
     var pick = el("#lang-pick");
     if (!pick) { return; }
     if (!pick.options.length) {
+      var auto = document.createElement("option");
+      auto.value = "auto";
+      auto.textContent = TXT.lang_auto || "";
+      pick.appendChild(auto);
       Object.keys(LANGS).forEach(function (code) {
         var one = document.createElement("option");
         one.value = code;
@@ -46,17 +66,200 @@
         pick.appendChild(one);
       });
     }
+    pick.value = "auto";
     try {
-      var was = localStorage.getItem("flowchart-code-lang");
+      var was = localStorage.getItem("flowchart-code-pick");
       if (was && LANGS[was]) { pick.value = was; }
-    } catch (e) { /* storage turned off: Python, then */ }
+    } catch (e) { /* storage turned off: found from the code, then */ }
+  }
+
+  // Look at the code again: what it is written in, said on the picker's
+  // first line, and everything that goes by the language told if it has
+  // changed.  A little while after the typing stops, not at every key.
+  var detectDue = null;
+  function langDetect() {
+    clearTimeout(detectDue);
+    detectDue = null;
+    var was = langNow();
+    var found = langHasCode() ? codeToPseudo.detect(langAll()) : null;
+    if (found) {
+      langSeen = found;
+      try { localStorage.setItem("flowchart-code-seen", found); }
+      catch (e) { /* this visit only */ }
+    }
+    var auto = el('#lang-pick option[value="auto"]');
+    if (auto) {
+      auto.textContent = found ? say("lang_auto_is", { lang: langName(found) })
+                               : (TXT.lang_auto || "");
+    }
+    // the tabs' made-up names follow what is in the files (a class's name),
+    // unless one of them is being named by hand right now
+    if (!el(".lang-file-rename")) { drawFiles(); }
+    if (langNow() !== was) {
+      dressTranslate();
+      numberLang();
+    }
+  }
+  function detectSoon() {
+    clearTimeout(detectDue);
+    detectDue = setTimeout(langDetect, 250);
   }
 
   // What the box says with nothing in it.  The words are the page's own
-  // language; the box is in the one picked.
+  // language; the box is in whichever the code turns out to be.
   function placeLang() {
     var box = langBox();
     if (box) { box.placeholder = TXT.lang_place || ""; }
+  }
+
+  // ------------------------------------------------------- the files --
+  // A tab for each file over the one box, which holds the file on show.
+  // A file's name is its own where it has one -- opened from Files, or
+  // given by double-clicking its tab -- and otherwise made up from what is
+  // in it: a Java or C# class's name, or main and file2 and so on.
+  function langKeep() {
+    var box = langBox();
+    if (box && langFiles[langAt]) { langFiles[langAt].text = box.value; }
+  }
+
+  // Every file as the reader wants it: the names people gave them, which
+  // are the ones that say anything (helpers.py, Receipt.java).
+  function langAll() {
+    langKeep();
+    return langFiles.map(function (one) { return { name: one.name || "", text: one.text || "" }; });
+  }
+  function langHasCode() {
+    langKeep();
+    return langFiles.some(function (one) { return String(one.text || "").trim(); });
+  }
+  // The whole of it, to tell whether it has changed since it was read.
+  function langKey() {
+    return JSON.stringify(langAll().map(function (one) { return [one.name, one.text]; }));
+  }
+
+  function fileLabel(k) {
+    var one = langFiles[k];
+    if (!one) { return ""; }
+    if (one.name) { return one.name; }
+    var lang = langNow(), ext = (LANGS[lang] || {}).ext || "txt";
+    var named = (lang === "java" || lang === "csharp") &&
+                /\bclass\s+([A-Za-z_]\w*)/.exec(one.text || "");
+    if (named) { return named[1] + "." + ext; }
+    return (k === 0 ? "main" : "file" + (k + 1)) + "." + ext;
+  }
+
+  function drawFiles() {
+    var strip = el("#lang-files");
+    if (!strip) { return; }
+    strip.innerHTML = "";
+    langFiles.forEach(function (one, k) {
+      var tab = document.createElement("button");
+      tab.type = "button";
+      tab.className = "lang-file" + (k === langAt ? " on" : "");
+      tab.setAttribute("role", "tab");
+      tab.setAttribute("aria-selected", k === langAt ? "true" : "false");
+      tab.title = TXT.lang_file_tip || "";
+      var name = document.createElement("span");
+      name.className = "lang-file-name";
+      name.textContent = fileLabel(k);
+      tab.appendChild(name);
+      tab.onclick = function () { if (k !== langAt) { showFile(k); } };
+      tab.ondblclick = function () { renameFile(k, name); };
+      if (langFiles.length > 1) {
+        var drop = document.createElement("span");
+        drop.className = "lang-file-x";
+        drop.setAttribute("role", "button");
+        drop.setAttribute("aria-label", TXT.lang_file_drop || "");
+        drop.title = TXT.lang_file_drop || "";
+        drop.innerHTML = '<svg viewBox="0 0 20 20"><path d="M6 6l8 8M14 6l-8 8"/></svg>';
+        drop.onclick = function (ev) { ev.stopPropagation(); dropFile(k); };
+        tab.appendChild(drop);
+      }
+      strip.appendChild(tab);
+    });
+    var add = document.createElement("button");
+    add.type = "button";
+    add.className = "lang-file add";
+    add.title = TXT.lang_file_add || "";
+    add.setAttribute("aria-label", TXT.lang_file_add || "");
+    add.innerHTML = '<svg viewBox="0 0 20 20"><path d="M10 4.5v11M4.5 10h11"/></svg>';
+    add.onclick = addFile;
+    strip.appendChild(add);
+    var keepAll = el("#lang-save-all");
+    if (keepAll) { keepAll.hidden = langFiles.length < 2; }
+  }
+
+  function showFile(k) {
+    var box = langBox();
+    if (!box || !langFiles[k]) { return; }
+    langKeep();
+    langFiles[langAt].scroll = box.scrollTop;
+    langAt = k;
+    box.value = langFiles[k].text || "";
+    box.scrollTop = langFiles[k].scroll || 0;
+    drawFiles();
+    numberLang();
+    box.focus();
+  }
+
+  function addFile() {
+    langKeep();
+    langFiles.push({ name: "", text: "" });
+    showFile(langFiles.length - 1);
+    translateReady();
+  }
+
+  function dropFile(k) {
+    var one = langFiles[k];
+    if (!one) { return; }
+    function gone() {
+      langKeep();
+      langFiles.splice(k, 1);
+      if (!langFiles.length) { langFiles = [{ name: "", text: "" }]; }
+      if (k < langAt || langAt >= langFiles.length) { langAt = Math.max(0, langAt - 1); }
+      langBox().value = langFiles[langAt].text || "";
+      drawFiles();
+      numberLang();
+      translateReady();
+      langDetect();
+    }
+    if (String(one.text || "").trim()) {
+      areYouSure(say("lang_drop_ask", { name: fileLabel(k) }), TXT.lang_drop_said || "",
+                 TXT.delete || "", gone);
+    } else {
+      gone();
+    }
+  }
+
+  // Double-click a tab to name its file.  Enter or clicking away keeps the
+  // name; Esc leaves it as it was; nothing at all goes back to the made-up one.
+  function renameFile(k, label) {
+    var tab = label.parentNode, field = document.createElement("input");
+    field.type = "text";
+    field.className = "lang-file-rename";
+    field.value = langFiles[k].name || fileLabel(k);
+    field.setAttribute("aria-label", TXT.lang_file_tip || "");
+    tab.replaceChild(field, label);
+    field.focus();
+    field.select();
+    var done = false;
+    function finish(keep) {
+      if (done) { return; }
+      done = true;
+      if (keep) {
+        var name = field.value.replace(/[\\/:*?"<>|]+/g, "").trim();
+        langFiles[k].name = name;
+      }
+      drawFiles();
+      if (keep) { langDetect(); }
+    }
+    field.addEventListener("keydown", function (ev) {
+      ev.stopPropagation();
+      if (ev.key === "Enter") { ev.preventDefault(); finish(true); }
+      if (ev.key === "Escape") { ev.preventDefault(); finish(false); }
+    });
+    field.addEventListener("click", function (ev) { ev.stopPropagation(); });
+    field.addEventListener("blur", function () { setTimeout(function () { finish(true); }, 0); });
   }
 
   // ------------------------------------------------ what it has to say --
@@ -84,9 +287,10 @@
     });
   }
 
-  // The line a problem is on, chosen in the box -- where anybody fixing it
-  // is going to look next.
-  function langPickLine(line) {
+  // The line a problem is on, chosen in the box -- in the file it is in,
+  // which is put on show -- where anybody fixing it is going to look next.
+  function langPickLine(line, file) {
+    if (file && file !== langAt && langFiles[file]) { showFile(file); }
     var box = langBox();
     if (!box || !line) { return; }
     var lines = box.value.split("\n"), from = 0;
@@ -98,32 +302,36 @@
     box.scrollTop = Math.max(0, (line - 3) * 20);
   }
 
+  // A line number, and the file it is in where there is more than one.
+  function inFile(file, said) {
+    return langFiles.length > 1 ? fileLabel(file || 0) + " · " + said : said;
+  }
+
   // ----------------------------------------------------- reading it in --
   // The code, read into the pseudocode box.  True when it could be; when it
   // could not, the pseudocode and the chart are left as they were and the
   // box says why.
   function readLangIn() {
-    var box = langBox();
-    if (!box || !el("#code")) { return false; }
+    if (!langBox() || !el("#code")) { return false; }
+    langDetect();
     var said;
     try {
-      said = codeToPseudo(box.value, langNow());
+      said = codeToPseudo(langAll(), langNow());
     } catch (err) {
       var text = err.line ? say("lang_line", { n: err.line, said: err.message }) : err.message;
-      langSays("bad", [text]);
-      if (err.line) { langPickLine(err.line); }
+      langSays("bad", [err.line ? inFile(err.file, text) : text]);
+      if (err.line) { langPickLine(err.line, err.file || 0); }
       return false;
     }
-    langFrom = box.value;
+    langFrom = langKey();
     langMade = said.text;
-    langKeepMark();
     if (el("#code").value !== said.text) {
       el("#code").value = said.text;
       newProgram();                      // named afresh from what it now says
       showStarts();
       countLines();
     }
-    langSays("warn", said.notes.map(function (n) { return n.text; }));
+    langSays("warn", said.notes.map(function (n) { return inFile(n.file, n.text); }));
     return true;
   }
 
@@ -141,7 +349,7 @@
       var asked = langAsked;
       langAsked = false;
       if (byLang && langBox() &&
-          ((ev && ev.isTrusted) || asked || langBox().value !== langFrom)) {
+          ((ev && ev.isTrusted) || asked || langKey() !== langFrom)) {
         if (!readLangIn()) {
           langTranslating = null;        // nothing to translate from, as it stands
           return;
@@ -159,7 +367,7 @@
   }
 
   // ------------------------------------------ and written out again --
-  // The pseudocode on the paper, written in the language picked -- by the
+  // The pseudocode on the paper, written in the code's language -- by the
   // writer Export code uses -- into the box.  Only while the chart on the
   // paper is the pseudocode in the box: the writer writes the chart.
   function langCanWrite() {
@@ -169,55 +377,61 @@
 
   // `typed` puts it in the way typing would, so Ctrl+Z takes it back out:
   // the button writes over somebody's code, and that ought to be undoable.
+  // A program kept in several files is written out as several files again.
   function langWriteOut(typed) {
     var box = langBox();
     if (!box || !langCanWrite()) { return false; }
-    var made;
-    try { made = codeFor(langNow()); }
+    var lang = langNow(), made;
+    try { made = langFiles.length > 1 ? filesFor(lang) : [codeFor(lang)]; }
     catch (e) { return false; }
-    if (!made || typeof made.text !== "string") { return false; }
-    var text = made.text.replace(/\s+$/, "") + "\n";
-    if (typed) { typeOver(box, 0, box.value.length, text); }
-    else { box.value = text; }
+    if (!made || !made.length || typeof made[0].text !== "string") { return false; }
+    function tidied(one) { return one.text.replace(/\s+$/, "") + "\n"; }
+    if (made.length > 1) {
+      langFiles = made.map(function (one) {
+        return { name: one.file + "." + one.ext, text: tidied(one) };
+      });
+      langAt = 0;
+      box.value = langFiles[0].text;
+    } else if (typed) {
+      langKeep();
+      langFiles = [langFiles[langAt]];
+      langAt = 0;
+      typeOver(box, 0, box.value.length, tidied(made[0]));
+    } else {
+      langFiles = [{ name: "", text: tidied(made[0]) }];
+      langAt = 0;
+      box.value = langFiles[0].text;
+    }
     box.setSelectionRange(0, 0);
     box.scrollTop = 0;
-    langFrom = box.value;
+    drawFiles();
+    langFrom = langKey();
     langMade = el("#code").value;
     langSays("", []);
-    langKeepMark();
+    langDetect();
+    numberLang();
     return true;
   }
 
   // Whether the code and the pseudocode still say the same thing, and if
-  // not, the way to make them.  Asked on arriving here, on a new chart, and
-  // on picking another language.
+  // not, the way to make them.  Asked on arriving here.
   function langCheck() {
-    if (!byLang) { return; }
-    var box = langBox();
-    if (!box || !el("#code")) { return; }
+    if (!byLang || !langBox() || !el("#code")) { return; }
     var pseudo = el("#code").value;
     // Nothing written here yet, and a chart drawn from pseudocode: that
-    // program, in this language, to start from.
-    if (!box.value.trim()) {
+    // program, in the language last used, to start from.
+    if (!langHasCode()) {
       if (pseudo.trim() && langCanWrite()) { langWriteOut(); }
       return;
     }
     var moved = langMade !== null && pseudo !== langMade && pseudo.trim();
-    var other = box.dataset.lang && box.dataset.lang !== langNow() && langMade === pseudo;
-    if (!(moved || other) || !langCanWrite()) { return; }
+    if (!moved || !langCanWrite()) { return; }
     var redo = document.createElement("button");
     redo.className = "btn small";
     redo.textContent = say("lang_rewrite", { lang: langName(langNow()) });
     redo.title = say("lang_rewrite_tip", { lang: langName(langNow()) });
     redo.onclick = function () { langWriteOut(true); };
-    langSays("warn", moved ? [TXT.lang_stale, redo] : [redo]);
-  }
-
-  // Which language the box was last written or read in, so picking another
-  // can offer to write it out in that one.
-  function langKeepMark() {
-    var box = langBox();
-    if (box) { box.dataset.lang = langNow(); }
+    langSays("warn", [TXT.lang_stale, redo]);
   }
 
   // ------------------------------------------------ the way of working --
@@ -253,28 +467,39 @@
 
   // ------------------------------------------------- keeping it with a save --
   // What the Code box holds, for a save, a file or a reload to carry: the
-  // code, the language, and what it was last read into -- so it comes back
-  // knowing whether the pseudocode has moved on from it.
+  // files, how the language is chosen, and what it was last read into -- so
+  // it comes back knowing whether the pseudocode has moved on from it.
   function langData() {
-    var box = langBox();
-    if (!box || !box.value.trim()) { return null; }
-    return { lang: langNow(), text: box.value, from: langFrom, made: langMade };
+    if (!langBox() || !langHasCode()) { return null; }
+    var pick = el("#lang-pick");
+    return { lang: pick ? pick.value : "auto", files: langAll(), at: langAt,
+             from: langFrom, made: langMade };
   }
 
   function wearLang(was) {
     var box = langBox();
     if (!box) { return; }
     was = was || {};
-    if (was.lang && LANGS[was.lang] && el("#lang-pick")) { el("#lang-pick").value = was.lang; }
-    box.value = String(was.text || "");
+    var pick = el("#lang-pick");
+    if (pick) { pick.value = was.lang && (LANGS[was.lang] || was.lang === "auto") ? was.lang : "auto"; }
+    // saved before a program could be in several files, it is one file
+    langFiles = (was.files && was.files.length ? was.files : [{ name: "", text: was.text || "" }])
+      .map(function (one) { return { name: String(one.name || ""), text: String(one.text || "") }; });
+    langAt = Math.min(Math.max(0, was.at || 0), langFiles.length - 1);
+    box.value = langFiles[langAt].text;
     langFrom = typeof was.from === "string" ? was.from : null;
     langMade = typeof was.made === "string" ? was.made : null;
-    langKeepMark();
+    // what was read before files were kept is the text of the one file
+    if (langFrom !== null && langFrom.charAt(0) !== "[") {
+      langFrom = JSON.stringify([["", langFrom]]);
+    }
+    drawFiles();
+    langDetect();
     langSays("", []);
   }
 
-  // A file of code, opened from Files: into this box, in the language its
-  // name says, and drawn.
+  // Files of code, opened from Files: into the box, a tab each, the language
+  // told by their names and what is in them, and drawn.
   var LANG_EXT = { py: "python", pyw: "python", java: "java", cs: "csharp",
                    cpp: "cpp", cc: "cpp", cxx: "cpp", hpp: "cpp", h: "cpp",
                    js: "javascript", mjs: "javascript", cjs: "javascript" };
@@ -283,14 +508,24 @@
     var lang = m ? LANG_EXT[m[1].toLowerCase()] : null;
     return lang && LANGS[lang] ? lang : null;
   }
-  function openCodeFile(name, text, lang) {
+  function openCodeFile(name, text) {
+    return openCodeFiles([{ name: name, text: text }]);
+  }
+  function openCodeFiles(list) {
     var box = langBox();
-    if (!box) { return false; }
-    if (el("#lang-pick")) { el("#lang-pick").value = lang; }
-    box.value = String(text).replace(/\r\n?/g, "\n");
+    if (!box || !list.length) { return false; }
+    langFiles = list.map(function (one) {
+      return { name: String(one.name || "").replace(/^.*[\\/]/, ""),
+               text: String(one.text || "").replace(/\r\n?/g, "\n") };
+    });
+    langAt = 0;
+    box.value = langFiles[0].text;
+    if (el("#lang-pick")) { el("#lang-pick").value = "auto"; }
+    try { localStorage.setItem("flowchart-code-pick", "auto"); } catch (e) { /* fine */ }
     langFrom = null;
     langMade = null;
-    langKeepMark();
+    drawFiles();
+    langDetect();
     setMode(false, true);
     langAsked = true;                    // read it in, whatever was there
     el("#build").click();
@@ -315,7 +550,8 @@
   if (langBox()) {
     dressLangPick();
     placeLang();
-    langKeepMark();
+    drawFiles();
+    langDetect();                        // the picker's first line says so
     var framed = frameOf(langBox(), "room");
     ownSliders(langBox(), framed, { inside: false });
     langBox().addEventListener("keydown", function (ev) {
@@ -331,21 +567,24 @@
         langNewLine(box);
       }
     });
-    // what was wrong is about code that is not there any more
     langBox().addEventListener("input", function () {
+      // what was wrong is about code that is not there any more
       var note = el("#lang-note");
       if (note && el(".bad", note)) { langSays("", []); }
+      langKeep();
       translateReady();
+      detectSoon();
       if (el("#lang-over") && !el("#lang-over").hidden) { numberLang(); }
     });
     langBox().addEventListener("scroll", function () {
       if (el("#lang-rule")) { el("#lang-rule").scrollTop = langBox().scrollTop; }
     });
     el("#lang-pick").addEventListener("change", function () {
-      try { localStorage.setItem("flowchart-code-lang", langNow()); }
+      try { localStorage.setItem("flowchart-code-pick", el("#lang-pick").value); }
       catch (e) { /* kept for this visit only */ }
       langSays("", []);
-      langCheck();
+      langDetect();
+      drawFiles();
       dressTranslate();                  // never into the language it is already in
       numberLang();
     });
@@ -354,7 +593,7 @@
   // ============================================================ translating ==
   // In the Code tab the program is code already, so the card under the run
   // does not write code out: it translates it.  Its list is every language
-  // but the one the box is written in, and Translate shows the program in
+  // but the one the code is written in, and Translate shows the program in
   // the one picked on the code screen (showCode, 18-write.js) -- Copy, Save,
   // a file each -- while the box stays exactly as it was written.  It goes
   // by way of the pseudocode, which is what the writer writes from, so code
@@ -389,7 +628,7 @@
       dressRunner();                     // back to what the run's readiness says
       return;
     }
-    var some = !!langBox().value.trim() || runnable();
+    var some = langHasCode() || runnable();
     all("#see-code, #code-apart, #code-write").forEach(function (b) { b.disabled = !some; });
   }
 
@@ -398,8 +637,8 @@
     if (!go || !go.onclick) { return; }
     var plain = go.onclick;
     go.onclick = function (ev) {
-      if (byLang && langBox() && langBox().value.trim() &&
-          (langBox().value !== langFrom || !runnable())) {
+      if (byLang && langBox() && langHasCode() &&
+          (langKey() !== langFrom || !runnable())) {
         langTranslating = el("#see-code").value;
         langAsked = true;
         el("#build").click();            // read in and drawn; langBuilt goes on
@@ -425,8 +664,8 @@
 
   // ================================================ the code, full screen ==
   // The same box, carried into a sheet over the whole page and back, the
-  // way the pseudocode is: everything listening to it goes on listening,
-  // and there is only ever one of it.
+  // way the pseudocode is -- the file tabs with it: everything listening to
+  // it goes on listening, and there is only ever one of it.
   function numberLang() {
     var box = langBox(), rule = el("#lang-rule");
     if (!box || !rule) { return; }
@@ -447,13 +686,16 @@
     var box = langBox(), over = el("#lang-over");
     if (!box || !over || want === !over.hidden) { return; }
     var going = slideHome(box);          // the box, and the bars around it
+    var strip = el("#lang-files");
     if (want) {
       tapeFull(false);                   // one screen at a time
       over.hidden = false;
+      if (strip) { el("#lang-over .code-sheet").insertBefore(strip, el("#lang-full-note")); }
       el("#lang-full").appendChild(going);
       numberLang();
     } else {
       over.hidden = true;
+      if (strip) { el("#lang-src").insertBefore(strip, el("#lang-home")); }
       el("#lang-home").insertBefore(going, el("#lang-home").firstChild);
     }
     var button = el("#lang-big");
@@ -469,9 +711,14 @@
     el("#lang-done").onclick = function () { langFull(false); };
     copyButton(function () { return langBox().value; }, el("#lang-copy"));
     el("#lang-save").onclick = function () {
-      save(new Blob([langBox().value], { type: "text/plain;charset=utf-8" }),
-           (chartFileName() || "program") + "." + ((LANGS[langNow()] || {}).ext || "txt"));
+      save(new Blob([langBox().value], { type: "text/plain;charset=utf-8" }), fileLabel(langAt));
     };
+    if (el("#lang-save-all")) {
+      el("#lang-save-all").onclick = function () {
+        var files = langAll().map(function (one, k) { return { name: fileLabel(k), text: one.text }; });
+        save(zipOf(files), (chartFileName() || "program") + ".zip");
+      };
+    }
     window.addEventListener("keydown", function (ev) {
       if (ev.key === "Escape" && !el("#lang-over").hidden) { langFull(false); }
     });
