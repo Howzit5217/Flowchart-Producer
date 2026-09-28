@@ -1494,6 +1494,7 @@
         builtText = asked;
         showTold(AST && AST.retold);     // a story, and what it was read as (33-told.js)
         dressRunner();                   // there is something to run now
+        langBuilt();                     // a translation waiting on it (32-code-side.js)
         forgetLines();
         if (AST) {
           noteLines(AST.main);

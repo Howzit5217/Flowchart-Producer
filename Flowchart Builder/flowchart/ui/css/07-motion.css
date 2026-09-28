@@ -638,8 +638,8 @@
   }
 
   /* --------------------------------------- the pseudocode, full screen -- */
-  #code-over:not([hidden]) { animation: dim-in var(--move) var(--ease-soft) backwards; }
-  #code-over:not([hidden]) .code-sheet {
+  :is(#code-over, #lang-over):not([hidden]) { animation: dim-in var(--move) var(--ease-soft) backwards; }
+  :is(#code-over, #lang-over):not([hidden]) .code-sheet {
     animation: sheet-rise var(--sheet-t) var(--ease) backwards;
   }
   #code-over.going { animation: dim-out .19s var(--ease-soft) forwards; }
@@ -746,7 +746,7 @@
      to be pressed -- a second click landing on a sheet already on its way
      out was a click on a thing nobody could see any more. */
   #more-over.going, #tidy-over.going, #eg-over.going, #pz-over.going, #print-over.going,
-  #sure-over.going, #code-over.going, #tape-over.going,
+  #sure-over.going, #code-over.going, #tape-over.going, #lang-over.going,
   #keys-over.going { pointer-events: none; }
   #more-over.going, #tidy-over.going, #eg-over.going, #pz-over.going, #keys-over.going {
     animation: dim-out .19s var(--ease-soft) forwards;

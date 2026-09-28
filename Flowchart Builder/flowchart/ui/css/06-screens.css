@@ -122,7 +122,7 @@
     .btn.small { padding: 3px 8px; }
     section.card { padding: 10px 14px; }
     #code-home, #lang-home { height: 120px; min-height: 90px; }
-    #code-over, #tape-over { padding: 10px; }
+    #code-over, #tape-over, #lang-over { padding: 10px; }
     .code-bar { padding: 8px 12px; }
   }
 

@@ -315,6 +315,10 @@
   #told-box { cursor: default; }
   #told-box:focus { border-color: var(--line); box-shadow: inset 0 1px 2px var(--code-well); }
   #lang-note:not(:empty) { margin-top: 8px; }
+  /* Said one way or the other, by the way of working it belongs to: the
+     card under the run exports code from pseudocode, and in the Code tab,
+     where the program is code already, translates it. */
+  body.by-lang .not-lang, body:not(.by-lang) .only-lang { display: none; }
   #lang-note .hint { margin: 0 0 4px; }
   #lang-note .btn { margin-top: 4px; }
   /* What the code was read into.  It is the chart's program still --

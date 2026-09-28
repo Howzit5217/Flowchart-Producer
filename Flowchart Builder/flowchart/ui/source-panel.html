@@ -80,7 +80,13 @@
          moved up here while this is the way of working (32-code-side.js):
          there is one of each, and they go with the box being written in. -->
     <section class="card" id="lang-src" hidden>
-      <h2><span data-w="lang_head">__W(lang_head)__</span></h2>
+      <h2><span data-w="lang_head">__W(lang_head)__</span>
+        <button class="icon small" id="lang-big" data-w-title="code_big"
+                title="__W(code_big)__" aria-label="__W(code_big)__"
+                aria-expanded="false">
+          <svg viewBox="0 0 20 20"><path d="M8 2.5H2.5v5.5M12 2.5h5.5v5.5M8 17.5H2.5V12M12 17.5h5.5V12"/></svg>
+        </button>
+      </h2>
       <!-- Filled from the table in 18-code.js: every language the page
            writes out, it reads back in. -->
       <select class="field" id="lang-pick" data-w-title="lang_pick"
@@ -227,8 +233,13 @@
          file for each chart, and a button.  Directly under the card it
          came out of, because reading the program and running it are the
          two things you do with a chart once it is drawn. -->
+    <!-- In the Code tab the program is code already, so there is nothing
+         to write out: the same card translates it instead, into any of
+         the other languages (32-code-side.js leaves its own out of the
+         list).  Each name is said by the way of working it belongs to. -->
     <section class="card" id="coder">
-      <h2><span data-w="c_head">__W(c_head)__</span></h2>
+      <h2><span class="not-lang" data-w="c_head">__W(c_head)__</span><span
+        class="only-lang" data-w="tr_head">__W(tr_head)__</span></h2>
       <div class="switches">
         <!-- The list is filled in from the table in 18-code.js, so adding
              a language there adds it here too. -->
@@ -248,7 +259,9 @@
         </select>
       </div>
       <div class="go-wide">
-        <button class="btn primary wide" id="code-write" data-w="c_write">__W(c_write)__</button>
+        <button class="btn primary wide" id="code-write"><span class="not-lang"
+          data-w="c_write">__W(c_write)__</span><span class="only-lang"
+          data-w="tr_go">__W(tr_go)__</span></button>
       </div>
       <p class="hint" id="code-note"></p>
     </section>

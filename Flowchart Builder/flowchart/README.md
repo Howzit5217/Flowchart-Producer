@@ -125,7 +125,7 @@ the `@@CSS@@` and `@@JS@@` marks in `studio.html` and hands back the page.
 | `ui/js/27-mend.js` | Putting right what a warning already worked out |
 | `ui/js/29-saves.js` | A few places to keep your progress, and picking a run up again where it stood |
 | `ui/js/31-app.js` | Installing the website as an app, and keeping it for offline |
-| `ui/js/32-code-side.js` | The Code tab: the box code is written in, read into the pseudocode on Build |
+| `ui/js/32-code-side.js` | The Code tab: the box code is written in, read into the pseudocode on Build, filling the screen, and translated into the other languages |
 | `ui/js/33-told.js` | A story in the pseudocode box, and the pseudocode it was read as beside it |
 | `ui/js/99-go.js` | Starting it all up |
 | `ui/app/sw.js` | The service worker `--site` writes beside the page, so the app opens and draws offline |

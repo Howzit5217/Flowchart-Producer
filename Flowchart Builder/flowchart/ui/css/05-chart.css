@@ -147,13 +147,13 @@
      the sheet stops at a comfortable measure and sits in the middle, with the
      page dimmed behind it.  Everything inside is set to one line height, so
      the numbers down the side line up with the words beside them. */
-  #code-over {
+  #code-over, #lang-over {
     position: fixed; inset: 0; z-index: 60; display: flex;
     align-items: center; justify-content: center; padding: 26px;
     background: var(--dim);
     -webkit-backdrop-filter: blur(3px); backdrop-filter: blur(3px);
   }
-  #code-over[hidden] { display: none !important; }
+  #code-over[hidden], #lang-over[hidden] { display: none !important; }
   .code-sheet {
     display: flex; flex-direction: column; min-height: 0;
     width: min(1040px, 100%); height: 100%;
@@ -391,7 +391,7 @@
      height), so Copy and Save it follow its last line; a program taller
      than the sheet gives way to what room there is and scrolls, and they
      stay at the foot.  The sheet under it is the same ground as the box. */
-  #code-over .code-sheet { background: var(--code-bg); }
+  #code-over .code-sheet, #lang-over .code-sheet { background: var(--code-bg); }
   /* The room under the box is for its sideways bar, and is only there while
      a line too long for the sheet has put the bar up: kept for good, it was
      an empty band between the last line and Copy and Save it.  The height
@@ -423,12 +423,12 @@
      stand in that margin -- 14px above, 16px beside and below -- so the
      box keeps all of its room, and the numbers beside it, which are not
      in the frame, stay level with it.  The run's tape is the same. */
-  :is(#code-slot, #tape-slot) > .slide-frame.room.has-y { padding-right: 0; }
-  :is(#code-slot, #tape-slot) > .slide-frame.room.has-x { padding-bottom: 0; }
-  :is(#code-slot, #tape-slot) > .slide-frame > .slider.y { right: -16px; bottom: -16px; }
-  :is(#code-slot, #tape-slot) > .slide-frame > .slider.x { right: -16px; bottom: -16px; }
-  :is(#code-slot, #tape-slot) > .slide-frame.has-y > .slider.x { right: -1px; }
-  :is(#code-slot, #tape-slot) > .slide-frame.has-x > .slider.y { bottom: -1px; }
+  :is(#code-slot, #tape-slot, #lang-full) > .slide-frame.room.has-y { padding-right: 0; }
+  :is(#code-slot, #tape-slot, #lang-full) > .slide-frame.room.has-x { padding-bottom: 0; }
+  :is(#code-slot, #tape-slot, #lang-full) > .slide-frame > .slider.y { right: -16px; bottom: -16px; }
+  :is(#code-slot, #tape-slot, #lang-full) > .slide-frame > .slider.x { right: -16px; bottom: -16px; }
+  :is(#code-slot, #tape-slot, #lang-full) > .slide-frame.has-y > .slider.x { right: -1px; }
+  :is(#code-slot, #tape-slot, #lang-full) > .slide-frame.has-x > .slider.y { bottom: -1px; }
   /* the pseudocode's has room under it only while it has a sideways bar */
   #code-slot > .slide-frame:not(.has-x) > .slider.y { bottom: 0; }
   :is(#code-slot, #tape-slot) > .slide-frame.has-x.has-y::after {
@@ -462,6 +462,37 @@
     flex: none; display: flex; gap: 8px; flex-wrap: wrap;
     padding: 8px 16px 16px; background: var(--code-bg);
   }
+
+  /* ------------------------------------------- the code, filling the screen -- */
+  /* The Code tab's box on a sheet of its own, laid out as the pseudocode's
+     is -- numbers down the side, the same ruling -- but filling the sheet,
+     so Copy and Save it sit at its foot.  Code is read line by line: it
+     does not wrap, it scrolls sideways. */
+  #lang-full {
+    flex: 1 1 auto; display: flex; min-height: 0;
+    padding: 14px 16px 0; background: var(--code-bg);
+    border-top: 1px solid var(--line-soft);
+  }
+  #lang-full > .slide-frame { flex: 1; min-width: 0; display: flex; }
+  #lang-full #lang-code {
+    display: block; flex: 1; width: 100%; height: auto; min-height: 0; min-width: 0;
+    resize: none; border: 0; border-radius: 0; box-shadow: none; margin: 0;
+    padding: 10px 4px 10px 14px; color: var(--ink);
+    font: 14px/24px "Cascadia Mono", Consolas, "SF Mono", Menlo, monospace;
+    white-space: pre; overflow-wrap: normal; overflow: auto; tab-size: 4;
+    background:
+      linear-gradient(var(--code-line) 1px, transparent 1px) 0 10px / 100% 24px,
+      transparent;
+    background-attachment: local;
+  }
+  #lang-full #lang-code:focus { box-shadow: none; border: 0; outline: 0; }
+  /* what the Code card would say under the box, said here too */
+  #lang-full-note:not(:empty) {
+    flex: none; padding: 8px 16px 0; background: var(--code-bg);
+    border-top: 1px solid var(--line-soft);
+  }
+  #lang-full-note .hint { margin: 0 0 4px; }
+  #lang-full-note:not(:empty) + #lang-full { border-top: 0; }
 
   /* ---------------------------- a story, and what it was read as, side by side -- */
   /* Two columns while the box holds a story (33-told.js): what was written

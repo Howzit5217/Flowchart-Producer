@@ -639,6 +639,8 @@ EN = {
     "code_shares": "what the program shares",
     # ---- the code a chart is written out as, and the files it comes in
     "c_head": "Export code", "c_write": "Write the code",
+    "tr_head": "Translate code", "tr_go": "Translate",
+    "tr_pick": "The language to translate your code into",
     "c_one": "In one file", "c_apart": "Several files",
     "c_files_tip": "One file, or one per chart. A long single chart is split into parts.",
     "c_one_chart": "Too short to split, so it's one file.",

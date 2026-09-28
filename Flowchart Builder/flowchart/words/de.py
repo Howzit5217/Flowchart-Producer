@@ -630,6 +630,8 @@ DE = {
     "code_ask": "{name} eingeben: ",
     "code_shares": "was das Programm teilt",
     "c_head": "Code exportieren", "c_write": "Den Code schreiben",
+    "tr_head": "Code übersetzen", "tr_go": "Übersetzen",
+    "tr_pick": "Die Sprache, in die dein Code übersetzt wird",
     "c_one": "In einer Datei", "c_apart": "Mehrere Dateien",
     "c_files_tip": "Eine Datei oder eine je Diagramm. Ein langes einzelnes Diagramm wird geteilt.",
     "c_one_chart": "Zu kurz zum Aufteilen: eine einzige Datei.",

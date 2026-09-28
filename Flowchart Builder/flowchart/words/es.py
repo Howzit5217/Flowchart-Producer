@@ -632,6 +632,8 @@ ES = {
     "code_ask": "Introduce {name}: ",
     "code_shares": "lo que comparte el programa",
     "c_head": "Exportar código", "c_write": "Escribir el código",
+    "tr_head": "Traducir código", "tr_go": "Traducir",
+    "tr_pick": "El lenguaje al que se traduce tu código",
     "c_one": "En un solo archivo", "c_apart": "Varios archivos",
     "c_files_tip": "Un archivo, o uno por diagrama. Un diagrama largo de un solo flujo se divide.",
     "c_one_chart": "Demasiado corto para dividirlo: un solo archivo.",

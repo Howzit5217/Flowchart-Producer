@@ -67,12 +67,17 @@
     var note = el("#lang-note");
     if (!note) { return; }
     note.innerHTML = "";
+    // and over the box filling the screen, the words of it -- a mistake
+    // made there is read there, not in the panel it is covering
+    var full = el("#lang-full-note");
+    if (full) { full.innerHTML = ""; }
     (parts || []).forEach(function (part) {
       if (typeof part === "string") {
         var p = document.createElement("p");
         p.className = "hint " + (how || "");
         p.textContent = part;
         note.appendChild(p);
+        if (full) { full.appendChild(p.cloneNode(true)); }
       } else if (part) {
         note.appendChild(part);
       }
@@ -137,7 +142,10 @@
       langAsked = false;
       if (byLang && langBox() &&
           ((ev && ev.isTrusted) || asked || langBox().value !== langFrom)) {
-        if (!readLangIn()) { return; }
+        if (!readLangIn()) {
+          langTranslating = null;        // nothing to translate from, as it stands
+          return;
+        }
       }
       return pressed.apply(this, arguments);
     };
@@ -237,7 +245,10 @@
     if (on) {
       placeLang();
       setTimeout(langCheck, 0);          // once the tab has finished changing
+    } else {
+      langFull(false);                   // the code's own screen goes with its tab
     }
+    dressTranslate();                    // Export code, or Translate code
   }
 
   // ------------------------------------------------- keeping it with a save --
@@ -324,11 +335,144 @@
     langBox().addEventListener("input", function () {
       var note = el("#lang-note");
       if (note && el(".bad", note)) { langSays("", []); }
+      translateReady();
+      if (el("#lang-over") && !el("#lang-over").hidden) { numberLang(); }
+    });
+    langBox().addEventListener("scroll", function () {
+      if (el("#lang-rule")) { el("#lang-rule").scrollTop = langBox().scrollTop; }
     });
     el("#lang-pick").addEventListener("change", function () {
       try { localStorage.setItem("flowchart-code-lang", langNow()); }
       catch (e) { /* kept for this visit only */ }
       langSays("", []);
       langCheck();
+      dressTranslate();                  // never into the language it is already in
+      numberLang();
+    });
+  }
+
+  // ============================================================ translating ==
+  // In the Code tab the program is code already, so the card under the run
+  // does not write code out: it translates it.  Its list is every language
+  // but the one the box is written in, and Translate shows the program in
+  // the one picked on the code screen (showCode, 18-write.js) -- Copy, Save,
+  // a file each -- while the box stays exactly as it was written.  It goes
+  // by way of the pseudocode, which is what the writer writes from, so code
+  // changed since it was last drawn is read in and drawn first.
+  var langTranslating = null;            // what to translate into once the drawing lands
+
+  function dressTranslate() {
+    var pick = el("#see-code");
+    if (!pick) { return; }
+    var mine = byLang ? langNow() : null, was = pick.value;
+    var want = Object.keys(LANGS).filter(function (code) { return code !== mine; });
+    var have = [].map.call(pick.options, function (one) { return one.value; });
+    if (have.join() !== want.join()) {
+      pick.innerHTML = "";
+      want.forEach(function (code) {
+        var one = document.createElement("option");
+        one.value = code;
+        one.textContent = langName(code);
+        pick.appendChild(one);
+      });
+      pick.value = want.indexOf(was) >= 0 ? was : want[0];
+    }
+    var tip = byLang ? TXT.tr_pick : TXT.r_lang_pick;
+    if (tip) { pick.title = tip; pick.setAttribute("aria-label", tip); }
+    translateReady();
+  }
+
+  // Ready as soon as there is code to translate: it is drawn on the way if
+  // it has not been.  Anywhere else the run's readiness says (dressRunner).
+  function translateReady() {
+    if (!byLang || !langBox()) {
+      dressRunner();                     // back to what the run's readiness says
+      return;
+    }
+    var some = !!langBox().value.trim() || runnable();
+    all("#see-code, #code-apart, #code-write").forEach(function (b) { b.disabled = !some; });
+  }
+
+  (function () {
+    var go = el("#code-write");
+    if (!go || !go.onclick) { return; }
+    var plain = go.onclick;
+    go.onclick = function (ev) {
+      if (byLang && langBox() && langBox().value.trim() &&
+          (langBox().value !== langFrom || !runnable())) {
+        langTranslating = el("#see-code").value;
+        langAsked = true;
+        el("#build").click();            // read in and drawn; langBuilt goes on
+        return;
+      }
+      return plain.apply(this, arguments);
+    };
+  })();
+
+  // A drawing has landed (09-build.js): a translation that was waiting for
+  // it is shown, and the card is made ready for what is there now.
+  function langBuilt() {
+    translateReady();
+    if (!langTranslating) { return; }
+    var into = langTranslating;
+    langTranslating = null;
+    // after the rest of the landing, which starts the tape afresh for the
+    // new program -- and would put the code screen away again with it
+    setTimeout(function () {
+      if (byLang && runnable()) { showCode(into); }
+    }, 0);
+  }
+
+  // ================================================ the code, full screen ==
+  // The same box, carried into a sheet over the whole page and back, the
+  // way the pseudocode is: everything listening to it goes on listening,
+  // and there is only ever one of it.
+  function numberLang() {
+    var box = langBox(), rule = el("#lang-rule");
+    if (!box || !rule) { return; }
+    var rows = 1;
+    for (var at = box.value.indexOf("\n"); at >= 0; at = box.value.indexOf("\n", at + 1)) { rows++; }
+    if (rule._rows !== rows) {
+      var out = [];
+      for (var i = 1; i <= rows; i++) { out.push(i); }
+      rule.textContent = out.join("\n");
+      rule._rows = rows;
+    }
+    rule.scrollTop = box.scrollTop;
+    var count = el("#lang-count");
+    if (count) { count.textContent = say("code_lines", { n: rows }) + " · " + langName(langNow()); }
+  }
+
+  function langFull(want) {
+    var box = langBox(), over = el("#lang-over");
+    if (!box || !over || want === !over.hidden) { return; }
+    var going = slideHome(box);          // the box, and the bars around it
+    if (want) {
+      tapeFull(false);                   // one screen at a time
+      over.hidden = false;
+      el("#lang-full").appendChild(going);
+      numberLang();
+    } else {
+      over.hidden = true;
+      el("#lang-home").insertBefore(going, el("#lang-home").firstChild);
+    }
+    var button = el("#lang-big");
+    if (button) {
+      button.setAttribute("aria-expanded", want ? "true" : "false");
+      button.title = want ? (TXT.code_small || "") : (TXT.code_big || "");
+    }
+    box.focus();
+  }
+
+  if (el("#lang-over")) {
+    el("#lang-big").onclick = function () { langFull(el("#lang-over").hidden); };
+    el("#lang-done").onclick = function () { langFull(false); };
+    copyButton(function () { return langBox().value; }, el("#lang-copy"));
+    el("#lang-save").onclick = function () {
+      save(new Blob([langBox().value], { type: "text/plain;charset=utf-8" }),
+           (chartFileName() || "program") + "." + ((LANGS[langNow()] || {}).ext || "txt"));
+    };
+    window.addEventListener("keydown", function (ev) {
+      if (ev.key === "Escape" && !el("#lang-over").hidden) { langFull(false); }
     });
   }

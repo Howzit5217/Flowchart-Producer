@@ -632,6 +632,8 @@ FR = {
     "code_ask": "Entrez {name} : ",
     "code_shares": "ce que le programme partage",
     "c_head": "Exporter le code", "c_write": "Écrire le code",
+    "tr_head": "Traduire le code", "tr_go": "Traduire",
+    "tr_pick": "Le langage dans lequel traduire votre code",
     "c_one": "Dans un seul fichier", "c_apart": "Plusieurs fichiers",
     "c_files_tip": "Un fichier, ou un par schéma. Un long schéma d’un seul tenant est découpé.",
     "c_one_chart": "Trop court pour être découpé : un seul fichier.",

@@ -337,6 +337,33 @@ __SVG__
   </div>
 </div>
 
+<!-- The code, filling the screen: the very box from the Code tab moved
+     into a sheet of its own and back again, as the pseudocode is
+     (32-code-side.js), with its lines numbered down the side. -->
+<div id="lang-over" hidden>
+  <div class="code-sheet">
+    <div class="code-bar">
+      <span class="mark small" aria-hidden="true">
+        <svg viewBox="0 0 24 24">
+          <rect x="7.5" y="1.8" width="9" height="5.4" rx="1.4"/>
+          <path d="M12 7.2v3.1"/>
+          <path d="M12 10.3l4 3.3-4 3.3-4-3.3z"/>
+          <path d="M12 16.9v2.1H4.6v3.2M12 19h7.4v3.2"/>
+        </svg>
+      </span>
+      <strong data-w="lang_head">__W(lang_head)__</strong>
+      <span class="code-count" id="lang-count"></span>
+      <button class="btn small primary" id="lang-done" data-w="done">__W(done)__</button>
+    </div>
+    <div id="lang-full-note"></div>
+    <div id="lang-full"><pre class="code-rule" id="lang-rule" aria-hidden="true"></pre></div>
+    <div class="told-keep" id="lang-keep">
+      <button class="btn small" id="lang-copy" data-w="r_copy">__W(r_copy)__</button>
+      <button class="btn small" id="lang-save" data-w="r_save_code">__W(r_save_code)__</button>
+    </div>
+  </div>
+</div>
+
 <div id="pz-over" hidden>
   <div class="code-sheet more-sheet" role="dialog" aria-labelledby="pz-head">
     <div class="code-bar">
