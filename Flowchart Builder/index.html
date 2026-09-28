@@ -707,13 +707,10 @@
     text-underline-offset: 2px; border-radius: 4px;
   }
   #starts .starts-go:hover { text-decoration-thickness: 2px; }
-  #source .fields > #chart-switches, #hand-switches .switches, .switch-row {
+  .switch-row {
     display: flex; flex-wrap: wrap; align-items: center;
-    gap: 8px 22px; padding: 0 2px;
+    gap: 8px 22px; padding: 0 2px; margin-top: 12px;
   }
-  .switch-row { margin-top: 12px; }
-  #source .fields > #chart-switches { grid-column: 1 / -1; margin-top: 2px; }
-  #chart-switches .switch > span { white-space: nowrap; }
   #source .build-row #more { flex: none; padding-left: 18px; padding-right: 18px; }
   #source .build-row #build { flex: 1; width: auto; min-width: 0; }
   #more { justify-content: center; position: relative; }
@@ -791,13 +788,11 @@
   #puzzles.some::after { opacity: 1; transform: scale(1); }
   #puzzles.won { border-color: var(--good); color: var(--good); }
   #source .build-row { margin-top: 12px; }
-  #hand-switches:empty { display: none; }
   #hand .hand-row {
     display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 12px;
   }
   #hand .hand-row .btn { width: 100%; justify-content: center; }
   #hand .check-row { margin-top: 8px; }
-  #hand-switches .switches { margin: 14px 0 0; }
   .btn.wide { width: 100%; justify-content: center; }
   .btn.primary.working {
     background: var(--busy); border-color: var(--busy); color: #fff;
@@ -2764,7 +2759,6 @@
       </h2>
       <div class="adders" id="adders"></div>
       <div id="hand-sel"></div>
-      <div id="hand-switches"></div>
       <div class="hand-row">
         <button class="btn" id="hand-tidy" data-w="h_tidy"
                 data-w-title="h_tidy_tip" title="Lay out every shape and arrow the way a pseudocode chart is drawn">Tidy up</button>
@@ -2791,10 +2785,6 @@
           <input type="text" id="f-title" value=""></div>
         <div><label for="f-author" data-w="your_name">Your name</label>
           <input type="text" id="f-author" value=""></div>
-        <div class="switches" id="chart-switches">
-          <label class="switch"><span data-w="grid">Grid</span><input type="checkbox" id="f-grid" checked></label>
-          <label class="switch"><span data-w="key_switch">Key</span><input type="checkbox" id="f-legend"></label>
-        </div>
       </div>
       <div class="go build-row">
         <button class="btn" id="more" aria-expanded="false"
@@ -3073,7 +3063,13 @@
       </section>
       <section class="more-part">
         <h3 data-w="o_paper">Spacing and paper</h3>
-        <div class="opt-group">
+        <div class="opt-group" id="more-paper">
+          <label class="opt-row" id="grid-row">
+            <span class="opt-name" data-w="grid">Grid</span>
+            <input type="checkbox" id="f-grid" checked></label>
+          <label class="opt-row" id="key-row">
+            <span class="opt-name" data-w="key_switch">Key</span>
+            <input type="checkbox" id="f-legend"></label>
           <div class="opt-row">
             <label class="opt-name" for="f-shape" data-w="shape">Shape</label>
             <select class="field" id="f-shape"><option value="auto" selected>Auto</option><option value="square">Square</option><option value="wide">Wide 16:9</option><option value="page">Page</option><option value="tall">Tall</option></select>
@@ -3177,7 +3173,7 @@
       </section>
       <section class="more-part">
         <h3 data-w="t_place">On the paper</h3>
-        <div class="opt-group">
+        <div class="opt-group" id="tidy-paper">
           <label class="opt-row">
             <span class="opt-name" data-w="t_stay">Keep the chart where it is</span>
             <input type="checkbox" id="t-stay"></label>
@@ -6408,7 +6404,7 @@
   }
   if (el("#f-legend")) {
     el("#f-legend").onchange = function () {
-      if (byHand) { drawHand(); }
+      if (byHand) { drawHand(); } else { optionChanged(); }
     };
   }
   el("#grid-on").onchange = function () {
@@ -7441,8 +7437,8 @@
     if (el("#code") && el("#code").value.trim()) { el("#build").click(); }
   }
 
-  all("#more-over input[type=\"checkbox\"]").forEach(function (box) {
-    box.onchange = optionChanged;
+  OPTIONS.forEach(function (id) {
+    if (el("#" + id)) { el("#" + id).onchange = optionChanged; }
   });
   all("#space-seg .seg-btn").forEach(function (b) {
     b.onclick = function () {
@@ -11909,10 +11905,11 @@
     el("#tab-hand").classList.toggle("on", toHand);
     el("#source").hidden = toHand;
     el("#hand").hidden = !toHand;
-    var both = el("#chart-switches");
-    if (both) {
-      if (toHand) { el("#hand-switches").appendChild(both); }
-      else { el("#source .fields").appendChild(both); }
+    var home = el(toHand ? "#tidy-paper" : "#more-paper");
+    if (home) {
+      [el("#key-row"), el("#grid-row")].forEach(function (row) {
+        if (row) { home.insertBefore(row, home.firstChild); }
+      });
     }
     if (toHand) {
       forgetProgram();
@@ -13339,7 +13336,6 @@
 
   function tidyAskHow() {
     if (!byHand || tidyAsked) { return; }
-    if (!hand.nodes.length) { handSays(TXT.h_tidy_none, true); return; }
     showTidy(true);
   }
 

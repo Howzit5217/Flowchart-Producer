@@ -930,9 +930,11 @@
   });
 
   // ---- the button ------------------------------------------------------------
+  // Opened even with nothing drawn yet: Grid and Key are in it too
+  // (13-hand-keep.js), and a sheet that would not open left them out of
+  // reach.  Tidy up pressed in it with nothing to tidy says so (tidyUp).
   function tidyAskHow() {
     if (!byHand || tidyAsked) { return; }
-    if (!hand.nodes.length) { handSays(TXT.h_tidy_none, true); return; }
     showTidy(true);
   }
 

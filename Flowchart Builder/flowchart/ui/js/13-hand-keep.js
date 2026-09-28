@@ -62,13 +62,15 @@
     el("#source").hidden = toHand;
     el("#hand").hidden = !toHand;
     // Grid and Key belong to the chart, not to the way it was made, so the
-    // one pair of switches goes wherever the chart is being made: above the
-    // Build button in one mode, up with the shapes in the other.  Moving the
-    // same two rather than having two pairs means they cannot disagree.
-    var both = el("#chart-switches");
-    if (both) {
-      if (toHand) { el("#hand-switches").appendChild(both); }
-      else { el("#source .fields").appendChild(both); }
+    // one pair of switches goes with the sheet of choices the chart is being
+    // made with: Chart options from pseudocode, Tidy up's by hand -- at the
+    // top of its paper group in each (studio.html).  Moving the same two
+    // rather than having two pairs means they cannot disagree.
+    var home = el(toHand ? "#tidy-paper" : "#more-paper");
+    if (home) {
+      [el("#key-row"), el("#grid-row")].forEach(function (row) {
+        if (row) { home.insertBefore(row, home.firstChild); }
+      });
     }
     if (toHand) {
       // A chart drawn by hand was never a program, so nothing here is

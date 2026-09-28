@@ -444,7 +444,21 @@ __SVG__
 
       <section class="more-part">
         <h3 data-w="o_paper">__W(o_paper)__</h3>
-        <div class="opt-group">
+        <div class="opt-group" id="more-paper">
+          <!-- Grid and Key, in with the rest of the chart's choices rather
+               than a row of their own in the panel.  They belong to the
+               chart, not to the way it was made, so drawing by hand the one
+               pair goes to Tidy up's sheet, On the paper (13-hand-keep.js):
+               the same two switches, so the two can never disagree.  They
+               start here because the page starts from pseudocode; opened
+               drawing by hand, the mode puts them there straight away.
+               Like everything in these sheets, they take hold at once. -->
+          <label class="opt-row" id="grid-row">
+            <span class="opt-name" data-w="grid">__W(grid)__</span>
+            <input type="checkbox" id="f-grid" checked></label>
+          <label class="opt-row" id="key-row">
+            <span class="opt-name" data-w="key_switch">__W(key_switch)__</span>
+            <input type="checkbox" id="f-legend"></label>
           <div class="opt-row">
             <label class="opt-name" for="f-shape" data-w="shape">__W(shape)__</label>
             <select class="field" id="f-shape">__SHAPES__</select>
@@ -561,7 +575,7 @@ __SVG__
 
       <section class="more-part">
         <h3 data-w="t_place">__W(t_place)__</h3>
-        <div class="opt-group">
+        <div class="opt-group" id="tidy-paper">
           <label class="opt-row">
             <span class="opt-name" data-w="t_stay">__W(t_stay)__</span>
             <input type="checkbox" id="t-stay"></label>

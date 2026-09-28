@@ -392,25 +392,13 @@
     text-underline-offset: 2px; border-radius: 4px;
   }
   #starts .starts-go:hover { text-decoration-thickness: 2px; }
-  /* The last row of the grid: two switches on one side, and on the other
-     the way in to the settings that are not worth a box each.  Two tick
-     boxes are shorter than a field, so the row they used to have to
-     themselves was mostly empty; a button is the same height as one of
-     them, so the row is even.
-     The pair still moves bodily to the by-hand card when the mode changes
-     -- they belong to the chart, not to the way it was made -- and there
-     they are a row again, which is why this says where rather than what. */
-  /* Grid (switch)  Key (switch): a row of their own across the fields,
-     laid out exactly as they are drawing by hand (#hand-switches, below),
-     so the one pair of switches looks the same in both places and every
-     switch on the page is the one size. */
-  #source .fields > #chart-switches, #hand-switches .switches, .switch-row {
+  /* Switches side by side, each named and then its switch: an arrow's
+     Dashed, Arrowhead and sides.  (Grid and Key live in the sheets of
+     choices now -- Chart options, and Tidy up's drawing by hand.) */
+  .switch-row {
     display: flex; flex-wrap: wrap; align-items: center;
-    gap: 8px 22px; padding: 0 2px;
+    gap: 8px 22px; padding: 0 2px; margin-top: 12px;
   }
-  .switch-row { margin-top: 12px; }        /* an arrow's Dashed, Arrowhead, sides */
-  #source .fields > #chart-switches { grid-column: 1 / -1; margin-top: 2px; }
-  #chart-switches .switch > span { white-space: nowrap; }
   /* Options and Build side by side: the choices beside the button they
      shape, Build taking the room that is left. */
   #source .build-row #more { flex: none; padding-left: 18px; padding-right: 18px; }
@@ -531,7 +519,6 @@
   #puzzles.some::after { opacity: 1; transform: scale(1); }
   #puzzles.won { border-color: var(--good); color: var(--good); }
   #source .build-row { margin-top: 12px; }
-  #hand-switches:empty { display: none; }
   /* The two things to do with a finished drawing, in a row of their own
      above the one that says whether it works.  Plain buttons, because
      Check is the thing this card is for and only one button on a card
@@ -541,12 +528,6 @@
   }
   #hand .hand-row .btn { width: 100%; justify-content: center; }
   #hand .check-row { margin-top: 8px; }
-  /* Grid and Key, up here from under the pseudocode (13-hand-keep.js).  A
-     pair side by side, as they are there, rather than spread over the
-     card's two columns with Key left alone in the middle; and a clear gap
-     under the shapes, which used to be the hint's to give and went with it,
-     so they read as the chart's switches and not as one more row of shapes. */
-  #hand-switches .switches { margin: 14px 0 0; }
   .btn.wide { width: 100%; justify-content: center; }
   /* what the button is doing, said in color */
   .btn.primary.working {

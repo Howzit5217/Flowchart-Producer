@@ -330,10 +330,11 @@
   }
   if (el("#f-legend")) {
     // By hand the key is drawn here and there, so the chart is simply drawn
-    // again.  From pseudocode it is a setting the drawing is made with, so it
-    // takes effect the next time the chart is built.
+    // again.  From pseudocode it is a setting the drawing is made with, and
+    // it sits in Chart options now, where every switch builds the chart
+    // again the moment it is moved (optionChanged, 09-build.js).
     el("#f-legend").onchange = function () {
-      if (byHand) { drawHand(); }
+      if (byHand) { drawHand(); } else { optionChanged(); }
     };
   }
   el("#grid-on").onchange = function () {

@@ -1316,8 +1316,8 @@
     if (el("#code") && el("#code").value.trim()) { el("#build").click(); }
   }
 
-  all("#more-over input[type=\"checkbox\"]").forEach(function (box) {
-    box.onchange = optionChanged;
+  OPTIONS.forEach(function (id) {
+    if (el("#" + id)) { el("#" + id).onchange = optionChanged; }
   });
   // Roomier and compressed are the two ends of one thing, so they are one
   // switch of three places (#space-seg): the one pressed ticks its own box
