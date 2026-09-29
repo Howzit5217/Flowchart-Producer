@@ -31,6 +31,12 @@
   // A language may say `like: CURLY` to start from what the brace-and-
   // semicolon languages share and change only what differs.
 
+  // Math.max(a, Math.max(b, c)): the ones that take two, taking three
+  function nested(fn, a) {
+    if (a.length <= 2) { return fn + "(" + a.join(", ") + ")"; }
+    return fn + "(" + a[0] + ", " + nested(fn, a.slice(1)) + ")";
+  }
+
   // Something that has to be wrapped in brackets before a method can be
   // called on it, or a cast put in front of it: anything that is not a
   // plain name, a piece of text, or one call with nothing nested in it.  A
@@ -158,6 +164,15 @@
     w.line(0, w.L.shut);
   }
 
+  // For Each x In xs with a Set x inside it: a name the loop may change,
+  // which JavaScript's const and C#'s foreach will not let it
+  function loopSetsItsName(item) {
+    var low = lowered(String(item["var"] || "")), hit = false;
+    eachStep(item.body, function (step) {
+      if ((step.op === "set" || step.op === "input") && lowered(String(step["var"] || "").trim()) === low) { hit = true; }
+    });
+    return hit;
+  }
   // The helpers these lines turned out to want, written where they stand.
   function helpersFor(w, deep) {
     var L = w.L;
@@ -169,6 +184,11 @@
       rows.forEach(function (row) { w.line(deep, row); });
     });
   }
+
+  // Java's kind of thing for a function handed about as a value.
+  var JAVA_FN_TYPE = ["    // A function handed about as a value: called with call(), and what it",
+                      "    // hands back is an Object.",
+                      "    interface Fn { Object call(Object... a); }"];
 
   // Java's and C#'s lists are brought in; these say whether they were used.
   var R_JAVA_UTIL = /\b(ArrayList|LinkedHashMap|LinkedHashSet|Arrays|Collections|Comparator|List|Map)\b/;
@@ -192,7 +212,15 @@
     // all see it.  C# has its own answer: a const is already static there,
     // and saying both is a thing the compiler refuses outright.
     field: function () { return "static "; },
-    typed: function (entry, w) { return this.kinds ? typeOfKind(this, entry.kind, w) + " " : ""; },
+    typed: function (entry, w) {
+      if (this.kinds && entry.kind === "int" && entry.big && this.bigInt) { return this.bigInt + " "; }
+      // a number that is sometimes nothing: Integer, int? -- which can be null
+      if (this.kinds && this.boxedKind && entry.nullable && this.boxedKind[entry.kind]) { return this.boxedKind[entry.kind] + " "; }
+      if (this.kinds && this.boxedKind && entry.elemNullable && isListKind(entry.kind) && this.boxedKind[elemOf(entry.kind)] && this.nullableList) {
+        return this.nullableList(elemOf(entry.kind)) + " ";
+      }
+      return this.kinds ? typeOfKind(this, entry.kind, w) + " " : "";
+    },
     declare: function (w, entry, start, fixed, plain) {
       return this.lead(fixed, plain) + this.typed(entry, w) +
              w.spelled(entry) + " = " + start;
@@ -368,6 +396,7 @@
       },
       declare: function (w, entry, start) { return w.spelled(entry) + " = " + start; },
       param: function (w, p) { return w.spelled(p.entry); },
+      paramDefault: function (code) { return "=" + code; },
       // A def that sets a name the whole program shares has to say so, or
       // Python makes it a new name of the def's own and the shared one
       // never changes.
@@ -385,6 +414,11 @@
         w.line(deep, "time.sleep(" + napFor(w, item, "s") + ")");
       },
       into: function (a, b) { return a + " // " + b; },
+      // -7 MOD 2 is -1, where Python's -7 % 2 is 1
+      towardNought: function (a, b, whole, w) {
+        w.need("math");
+        return (whole ? "int(" : "") + "math.fmod(" + a + ", " + b + ")" + (whole ? ")" : "");
+      },
       pow: "**",
       worded: function (code) { return "str(" + code + ")"; },
       calls: {
@@ -445,7 +479,7 @@
           w.inside(null, 0);
         });
         w.line(0, this.note + w.title);
-        ["functools", "math", "random", "time"].forEach(function (lib) {
+        ["copy", "functools", "json", "math", "random", "time"].forEach(function (lib) {
           if (w.needs[lib]) { w.line(0, "import " + lib); }
         });
         helpersFor(w, 0);
@@ -477,7 +511,7 @@
         function top(what, brings) {
           w.line(0, L.note + w.title + (what ? " -- " + what : ""));
           var before = w.count();
-          ["functools", "math", "random", "time"].forEach(function (lib) {
+          ["copy", "functools", "json", "math", "random", "time"].forEach(function (lib) {
             if (w.needs[lib]) { w.line(0, "import " + lib); }
           });
           brings.forEach(function (name) { w.line(0, "import " + name); });
@@ -542,6 +576,8 @@
       like: CURLY,
       name: "Java", ext: "java",
       kinds: { int: "int", real: "double", text: "String", bool: "boolean" },
+      bigInt: "long",
+      longSuffix: "L",
       kept: "abstract assert boolean break byte case catch char class const " +
             "continue default do double else enum extends final finally float " +
             "for goto if implements import instanceof int interface long " +
@@ -634,7 +670,7 @@
         round: function (a) { return "(int) Math.round(" + a[0] + ")"; },
         floor: function (a) { return "(int) Math.floor(" + a[0] + ")"; },
         ceiling: function (a) { return "(int) Math.ceil(" + a[0] + ")"; },
-        int: function (a) { return "(int) " + held(a[0]); },
+        int: function (a, k) { return k[0] === "bool" ? "(" + a[0] + " ? 1 : 0)" : "(int) " + held(a[0]); },
         length: function (a) { return held(a[0]) + ".length()"; },
         toupper: function (a) { return held(a[0]) + ".toUpperCase()"; },
         tolower: function (a) { return held(a[0]) + ".toLowerCase()"; },
@@ -647,8 +683,8 @@
           return (k[0] === "int" && k[1] === "int" ? "(int) " : "") +
                  "Math.pow(" + a.join(", ") + ")";
         },
-        min: function (a) { return "Math.min(" + a.join(", ") + ")"; },
-        max: function (a) { return "Math.max(" + a.join(", ") + ")"; }
+        min: function (a) { return nested("Math.min", a); },
+        max: function (a) { return nested("Math.max", a); }
       },
       whole: function (w) {
         classFile(w, function (w, inside) {
@@ -691,6 +727,11 @@
           w.alone();
           var lines = w.aside(write);
           lines.after = w.aside(function () { helpersFor(w, 0); });
+          // one Fn for every file, in a file of its own: an Fn inside each
+          // class would be a different kind of thing in each
+          lines.after = lines.after.filter(function (row) {
+            return JAVA_FN_TYPE.indexOf(String(row).replace(/^\s*/, "    ")) < 0;
+          });
           Object.keys(w.needs).forEach(function (what) { wants[what] = true; });
           return lines;
         }
@@ -754,6 +795,12 @@
           }) });
         }
 
+        if (wants.fn) {
+          files.push({ name: "Fn", lines: w.aside(function () {
+            w.line(0, L.note + w.title);
+            JAVA_FN_TYPE.forEach(function (row) { w.line(0, row.replace(/^ {4}/, "")); });
+          }) });
+        }
         w.reach = w.sharedFile + ".";
         w.mods.forEach(function (one, at) {
           files.push({ name: w.fileOf(one), lines: w.aside(function () {
@@ -773,6 +820,7 @@
       like: CURLY,
       name: "C#", ext: "cs",
       kinds: { int: "int", real: "double", text: "string", bool: "bool" },
+      bigInt: "long",
       kept: "abstract as base bool break byte case catch char checked class " +
             "const continue decimal default delegate do double else enum event " +
             "explicit extern false finally fixed float for foreach goto if " +
@@ -829,13 +877,12 @@
       calls: {
         sqrt: function (a) { return "Math.Sqrt(" + a[0] + ")"; },
         abs: function (a) { return "Math.Abs(" + a[0] + ")"; },
-        // Math.Round goes to the nearest even number unless told not to.
-        round: function (a) {
-          return "(int)Math.Round(" + a[0] + ", MidpointRounding.AwayFromZero)";
-        },
+        // A half goes up, the way the runner rounds: Math.Round would take
+        // it to the even one, and AwayFromZero takes -2.5 down to -3.
+        round: function (a) { return "(int)Math.Floor(" + a[0] + " + 0.5)"; },
         floor: function (a) { return "(int)Math.Floor(" + a[0] + ")"; },
         ceiling: function (a) { return "(int)Math.Ceiling(" + a[0] + ")"; },
-        int: function (a) { return "(int)" + held(a[0]); },
+        int: function (a, k) { return k[0] === "bool" ? "(" + a[0] + " ? 1 : 0)" : "(int)" + held(a[0]); },
         length: function (a) { return held(a[0]) + ".Length"; },
         toupper: function (a) { return held(a[0]) + ".ToUpper()"; },
         tolower: function (a) { return held(a[0]) + ".ToLower()"; },
@@ -849,8 +896,8 @@
           return (k[0] === "int" && k[1] === "int" ? "(int)" : "") +
                  "Math.Pow(" + a.join(", ") + ")";
         },
-        min: function (a) { return "Math.Min(" + a.join(", ") + ")"; },
-        max: function (a) { return "Math.Max(" + a.join(", ") + ")"; }
+        min: function (a) { return nested("Math.Min", a); },
+        max: function (a) { return nested("Math.Max", a); }
       },
       whole: function (w) {
         classFile(w, function (w, inside) {
@@ -964,6 +1011,8 @@
       like: CURLY,
       name: "C++", ext: "cpp",
       kinds: { int: "int", real: "double", text: "std::string", bool: "bool" },
+      bigInt: "long long",
+      flagText: function (code) { return "(" + code + " ? \"True\" : \"False\")"; },
       kept: "alignas alignof and and_eq asm auto bitand bitor bool break case " +
             "catch char char16_t char32_t class compl const constexpr " +
             "const_cast continue decltype default delete do double " +
@@ -991,6 +1040,13 @@
       join: function (bits, w) {
         var L = this;
         return bits.map(function (bit) {
+          // a number with a point the way the chart writes one -- cout alone
+          // would give six figures, 20.3333, or 1.23457e+06
+          if (!bit.cash && bit.kind === "real" &&
+              !(/^-?\d+(\.\d+)?$/.test(bit.code) && bit.code.replace(/[-.]/g, "").replace(/^0+/, "").length <= 6)) {
+            w.need("realText");
+            return "realText(" + bit.code + ")";
+          }
           return bit.cash ? L.cash(bit.code, bit.kind, w)
                : bit.loose ? "(" + bit.code + ")" : bit.code;
         }).join(" << ");
@@ -1055,7 +1111,7 @@
           w.need("cmath"); w.need("cstdlib");      // one header each, for Real and whole
           return "std::abs(" + a[0] + ")";
         },
-        round: function (a, k, w) { w.need("cmath"); return "(int)std::round(" + a[0] + ")"; },
+        round: function (a, k, w) { w.need("cmath"); return "(int)std::floor(" + a[0] + " + 0.5)"; },
         floor: function (a, k, w) { w.need("cmath"); return "(int)std::floor(" + a[0] + ")"; },
         ceiling: function (a, k, w) { w.need("cmath"); return "(int)std::ceil(" + a[0] + ")"; },
         int: function (a) { return "(int)" + held(a[0]); },
@@ -1266,6 +1322,8 @@
             // and the lists and tables it names, where it names any
             if (said.some(function (row) { return /std::map</.test(row); })) { w.line(0, "#include <map>"); }
             if (said.some(function (row) { return /std::vector</.test(row); })) { w.line(0, "#include <vector>"); }
+            // a Value named here is made in full in each file that has one
+            if (said.some(function (row) { return /\bValue\b/.test(row); })) { w.line(0, ""); w.line(0, "struct Value;"); }
             w.line(0, "");
             w.pour(said);
           });
@@ -1341,6 +1399,7 @@
     javascript: {
       like: CURLY,
       name: "JavaScript", ext: "js",
+      paramDefault: function (code) { return " = " + code; },
       tab: "  ", eq: "===", ne: "!==",
       kinds: null,
       kept: "break case catch class const continue debugger default delete do " +
@@ -1386,7 +1445,7 @@
         round: function (a) { return "Math.round(" + a[0] + ")"; },
         floor: function (a) { return "Math.floor(" + a[0] + ")"; },
         ceiling: function (a) { return "Math.ceil(" + a[0] + ")"; },
-        int: function (a) { return "Math.trunc(" + a[0] + ")"; },
+        int: function (a, k) { return k[0] === "text" ? "Math.trunc(parseFloat(" + a[0] + ") || 0)" : "Math.trunc(" + a[0] + ")"; },
         length: function (a) { return held(a[0]) + ".length"; },
         toupper: function (a) { return held(a[0]) + ".toUpperCase()"; },
         tolower: function (a) { return held(a[0]) + ".toLowerCase()"; },
@@ -1566,7 +1625,10 @@
   function typeOfKind(L, kind, w) {
     if (!L.kinds) { return ""; }
     if (kind === "none") { kind = "text"; }
-    if (kind === "any") { return L.anyType || L.kinds.text; }
+    if (kind === "any") {
+      if (w && L.anyNeeds) { w.need(L.anyNeeds); }
+      return L.anyType || L.kinds.text;
+    }
     if (isListKind(kind)) {
       if (w) { w.need("vector"); }
       return L.listType(typeOfKind(L, elemOf(kind) || "real", w), elemOf(kind) || "real");
@@ -1741,9 +1803,10 @@
         classof: function (a, k, w) { w.need("classOf"); return "class_of(" + a[0] + ")"; },
         any: function (a) { return "any(" + a[0] + ")"; },
         all: function (a) { return "all(" + a[0] + ")"; },
-        newlist: function (a) {
+        newlist: function (a, k) {
           var fill = a[a.length - 1], sizes = a.slice(0, -1);
-          var made = "[" + fill + "] * " + held(sizes[sizes.length - 1]);
+          var made = compoundKind(k[k.length - 1]) ? "[" + fill + " for _ in range(" + sizes[sizes.length - 1] + ")]"
+                                                    : "[" + fill + "] * " + held(sizes[sizes.length - 1]);
           for (var d = sizes.length - 2; d >= 0; d--) { made = "[" + made + " for _ in range(" + sizes[d] + ")]"; }
           return made;
         },
@@ -1827,7 +1890,7 @@
         var over = tree(item.over), kind = w.kind(over), src = w.code(item.over);
         var entry = w.entry(item["var"]);
         if (isTableKind(kind)) { src = held(src) + ".keys()"; }
-        w.line(deep, "for (" + (entry && !entry.perLoop ? "" : "const ") +
+        w.line(deep, "for (" + (entry && !entry.perLoop ? "" : loopSetsItsName(item) ? "let " : "const ") +
                w.named(item["var"]) + " of " + src + ") {");
         w.block(item.body, deep + 1);
         w.line(deep, "}");
@@ -1846,11 +1909,16 @@
           return isTableKind(k[0]) ? held(a[0]) + ".delete(" + a[1] + ")"
                : held(a[0]) + ".splice(" + held(a[0]) + ".indexOf(" + a[1] + "), 1)";
         },
-        pop: function (a, k) {
-          if (isTableKind(k[0])) { return "((v) => (" + held(a[0]) + ".delete(" + a[1] + "), v))(" + held(a[0]) + ".get(" + a[1] + "))"; }
+        pop: function (a, k, w) {
+          // on a line of its own, only the taking out
+          if (isTableKind(k[0])) {
+            if (w && w.statement) { return held(a[0]) + ".delete(" + a[1] + ")"; }
+            w.need("popKey");
+            return "popKey(" + a[0] + ", " + a[1] + ")";
+          }
           if (!a[1]) { return held(a[0]) + ".pop()"; }
           if (a[1] === "0") { return held(a[0]) + ".shift()"; }
-          return held(a[0]) + ".splice(" + a[1] + ", 1)[0]";
+          return held(a[0]) + ".splice(" + a[1] + ", 1)" + (w && w.statement ? "" : "[0]");
         },
         contains: function (a, k) {
           return isTableKind(k[0]) ? held(a[0]) + ".has(" + a[1] + ")" : held(a[0]) + ".includes(" + a[1] + ")";
@@ -1911,9 +1979,10 @@
         classof: function (a, k, w) { w.need("classOf"); return "classOf(" + a[0] + ")"; },
         any: function (a) { return held(a[0]) + ".some(Boolean)"; },
         all: function (a) { return held(a[0]) + ".every(Boolean)"; },
-        newlist: function (a) {
+        newlist: function (a, k) {
           var fill = a[a.length - 1], sizes = a.slice(0, -1);
-          var made = "Array(" + sizes[sizes.length - 1] + ").fill(" + fill + ")";
+          var made = compoundKind(k[k.length - 1]) ? "Array.from({ length: " + sizes[sizes.length - 1] + " }, () => " + fill + ")"
+                                                    : "Array(" + sizes[sizes.length - 1] + ").fill(" + fill + ")";
           for (var d = sizes.length - 2; d >= 0; d--) { made = "Array.from({ length: " + sizes[d] + " }, () => " + made + ")"; }
           return made;
         },
@@ -1940,8 +2009,17 @@
         bitor: function (a) { return held(a[0]) + " | " + held(a[1]); },
         bitxor: function (a) { return held(a[0]) + " ^ " + held(a[1]); },
         real: function (a) { return "Number(" + a[0] + ")"; },
-        min: function (a, k) { return k.length === 1 && isListKind(k[0]) ? "Math.min(..." + a[0] + ")" : "Math.min(" + a.join(", ") + ")"; },
-        max: function (a, k) { return k.length === 1 && isListKind(k[0]) ? "Math.max(..." + a[0] + ")" : "Math.max(" + a.join(", ") + ")"; },
+        // the smallest and biggest -- of words too, which Math.min makes NaN of
+        min: function (a, k) {
+          if (k.length === 1 && isListKind(k[0]) && !/^(int|real)$/.test(elemOf(k[0]) || "")) { return held(a[0]) + ".reduce((a_, b_) => (b_ < a_ ? b_ : a_))"; }
+          if (k.length > 1 && k.some(function (x) { return x === "text"; })) { return "[" + a.join(", ") + "].reduce((a_, b_) => (b_ < a_ ? b_ : a_))"; }
+          return k.length === 1 && isListKind(k[0]) ? "Math.min(..." + a[0] + ")" : "Math.min(" + a.join(", ") + ")";
+        },
+        max: function (a, k) {
+          if (k.length === 1 && isListKind(k[0]) && !/^(int|real)$/.test(elemOf(k[0]) || "")) { return held(a[0]) + ".reduce((a_, b_) => (b_ > a_ ? b_ : a_))"; }
+          if (k.length > 1 && k.some(function (x) { return x === "text"; })) { return "[" + a.join(", ") + "].reduce((a_, b_) => (b_ > a_ ? b_ : a_))"; }
+          return k.length === 1 && isListKind(k[0]) ? "Math.max(..." + a[0] + ")" : "Math.max(" + a.join(", ") + ")";
+        },
         log: function (a) { return "Math.log(" + a[0] + ")"; },
         log10: function (a) { return "Math.log10(" + a[0] + ")"; },
         exp: function (a) { return "Math.exp(" + a[0] + ")"; },
@@ -2003,21 +2081,39 @@
   }
   function placeOf(node) { return !!node && (!!node.name || !!node.index || !!node.field); }
   function pyKey(code, node, w) {
+    var bound = node && node.call === "bind" ? boundArity(node, w) : null;
+    if (bound && bound.left === 2) {
+      w.need("functools");
+      return bound.one.gives === "bool" ? "functools.cmp_to_key(lambda a, b: -1 if " + held(code) + "(a, b) else 1 if " + held(code) + "(b, a) else 0)"
+                                        : "functools.cmp_to_key(" + code + ")";
+    }
     var one = orderedBy(node, w);
     if (one && one.params.length === 2) {
       w.need("functools");
-      if (one.gives === "bool") { return "functools.cmp_to_key(lambda a, b: -1 if " + code + "(a, b) else 1)"; }
+      if (one.gives === "bool") {
+        return "functools.cmp_to_key(lambda a, b: -1 if " + code + "(a, b) else 1 if " + code + "(b, a) else 0)";
+      }
       return "functools.cmp_to_key(" + code + ")";
     }
     return code;
   }
   function jsOrder(code, node, w, kind) {
+    var bound = node && node.call === "bind" ? boundArity(node, w) : null;
+    if (bound && bound.left === 2) {
+      return bound.one.gives === "bool" ? "(a, b) => (" + held(code) + "(a, b) ? -1 : " + held(code) + "(b, a) ? 1 : 0)" : code;
+    }
+    if (!code && kind !== "text" && kind !== "int" && kind !== "real") { w.need("orderOf"); return "orderOf"; }
     var one = orderedBy(node, w);
     if (one && one.params.length === 2) {
-      return one.gives === "bool" ? "(a, b) => (" + code + "(a, b) ? -1 : 1)" : code;
+      return one.gives === "bool" ? "(a, b) => (" + code + "(a, b) ? -1 : " + code + "(b, a) ? 1 : 0)" : code;
     }
     if (code) {
       var by = held(code);
+      // a key that is a list -- [-age, name] -- goes item by item, not as the words < makes of it
+      if (one && one.gives && !/^(int|real|text|bool)$/.test(one.gives)) {
+        w.need("orderOf");
+        return "(a, b) => orderOf(" + by + "(a), " + by + "(b))";
+      }
       return "(a, b) => (" + by + "(a) < " + by + "(b) ? -1 : " + by + "(a) > " + by + "(b) ? 1 : 0)";
     }
     return kind === "text" ? "" : "(a, b) => a - b";
@@ -2083,10 +2179,10 @@
     forEach: function (w, item, deep) {
       var over = tree(item.over), kind = w.kind(over), src = w.code(item.over);
       var entry = w.entry(item["var"]), elem = kind === "text" ? "text" : isTableKind(kind) ? tableKey(kind) : elemOf(kind);
-      if (kind === "text") { src = held(src) + '.split("")'; }
+      if (kind === "text") { w.need("chars"); src = "chars(" + src + ")"; }
       else if (kind === "any") { src = "(List<?>) " + held(src); }
       else if (isTableKind(kind)) { src = held(src) + ".keySet()"; }
-      var type = w.typeOf(elem || "real");
+      var type = w.elemType(item.over, elem);
       if (entry && !entry.perLoop) {
         var loose = (entry ? w.spelled(entry) : w.named(item["var"])) + "_";
         w.line(deep, "for (" + type + " " + loose + " : " + src + ") {");
@@ -2107,11 +2203,29 @@
       var fields = unionFields(w.prog);
       w.need("shown");
       w.line(0, "");
-      w.line(deep, "static class Record {");
+      var copies = w.needs.recordCopy || w.needs.deepCopyRec;
+      w.line(deep, "static class Record" + (copies ? " implements Cloneable" : "") + " {");
       w.line(deep + 1, 'String kindName = "Record";');
       Object.keys(fields).forEach(function (low) {
         w.line(deep + 1, w.typeOf(fields[low].kind) + " " + w.fieldName(fields[low].name) + ";");
       });
+      if (copies) {                                     // copy(p): one of its own
+        w.line(deep + 1, "Record copied() {");
+        w.line(deep + 2, "try { return (Record) clone(); } catch (CloneNotSupportedException e) { throw new RuntimeException(e); }");
+        w.line(deep + 1, "}");
+      }
+      if (w.needs.deepCopyRec) {                        // deepCopy(p): and what it holds
+        w.line(deep + 1, "Record deepCopied() {");
+        w.line(deep + 2, "Record made = copied();");
+        Object.keys(fields).forEach(function (low) {
+          if (compoundKind(fields[low].kind)) {
+            var f = w.fieldName(fields[low].name);
+            w.line(deep + 2, "made." + f + " = deepCopy(made." + f + ");");
+          }
+        });
+        w.line(deep + 2, "return made;");
+        w.line(deep + 1, "}");
+      }
       w.line(deep + 1, "public String toString() {");
       Object.keys(recs).forEach(function (kind) {
         w.line(deep + 2, 'if (kindName.equals("' + kind + '")) { return ' +
@@ -2130,6 +2244,17 @@
     nullValue: "null",
     anyType: "Object",
     anyNum: function (code) { return "((Number) " + code + ").doubleValue()"; },
+    boxedKind: { int: "Integer", real: "Double", bool: "Boolean" },
+    nothingText: function (code) { return "Objects.toString(" + code + ", \"\")"; },
+    // something of no one kind -- what an Fn hands back -- going where one kind goes
+    fromAny: function (code, kind, w) {
+      if (kind === "int") { return "((Number) " + code + ").intValue()"; }
+      if (kind === "real") { return "((Number) " + code + ").doubleValue()"; }
+      if (kind === "text") { return "(String) " + held(code); }
+      if (kind === "bool") { return "(Boolean) " + held(code); }
+      if (compoundKind(kind)) { return "(" + w.typeOf(kind) + ") " + held(code); }
+      return code;
+    },
     anyOrder: function (a, op, b, w) { w.need("orderOf"); return "orderOf(" + a + ", " + b + ") " + op + " 0"; },
     truthOf: function (code, kind) {
       if (kind === "int" || kind === "real") { return held(code) + " != 0"; }
@@ -2239,8 +2364,14 @@
           return k[i] === "real" ? "(int) " + held(n) : n;
         }).join(", ") + ")";
       },
-      get: function (a, k) {
-        if (isTableKind(k[0])) { return javaUnbox(held(a[0]) + ".getOrDefault(" + a[1] + ", " + (a[2] || "null") + ")", tableValue(k[0])); }
+      get: function (a, k, w) {
+        // a table written out right there: told what it holds, which nothing
+        // around it would tell Java
+        var table = /^tableOf\(/.test(a[0]) ? "new " + w.typeOf(k[0]) + "(" + a[0] + ")" : held(a[0]);
+        if (isTableKind(k[0]) && builtKind("get", k) === "any") {
+          return "(" + table + ".containsKey(" + a[1] + ") ? (Object) " + table + ".get(" + a[1] + ") : (Object) " + held(a[2]) + ")";
+        }
+        if (isTableKind(k[0])) { return javaUnbox(table + ".getOrDefault(" + a[1] + ", " + (a[2] || "null") + ")", tableValue(k[0])); }
         return "(" + a[1] + " >= 0 && " + a[1] + " < " + held(a[0]) + ".size() ? " + held(a[0]) + ".get(" + a[1] + ") : " + (a[2] || "null") + ")";
       },
       clear: function (a) { return held(a[0]) + ".clear()"; },
@@ -2256,8 +2387,18 @@
       },
       intersection: function (a) { return "new ArrayList<>(" + held(a[0]) + ".stream().distinct().filter(" + held(a[1]) + "::contains).toList())"; },
       difference: function (a) { return "new ArrayList<>(" + held(a[0]) + ".stream().filter(v_ -> !" + held(a[1]) + ".contains(v_)).toList())"; },
-      padleft: function (a) { return 'String.format("%' + a[1] + 's", ' + a[0] + ")" + (a[2] && a[2] !== '" "' ? '.replace(" ", ' + a[2] + ")" : ""); },
-      padright: function (a) { return 'String.format("%-' + a[1] + 's", ' + a[0] + ")" + (a[2] && a[2] !== '" "' ? '.replace(" ", ' + a[2] + ")" : ""); },
+      // padLeft(x, 5): String.format does it, for a width written out and spaces;
+      // anything else, and the page's own padded()
+      padleft: function (a, k, w) {
+        if (/^\d+$/.test(a[1]) && (!a[2] || a[2] === '" "')) { return 'String.format("%' + a[1] + 's", ' + a[0] + ")"; }
+        w.need("padded");
+        return "padded(" + a[0] + ", " + a[1] + ", " + (a[2] || '" "') + ", true)";
+      },
+      padright: function (a, k, w) {
+        if (/^\d+$/.test(a[1]) && (!a[2] || a[2] === '" "')) { return 'String.format("%-' + a[1] + 's", ' + a[0] + ")"; }
+        w.need("padded");
+        return "padded(" + a[0] + ", " + a[1] + ", " + (a[2] || '" "') + ", false)";
+      },
       fixed: function (a) { return 'String.format("%.' + a[1] + 'f", (double) (' + a[0] + "))"; },
       bitand: function (a) { return held(a[0]) + " & " + held(a[1]); },
       bitor: function (a) { return held(a[0]) + " | " + held(a[1]); },
@@ -2375,6 +2516,13 @@
                 "        for (Map.Entry<K, V> e : table.entrySet()) { out.add(new ArrayList<>(Arrays.asList(e.getKey(), e.getValue()))); }",
                 "        return out;",
                 "    }"],
+      padded: ["    // v made at least `width` long, `fill` put on the left (or the right).",
+               "    static String padded(Object v, int width, String fill, boolean left) {",
+               "        String s = String.valueOf(v), pad = \"\";",
+               "        while (pad.length() + s.length() < width) { pad += fill; }",
+               "        pad = pad.substring(0, Math.max(0, width - s.length()));",
+               "        return left ? pad + s : s + pad;",
+               "    }"],
       filled: ["    // Lists of lists, as many as the sizes say, every place holding `fill`.",
                "    @SuppressWarnings(\"unchecked\")",
                "    static <T> T filled(Object fill, int... sizes) { return (T) filledFrom(fill, sizes, 0); }",
@@ -2395,12 +2543,20 @@
     var one = orderedBy(node, w);
     if (one && one.params.length === 2) {
       var f = w.reachMod(one) + w.called(one);
-      return one.gives === "bool" ? "(a_, b_) -> " + f + "(a_, b_) ? -1 : 1"
+      return one.gives === "bool" ? "(a_, b_) -> " + f + "(a_, b_) ? -1 : " + f + "(b_, a_) ? 1 : 0"
                                   : "(a_, b_) -> (int) Math.signum(" + f + "(a_, b_))";
     }
     var key = w.keyFn(node, elem);
     w.need("orderOf");
     if (key) { return "(a_, b_) -> orderOf(" + key("a_") + ", " + key("b_") + ")"; }
+    if (code && node && (node.call === "bind" || w.kind(node) === "fn")) {
+      var bound = node.call === "bind" ? boundArity(node, w) : null;
+      if (bound && bound.left === 2) {
+        return bound.one.gives === "bool" ? "(a_, b_) -> (Boolean) " + held(code) + ".call(a_, b_) ? -1 : (Boolean) " + held(code) + ".call(b_, a_) ? 1 : 0"
+                                          : "(a_, b_) -> (int) Math.signum(((Number) " + held(code) + ".call(a_, b_)).doubleValue())";
+      }
+      return "(a_, b_) -> orderOf(" + held(code) + ".call(a_), " + held(code) + ".call(b_))";
+    }
     return "(a_, b_) -> orderOf(a_, b_)";
   }
 
@@ -2431,10 +2587,13 @@
       var entry = w.entry(item["var"]), elem = kind === "text" ? "text" : isTableKind(kind) ? tableKey(kind) : elemOf(kind);
       if (kind === "text") { src = held(src) + ".Select(c_ => c_.ToString())"; }
       else if (isTableKind(kind)) { src = held(src) + ".Keys.ToList()"; }
-      var type = w.typeOf(elem || "real");
+      var type = w.elemType(item.over, elem);
       if (entry && !entry.perLoop) {
         w.line(deep, "foreach (" + type + " " + w.spelled(entry) + "_ in " + src + ") {");
         w.line(deep + 1, w.named(item["var"]) + " = " + w.spelled(entry) + "_;");
+      } else if (loopSetsItsName(item)) {
+        w.line(deep, "foreach (" + type + " " + w.named(item["var"]) + "_ in " + src + ") {");
+        w.line(deep + 1, type + " " + w.named(item["var"]) + " = " + w.named(item["var"]) + "_;");
       } else {
         w.line(deep, "foreach (" + type + " " + w.named(item["var"]) + " in " + src + ") {");
       }
@@ -2451,6 +2610,21 @@
       Object.keys(fields).forEach(function (low) {
         w.line(deep + 1, "public " + w.typeOf(fields[low].kind) + " " + w.fieldName(fields[low].name) + ";");
       });
+      if (w.needs.recordCopy || w.needs.deepCopyRec) {  // copy(p): one of its own
+        w.line(deep + 1, "public Record Copied() { return (Record)MemberwiseClone(); }");
+      }
+      if (w.needs.deepCopyRec) {                        // deepCopy(p): and what it holds
+        w.line(deep + 1, "public Record DeepCopied() {");
+        w.line(deep + 2, "var made = (Record)MemberwiseClone();");
+        Object.keys(fields).forEach(function (low) {
+          if (compoundKind(fields[low].kind)) {
+            var f = w.fieldName(fields[low].name);
+            w.line(deep + 2, "made." + f + " = DeepCopy(made." + f + ");");
+          }
+        });
+        w.line(deep + 2, "return made;");
+        w.line(deep + 1, "}");
+      }
       w.line(deep + 1, "public override string ToString() {");
       Object.keys(recs).forEach(function (kind) {
         w.line(deep + 2, 'if (KindName == "' + kind + '") { return ' +
@@ -2479,12 +2653,23 @@
       return "Shown(" + a + ") " + (differ ? "!=" : "==") + " Shown(" + b + ")";
     },
     anyOrder: function (a, op, b, w) { w.need("orderOf"); return "OrderOf(" + a + ", " + b + ") " + op + " 0"; },
+    boxedKind: { int: "int?", real: "double?", bool: "bool?" },
+    // int by = 1: C# says a default in the heading where it is a plain value
+    paramDefault: function (code, said, kind) {
+      // "" for something that is not words is nothing yet: null, where the kind can hold it
+      if (/^\s*""\s*$/.test(String(said || "")) && kind !== "text") { return compoundKind(kind) || kind === "any" ? " = null" : null; }
+      return /^\s*(-?\d+(\.\d+)?|"[^"\\]*"|true|false)\s*$/i.test(String(said || "")) ? " = " + code : null;
+    },
+    nullableList: function (elem) { return "List<" + { int: "int?", real: "double?", bool: "bool?" }[elem] + ">"; },
     lists: {
       length: function (a, k) { return held(a[0]) + (k[0] === "text" ? ".Length" : ".Count"); },
       append: function (a) { return held(a[0]) + ".Add(" + a[1] + ")"; },
       insert: function (a) { return held(a[0]) + ".Insert(" + a[1] + ", " + a[2] + ")"; },
       remove: function (a) { return held(a[0]) + ".Remove(" + a[1] + ")"; },
-      pop: function (a, k, w) { w.need("popAt"); return "PopAt(" + a[0] + (a[1] ? ", " + a[1] : "") + ")"; },
+      pop: function (a, k, w) {
+        if (isTableKind(k[0])) { w.need("popKey"); return "PopKey(" + a[0] + ", " + a[1] + ")"; }
+        w.need("popAt"); return "PopAt(" + a[0] + (a[1] ? ", " + a[1] : "") + ")";
+      },
       contains: function (a, k) { return isTableKind(k[0]) ? held(a[0]) + ".ContainsKey(" + a[1] + ")" : held(a[0]) + ".Contains(" + a[1] + ")"; },
       indexof: function (a) { return held(a[0]) + ".IndexOf(" + a[1] + ")"; },
       count: function (a, k) {
@@ -2565,17 +2750,24 @@
       all: function (a) { return held(a[0]) + ".All(v_ => v_)"; },
       newlist: function (a, k, w) {
         var fill = a[a.length - 1], sizes = a.slice(0, -1);
-        var made = "Enumerable.Repeat(" + fill + ", " + sizes[sizes.length - 1] + ").ToList()";
+        var made = compoundKind(k[k.length - 1]) ? "Enumerable.Range(0, " + sizes[sizes.length - 1] + ").Select(n_ => " + fill + ").ToList()"
+                                                  : "Enumerable.Repeat(" + fill + ", " + sizes[sizes.length - 1] + ").ToList()";
         for (var d = sizes.length - 2; d >= 0; d--) { made = "Enumerable.Range(0, " + sizes[d] + ").Select(n_ => " + made + ").ToList()"; }
         return made;
       },
       get: function (a, k, w) {
         var none = a[2] || "default(" + w.typeOf(elemOf(k[0]) || "real") + ")";
+        if (isTableKind(k[0]) && builtKind("get", k) === "any") {
+          return "(" + held(a[0]) + ".ContainsKey(" + a[1] + ") ? (dynamic)" + held(a[0]) + "[" + a[1] + "] : (dynamic)" + held(a[2]) + ")";
+        }
         if (isTableKind(k[0])) { return "(" + held(a[0]) + ".ContainsKey(" + a[1] + ") ? " + held(a[0]) + "[" + a[1] + "] : " + none + ")"; }
         return "(" + a[1] + " >= 0 && " + a[1] + " < " + held(a[0]) + ".Count ? " + held(a[0]) + "[" + a[1] + "] : " + none + ")";
       },
       clear: function (a) { return held(a[0]) + ".Clear()"; },
-      extend: function (a) { return held(a[0]) + ".AddRange(" + a[1] + ")"; },
+      // a list of numbers put on the end of a list of anything: each one on its own
+      extend: function (a, k) {
+        return held(a[0]) + ".AddRange(" + (elemOf(k[0]) !== elemOf(k[1]) ? held(a[1]) + ".Cast<dynamic>()" : a[1]) + ")";
+      },
       isnumber: function (a, k, w) { w.need("isNumber"); return "IsNumber(Convert.ToString(" + a[0] + "))"; },
       tolist: function (a, k) {
         if (k[0] === "text") { return held(a[0]) + ".Select(c_ => c_.ToString()).ToList()"; }
@@ -2642,6 +2834,12 @@
       sortIn: ["    static List<T> SortIn<T>(List<T> items) { items.Sort(); return items; }",
                "    static List<T> SortIn<T>(List<T> items, Comparison<T> order) { items.Sort(order); return items; }",
                "    static List<T> ReverseIn<T>(List<T> items) { items.Reverse(); return items; }"],
+      popKey: ["    // what a table holds under key, taken out of it",
+               "    static V PopKey<K, V>(Dictionary<K, V> table, K key) {",
+               "        V v = table[key];",
+               "        table.Remove(key);",
+               "        return v;",
+               "    }"],
       popAt: ["    static T PopAt<T>(List<T> items, int at = -1) {",
               "        if (at < 0) { at = items.Count - 1; }",
               "        T got = items[at];",
@@ -2671,12 +2869,21 @@
     var one = orderedBy(node, w);
     if (one && one.params.length === 2) {
       var f = w.reachMod(one) + w.called(one);
-      return one.gives === "bool" ? "(a_, b_) => " + f + "(a_, b_) ? -1 : 1"
+      return one.gives === "bool" ? "(a_, b_) => " + f + "(a_, b_) ? -1 : " + f + "(b_, a_) ? 1 : 0"
                                   : "(a_, b_) => Math.Sign(" + f + "(a_, b_))";
     }
     var key = w.keyFn(node, elem);
     w.need("orderOf");
     if (key) { return "(a_, b_) => OrderOf(" + key("a_") + ", " + key("b_") + ")"; }
+    if (code && node && (node.call === "bind" || w.kind(node) === "fn")) {
+      var bound = node.call === "bind" ? boundArity(node, w) : null;
+      var f = "((dynamic)" + held(code) + ")";
+      if (bound && bound.left === 2) {
+        return bound.one.gives === "bool" ? "(a_, b_) => " + f + "(a_, b_) ? -1 : " + f + "(b_, a_) ? 1 : 0"
+                                          : "(a_, b_) => Math.Sign((double)" + f + "(a_, b_))";
+      }
+      return "(a_, b_) => OrderOf(" + f + "(a_), " + f + "(b_))";
+    }
     return "(a_, b_) => OrderOf(a_, b_)";
   }
 
@@ -2708,7 +2915,7 @@
     castTo: function (code, type) { return "(" + type + ")" + held(code); },
     forEach: function (w, item, deep) {
       var over = tree(item.over), kind = w.kind(over), src = w.code(item.over);
-      var entry = w.entry(item["var"]), elem = kind === "text" ? "text" : isTableKind(kind) ? tableKey(kind) : elemOf(kind);
+      var entry = w.entry(item["var"]), elem = kind === "text" ? "text" : isTableKind(kind) ? tableKey(kind) : kind === "any" ? "any" : elemOf(kind);
       if (kind === "text") { w.need("chars"); src = "chars(" + src + ")"; }
       else if (isTableKind(kind)) { w.need("keysOf"); src = "keysOf(" + src + ")"; }
       var type = w.typeOf(elem || "real");
@@ -2767,6 +2974,7 @@
     truthOf: function (code, kind) {
       if (kind === "int" || kind === "real") { return held(code) + " != 0"; }
       if (kind === "text" || isListKind(kind) || isTableKind(kind)) { return "!" + held(code) + ".empty()"; }
+      if (kind === "any") { return "(bool)" + held(code); }
       return held(code) + " != nullptr";
     },
     lists: {
@@ -2778,7 +2986,10 @@
         w.need("algorithm");
         return held(a[0]) + ".erase(std::find(" + held(a[0]) + ".begin(), " + held(a[0]) + ".end(), " + a[1] + "))";
       },
-      pop: function (a, k, w) { w.need("popAt"); return "popAt(" + a[0] + (a[1] ? ", " + a[1] : "") + ")"; },
+      pop: function (a, k, w) {
+        if (isTableKind(k[0])) { w.need("popKey"); return "popKey(" + a[0] + ", " + a[1] + ")"; }
+        w.need("popAt"); return "popAt(" + a[0] + (a[1] ? ", " + a[1] : "") + ")";
+      },
       contains: function (a, k, w) {
         if (isTableKind(k[0])) { return "(" + held(a[0]) + ".count(" + a[1] + ") > 0)"; }
         if (k[0] === "text") { return "(" + held(a[0]) + ".find(" + a[1] + ") != std::string::npos)"; }
@@ -2845,6 +3056,7 @@
       chr: function (a) { return "std::string(1, (char)(" + a[0] + "))"; },
       classof: function (a, k, w) {
         if (k[0] === "real") { w.need("cmath"); return "std::string(" + a[0] + " == std::floor(" + a[0] + ") ? \"Integer\" : \"Real\")"; }
+        if (k[0] === "any") { w.need("value"); return "classOf(" + a[0] + ")"; }
         return held(a[0]) + "->kindName";
       },
       any: function (a, k, w) { w.need("algorithm"); return "std::any_of(" + held(a[0]) + ".begin(), " + held(a[0]) + ".end(), [](bool v) { return v; })"; },
@@ -2923,11 +3135,16 @@
                "    }",
                "    return out << \"}\";",
                "}"] },
+      popKey: { wants: ["map"], lines: ["// what a table holds under key, taken out of it",
+                                        "template <typename K, typename V, typename Q> static V popKey(std::map<K, V>& table, const Q& key) {",
+                                        "    V v = table.at(key);",
+                                        "    table.erase(key);",
+                                        "    return v;", "}"] },
       popAt: { wants: ["vector"], lines: ["template <typename T> static T popAt(std::vector<T>& items, int at = -1) {",
                "    if (at < 0) { at = (int)items.size() - 1; }", "    T got = items[at];",
                "    items.erase(items.begin() + at);", "    return got;", "}"] },
-      indexOf: { wants: ["vector", "algorithm"], lines: ["template <typename T> static int indexOf(const std::vector<T>& items, const T& x) {",
-                 "    auto at = std::find(items.begin(), items.end(), x);",
+      indexOf: { wants: ["vector", "algorithm"], lines: ["template <typename T, typename U> static int indexOf(const std::vector<T>& items, const U& x, int from = 0) {",
+                 "    auto at = std::find(items.begin() + std::min((int)items.size(), std::max(0, from)), items.end(), x);",
                  "    return at == items.end() ? -1 : (int)(at - items.begin());", "}"] },
       joined: { wants: ["vector", "sstream"], lines: ["template <typename T> static std::string joined(const std::vector<T>& items, const std::string& sep) {",
                 "    std::ostringstream out;", "    for (size_t i = 0; i < items.size(); i++) {",
@@ -3009,8 +3226,952 @@
     }
     var key = w.keyFn(node, elem);
     if (key) { return "[](auto a_, auto b_) { return " + key("a_") + " < " + key("b_") + "; }"; }
+    // an Fn: a comparison of two, or what to sort by
+    if (code && node && (node.call === "bind" || w.kind(node) === "fn")) {
+      var bound = node.call === "bind" ? boundArity(node, w) : null;
+      if (bound && bound.left === 2) {
+        return bound.one.gives === "bool" ? "[=](auto a_, auto b_) { return (bool)" + held(code) + "(std::vector<Value>{a_, b_}); }"
+                                          : "[=](auto a_, auto b_) { return (double)" + held(code) + "(std::vector<Value>{a_, b_}) < 0; }";
+      }
+      return "[=](auto a_, auto b_) { return " + held(code) + "(std::vector<Value>{a_}) < " + held(code) + "(std::vector<Value>{b_}); }";
+    }
     return "[](auto a_, auto b_) { return " + held(code) + "(a_) < " + held(code) + "(b_); }";
   }
+
+  // round(x, 2), and roundEven(x) and roundEven(x, 2): a half to the even one
+  (function () {
+    function scaled(a) { return a[1] ? a[1] : null; }
+    LIST_WORK.python.lists.roundeven = function (a) { return "round(" + a.join(", ") + ")"; };
+    LIST_WORK.javascript.lists.roundeven = function (a, k, w) { w.need("roundEven"); return "roundEven(" + a.join(", ") + ")"; };
+    LIST_WORK.javascript.helpers.roundEven = ["// Rounded, a half going to the even one: 2.5 is 2, 3.5 is 4.",
+      "function roundEven(x, places = 0) {",
+      "  const by = 10 ** places, n = x * by, near = Math.round(n);",
+      "  return (Math.abs(n % 1) === 0.5 ? 2 * Math.round(n / 2) : near) / by;",
+      "}"];
+    LIST_WORK.java.lists.roundeven = function (a) {
+      return scaled(a) ? "Math.rint(" + a[0] + " * Math.pow(10, " + a[1] + ")) / Math.pow(10, " + a[1] + ")"
+                       : "(int) Math.rint(" + a[0] + ")";
+    };
+    LIST_WORK.csharp.lists.roundeven = function (a) {
+      if (!scaled(a)) { return "(int)Math.Round((double)" + held(a[0]) + ")"; }
+      // Math.Round takes 0 to 15 places; to the hundreds, it is scaled by hand
+      return /^\d+$/.test(a[1]) && Number(a[1]) <= 15 ? "Math.Round((double)" + held(a[0]) + ", " + a[1] + ")"
+           : "(Math.Round((double)" + held(a[0]) + " * Math.Pow(10, " + a[1] + ")) / Math.Pow(10, " + a[1] + "))";
+    };
+    LIST_WORK.cpp.lists.roundeven = function (a, k, w) {
+      w.need("cmath");
+      return scaled(a) ? "std::nearbyint(" + a[0] + " * std::pow(10, " + a[1] + ")) / std::pow(10, " + a[1] + ")"
+                       : "(int)std::nearbyint(" + a[0] + ")";
+    };
+    // round(x, 2): half up, to two places
+    LIST_WORK.python.lists.round = function (a, k, w) {
+      w.need("math");
+      return scaled(a) ? "math.floor(" + a[0] + " * 10 ** " + a[1] + " + 0.5) / 10 ** " + a[1] : "math.floor(" + a[0] + " + 0.5)";
+    };
+    LIST_WORK.javascript.lists.round = function (a) {
+      return scaled(a) ? "Math.round(" + a[0] + " * 10 ** " + a[1] + ") / 10 ** " + a[1] : "Math.round(" + a[0] + ")";
+    };
+    LIST_WORK.java.lists.round = function (a) {
+      return scaled(a) ? "Math.round(" + a[0] + " * Math.pow(10, " + a[1] + ")) / Math.pow(10, " + a[1] + ")"
+                       : "(int) Math.round(" + a[0] + ")";
+    };
+    LIST_WORK.csharp.lists.round = function (a) {
+      return scaled(a) ? "Math.Floor(" + a[0] + " * Math.Pow(10, " + a[1] + ") + 0.5) / Math.Pow(10, " + a[1] + ")"
+                       : "(int)Math.Floor(" + a[0] + " + 0.5)";
+    };
+    LIST_WORK.cpp.lists.round = function (a, k, w) {
+      w.need("cmath");
+      return scaled(a) ? "std::floor(" + a[0] + " * std::pow(10, " + a[1] + ") + 0.5) / std::pow(10, " + a[1] + ")"
+                       : "(int)std::floor(" + a[0] + " + 0.5)";
+    };
+  })();
+
+  // lastIndexOf(v, x) and compare(a, b)
+  LIST_WORK.python.lists.lastindexof = function (a, k) {
+    if (k[0] === "text") { return held(a[0]) + ".rfind(" + a[1] + ")"; }
+    return "(len(" + a[0] + ") - 1 - " + held(a[0]) + "[::-1].index(" + a[1] + ") if " + a[1] + " in " + held(a[0]) + " else -1)";
+  };
+  LIST_WORK.python.lists.compare = function (a) { return "((" + a[0] + " > " + a[1] + ") - (" + a[0] + " < " + a[1] + "))"; };
+  LIST_WORK.javascript.lists.lastindexof = function (a) { return held(a[0]) + ".lastIndexOf(" + a[1] + ")"; };
+  LIST_WORK.javascript.lists.compare = function (a) {
+    return "(" + a[0] + " < " + a[1] + " ? -1 : " + a[0] + " > " + a[1] + " ? 1 : 0)";
+  };
+  LIST_WORK.java.lists.lastindexof = function (a) { return held(a[0]) + ".lastIndexOf(" + a[1] + ")"; };
+  LIST_WORK.java.lists.compare = function (a, k, w) {
+    if (k[0] === "text" && k[1] === "text") { return "Integer.signum(" + held(a[0]) + ".compareTo(" + a[1] + "))"; }
+    if (/^(int|real)$/.test(k[0]) && /^(int|real)$/.test(k[1])) { return "Double.compare(" + a[0] + ", " + a[1] + ")"; }
+    w.need("orderOf");
+    return "Integer.signum(orderOf(" + a[0] + ", " + a[1] + "))";
+  };
+  LIST_WORK.csharp.lists.lastindexof = function (a) { return held(a[0]) + ".LastIndexOf(" + a[1] + ")"; };
+  LIST_WORK.csharp.lists.compare = function (a, k, w) {
+    if (k[0] === "text" && k[1] === "text") { return "Math.Sign(string.CompareOrdinal(" + a[0] + ", " + a[1] + "))"; }
+    if (/^(int|real)$/.test(k[0]) && /^(int|real)$/.test(k[1])) { return "Math.Sign(" + held(a[0]) + " - " + held(a[1]) + ")"; }
+    w.need("orderOf");
+    return "Math.Sign(OrderOf(" + a[0] + ", " + a[1] + "))";
+  };
+  LIST_WORK.cpp.lists.lastindexof = function (a, k, w) {
+    if (k[0] === "text") { return "(int)" + held(a[0]) + ".rfind(" + a[1] + ")"; }
+    w.need("lastIndexOf");
+    return "lastIndexOf(" + a[0] + ", " + a[1] + ")";
+  };
+  LIST_WORK.cpp.lists.compare = function (a) {
+    return "(" + a[0] + " < " + a[1] + " ? -1 : " + a[0] + " > " + a[1] + " ? 1 : 0)";
+  };
+  // C++ keeps one kind of thing in each place.  Where the chart keeps more
+  // than one -- (1, "one"), a table of words and numbers, a list of lists and
+  // numbers -- the place holds a Value, which is any of them.
+  LIST_WORK.cpp.anyType = "Value";
+  LIST_WORK.cpp.anyNeeds = "value";
+  LIST_WORK.cpp.anyZero = "Value()";
+  LIST_WORK.cpp.helpers.value = { wants: ["memory", "vector", "map", "string", "sstream", "ostream", "cstdlib", "cmath", "type_traits", "utility", "initializer_list"], lines: [
+    "// A value of no one kind -- a number, words, yes or no, a list or a table --",
+    "// for the places this program keeps more than one kind of thing.",
+    "struct Value {",
+    "    enum Kind { NOTHING, WHOLE, REAL, WORDS, FLAG, LIST, TABLE };",
+    "    Kind kind = NOTHING;",
+    "    long long whole = 0;",
+    "    double real = 0;",
+    "    std::string words;",
+    "    std::shared_ptr<std::vector<Value>> list;",
+    "    std::shared_ptr<std::vector<std::pair<Value, Value>>> table;",
+    "    Value() {}",
+    "    template <typename T, typename std::enable_if<std::is_integral<T>::value && !std::is_same<T, bool>::value, int>::type = 0>",
+    "    Value(T v) : kind(WHOLE), whole((long long)v) {}",
+    "    template <typename T, typename std::enable_if<std::is_floating_point<T>::value, int>::type = 0>",
+    "    Value(T v) : kind(REAL), real((double)v) {}",
+    "    Value(bool v) : kind(FLAG), whole(v ? 1 : 0) {}",
+    "    Value(const char* v) : kind(WORDS), words(v) {}",
+    "    Value(const std::string& v) : kind(WORDS), words(v) {}",
+    "    template <typename T> Value(T* v) = delete;",
+    "    Value(std::initializer_list<Value> items) : kind(LIST), list(std::make_shared<std::vector<Value>>(items)) {}",
+    "    template <typename T> Value(const std::vector<T>& items) : kind(LIST), list(std::make_shared<std::vector<Value>>()) {",
+    "        for (const auto& x : items) { list->push_back(Value(x)); }",
+    "    }",
+    "    template <typename K, typename V> Value(const std::map<K, V>& t) : kind(TABLE), table(std::make_shared<std::vector<std::pair<Value, Value>>>()) {",
+    "        for (const auto& kv : t) { table->push_back(std::make_pair(Value(kv.first), Value(kv.second))); }",
+    "    }",
+    "    bool isNumber() const { return kind == WHOLE || kind == REAL || kind == FLAG; }",
+    "    double number() const {",
+    "        if (kind == WHOLE || kind == FLAG) { return (double)whole; }",
+    "        if (kind == REAL) { return real; }",
+    "        if (kind == WORDS) { return std::strtod(words.c_str(), nullptr); }",
+    "        return 0;",
+    "    }",
+    "    bool truth() const {",
+    "        if (kind == WHOLE || kind == FLAG) { return whole != 0; }",
+    "        if (kind == REAL) { return real != 0; }",
+    "        if (kind == WORDS) { return !words.empty(); }",
+    "        if (kind == LIST) { return !list->empty(); }",
+    "        if (kind == TABLE) { return !table->empty(); }",
+    "        return false;",
+    "    }",
+    "    std::string text() const;",
+    "    operator double() const { return number(); }",
+    "    operator std::string() const { return text(); }",
+    "    operator std::vector<Value>() const { return kind == LIST ? *list : std::vector<Value>(); }",
+    "    explicit operator bool() const { return truth(); }",
+    "    int size() const {",
+    "        if (kind == LIST) { return (int)list->size(); }",
+    "        if (kind == TABLE) { return (int)table->size(); }",
+    "        return (int)words.size();",
+    "    }",
+    "    bool empty() const { return size() == 0; }",
+    "    void push_back(const Value& x) {",
+    "        if (kind != LIST) { kind = LIST; list = std::make_shared<std::vector<Value>>(); }",
+    "        list->push_back(x);",
+    "    }",
+    "    auto begin() {",
+    "        if (kind != LIST) { kind = LIST; list = std::make_shared<std::vector<Value>>(); }",
+    "        return list->begin();",
+    "    }",
+    "    auto end() {",
+    "        if (kind != LIST) { kind = LIST; list = std::make_shared<std::vector<Value>>(); }",
+    "        return list->end();",
+    "    }",
+    "    int count(const Value& key) const;",
+    "    Value& at(const Value& key);",
+    "    Value& operator[](const Value& key) { return at(key); }",
+    "    Value& operator[](int key) { return at(Value(key)); }",
+    "    Value& operator[](long long key) { return at(Value(key)); }",
+    "    Value& operator[](const char* key) { return at(Value(key)); }",
+    "    Value& operator[](const std::string& key) { return at(Value(key)); }",
+    "    Value operator-() const { return kind == REAL ? Value(-real) : Value(-whole); }",
+    "};",
+    "",
+    "// Which of two comes first: numbers by size, words by their letters, lists",
+    "// item by item -- the way the chart puts them in order.",
+    "inline int valueOrder(const Value& a, const Value& b) {",
+    "    if (a.kind == Value::LIST && b.kind == Value::LIST) {",
+    "        for (size_t i = 0; i < a.list->size() && i < b.list->size(); i++) {",
+    "            int one = valueOrder((*a.list)[i], (*b.list)[i]);",
+    "            if (one) { return one; }",
+    "        }",
+    "        return a.list->size() < b.list->size() ? -1 : a.list->size() > b.list->size() ? 1 : 0;",
+    "    }",
+    "    if (a.isNumber() && b.isNumber()) {",
+    "        return a.number() < b.number() ? -1 : a.number() > b.number() ? 1 : 0;",
+    "    }",
+    "    if (a.isNumber() != b.isNumber()) { return a.isNumber() ? -1 : 1; }",
+    "    std::string x = a.text(), y = b.text();",
+    "    return x < y ? -1 : x > y ? 1 : 0;",
+    "}",
+    "inline bool valueSame(const Value& a, const Value& b) {",
+    "    if (a.isNumber() && b.isNumber()) { return a.number() == b.number(); }",
+    "    if (a.kind != b.kind) { return false; }",
+    "    if (a.kind == Value::WORDS) { return a.words == b.words; }",
+    "    if (a.kind == Value::LIST) {",
+    "        if (a.list->size() != b.list->size()) { return false; }",
+    "        for (size_t i = 0; i < a.list->size(); i++) { if (!valueSame((*a.list)[i], (*b.list)[i])) { return false; } }",
+    "        return true;",
+    "    }",
+    "    if (a.kind == Value::TABLE) {",
+    "        if (a.table->size() != b.table->size()) { return false; }",
+    "        for (size_t i = 0; i < a.table->size(); i++) {",
+    "            if (!valueSame((*a.table)[i].first, (*b.table)[i].first) || !valueSame((*a.table)[i].second, (*b.table)[i].second)) { return false; }",
+    "        }",
+    "        return true;",
+    "    }",
+    "    return a.kind == Value::NOTHING;",
+    "}",
+    "inline int Value::count(const Value& key) const {",
+    "    if (kind == TABLE) { for (const auto& kv : *table) { if (valueSame(kv.first, key)) { return 1; } } return 0; }",
+    "    if (kind == LIST) { int n = 0; for (const auto& x : *list) { if (valueSame(x, key)) { n++; } } return n; }",
+    "    return 0;",
+    "}",
+    "inline Value& Value::at(const Value& key) {",
+    "    if (kind == LIST) {",
+    "        long long i = (long long)key.number();",
+    "        if (i < 0) { i += (long long)list->size(); }",
+    "        return (*list)[(size_t)i];",
+    "    }",
+    "    if (kind == WORDS) {",
+    "        static Value letter;",
+    "        long long i = (long long)key.number();",
+    "        if (i < 0) { i += (long long)words.size(); }",
+    "        letter = Value(std::string(1, words[(size_t)i]));",
+    "        return letter;",
+    "    }",
+    "    if (kind != TABLE) { kind = TABLE; table = std::make_shared<std::vector<std::pair<Value, Value>>>(); }",
+    "    for (auto& kv : *table) { if (valueSame(kv.first, key)) { return kv.second; } }",
+    "    table->push_back(std::make_pair(key, Value()));",
+    "    return table->back().second;",
+    "}",
+    "inline void shownIn(std::ostream& out, const Value& v);",
+    "inline std::ostream& operator<<(std::ostream& out, const Value& v) {",
+    "    switch (v.kind) {",
+    "        case Value::NOTHING: return out;",
+    "        case Value::WHOLE: return out << v.whole;",
+    "        case Value::REAL: return out << v.real;",
+    "        case Value::WORDS: return out << v.words;",
+    "        case Value::FLAG: return out << (v.whole ? \"True\" : \"False\");",
+    "        case Value::LIST:",
+    "            out << \"[\";",
+    "            for (size_t i = 0; i < v.list->size(); i++) { if (i) { out << \", \"; } shownIn(out, (*v.list)[i]); }",
+    "            return out << \"]\";",
+    "        case Value::TABLE:",
+    "            out << \"{\";",
+    "            for (size_t i = 0; i < v.table->size(); i++) {",
+    "                if (i) { out << \", \"; }",
+    "                shownIn(out, (*v.table)[i].first); out << \": \"; shownIn(out, (*v.table)[i].second);",
+    "            }",
+    "            return out << \"}\";",
+    "    }",
+    "    return out;",
+    "}",
+    "inline void shownIn(std::ostream& out, const Value& v) {",
+    "    if (v.kind == Value::WORDS) { out << \"'\" << v.words << \"'\"; } else { out << v; }",
+    "}",
+    "inline std::string Value::text() const {",
+    "    if (kind == WORDS) { return words; }",
+    "    std::ostringstream out;",
+    "    out << *this;",
+    "    return out.str();",
+    "}",
+    "inline std::string classOf(const Value& v) {",
+    "    switch (v.kind) {",
+    "        case Value::WHOLE: return \"Integer\";",
+    "        case Value::REAL: return v.real == std::floor(v.real) ? \"Integer\" : \"Real\";",
+    "        case Value::WORDS: return \"String\";",
+    "        case Value::FLAG: return \"Boolean\";",
+    "        case Value::LIST: return \"List\";",
+    "        case Value::TABLE: return \"Table\";",
+    "        default: return \"Nothing\";",
+    "    }",
+    "}",
+    "inline Value operator+(const Value& a, const Value& b) {",
+    "    if (a.kind == Value::LIST && b.kind == Value::LIST) {",
+    "        std::vector<Value> both(*a.list);",
+    "        both.insert(both.end(), b.list->begin(), b.list->end());",
+    "        return Value(both);",
+    "    }",
+    "    if (a.kind == Value::WORDS || b.kind == Value::WORDS) { return Value(a.text() + b.text()); }",
+    "    if (a.kind == Value::REAL || b.kind == Value::REAL) { return Value(a.number() + b.number()); }",
+    "    return Value(a.whole + b.whole);",
+    "}",
+    "inline Value operator-(const Value& a, const Value& b) {",
+    "    if (a.kind == Value::REAL || b.kind == Value::REAL) { return Value(a.number() - b.number()); }",
+    "    return Value(a.whole - b.whole);",
+    "}",
+    "inline Value operator*(const Value& a, const Value& b) {",
+    "    if (a.kind == Value::LIST && b.isNumber()) {",
+    "        std::vector<Value> made;",
+    "        for (long long i = 0; i < (long long)b.number(); i++) { made.insert(made.end(), a.list->begin(), a.list->end()); }",
+    "        return Value(made);",
+    "    }",
+    "    if (a.kind == Value::REAL || b.kind == Value::REAL) { return Value(a.number() * b.number()); }",
+    "    return Value(a.whole * b.whole);",
+    "}",
+    "inline Value operator/(const Value& a, const Value& b) { return Value(a.number() / b.number()); }",
+    "inline Value operator%(const Value& a, const Value& b) {",
+    "    if (a.kind == Value::REAL || b.kind == Value::REAL) { return Value(std::fmod(a.number(), b.number())); }",
+    "    return Value(a.whole % b.whole);",
+    "}",
+    "inline bool operator==(const Value& a, const Value& b) { return valueSame(a, b); }",
+    "inline bool operator!=(const Value& a, const Value& b) { return !valueSame(a, b); }",
+    "inline bool operator<(const Value& a, const Value& b) { return valueOrder(a, b) < 0; }",
+    "inline bool operator>(const Value& a, const Value& b) { return valueOrder(a, b) > 0; }",
+    "inline bool operator<=(const Value& a, const Value& b) { return valueOrder(a, b) <= 0; }",
+    "inline bool operator>=(const Value& a, const Value& b) { return valueOrder(a, b) >= 0; }",
+    "template <typename T> inline Value operator+(const Value& a, const T& b) { return a + Value(b); }",
+    "template <typename T> inline Value operator+(const T& a, const Value& b) { return Value(a) + b; }",
+    "template <typename T> inline Value operator-(const Value& a, const T& b) { return a - Value(b); }",
+    "template <typename T> inline Value operator-(const T& a, const Value& b) { return Value(a) - b; }",
+    "template <typename T> inline Value operator*(const Value& a, const T& b) { return a * Value(b); }",
+    "template <typename T> inline Value operator*(const T& a, const Value& b) { return Value(a) * b; }",
+    "template <typename T> inline Value operator/(const Value& a, const T& b) { return a / Value(b); }",
+    "template <typename T> inline Value operator/(const T& a, const Value& b) { return Value(a) / b; }",
+    "template <typename T> inline Value operator%(const Value& a, const T& b) { return a % Value(b); }",
+    "template <typename T> inline Value operator%(const T& a, const Value& b) { return Value(a) % b; }",
+    "template <typename T> inline bool operator==(const Value& a, const T& b) { return a == Value(b); }",
+    "template <typename T> inline bool operator==(const T& a, const Value& b) { return Value(a) == b; }",
+    "template <typename T> inline bool operator!=(const Value& a, const T& b) { return a != Value(b); }",
+    "template <typename T> inline bool operator!=(const T& a, const Value& b) { return Value(a) != b; }",
+    "template <typename T> inline bool operator<(const Value& a, const T& b) { return a < Value(b); }",
+    "template <typename T> inline bool operator<(const T& a, const Value& b) { return Value(a) < b; }",
+    "template <typename T> inline bool operator>(const Value& a, const T& b) { return a > Value(b); }",
+    "template <typename T> inline bool operator>(const T& a, const Value& b) { return Value(a) > b; }",
+    "template <typename T> inline bool operator<=(const Value& a, const T& b) { return a <= Value(b); }",
+    "template <typename T> inline bool operator<=(const T& a, const Value& b) { return Value(a) <= b; }",
+    "template <typename T> inline bool operator>=(const Value& a, const T& b) { return a >= Value(b); }",
+    "template <typename T> inline bool operator>=(const T& a, const Value& b) { return Value(a) >= b; }"] };
+  // A function handed about as a value: an Fn, handed a list of Values and
+  // handing one back -- the one shape every function can be made to take.
+  // bind(f, cell) keeps what it was handed as it is, inside the Fn.
+  function cppFromValue(code, kind) {
+    if (kind === "int") { return "(int)" + code; }
+    if (kind === "real") { return "(double)" + code; }
+    if (kind === "text") { return "(std::string)" + code; }
+    if (kind === "bool") { return "(bool)" + code; }
+    if (kind === "list:any") { return "(std::vector<Value>)" + code; }
+    return code;
+  }
+  function cppFnBody(one, call) {
+    return one.gives ? "return " + call + ";" : call + "; return Value();";
+  }
+  LIST_WORK.cpp.fnType = "Fn";
+  LIST_WORK.cpp.fnRef = function (name, one, w) {
+    w.need("value"); w.need("fn");
+    var args = one.params.map(function (p, i) {
+      var got = cppFromValue("a_[" + i + "]", p.entry.kind);
+      return p.dflt ? "(a_.size() > " + i + " ? " + got + " : " + w.code(p.dflt) + ")" : got;
+    });
+    return "Fn([](std::vector<Value> a_) -> Value { " + cppFnBody(one, w.reachMod(one) + name + "(" + args.join(", ") + ")") + " })";
+  };
+  LIST_WORK.cpp.lists.bind = function (a, k, w, nodes) {
+    w.need("value"); w.need("fn");
+    var got = boundArity(nodes && nodes[0] ? { args: nodes } : null, w);
+    if (!got) { return "Fn()"; }
+    var bound = a.slice(1);
+    var rest = got.one.params.slice(bound.length).map(function (p, i) {
+      var fromA = cppFromValue("a_[" + i + "]", p.entry.kind);
+      return p.dflt ? "(a_.size() > " + i + " ? " + fromA + " : " + w.code(p.dflt) + ")" : fromA;
+    });
+    var call = w.reachMod(got.one) + w.called(got.one) + "(" + bound.concat(rest).join(", ") + ")";
+    return "Fn([=](std::vector<Value> a_) -> Value { " + cppFnBody(got.one, call) + " })";
+  };
+  LIST_WORK.cpp.callFn = function (name, codes) { return name + "(std::vector<Value>{" + codes.join(", ") + "})"; };
+  LIST_WORK.cpp.helpers.fn = { wants: ["functional", "vector"], lines: [
+    "// A function handed about as a value: handed a list of Values, handing one back.",
+    "using Fn = std::function<Value(std::vector<Value>)>;"] };
+  // items(t), zip(a, b), enumerate(xs): lists of pairs, each pair a list
+  // of what the chart says it holds -- Values, where the two differ
+  LIST_WORK.cpp.lists.items = function (a, k, w) {
+    w.need("itemsOf");
+    return "itemsOf<" + w.typeOf(elemOf(elemOf(builtKind("items", k)) || "any") || "any") + ">(" + a[0] + ")";
+  };
+  LIST_WORK.cpp.lists.zip = function (a, k, w) {
+    w.need("zipped");
+    return "zipped<" + w.typeOf(elemOf(elemOf(builtKind("zip", k)) || "any") || "any") + ">(" + a.join(", ") + ")";
+  };
+  LIST_WORK.cpp.lists.enumerate = function (a, k, w) {
+    w.need("enumerated");
+    return "enumerated<" + w.typeOf(elemOf(elemOf(builtKind("enumerate", k)) || "any") || "any") + ">(" + a.join(", ") + ")";
+  };
+  LIST_WORK.cpp.helpers.itemsOf = { wants: ["vector", "map"], lines: [
+    "template <typename E, typename K, typename V> static std::vector<std::vector<E>> itemsOf(const std::map<K, V>& table) {",
+    "    std::vector<std::vector<E>> out;",
+    "    for (const auto& kv : table) { out.push_back(std::vector<E>{E(kv.first), E(kv.second)}); }",
+    "    return out;",
+    "}",
+    "template <typename E, typename T> static std::vector<std::vector<E>> itemsOf(const std::vector<T>& items) {",
+    "    std::vector<std::vector<E>> out;",
+    "    for (size_t i = 0; i < items.size(); i++) { out.push_back(std::vector<E>{E((int)i), E(items[i])}); }",
+    "    return out;",
+    "}"] };
+  LIST_WORK.cpp.helpers.zipped = { wants: ["vector"], lines: [
+    "template <typename E, typename A, typename B> static std::vector<std::vector<E>> zipped(const std::vector<A>& a, const std::vector<B>& b) {",
+    "    std::vector<std::vector<E>> out;",
+    "    for (size_t i = 0; i < a.size() && i < b.size(); i++) { out.push_back(std::vector<E>{E(a[i]), E(b[i])}); }",
+    "    return out;",
+    "}"] };
+  LIST_WORK.cpp.helpers.enumerated = { wants: ["vector"], lines: [
+    "template <typename E, typename T> static std::vector<std::vector<E>> enumerated(const std::vector<T>& items, int from = 0) {",
+    "    std::vector<std::vector<E>> out;",
+    "    for (size_t i = 0; i < items.size(); i++) { out.push_back(std::vector<E>{E(from + (int)i), E(items[i])}); }",
+    "    return out;",
+    "}"] };
+  // slice(xs, from, to, by): every by-th, the way Python's xs[from:to:by]
+  // means it; and toBase(n, 16), fromBase("ff", 16): whole numbers written
+  // in another base
+  (function () {
+    function stepped(lang, make) {
+      var plain = LIST_WORK[lang].lists.slice;
+      LIST_WORK[lang].lists.slice = function (a, k, w) {
+        return a.length > 3 ? make(a, k, w) : plain.apply(this, arguments);
+      };
+    }
+    stepped("python", function (a) { return held(a[0]) + "[" + a[1] + ":" + a[2] + ":" + a[3] + "]"; });
+    stepped("javascript", function (a, k, w) { w.need("sliceStep"); return "sliceStep(" + a.join(", ") + ")"; });
+    stepped("java", function (a, k, w) { w.need("sliceStep"); return "sliceStep(" + a.join(", ") + ")"; });
+    stepped("csharp", function (a, k, w) { w.need("sliceStep"); return "SliceStep(" + a.join(", ") + ")"; });
+    stepped("cpp", function (a, k, w) { w.need("sliceStep"); return "sliceStep(" + a.join(", ") + ")"; });
+    LIST_WORK.javascript.helpers.sliceStep = [
+      "// Every by-th of a list or of some words, from `from` towards `to`.",
+      "function sliceStep(v, from, to, by) {",
+      "  const items = typeof v === \"string\" ? [...v] : v, n = items.length, out = [];",
+      "  const at = (x, low, high) => Math.max(low, Math.min(high, x < 0 ? x + n : x));",
+      "  if (by > 0) { for (let i = at(from, 0, n); i < at(to, 0, n); i += by) { out.push(items[i]); } }",
+      "  else { for (let i = at(from, -1, n - 1); i > at(to, -1, n - 1); i += by) { out.push(items[i]); } }",
+      "  return typeof v === \"string\" ? out.join(\"\") : out;",
+      "}"];
+    LIST_WORK.java.helpers.sliceStep = [
+      "    // Every by-th of a list or of some words, from `from` towards `to`.",
+      "    static int stepAt(int x, int low, int high, int n) { return Math.max(low, Math.min(high, x < 0 ? x + n : x)); }",
+      "    static <T> ArrayList<T> sliceStep(List<T> items, int from, int to, int by) {",
+      "        ArrayList<T> out = new ArrayList<>();",
+      "        int n = items.size();",
+      "        if (by > 0) { for (int i = stepAt(from, 0, n, n); i < stepAt(to, 0, n, n); i += by) { out.add(items.get(i)); } }",
+      "        else { for (int i = stepAt(from, -1, n - 1, n); i > stepAt(to, -1, n - 1, n); i += by) { out.add(items.get(i)); } }",
+      "        return out;",
+      "    }",
+      "    static String sliceStep(String s, int from, int to, int by) {",
+      "        StringBuilder out = new StringBuilder();",
+      "        int n = s.length();",
+      "        if (by > 0) { for (int i = stepAt(from, 0, n, n); i < stepAt(to, 0, n, n); i += by) { out.append(s.charAt(i)); } }",
+      "        else { for (int i = stepAt(from, -1, n - 1, n); i > stepAt(to, -1, n - 1, n); i += by) { out.append(s.charAt(i)); } }",
+      "        return out.toString();",
+      "    }"];
+    LIST_WORK.csharp.helpers.sliceStep = [
+      "    // Every by-th of a list or of some words, from `from` towards `to`.",
+      "    static int StepAt(int x, int low, int high, int n) { return Math.Max(low, Math.Min(high, x < 0 ? x + n : x)); }",
+      "    static List<T> SliceStep<T>(List<T> items, int from, int to, int by) {",
+      "        var made = new List<T>();",
+      "        int n = items.Count;",
+      "        if (by > 0) { for (int i = StepAt(from, 0, n, n); i < StepAt(to, 0, n, n); i += by) { made.Add(items[i]); } }",
+      "        else { for (int i = StepAt(from, -1, n - 1, n); i > StepAt(to, -1, n - 1, n); i += by) { made.Add(items[i]); } }",
+      "        return made;",
+      "    }",
+      "    static string SliceStep(string s, int from, int to, int by) {",
+      "        var made = new System.Text.StringBuilder();",
+      "        int n = s.Length;",
+      "        if (by > 0) { for (int i = StepAt(from, 0, n, n); i < StepAt(to, 0, n, n); i += by) { made.Append(s[i]); } }",
+      "        else { for (int i = StepAt(from, -1, n - 1, n); i > StepAt(to, -1, n - 1, n); i += by) { made.Append(s[i]); } }",
+      "        return made.ToString();",
+      "    }"];
+    LIST_WORK.cpp.helpers.sliceStep = { wants: ["vector", "string", "algorithm"], lines: [
+      "// Every by-th of a list or of some words, from `from` towards `to`.",
+      "static int stepAt(int x, int low, int high, int n) { return std::max(low, std::min(high, x < 0 ? x + n : x)); }",
+      "template <typename T> static T sliceStep(const T& items, int from, int to, int by) {",
+      "    T out{};",
+      "    int n = (int)items.size();",
+      "    if (by > 0) { for (int i = stepAt(from, 0, n, n); i < stepAt(to, 0, n, n); i += by) { out.push_back(items[i]); } }",
+      "    else { for (int i = stepAt(from, -1, n - 1, n); i > stepAt(to, -1, n - 1, n); i += by) { out.push_back(items[i]); } }",
+      "    return out;",
+      "}"] };
+
+    LIST_WORK.python.lists.tobase = function (a, k, w) {
+      var fmt = { "2": "b", "8": "o", "16": "x" }[String(a[1]).trim()];
+      if (fmt) { return "format(" + a[0] + ", \"" + fmt + "\")"; }
+      w.need("toBase");
+      return "to_base(" + a.join(", ") + ")";
+    };
+    LIST_WORK.python.lists.frombase = function (a) { return "int(" + a[0] + ", " + a[1] + ")"; };
+    LIST_WORK.python.helpers.toBase = [
+      "def to_base(n, base):",
+      "    digits = \"0123456789abcdefghijklmnopqrstuvwxyz\"",
+      "    sign, n, out = \"-\" if n < 0 else \"\", abs(int(n)), \"\"",
+      "    while True:",
+      "        out = digits[n % base] + out",
+      "        n //= base",
+      "        if n == 0:",
+      "            return sign + out"];
+    LIST_WORK.javascript.lists.tobase = function (a) { return "Math.trunc(" + a[0] + ").toString(" + a[1] + ")"; };
+    LIST_WORK.javascript.lists.frombase = function (a) { return "parseInt(" + a[0] + ", " + a[1] + ")"; };
+    LIST_WORK.java.lists.tobase = function (a) { return "Integer.toString(" + a[0] + ", " + a[1] + ")"; };
+    LIST_WORK.java.lists.frombase = function (a) { return "Integer.parseInt(" + held(a[0]) + ".trim(), " + a[1] + ")"; };
+    LIST_WORK.csharp.lists.tobase = function (a, k, w) { w.need("toBase"); return "ToBase(" + a.join(", ") + ")"; };
+    LIST_WORK.csharp.lists.frombase = function (a) { return "Convert.ToInt32(" + held(a[0]) + ".Trim(), " + a[1] + ")"; };
+    LIST_WORK.csharp.helpers.toBase = [
+      "    // A whole number written in another base: ToBase(255, 16) is \"ff\".",
+      "    static string ToBase(long n, int b) {",
+      "        const string digits = \"0123456789abcdefghijklmnopqrstuvwxyz\";",
+      "        string sign = n < 0 ? \"-\" : \"\", made = \"\";",
+      "        n = Math.Abs(n);",
+      "        do { made = digits[(int)(n % b)] + made; n /= b; } while (n > 0);",
+      "        return sign + made;",
+      "    }"];
+    LIST_WORK.cpp.lists.tobase = function (a, k, w) { w.need("toBase"); return "toBase(" + a.join(", ") + ")"; };
+    LIST_WORK.cpp.lists.frombase = function (a) { return "(int)std::stoll(" + a[0] + ", nullptr, " + a[1] + ")"; };
+    LIST_WORK.cpp.helpers.toBase = { wants: ["string"], lines: [
+      "// A whole number written in another base: toBase(255, 16) is \"ff\".",
+      "static std::string toBase(long long n, int b) {",
+      "    const std::string digits = \"0123456789abcdefghijklmnopqrstuvwxyz\";",
+      "    std::string sign = n < 0 ? \"-\" : \"\", out;",
+      "    if (n < 0) { n = -n; }",
+      "    do { out = digits[n % b] + out; n /= b; } while (n > 0);",
+      "    return sign + out;",
+      "}"] };
+  })();
+
+  // indexOf(xs, x, from): looking from `from` on
+  (function () {
+    function from(lang, make) {
+      var plain = LIST_WORK[lang].lists.indexof;
+      LIST_WORK[lang].lists.indexof = function (a, k, w) {
+        return a.length > 2 ? make(a, k, w) : plain.apply(this, arguments);
+      };
+    }
+    from("python", function (a, k) {
+      if (k[0] === "text") { return held(a[0]) + ".find(" + a[1] + ", " + a[2] + ")"; }
+      return "(" + held(a[0]) + ".index(" + a[1] + ", " + a[2] + ") if " + a[1] + " in " + held(a[0]) + "[" + a[2] + ":] else -1)";
+    });
+    from("javascript", function (a) { return held(a[0]) + ".indexOf(" + a[1] + ", " + a[2] + ")"; });
+    from("java", function (a, k, w) {
+      if (k[0] === "text") { return held(a[0]) + ".indexOf(" + a[1] + ", " + a[2] + ")"; }
+      w.need("indexFrom");
+      return "indexFrom(" + a.join(", ") + ")";
+    });
+    from("csharp", function (a) { return held(a[0]) + ".IndexOf(" + a[1] + ", " + a[2] + ")"; });
+    from("cpp", function (a, k, w) {
+      if (k[0] === "text") { return "(int)" + held(a[0]) + ".find(" + a[1] + ", " + a[2] + ")"; }
+      w.need("indexOf");
+      return "indexOf(" + a.join(", ") + ")";
+    });
+    LIST_WORK.java.helpers.indexFrom = [
+      "    // Where x first is in a list, looking from `from` on; -1 where it is not.",
+      "    static int indexFrom(List<?> items, Object x, int from) {",
+      "        for (int i = Math.max(0, from); i < items.size(); i++) { if (Objects.equals(items.get(i), x)) { return i; } }",
+      "        return -1;",
+      "    }"];
+  })();
+
+  // grouped(x, 2): thousands kept apart by commas -- "1,234,567.89"
+  // (the places written into the format where they are a number written out)
+  function placesSaid(code) { return /^\d+$/.test(String(code || "").trim()) ? String(code).trim() : null; }
+  LIST_WORK.python.lists.grouped = function (a) {
+    if (a[1] && placesSaid(a[1])) { return "format(" + a[0] + ", \",." + placesSaid(a[1]) + "f\")"; }
+    return a[1] ? "format(" + a[0] + ", \",.\" + str(" + a[1] + ") + \"f\")" : "format(" + a[0] + ", \",\")";
+  };
+  LIST_WORK.javascript.lists.grouped = function (a) {
+    return a[1] ? "Number(" + a[0] + ").toLocaleString(\"en-US\", { minimumFractionDigits: " + a[1] + ", maximumFractionDigits: " + a[1] + " })"
+                : "Number(" + a[0] + ").toLocaleString(\"en-US\")";
+  };
+  LIST_WORK.java.lists.grouped = function (a, k) {
+    if (a[1] && placesSaid(a[1])) { return "String.format(\"%,." + placesSaid(a[1]) + "f\", (double) " + held(a[0]) + ")"; }
+    if (a[1]) { return "String.format(\"%,.\" + " + a[1] + " + \"f\", (double) " + held(a[0]) + ")"; }
+    return k[0] === "int" ? "String.format(\"%,d\", (long) " + held(a[0]) + ")" : "String.format(\"%,.2f\", (double) " + held(a[0]) + ")";
+  };
+  LIST_WORK.csharp.lists.grouped = function (a, k) {
+    if (a[1] && placesSaid(a[1])) { return "((double)" + held(a[0]) + ").ToString(\"N" + placesSaid(a[1]) + "\")"; }
+    if (a[1]) { return "((double)" + held(a[0]) + ").ToString(\"N\" + " + a[1] + ")"; }
+    return k[0] === "int" ? held(a[0]) + ".ToString(\"N0\")" : "((double)" + held(a[0]) + ").ToString(\"N2\")";
+  };
+  LIST_WORK.cpp.lists.grouped = function (a, k, w) {
+    w.need("grouped");
+    return "grouped(" + a[0] + ", " + (a[1] || (k[0] === "int" ? "0" : "2")) + ")";
+  };
+  LIST_WORK.cpp.helpers.grouped = { wants: ["string", "sstream", "iomanip"], lines: [
+    "// Thousands kept apart by commas, to so many places: grouped(1234567.891, 2) is \"1,234,567.89\".",
+    "static std::string grouped(double x, int places) {",
+    "    std::ostringstream o;",
+    "    o << std::fixed << std::setprecision(places) << (x < 0 ? -x : x);",
+    "    std::string s = o.str(), whole = s.substr(0, s.find('.')), rest = s.find('.') == std::string::npos ? \"\" : s.substr(s.find('.'));",
+    "    for (int i = (int)whole.size() - 3; i > 0; i -= 3) { whole.insert(i, \",\"); }",
+    "    return (x < 0 ? \"-\" : \"\") + whole + rest;",
+    "}"] };
+
+  // toJson(x): x written the way JSON writes it -- {"a":1,"b":[2,3]}
+  LIST_WORK.python.lists.tojson = function (a, k, w) { w.need("json"); return "json.dumps(" + a[0] + ", separators=(\",\", \":\"))"; };
+  LIST_WORK.javascript.lists.tojson = function (a, k, w) { w.need("toJson"); return "toJson(" + a[0] + ")"; };
+  LIST_WORK.javascript.helpers.toJson = [
+    "// Something written the way JSON writes it; a Map as the object it stands for.",
+    "function toJson(v) {",
+    "  return JSON.stringify(v, (k, x) => (x instanceof Map ? Object.fromEntries(x) : x instanceof Set ? [...x] : x));",
+    "}"];
+  LIST_WORK.java.lists.tojson = function (a, k, w) { w.need("toJson"); return "toJson(" + a[0] + ")"; };
+  LIST_WORK.java.helpers.toJson = [
+    "    // Something written the way JSON writes it: {\"a\":1,\"b\":[2,3]}.",
+    "    static String toJson(Object v) {",
+    "        if (v == null) { return \"null\"; }",
+    "        if (v instanceof String) {",
+    "            StringBuilder out = new StringBuilder(\"\\\"\");",
+    "            for (char c : ((String) v).toCharArray()) {",
+    "                if (c == '\"' || c == '\\\\') { out.append('\\\\').append(c); }",
+    "                else if (c == '\\n') { out.append(\"\\\\n\"); }",
+    "                else { out.append(c); }",
+    "            }",
+    "            return out.append('\"').toString();",
+    "        }",
+    "        if (v instanceof Map) {",
+    "            StringBuilder out = new StringBuilder(\"{\");",
+    "            for (Map.Entry<?, ?> e : ((Map<?, ?>) v).entrySet()) {",
+    "                if (out.length() > 1) { out.append(','); }",
+    "                out.append(toJson(String.valueOf(e.getKey()))).append(':').append(toJson(e.getValue()));",
+    "            }",
+    "            return out.append('}').toString();",
+    "        }",
+    "        if (v instanceof List) {",
+    "            StringBuilder out = new StringBuilder(\"[\");",
+    "            for (Object x : (List<?>) v) { if (out.length() > 1) { out.append(','); } out.append(toJson(x)); }",
+    "            return out.append(']').toString();",
+    "        }",
+    "        if (v instanceof Double && (Double) v == Math.rint((Double) v) && !((Double) v).isInfinite()) {",
+    "            return String.valueOf(((Double) v).longValue());",
+    "        }",
+    "        return String.valueOf(v);",
+    "    }"];
+  LIST_WORK.csharp.lists.tojson = function (a, k, w) { w.need("toJson"); return "ToJson(" + a[0] + ")"; };
+  LIST_WORK.csharp.helpers.toJson = [
+    "    // Something written the way JSON writes it: {\"a\":1,\"b\":[2,3]}.",
+    "    static string ToJson(object v) {",
+    "        if (v == null) { return \"null\"; }",
+    "        if (v is string) { return \"\\\"\" + ((string)v).Replace(\"\\\\\", \"\\\\\\\\\").Replace(\"\\\"\", \"\\\\\\\"\").Replace(\"\\n\", \"\\\\n\") + \"\\\"\"; }",
+    "        if (v is bool) { return (bool)v ? \"true\" : \"false\"; }",
+    "        if (v is System.Collections.IDictionary) {",
+    "            var parts = new List<string>();",
+    "            foreach (System.Collections.DictionaryEntry e in (System.Collections.IDictionary)v) {",
+    "                parts.Add(ToJson(Convert.ToString(e.Key)) + \":\" + ToJson(e.Value));",
+    "            }",
+    "            return \"{\" + string.Join(\",\", parts) + \"}\";",
+    "        }",
+    "        if (v is System.Collections.IEnumerable) {",
+    "            var parts = new List<string>();",
+    "            foreach (object x in (System.Collections.IEnumerable)v) { parts.Add(ToJson(x)); }",
+    "            return \"[\" + string.Join(\",\", parts) + \"]\";",
+    "        }",
+    "        return Convert.ToString(v, System.Globalization.CultureInfo.InvariantCulture);",
+    "    }"];
+  LIST_WORK.cpp.lists.tojson = function (a, k, w) { w.need("toJson"); return "toJson(" + a[0] + ")"; };
+  LIST_WORK.cpp.helpers.toJson = { wants: ["string", "vector", "map", "sstream"], lines: [
+    "// Something written the way JSON writes it: {\"a\":1,\"b\":[2,3]}.",
+    "template <typename T> static std::string toJson(const std::vector<T>& items);",
+    "template <typename K, typename V> static std::string toJson(const std::map<K, V>& table);",
+    "static std::string toJson(const std::string& s) {",
+    "    std::string out = \"\\\"\";",
+    "    for (char c : s) { if (c == '\"' || c == '\\\\') { out += '\\\\'; } out += c; }",
+    "    return out + \"\\\"\";",
+    "}",
+    "static std::string toJson(const char* s) { return toJson(std::string(s)); }",
+    "static std::string toJson(bool b) { return b ? \"true\" : \"false\"; }",
+    "template <typename T> static std::string toJson(const T& v) { std::ostringstream o; o << v; return o.str(); }",
+    "template <typename T> static std::string toJson(const std::vector<T>& items) {",
+    "    std::string out = \"[\";",
+    "    for (size_t i = 0; i < items.size(); i++) { if (i) { out += \",\"; } out += toJson(items[i]); }",
+    "    return out + \"]\";",
+    "}",
+    "template <typename K, typename V> static std::string toJson(const std::map<K, V>& table) {",
+    "    std::string out = \"{\";",
+    "    bool first = true;",
+    "    for (const auto& kv : table) {",
+    "        if (!first) { out += \",\"; }",
+    "        first = false;",
+    "        std::ostringstream key;",
+    "        key << kv.first;",
+    "        out += toJson(key.str()) + \":\" + toJson(kv.second);",
+    "    }",
+    "    return out + \"}\";",
+    "}"] };
+
+  LIST_WORK.cpp.helpers.lastIndexOf = { wants: ["vector"], lines: [
+    "template <typename T, typename U> static int lastIndexOf(const std::vector<T>& items, const U& x) {",
+    "    for (int i = (int)items.size() - 1; i >= 0; i--) { if (items[i] == x) { return i; } }",
+    "    return -1;", "}"] };
+
+  // copy(p) of a record: a record of its own with the same things in it
+  (function () {
+    function recCopy(lang, make) {
+      var plain = LIST_WORK[lang].lists.copy;
+      LIST_WORK[lang].lists.copy = function (a, k, w) {
+        return isRecKind(k[0]) ? make(a, k[0].slice(4), w) : plain.apply(this, arguments);
+      };
+    }
+    recCopy("python", function (a, name, w) { w.need("copied"); return "copied(" + a[0] + ")"; });
+    LIST_WORK.python.helpers.copied = [
+      "def copied(record):",
+      "    made = type(record)()",
+      "    vars(made).update(vars(record))",
+      "    return made"];
+    recCopy("javascript", function (a) {
+      return "Object.assign(Object.create(Object.getPrototypeOf(" + a[0] + ")), " + a[0] + ")";
+    });
+    recCopy("java", function (a, name, w) {
+      w.need("recordCopy");
+      return (name ? "(" + w.recName(name) + ") " : "") + held(a[0]) + ".copied()";
+    });
+    recCopy("csharp", function (a, name, w) {
+      w.need("recordCopy");
+      return (name ? "(" + w.recName(name) + ") " : "") + held(a[0]) + ".Copied()";
+    });
+    recCopy("cpp", function (a, name, w) { return "new " + (name ? w.recName(name) : "Record") + "(*" + held(a[0]) + ")"; });
+  })();
+
+  // deepCopy(x): a copy all the way down -- the lists, tables and records
+  // inside it copied as well.  Where the program has records the helper
+  // hands those to the record's own deepCopied().
+  (function () {
+    function hasRecords(w) { return Object.keys(recordsIn(w.prog)).length > 0; }
+    LIST_WORK.python.lists.deepcopy = function (a, k, w) { w.need("copy"); return "copy.deepcopy(" + a[0] + ")"; };
+    LIST_WORK.javascript.lists.deepcopy = function (a, k, w) { w.need("deepCopy"); return "deepCopy(" + a[0] + ")"; };
+    LIST_WORK.javascript.helpers.deepCopy = [
+      "// A copy all the way down: the lists, tables and records inside it copied too.",
+      "function deepCopy(v) {",
+      "  if (Array.isArray(v)) { return v.map(deepCopy); }",
+      "  if (v instanceof Map) { return new Map([...v].map(([k, x]) => [k, deepCopy(x)])); }",
+      "  if (v instanceof Set) { return new Set(v); }",
+      "  if (v && typeof v === \"object\") {",
+      "    const made = Object.create(Object.getPrototypeOf(v));",
+      "    for (const k of Object.keys(v)) { made[k] = deepCopy(v[k]); }",
+      "    return made;",
+      "  }",
+      "  return v;",
+      "}"];
+    LIST_WORK.java.lists.deepcopy = function (a, k, w) {
+      w.need(hasRecords(w) ? "deepCopyRec" : "deepCopy");
+      return "deepCopy(" + a[0] + ")";
+    };
+    var javaDeep = [
+      "    // A copy all the way down: the lists, tables and records inside it copied too.",
+      "    @SuppressWarnings(\"unchecked\")",
+      "    static <T> T deepCopy(T v) {",
+      "        if (v instanceof List) {",
+      "            List<Object> out = new ArrayList<>();",
+      "            for (Object x : (List<?>) v) { out.add(deepCopy(x)); }",
+      "            return (T) out;",
+      "        }",
+      "        if (v instanceof Map) {",
+      "            Map<Object, Object> out = new LinkedHashMap<>();",
+      "            for (Map.Entry<?, ?> e : ((Map<?, ?>) v).entrySet()) { out.put(e.getKey(), deepCopy(e.getValue())); }",
+      "            return (T) out;",
+      "        }",
+      "        if (v instanceof Set) { return (T) new LinkedHashSet<Object>((Set<?>) v); }",
+      "        return v;",
+      "    }"];
+    LIST_WORK.java.helpers.deepCopy = javaDeep;
+    LIST_WORK.java.helpers.deepCopyRec = javaDeep.slice(0, -2).concat([
+      "        if (v instanceof Record) { return (T) ((Record) v).deepCopied(); }",
+      "        return v;",
+      "    }"]);
+    LIST_WORK.csharp.lists.deepcopy = function (a, k, w) {
+      w.need(hasRecords(w) ? "deepCopyRec" : "deepCopy");
+      return "DeepCopy(" + a[0] + ")";
+    };
+    var csDeep = [
+      "    // A copy all the way down: the lists, tables and records inside it copied too.",
+      "    static T DeepCopy<T>(T v) {",
+      "        object o = v;",
+      "        if (o is System.Collections.IDictionary) {",
+      "            var made = (System.Collections.IDictionary)Activator.CreateInstance(o.GetType());",
+      "            foreach (System.Collections.DictionaryEntry e in (System.Collections.IDictionary)o) { made[e.Key] = DeepCopy(e.Value); }",
+      "            return (T)(object)made;",
+      "        }",
+      "        if (o is System.Collections.IList && o.GetType().IsGenericType) {",
+      "            var made = (System.Collections.IList)Activator.CreateInstance(o.GetType());",
+      "            foreach (object x in (System.Collections.IList)o) { made.Add(DeepCopy(x)); }",
+      "            return (T)(object)made;",
+      "        }",
+      "        if (o is System.Collections.IEnumerable && !(o is string) && o.GetType().IsGenericType) {",
+      "            return (T)Activator.CreateInstance(o.GetType(), o);",
+      "        }",
+      "        return v;",
+      "    }"];
+    LIST_WORK.csharp.helpers.deepCopy = csDeep;
+    LIST_WORK.csharp.helpers.deepCopyRec = csDeep.slice(0, -2).concat([
+      "        if (o is Record) { return (T)(object)((Record)o).DeepCopied(); }",
+      "        return v;",
+      "    }"]);
+    // C++'s vectors and maps are copied whole already; its records are
+    // pointers, each one made again
+    LIST_WORK.cpp.lists.deepcopy = function (a, k, w) { w.need("deepCopy"); return "deepCopy(" + a[0] + ")"; };
+    LIST_WORK.cpp.helpers.deepCopy = { wants: ["vector", "map"], lines: [
+      "// A copy all the way down: the lists, tables and records inside it copied too.",
+      "template <typename T> static T deepCopy(const T& v) { return v; }",
+      "template <typename T> static T* deepCopy(T* const& v) { return v ? new T(*v) : v; }",
+      "template <typename T> static std::vector<T> deepCopy(const std::vector<T>& items);",
+      "template <typename K, typename V> static std::map<K, V> deepCopy(const std::map<K, V>& table);",
+      "template <typename T> static std::vector<T> deepCopy(const std::vector<T>& items) {",
+      "    std::vector<T> out;",
+      "    for (const auto& x : items) { out.push_back(deepCopy(x)); }",
+      "    return out;",
+      "}",
+      "template <typename K, typename V> static std::map<K, V> deepCopy(const std::map<K, V>& table) {",
+      "    std::map<K, V> out;",
+      "    for (const auto& kv : table) { out[kv.first] = deepCopy(kv.second); }",
+      "    return out;",
+      "}"] };
+  })();
+
+  // a number with a point the way the chart shows it: to six places at most,
+  // no noughts left on the end -- 20.333333, 2.5, 3
+  LIST_WORK.cpp.helpers.realText = { wants: ["string", "sstream", "iomanip"], lines: [
+    "// A number with a point, the way the chart shows it: to six places, no noughts on the end.",
+    "static std::string realText(double x) {",
+    "    std::ostringstream o;",
+    "    o << std::fixed << std::setprecision(6) << x;",
+    "    std::string s = o.str();",
+    "    if (s.find('.') != std::string::npos) {",
+    "        s.erase(s.find_last_not_of('0') + 1);",
+    "        if (s[s.size() - 1] == '.') { s.erase(s.size() - 1); }",
+    "    }",
+    "    return s == \"-0\" ? \"0\" : s;",
+    "}"] };
+
+  LIST_WORK.javascript.helpers.popKey = [
+    "// What a table holds under key, taken out of it.",
+    "function popKey(table, key) {",
+    "  const v = table.get(key);",
+    "  table.delete(key);",
+    "  return v;",
+    "}"];
+
+  // significant(x, 6): x to so many figures, as C++ shows one -- 81.6667
+  LIST_WORK.python.lists.significant = function (a) {
+    var n = a[1] || "6";
+    return /^\d+$/.test(n) ? "format(" + a[0] + ", \"." + n + "g\")"
+                           : "format(" + a[0] + ", \".\" + str(" + n + ") + \"g\")";
+  };
+  LIST_WORK.javascript.lists.significant = function (a, k, w) { w.need("significant"); return "significant(" + a[0] + ", " + (a[1] || "6") + ")"; };
+  LIST_WORK.javascript.helpers.significant = [
+    "// x to so many figures, as C++ shows a number: 81.6667, 1.23457e+06.",
+    "function significant(x, n) {",
+    "  if (x === 0) { return \"0\"; }",
+    "  const bare = (t) => (t.includes(\".\") ? t.replace(/0+$/, \"\").replace(/\\.$/, \"\") : t);",
+    "  const exp = Math.floor(Math.log10(Math.abs(Number(x.toPrecision(n)))));",
+    "  if (exp < -4 || exp >= n) {",
+    "    const [m, e] = x.toExponential(n - 1).split(\"e\");",
+    "    return bare(m) + \"e\" + e[0] + e.slice(1).padStart(2, \"0\");",
+    "  }",
+    "  return bare(x.toFixed(Math.max(0, n - 1 - exp)));",
+    "}"];
+  LIST_WORK.java.lists.significant = function (a, k, w) { w.need("significant"); return "significant(" + a[0] + ", " + (a[1] || "6") + ")"; };
+  LIST_WORK.java.helpers.significant = [
+    "    // x to so many figures, as C++ shows a number: 81.6667, 1.23457e+06.",
+    "    static String significant(double x, int n) {",
+    "        if (x == 0) { return \"0\"; }",
+    "        java.math.BigDecimal b = new java.math.BigDecimal(x).round(new java.math.MathContext(n));",
+    "        int exp = b.precision() - b.scale() - 1;",
+    "        if (exp < -4 || exp >= n) {",
+    "            String m = b.movePointLeft(exp).stripTrailingZeros().toPlainString();",
+    "            return m + \"e\" + (exp < 0 ? \"-\" : \"+\") + (Math.abs(exp) < 10 ? \"0\" : \"\") + Math.abs(exp);",
+    "        }",
+    "        return b.stripTrailingZeros().toPlainString();",
+    "    }"];
+  LIST_WORK.csharp.lists.significant = function (a, k, w) { w.need("significant"); return "Significant(" + a[0] + ", " + (a[1] || "6") + ")"; };
+  LIST_WORK.csharp.helpers.significant = [
+    "    // x to so many figures, as C++ shows a number: 81.6667, 1.23457e+06.",
+    "    static string Significant(double x, int n) {",
+    "        if (x == 0) { return \"0\"; }",
+    "        var inv = System.Globalization.CultureInfo.InvariantCulture;",
+    "        string e = x.ToString(\"E\" + (n - 1), inv);",
+    "        int exp = int.Parse(e.Substring(e.IndexOf('E') + 1), inv);",
+    "        if (exp < -4 || exp >= n) {",
+    "            string m = e.Substring(0, e.IndexOf('E'));",
+    "            if (m.Contains(\".\")) { m = m.TrimEnd('0').TrimEnd('.'); }",
+    "            return m + \"e\" + (exp < 0 ? \"-\" : \"+\") + Math.Abs(exp).ToString(\"00\");",
+    "        }",
+    "        string f = x.ToString(\"F\" + Math.Max(0, n - 1 - exp), inv);",
+    "        if (f.Contains(\".\")) { f = f.TrimEnd('0').TrimEnd('.'); }",
+    "        return f;",
+    "    }"];
+  LIST_WORK.cpp.lists.significant = function (a, k, w) { w.need("significant"); return "significant(" + a[0] + ", " + (a[1] || "6") + ")"; };
+  LIST_WORK.cpp.helpers.significant = { wants: ["string", "sstream", "iomanip"], lines: [
+    "// x to so many figures, as cout shows a number: 81.6667, 1.23457e+06.",
+    "static std::string significant(double x, int n) {",
+    "    std::ostringstream o;",
+    "    o << std::setprecision(n) << x;",
+    "    return o.str();",
+    "}"] };
+
+  // repr(x): words in quotes, the way they are written inside a list
+  LIST_WORK.python.lists.repr = function (a) { return "repr(" + a[0] + ")"; };
+  LIST_WORK.javascript.lists.repr = function (a, k, w) { w.need("shown"); return "shown(" + a[0] + ", true)"; };
+  LIST_WORK.java.lists.repr = function (a, k, w) { w.need("shown"); return "shown(" + a[0] + ", true)"; };
+  LIST_WORK.csharp.lists.repr = function (a, k, w) { w.need("shown"); return "Shown(" + a[0] + ", true)"; };
+  LIST_WORK.cpp.lists.repr = function (a, k, w) { w.need("shown"); w.need("reprOf"); return "reprOf(" + a[0] + ")"; };
+  LIST_WORK.cpp.helpers.reprOf = { wants: ["sstream"], lines: [
+    "static std::string reprOf(const std::string& s) { return \"'\" + s + \"'\"; }",
+    "template <typename T> static std::string reprOf(const T& v) {",
+    "    std::ostringstream o;", "    shownIn(o, v);", "    return o.str();", "}"] };
+
+  // word[i] = "x": words cannot be changed in place, so the word is made again
+  LIST_WORK.python.setChar = function (t, i, v) { return t + " = " + held(t) + "[:" + i + "] + " + v + " + " + held(t) + "[" + held(i) + " + 1:]"; };
+  LIST_WORK.javascript.setChar = function (t, i, v) {
+    return t + " = " + held(t) + ".slice(0, " + i + ") + " + v + " + " + held(t) + ".slice(" + held(i) + " + 1)";
+  };
+  LIST_WORK.java.setChar = function (t, i, v) {
+    return t + " = " + held(t) + ".substring(0, " + i + ") + " + v + " + " + held(t) + ".substring(" + held(i) + " + 1)";
+  };
+  LIST_WORK.csharp.setChar = function (t, i, v) {
+    return t + " = " + held(t) + ".Substring(0, " + i + ") + " + v + " + " + held(t) + ".Substring(" + held(i) + " + 1)";
+  };
+  LIST_WORK.cpp.setChar = function (t, i, v) { return held(t) + "[" + i + "] = " + held(v) + "[0]"; };
+
+  // (3, 4): Python has tuples; the rest keep one as a list
+  LIST_WORK.python.tupleOf = function (items) { return "(" + items.join(", ") + (items.length === 1 ? ",)" : ")"); };
+
+  // transpose(rows): the columns of a list of lists
+  LIST_WORK.python.lists.transpose = function (a) { return "[list(c) for c in zip(*" + a[0] + ")]"; };
+  LIST_WORK.javascript.lists.transpose = function (a) {
+    return "(" + held(a[0]) + ".length ? " + held(a[0]) + "[0].map((_, i) => " + held(a[0]) + ".map((row) => row[i])) : [])";
+  };
+  LIST_WORK.java.lists.transpose = function (a, k, w) { w.need("transpose"); return "transpose(" + a[0] + ")"; };
+  LIST_WORK.java.helpers.transpose = ["    static <T> ArrayList<ArrayList<T>> transpose(List<? extends List<T>> rows) {",
+                                      "        ArrayList<ArrayList<T>> out = new ArrayList<>();",
+                                      "        int n = rows.isEmpty() ? 0 : Integer.MAX_VALUE;",
+                                      "        for (List<T> row : rows) { n = Math.min(n, row.size()); }",
+                                      "        for (int i = 0; i < n; i++) {",
+                                      "            ArrayList<T> col = new ArrayList<>();",
+                                      "            for (List<T> row : rows) { col.add(row.get(i)); }",
+                                      "            out.add(col);",
+                                      "        }",
+                                      "        return out;",
+                                      "    }"];
+  LIST_WORK.csharp.lists.transpose = function (a) {
+    return "Enumerable.Range(0, " + held(a[0]) + ".Count == 0 ? 0 : " + held(a[0]) + ".Min(r_ => r_.Count)).Select(i_ => " +
+           held(a[0]) + ".Select(r_ => r_[i_]).ToList()).ToList()";
+  };
+  LIST_WORK.cpp.lists.transpose = function (a, k, w) { w.need("transpose"); return "transpose(" + a[0] + ")"; };
+  LIST_WORK.cpp.helpers.transpose = { wants: ["vector", "algorithm"], lines: [
+    "template <typename T> static std::vector<std::vector<T>> transpose(const std::vector<std::vector<T>>& rows) {",
+    "    std::vector<std::vector<T>> out;",
+    "    size_t n = rows.empty() ? 0 : rows[0].size();",
+    "    for (const auto& row : rows) { n = std::min(n, row.size()); }",
+    "    for (size_t i = 0; i < n; i++) {",
+    "        std::vector<T> col;",
+    "        for (const auto& row : rows) { col.push_back(row[i]); }",
+    "        out.push_back(col);",
+    "    }",
+    "    return out;", "}"] };
 
   // Two lists put end to end: [1, 2] + [3].
   LIST_WORK.python.listPlus = function (a, b) { return a + " + " + b; };
@@ -3061,7 +4222,7 @@
   LIST_WORK.python.lambda = function (v, body) { return "lambda " + v + ": " + body; };
   LIST_WORK.javascript.keptToo = "classOf Array Map Set Object Boolean JSON Infinity NaN isNaN shown shuffle";
   LIST_WORK.javascript.lambda = function (v, body) { return "(" + v + ") => " + body; };
-  LIST_WORK.java.keptToo = "sizeOf orderOf listPlus Record kindName sortIn reverseIn ArrayList LinkedHashMap LinkedHashSet Arrays Collections List Map Comparator " +
+  LIST_WORK.java.keptToo = "transpose sizeOf orderOf listPlus Record kindName sortIn reverseIn ArrayList LinkedHashMap LinkedHashSet Arrays Collections List Map Comparator " +
                            "Object StringBuilder shown joined filled filledFrom tableOf sortedList " +
                            "reversedList shuffledList itemsOf isNumber java";
   LIST_WORK.java.lambda = function (v, body) { return v + " -> " + body; };
@@ -3069,10 +4230,363 @@
   LIST_WORK.csharp.keptToo = "OrderOf Record KindName SortIn ReverseIn dynamic List Dictionary Enumerable Shown PopAt SortedList Shuffle IsNumber System Linq";
   LIST_WORK.csharp.lambda = function (v, body) { return v + " => " + body; };
   LIST_WORK.csharp.lambdaName = "v_";
-  LIST_WORK.cpp.keptToo = "listPlus kindName vector map shown shownIn popAt indexOf joined splitText chars keysOf valuesOf " +
+  LIST_WORK.cpp.keptToo = "lastIndexOf reprOf transpose listPlus kindName vector map shown shownIn popAt indexOf joined splitText chars keysOf valuesOf " +
                           "sortedList reversedCopy shuffleIn shuffledCopy repeated rangeOf textOf replaced " +
                           "trimmed allOf isNumber uniqueOf setWork padded fixedText Record INFINITY";
   LIST_WORK.cpp.lambda = function (v, body) { return "[](auto " + v + ") { return " + body + "; }"; };
+
+
+  // ---- functions as values, and what is left over -------------------------
+  // bind(f, a): f with a handed over first.  Python and JavaScript have the
+  // word for it already; Java is handed an Fn, which is called with call();
+  // C# a delegate, which is called as it stands.
+  function boundArity(node, w) {
+    var head = node && node.args && node.args[0];
+    var one = head && head.name && !head.field ? w.prog.byName[lowered(head.name)] : null;
+    return one ? { one: one, left: one.params.length - (node.args.length - 1) } : null;
+  }
+  function javaFromObject(code, kind, w) {
+    if (kind === "int") { return "((Number) " + code + ").intValue()"; }
+    if (kind === "real") { return "((Number) " + code + ").doubleValue()"; }
+    if (kind === "text") { return "(String) " + code; }
+    if (kind === "bool") { return "(Boolean) " + code; }
+    if (kind === "any" || !kind) { return code; }
+    return "(" + w.typeOf(kind) + ") " + code;
+  }
+  LIST_WORK.python.lists.bind = function (a, k, w) { w.need("functools"); return "functools.partial(" + a.join(", ") + ")"; };
+  LIST_WORK.javascript.lists.bind = function (a) { return held(a[0]) + ".bind(null" + a.slice(1).map(function (x) { return ", " + x; }).join("") + ")"; };
+  LIST_WORK.java.fnType = "Fn";
+  LIST_WORK.java.fnRef = function (name, one, w) {
+    w.need("fn");
+    var args = one.params.map(function (p, i) {
+      var got = javaFromObject("a_[" + i + "]", p.entry.kind, w);
+      return p.dflt ? "(a_.length > " + i + " ? " + got + " : " + w.code(p.dflt) + ")" : got;
+    });
+    var call = w.reachMod(one) + name + "(" + args.join(", ") + ")";
+    return "(Fn) (a_) -> " + (one.gives ? call : "{ " + call + "; return null; }");
+  };
+  LIST_WORK.java.lists.bind = function (a, k, w) { w.need("fn"); return "bind(" + a.join(", ") + ")"; };
+  LIST_WORK.java.callFn = function (name, codes) { return name + ".call(" + codes.join(", ") + ")"; };
+  LIST_WORK.java.helpers.fn = JAVA_FN_TYPE.concat([
+                               "    // f, handed what is bound first whenever it is called",
+                               "    static Fn bind(Fn f, Object... bound) {",
+                               "        return (a) -> {",
+                               "            Object[] all = new Object[bound.length + a.length];",
+                               "            System.arraycopy(bound, 0, all, 0, bound.length);",
+                               "            System.arraycopy(a, 0, all, bound.length, a.length);",
+                               "            return f.call(all);",
+                               "        };",
+                               "    }"]);
+  LIST_WORK.csharp.fnType = "dynamic";
+  // A C# delegate whose last ones may be left out -- by = 1 -- declared
+  // for the function it stands for: Fn_step(dynamic p0_, dynamic p1_ = null)
+  function csOptionalFn(tag, params, gives, w, lang) {
+    var nm = "Fn_" + tag;
+    if (!lang.helpers[nm]) {
+      lang.helpers[nm] = ["    // what a call may leave out, made what it is when it is left out",
+                          "    delegate " + (gives ? "dynamic" : "void") + " " + nm + "(" + params.map(function (p, i) {
+                            return "dynamic p" + i + "_" + (p.dflt ? " = null" : "");
+                          }).join(", ") + ");"];
+      lang.kept[nm] = true;
+    }
+    w.need(nm);
+    return nm;
+  }
+  function csFnOf(name, one, w) {
+    if (one.params.some(function (p) { return p.dflt; })) {
+      var dn = csOptionalFn(name, one.params, !!one.gives, w, w.L);
+      var qs = one.params.map(function (p, i) { return "p" + i + "_"; });
+      var handed = one.params.map(function (p, i) { return p.dflt ? "(" + qs[i] + " ?? " + w.code(p.dflt) + ")" : qs[i]; });
+      return "new " + dn + "((" + qs.join(", ") + ") => " + w.reachMod(one) + name + "(" + handed.join(", ") + "))";
+    }
+    var ps = one.params.map(function (p, i) { return "p" + i + "_"; });
+    var types = one.params.map(function () { return "dynamic"; });
+    var body = w.reachMod(one) + name + "(" + ps.join(", ") + ")";
+    var type = one.gives ? "Func<" + types.concat(["dynamic"]).join(", ") + ">" : (types.length ? "Action<" + types.join(", ") + ">" : "Action");
+    return "new " + type + "((" + ps.join(", ") + ") => " + body + ")";
+  }
+  LIST_WORK.csharp.fnRef = function (name, one, w) { return csFnOf(name, one, w); };
+  LIST_WORK.csharp.lists.bind = function (a, k, w, nodes) {
+    var got = boundArity(nodes[0] ? { args: nodes } : null, w);
+    if (!got) { return "null"; }
+    var n = got.one.params.length, b = nodes.length - 1, left = n - b, gives = !!got.one.gives;
+    // bound with some still to come that may be left out: its own delegate
+    var rest0 = got.one.params.slice(b);
+    if (rest0.some(function (p) { return p.dflt; })) {
+      var tag = w.called(got.one) + "_" + b;
+      var dn = csOptionalFn(tag, rest0, gives, w, this);
+      var bnm = "Bind_" + tag;
+      if (!this.helpers[bnm]) {
+        var bs0 = [], xs0 = [];
+        for (var i0 = 0; i0 < b; i0++) { bs0.push("b" + i0); }
+        rest0.forEach(function (p, j0) { xs0.push("p" + j0 + "_"); });
+        this.helpers[bnm] = ["    // " + w.called(got.one) + ", handed " + b + " now and the rest when it is called",
+                             "    static " + dn + " " + bnm + "(dynamic f" + bs0.map(function (v) { return ", dynamic " + v; }).join("") + ") {",
+                             "        return (" + xs0.join(", ") + ") => f(" + bs0.concat(xs0).join(", ") + ");",
+                             "    }"];
+        this.kept[bnm] = true;
+      }
+      w.need(bnm);
+      return bnm + "(" + [csFnOf(w.called(got.one), got.one, w)].concat(a.slice(1)).join(", ") + ")";
+    }
+    var nm = "Bind" + (gives ? "" : "V") + n + "_" + b;
+    if (!this.helpers[nm]) {
+      var dyn = function (m) { var o = []; for (var i = 0; i < m; i++) { o.push("dynamic"); } return o; };
+      var fType = gives ? "Func<" + dyn(n).concat(["dynamic"]).join(", ") + ">" : (n ? "Action<" + dyn(n).join(", ") + ">" : "Action");
+      var rType = gives ? "Func<" + dyn(left).concat(["dynamic"]).join(", ") + ">" : (left ? "Action<" + dyn(left).join(", ") + ">" : "Action");
+      var bs = [], xs = [];
+      for (var i = 0; i < b; i++) { bs.push("b" + i); }
+      for (var j = 0; j < left; j++) { xs.push("x" + j); }
+      this.helpers[nm] = ["    // " + (gives ? "A function" : "A module") + " of " + n + ", handed " + b + " of them now and the rest when it is called.",
+                          "    static " + rType + " " + nm + "(" + fType + " f" + bs.map(function (v) { return ", dynamic " + v; }).join("") + ") {",
+                          "        return (" + xs.join(", ") + ") => f(" + bs.concat(xs).join(", ") + ");",
+                          "    }"];
+      this.kept[nm] = true;
+    }
+    w.need(nm);
+    return nm + "(" + [csFnOf(w.called(got.one), got.one, w)].concat(a.slice(1)).join(", ") + ")";
+  };
+
+  // ---- a slice counted from the end: t[-5:] --------------------------------
+  function fromEnd(code, length) {
+    return /^-\s*\d+$/.test(String(code).trim()) ? length + " " + String(code).trim().replace(/^-\s*/, "- ") : code;
+  }
+  LIST_WORK.java.lists.slice = function (a, k) {
+    if (k[0] === "text") {
+      var len = held(a[0]) + ".length()";
+      return held(a[0]) + ".substring(" + fromEnd(a[1], len) + (a[2] ? ", " + fromEnd(a[2], len) : "") + ")";
+    }
+    var size = held(a[0]) + ".size()";
+    return "new ArrayList<>(" + held(a[0]) + ".subList(" + fromEnd(a[1], size) + ", " + (a[2] ? fromEnd(a[2], size) : size) + "))";
+  };
+  LIST_WORK.java.lists.substring = function (a) {
+    var len = held(a[0]) + ".length()";
+    return held(a[0]) + ".substring(" + fromEnd(a[1], len) + (a[2] ? ", " + fromEnd(a[2], len) : "") + ")";
+  };
+  LIST_WORK.csharp.lists.slice = function (a, k) {
+    var len = held(a[0]) + (k[0] === "text" ? ".Length" : ".Count");
+    var from = fromEnd(a[1], len), to = a[2] ? fromEnd(a[2], len) : null;
+    if (k[0] === "text") { return held(a[0]) + ".Substring(" + from + (to ? ", " + to + " - " + held(from) : "") + ")"; }
+    return held(a[0]) + ".GetRange(" + from + ", " + (to || len) + " - " + held(from) + ")";
+  };
+  LIST_WORK.csharp.lists.substring = function (a) {
+    var len = held(a[0]) + ".Length";
+    var from = fromEnd(a[1], len), to = a[2] ? fromEnd(a[2], len) : null;
+    return held(a[0]) + ".Substring(" + from + (to ? ", " + to + " - " + held(from) : "") + ")";
+  };
+  LIST_WORK.cpp.lists.slice = function (a, k, w) {
+    var len = "(int)" + held(a[0]) + ".size()";
+    var from = fromEnd(a[1], len), to = a[2] ? fromEnd(a[2], len) : null;
+    if (k[0] === "text") { return held(a[0]) + ".substr(" + from + (to ? ", " + to + " - " + held(from) : "") + ")"; }
+    return w.typeOf(k[0]) + "(" + held(a[0]) + ".begin() + " + held(from) + ", " + (to ? held(a[0]) + ".begin() + " + held(to) : held(a[0]) + ".end()") + ")";
+  };
+  LIST_WORK.cpp.lists.substring = function (a) {
+    var len = "(int)" + held(a[0]) + ".size()";
+    var from = fromEnd(a[1], len), to = a[2] ? fromEnd(a[2], len) : null;
+    return held(a[0]) + ".substr(" + from + (to ? ", " + to + " - " + held(from) : "") + ")";
+  };
+  // the slices above, with a step as well: every so many, the stepped helper
+  ["java", "csharp", "cpp"].forEach(function (lang) {
+    var plain = LIST_WORK[lang].lists.slice;
+    LIST_WORK[lang].lists.slice = function (a, k, w) {
+      if (a.length > 3) { w.need("sliceStep"); return (lang === "csharp" ? "SliceStep(" : "sliceStep(") + a.join(", ") + ")"; }
+      return plain.apply(this, arguments);
+    };
+  });
+
+  // ---- Java: what is in both, in either, in one only; zip and enumerate --
+  ["union", "intersection", "difference"].forEach(function (op, how) {
+    LIST_WORK.java.lists[op] = function (a, k, w) { w.need("setWork"); return "setWork(" + a[0] + ", " + a[1] + ", " + [2, 0, 1][how] + ")"; };
+  });
+  LIST_WORK.java.helpers.setWork = ["    // What is in both (0), in the first only (1), or in either (2).",
+                                    "    static <T> ArrayList<T> setWork(List<T> a, List<T> b, int how) {",
+                                    "        ArrayList<T> out = new ArrayList<>();",
+                                    "        for (T v : a) {",
+                                    "            boolean inB = b.contains(v);",
+                                    "            if (how == 1 ? !inB : (how == 2 || inB) && !out.contains(v)) { out.add(v); }",
+                                    "        }",
+                                    "        if (how == 2) { for (T v : b) { if (!out.contains(v)) { out.add(v); } } }",
+                                    "        return out;",
+                                    "    }"];
+  LIST_WORK.java.lists.zip = function (a, k, w) { w.need("zipped"); return "zipped(" + a.join(", ") + ")"; };
+  LIST_WORK.java.lists.enumerate = function (a, k, w) { w.need("zipped"); return "enumerated(" + a.join(", ") + ")"; };
+  LIST_WORK.java.helpers.zipped = ["    // Lists taken a place at a time: [first of each], [second of each], ...",
+                                   "    static ArrayList<ArrayList<Object>> zipped(List<?>... lists) {",
+                                   "        ArrayList<ArrayList<Object>> out = new ArrayList<>();",
+                                   "        int n = Integer.MAX_VALUE;",
+                                   "        for (List<?> l : lists) { n = Math.min(n, l.size()); }",
+                                   "        for (int i = 0; lists.length > 0 && i < n; i++) {",
+                                   "            ArrayList<Object> row = new ArrayList<>();",
+                                   "            for (List<?> l : lists) { row.add(l.get(i)); }",
+                                   "            out.add(row);",
+                                   "        }",
+                                   "        return out;",
+                                   "    }",
+                                   "    static ArrayList<ArrayList<Object>> enumerated(List<?> items) { return enumerated(items, 0); }",
+                                   "    static ArrayList<ArrayList<Object>> enumerated(List<?> items, int from) {",
+                                   "        ArrayList<ArrayList<Object>> out = new ArrayList<>();",
+                                   "        for (int i = 0; i < items.size(); i++) { out.add(new ArrayList<>(Arrays.asList(from + i, items.get(i)))); }",
+                                   "        return out;",
+                                   "    }"];
+
+  // ---- sorting that keeps equal things in the order they came in ----------
+  LIST_WORK.csharp.lists.sort = function (a, k, w, nodes) {
+    var elem = elemOf(k[0]);
+    var how = a[1] || !/^(int|real|text|bool)$/.test(elem) ? csOrder(a[1], nodes[1], w, elem)
+            : elem === "text" ? "string.CompareOrdinal" : "";
+    if (!how) { return w.statement ? held(a[0]) + ".Sort()" : (w.need("sortIn"), "SortIn(" + a[0] + ")"); }
+    w.need("sortIn");
+    return "SortIn(" + a[0] + ", " + how + ")";
+  };
+  LIST_WORK.csharp.helpers.sortIn = ["    static List<T> SortIn<T>(List<T> items) { items.Sort(); return items; }",
+                                     "    // In order, and things that come out equal left the way round they were.",
+                                     "    static List<T> SortIn<T>(List<T> items, Comparison<T> order) {",
+                                     "        var made = items.OrderBy(v_ => v_, Comparer<T>.Create(order)).ToList();",
+                                     "        items.Clear();",
+                                     "        items.AddRange(made);",
+                                     "        return items;",
+                                     "    }",
+                                     "    static List<T> ReverseIn<T>(List<T> items) { items.Reverse(); return items; }"];
+  LIST_WORK.csharp.helpers.sortedList = ["    static List<T> SortedList<T>(List<T> items, Comparison<T> order) {",
+                                         "        return items.OrderBy(v_ => v_, Comparer<T>.Create(order)).ToList();",
+                                         "    }"];
+  LIST_WORK.cpp.lists.sort = function (a, k, w, nodes) {
+    if (!w.statement) {
+      w.need("sortedList");
+      return "sortedList(" + a[0] + (a[1] ? ", " + cppOrder(a[1], nodes[1], w) : "") + ")";
+    }
+    w.need("algorithm");
+    return "std::stable_sort(" + held(a[0]) + ".begin(), " + held(a[0]) + ".end()" + (a[1] ? ", " + cppOrder(a[1], nodes[1], w) : "") + ")";
+  };
+  LIST_WORK.cpp.helpers.sortedList = { wants: ["vector", "algorithm"], lines: [
+    "template <typename T> static std::vector<T> sortedList(std::vector<T> items) {",
+    "    std::stable_sort(items.begin(), items.end());", "    return items;", "}",
+    "template <typename T, typename F> static std::vector<T> sortedList(std::vector<T> items, F order) {",
+    "    std::stable_sort(items.begin(), items.end(), order);", "    return items;", "}"] };
+
+  // ---- Java: the letters of some words, the empty word having none --------
+  LIST_WORK.java.helpers.chars = ["    // Each letter of some words, as words of its own.",
+                                  "    static ArrayList<String> chars(String s) {",
+                                  "        ArrayList<String> out = new ArrayList<>();",
+                                  "        for (char c : s.toCharArray()) { out.add(String.valueOf(c)); }",
+                                  "        return out;",
+                                  "    }"];
+  (function () {
+    var split0 = LIST_WORK.java.lists.split, tolist0 = LIST_WORK.java.lists.tolist;
+    LIST_WORK.java.lists.split = function (a, k, w) {
+      if (a[1] === '""') { w.need("chars"); return "chars(" + a[0] + ")"; }
+      return split0.apply(this, arguments);
+    };
+    LIST_WORK.java.lists.tolist = function (a, k, w) {
+      if (k[0] === "text") { w.need("chars"); return "chars(" + a[0] + ")"; }
+      return tolist0.apply(this, arguments);
+    };
+  })();
+
+  // ---- what something of no one kind is, and what is at a place in it ------
+  (function () {
+    var classof0 = LIST_WORK.java.lists.classof;
+    LIST_WORK.java.lists.classof = function (a, k, w) {
+      if (k[0] === "any" || !k[0]) { w.need("classOf"); return "classOf(" + a[0] + ")"; }
+      return classof0.apply(this, arguments);
+    };
+    var classof1 = LIST_WORK.csharp.lists.classof;
+    LIST_WORK.csharp.lists.classof = function (a, k, w) {
+      if (k[0] === "any" || !k[0]) { w.need("classOf"); return "ClassOf(" + a[0] + ")"; }
+      return classof1.apply(this, arguments);
+    };
+  })();
+  LIST_WORK.java.helpers.classOf = ["    // What kind of thing something is, in the chart's words.",
+                                    "    static String classOf(Object v) {",
+                                    "        if (v instanceof List) { return \"List\"; }",
+                                    "        if (v instanceof Map) { return \"Table\"; }",
+                                    "        if (v instanceof Boolean) { return \"Boolean\"; }",
+                                    "        if (v instanceof Integer || v instanceof Long) { return \"Integer\"; }",
+                                    "        if (v instanceof Double) { return (Double) v == Math.floor((Double) v) ? \"Integer\" : \"Real\"; }",
+                                    "        if (v instanceof String) { return \"String\"; }",
+                                    "        return v.getClass().getSimpleName();",
+                                    "    }"];
+  LIST_WORK.csharp.helpers.classOf = ["    // What kind of thing something is, in the chart's words.",
+                                      "    static string ClassOf(object v) {",
+                                      "        if (v is System.Collections.IDictionary) { return \"Table\"; }",
+                                      "        if (v is System.Collections.IList) { return \"List\"; }",
+                                      "        if (v is bool) { return \"Boolean\"; }",
+                                      "        if (v is int || v is long) { return \"Integer\"; }",
+                                      "        if (v is double) { return (double)v == Math.Floor((double)v) ? \"Integer\" : \"Real\"; }",
+                                      "        if (v is string) { return \"String\"; }",
+                                      "        return v.GetType().Name;",
+                                      "    }"];
+  (function () {
+    var itemAt0 = LIST_WORK.java.itemAt;
+    LIST_WORK.java.itemAt = function (o, i, kind, w) {
+      if (kind === "any") { w.need("itemOf"); return "itemOf(" + o + ", " + i + ")"; }
+      return itemAt0.apply(this, arguments);
+    };
+    LIST_WORK.csharp.itemAt = function (o, i, kind, w) {
+      if (kind === "any") { w.need("itemOf"); return "ItemOf(" + o + ", " + i + ")"; }
+      return held(o) + "[" + i + "]";
+    };
+  })();
+  LIST_WORK.java.helpers.itemOf = ["    // What is at a place in something of no one kind: a letter of words,",
+                                   "    // an item of a list, what a table keeps under it.",
+                                   "    static Object itemOf(Object v, Object at) {",
+                                   "        if (v instanceof String) { return String.valueOf(((String) v).charAt((Integer) at)); }",
+                                   "        if (v instanceof Map) { return ((Map<?, ?>) v).get(at); }",
+                                   "        return ((List<?>) v).get((Integer) at);",
+                                   "    }"];
+  LIST_WORK.csharp.helpers.itemOf = ["    // What is at a place in something of no one kind: a letter of words,",
+                                     "    // an item of a list, what a table keeps under it.",
+                                     "    static dynamic ItemOf(dynamic v, dynamic at) {",
+                                     "        if (v is string) { return ((string)v)[(int)at].ToString(); }",
+                                     "        return v[at];",
+                                     "    }"];
+  LIST_WORK.csharp.listPlus = function (a, b) { return "Enumerable.ToList(Enumerable.Concat(" + a + ", " + b + "))"; };
+
+  // ---- JavaScript: anything that is not a number or words, put in order --
+  LIST_WORK.javascript.helpers.orderOf = ["// Which of two comes first: numbers by size, words by their letters,",
+                                          "// lists item by item -- the way the chart puts them in order.",
+                                          "function orderOf(a, b) {",
+                                          "  if (Array.isArray(a) && Array.isArray(b)) {",
+                                          "    for (let i = 0; i < Math.min(a.length, b.length); i++) {",
+                                          "      const one = orderOf(a[i], b[i]);",
+                                          "      if (one) { return one; }",
+                                          "    }",
+                                          "    return a.length - b.length;",
+                                          "  }",
+                                          "  if (typeof a === \"number\" && typeof b === \"number\") { return a - b; }",
+                                          "  if ((typeof a === \"number\") !== (typeof b === \"number\")) { return typeof a === \"number\" ? -1 : 1; }",
+                                          "  return a < b ? -1 : a > b ? 1 : 0;",
+                                          "}"];
+  // JavaScript reads the number at the front of some words, and nought where there is none
+  (function () {
+    var real0 = LIST_WORK.javascript.lists.real;
+    LIST_WORK.javascript.lists.real = function (a, k) {
+      return k[0] === "text" ? "(parseFloat(" + a[0] + ") || 0)" : real0.apply(this, arguments);
+    };
+  })();
+  LIST_WORK.javascript.keptToo += " orderOf roundEven";
+  LIST_WORK.java.keptToo += " Fn bind chars classOf itemOf setWork zipped enumerated";
+  LIST_WORK.csharp.keptToo += " ClassOf ItemOf";
+  LIST_WORK.cpp.keptToo += " Value valueOrder valueSame classOf itemsOf zipped enumerated Fn function";
+  LIST_WORK.python.keptToo += " to_base format";
+  LIST_WORK.python.softToo.copy = "deepcopy";
+  LIST_WORK.python.softToo.json = "tojson";
+  LIST_WORK.javascript.keptToo += " deepCopy significant popKey";
+  LIST_WORK.java.keptToo += " significant padded";
+  LIST_WORK.csharp.keptToo += " Significant PopKey";
+  LIST_WORK.cpp.keptToo += " significant popKey realText";
+  LIST_WORK.java.keptToo += " deepCopy deepCopied copied";
+  LIST_WORK.csharp.keptToo += " DeepCopy DeepCopied Copied";
+  LIST_WORK.cpp.keptToo += " deepCopy";
+  LIST_WORK.python.softToo.copied = "copy";
+  LIST_WORK.javascript.keptToo += " sliceStep";
+  LIST_WORK.java.keptToo += " sliceStep stepAt indexFrom";
+  LIST_WORK.csharp.keptToo += " SliceStep StepAt ToBase";
+  LIST_WORK.cpp.keptToo += " sliceStep stepAt toBase grouped toJson";
+  LIST_WORK.javascript.keptToo += " toJson";
+  LIST_WORK.java.keptToo += " toJson";
+  LIST_WORK.csharp.keptToo += " ToJson";
+  LIST_WORK.python.keptToo += " json";
 
   // Filled into each language's own block, once.
   Object.keys(LIST_WORK).forEach(function (code) {

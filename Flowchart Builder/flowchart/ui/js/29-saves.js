@@ -202,13 +202,19 @@
       var id = seen.size;
       seen.set(v, id);
       if (Array.isArray(v)) {
-        return { id: id, list: v.map(function (x) { return packOne(x, seen); }) };
+        var packed = { id: id, list: v.map(function (x) { return packOne(x, seen); }) };
+        if (v.tuple) { packed.tuple = true; }
+        return packed;
       }
       return { id: id, kind: v.kind,
                keys: v.keys().map(function (x) { return packOne(x, seen); }),
                vals: v.values().map(function (x) { return packOne(x, seen); }) };
     }
-    if (v instanceof FnRef) { return { fn: v.mod ? v.mod.name : "", built: v.built || "" }; }
+    if (v instanceof FnRef) {
+      var ref = { fn: v.mod ? v.mod.name : "", built: v.built || "" };
+      if (v.extra) { ref.extra = v.extra.map(function (x) { return packOne(x, seen); }); }
+      return ref;
+    }
     return v;
   }
 
@@ -224,10 +230,15 @@
     if (!v || typeof v !== "object") { return v; }
     if ("odd" in v) { return Number(v.odd); }
     if ("ref" in v) { return made[v.ref]; }
-    if ("fn" in v) { return new FnRef(v.fn ? moduleNamed(v.fn) : null, v.built || null); }
+    if ("fn" in v) {
+      var ref = new FnRef(v.fn ? moduleNamed(v.fn) : null, v.built || null);
+      if (v.extra) { ref.extra = v.extra.map(function (x) { return unpackOne(x, made); }); }
+      return ref;
+    }
     if (Array.isArray(v.list)) {
       var list = made[v.id] = [];
       v.list.forEach(function (x) { list.push(unpackOne(x, made)); });
+      if (v.tuple) { list.tuple = true; }
       return list;
     }
     if (Array.isArray(v.keys)) {

@@ -135,6 +135,7 @@
     var ts = tokens(src), at = 0;
     var dry = 0;                         // > 0: reading past, not working out
     function peek() { return ts[at]; }
+    function isOp(v) { var t = ts[at]; return !!t && t.t === "op" && t.v === v; }
     function take() { return ts[at++]; }
     function ended() {                   // a token's worth of "right here"
       var last = ts[ts.length - 1];
@@ -170,18 +171,18 @@
     async function handed(opened, first) {
       var args = first === undefined ? [] : [first], given = first === undefined ? [] : [""];
       var from;
-      if (peek() && peek().v !== ")") {
+      if (peek() && !isOp(")")) {
         from = at;
         args.push(await expr(0));
         given.push(between(from, at));
-        while (peek() && peek().v === ",") {
+        while (isOp(",")) {
           take();
           from = at;
           args.push(await expr(0));
           given.push(between(from, at));
         }
       }
-      if (!peek() || peek().v !== ")") {
+      if (!isOp(")")) {
         throw wrong(TXT.r_open_bracket, opened, "", bracketsOpen());
       }
       take();
@@ -208,7 +209,7 @@
         var op = take();
         if (op.v === "[") {
           var pick = await expr(0);
-          if (!peek() || peek().v !== "]") { throw wrong(TXT.r_open_square, op); }
+          if (!isOp("]")) { throw wrong(TXT.r_open_square, op); }
           take();
           if (dry) { continue; }
           try { v = itemOf(v, pick); } catch (bad) { throw spotIn(bad, src, op); }
@@ -216,7 +217,7 @@
         }
         var nm = take();
         if (!nm || nm.t !== "name") { throw wrong(say("r_odd_here", { bit: "." }), op); }
-        if (peek() && peek().v === "(") {
+        if (isOp("(")) {
           var opened = take();
           var got = await handed(opened, v);
           if (dry) { continue; }
@@ -241,7 +242,21 @@
       if (tok.t === "num" || tok.t === "str") { return tok.v; }
       if (tok.t === "op" && tok.v === "(") {
         var inside = await expr(0);
-        if (!peek() || peek().v !== ")") {
+        // (3, 4): a tuple -- a list that says it is a few things together,
+        // and is printed in round brackets, the way Python and C# print one
+        if (isOp(",")) {
+          var together = [inside];
+          while (isOp(",")) {
+            take();
+            if (isOp(")")) { break; }
+            together.push(await expr(0));
+          }
+          if (!isOp(")")) { throw wrong(TXT.r_open_bracket, tok, "", bracketsOpen()); }
+          take();
+          together.tuple = true;
+          return together;
+        }
+        if (!isOp(")")) {
           throw wrong(TXT.r_open_bracket, tok, "", bracketsOpen());
         }
         take();
@@ -250,29 +265,29 @@
       // [1, 2, 3], a list written out
       if (tok.t === "op" && tok.v === "[") {
         var items = [];
-        while (peek() && peek().v !== "]") {
+        while (peek() && !isOp("]")) {
           items.push(await expr(0));
-          if (!peek() || peek().v !== ",") { break; }
+          if (!isOp(",")) { break; }
           take();
         }
-        if (!peek() || peek().v !== "]") { throw wrong(TXT.r_open_square, tok); }
+        if (!isOp("]")) { throw wrong(TXT.r_open_square, tok); }
         take();
         return items;
       }
       // {"a": 1, "b": 2}, a table written out
       if (tok.t === "op" && tok.v === "{") {
         var made = new Table(""), loose = [], keyed = false;
-        while (peek() && peek().v !== "}") {
+        while (peek() && !isOp("}")) {
           var k = await expr(0);
-          if (peek() && peek().v === ":") {
+          if (isOp(":")) {
             take();
             made.put(k, await expr(0));
             keyed = true;
           } else { loose.push(k); }
-          if (!peek() || peek().v !== ",") { break; }
+          if (!isOp(",")) { break; }
           take();
         }
-        if (!peek() || peek().v !== "}") { throw wrong(say("r_odd_here", { bit: "{" }), tok); }
+        if (!isOp("}")) { throw wrong(say("r_odd_here", { bit: "{" }), tok); }
         take();
         return keyed || !loose.length ? made : loose;
       }
@@ -283,7 +298,7 @@
         // New Point: a record of that kind with nothing in it yet
         if (low === "new" && peek() && peek().t === "name") {
           var kind = String(take().v);
-          if (peek() && peek().v === "(") {
+          if (isOp("(")) {
             var open2 = take(), made2 = await handed(open2);
             if (dry) { return undefined; }
             if (made2.args.length && moduleNamed(kind)) {
@@ -292,7 +307,7 @@
           }
           return new Table(kind);
         }
-        if (peek() && peek().v === "(") {    // a call, ours or a built-in
+        if (isOp("(")) {    // a call, ours or a built-in
           var opened = take();
           var got = await handed(opened);
           if (dry) { return undefined; }
@@ -312,7 +327,7 @@
         if (low === "newline") { return "\n"; }
         if (low === "tab") { return "\t"; }
         if (low === "infinity") { return Infinity; }
-        if (BUILT[low] && peek() && (peek().v === ")" || peek().v === ",")) {
+        if (BUILT[low] && (isOp(")") || isOp(","))) {
           return new FnRef(null, low);
         }
         var meant = nearest(name, seenNames(where));
@@ -460,6 +475,8 @@
     if ((Array.isArray(v) || typeof v === "string") && /^(length|size|count)$/i.test(name)) {
       return v.length;
     }
+    // an error said in words is its own message: e.message, whichever kind of error e is
+    if (typeof v === "string" && /^message$/i.test(name)) { return v; }
     throw new Error(say("r_no_field", { name: name }));
   }
   // Putting something into one: scores[2] = 90, p.x = 3, prices["tea"] = 2.
@@ -496,7 +513,7 @@
     return String(v || "").length > 0 && String(v).toLowerCase() !== "false";
   }
   function num(v) {
-    var n = typeof v === "number" ? v : parseFloat(v);
+    var n = typeof v === "number" ? v : typeof v === "boolean" ? (v ? 1 : 0) : parseFloat(v);
     return isNaN(n) ? 0 : n;
   }
   function same(a, b) {
@@ -583,7 +600,22 @@
   }
 
   var BUILT = {
-    sqrt: Math.sqrt, abs: Math.abs, round: Math.round, floor: Math.floor,
+    sqrt: Math.sqrt, abs: Math.abs, floor: Math.floor,
+    // round(x) is the nearest whole number, a half going up; round(x, 2)
+    // the nearest to two places
+    round: function (v, places) {
+      if (places === undefined) { return Math.round(v); }
+      var by = Math.pow(10, Math.floor(num(places)));
+      return Math.round(num(v) * by) / by;
+    },
+    // roundEven(x): the same, but a half goes to the even one -- 2.5 is 2,
+    // 3.5 is 4 -- the way Python's round() and C#'s Math.Round do it
+    roundeven: function (v, places) {
+      var by = places === undefined ? 1 : Math.pow(10, Math.floor(num(places)));
+      var scaled = num(v) * by, near = Math.round(scaled);
+      if (Math.abs(scaled % 1) === 0.5) { near = 2 * Math.round(scaled / 2); }
+      return near / by;
+    },
     ceiling: Math.ceil, ceil: Math.ceil, int: function (v) { return Math.trunc(num(v)); },
     integer: function (v) { return Math.trunc(num(v)); },
     length: function (v) { return String(v).length; },
@@ -682,15 +714,18 @@
     throw new Error(say("r_no_items", { what: whatIs(v) }));
   }
   var builtWhere = null;                 // the chart a built-in was called from
+  // A module handed over with bind() is handed what it was bound with as
+  // well, after whatever it is called with.
   async function callRef(ref, args, given) {
+    if (ref.extra) { args = ref.extra.concat(args); }
     if (ref.mod) { return await runModule(ref.mod, args, builtWhere, given || []); }
     return await BUILT[ref.built].apply(null, args);
   }
   function takesTwo(ref) {
-    if (!ref.mod) { return false; }
-    return String(ref.mod.params || "").split(",").filter(function (p) {
-      return p.trim();
-    }).length >= 2;
+    // compare, handed over as it is: the one built-in that takes a pair
+    if (!ref.mod) { return String(ref.built || "").toLowerCase() === "compare" && !(ref.extra && ref.extra.length); }
+    return paramBits(ref.mod.params).filter(function (p) { return !p.dflt; }).length -
+           (ref.extra ? ref.extra.length : 0) >= 2;
   }
   // Sorting that can stop to run a module of the program's own for every
   // pair it compares -- sort(people, byAge) -- and so is written out rather
@@ -700,8 +735,12 @@
       return await mergeSort(list.slice(), async function (a, b) {
         var said = await callRef(how, [a, b]);
         // a comparison that answers yes or no -- C++'s a < b -- says
-        // whether a goes first
-        if (typeof said === "boolean") { return said ? -1 : 1; }
+        // whether a goes first; where neither goes before the other they
+        // are the same, and stay in the order they were
+        if (typeof said === "boolean") {
+          if (said) { return -1; }
+          return (await callRef(how, [b, a])) === true ? 1 : 0;
+        }
         return num(said);
       });
     }
@@ -762,20 +801,112 @@
       if (isTable(v)) { return !!v.get(x); }
       return String(v).indexOf(String(x)) >= 0;
     },
-    indexof: function (v, x) {
+    // indexOf(xs, x, from): where x first is, looking from `from` on
+    indexof: function (v, x, from) {
+      var at = from === undefined ? 0 : Math.trunc(num(from));
       if (Array.isArray(v)) {
-        for (var i = 0; i < v.length; i++) { if (exactly(v[i], x)) { return i; } }
+        if (at < 0) { at = Math.max(0, at + v.length); }
+        for (var i = at; i < v.length; i++) { if (exactly(v[i], x)) { return i; } }
         return -1;
       }
-      return String(v).indexOf(String(x));
+      var s = String(v);
+      if (at < 0) { at = Math.max(0, at + s.length); }
+      return s.indexOf(String(x), at);
+    },
+    // lastIndexOf(v, x): where x is last, counted from nought; -1 if nowhere
+    lastindexof: function (v, x) {
+      if (Array.isArray(v)) {
+        for (var i = v.length - 1; i >= 0; i--) { if (exactly(v[i], x)) { return i; } }
+        return -1;
+      }
+      return String(v).lastIndexOf(String(x));
+    },
+    // compare(a, b): -1 if a comes first, 1 if b does, 0 if they are the same
+    compare: function (a, b) {
+      var one = orderOf(a, b);
+      return one < 0 ? -1 : one > 0 ? 1 : 0;
     },
     count: function (v, x) {
       if (Array.isArray(v)) { return v.filter(function (y) { return exactly(y, x); }).length; }
       var s = String(v), w = String(x);
       return w ? s.split(w).length - 1 : s.length + 1;
     },
-    slice: function (v, from, to) {
-      return cut(Array.isArray(v) ? v : String(v), from, to);
+    slice: function (v, from, to, step) {
+      if (step === undefined) { return cut(Array.isArray(v) ? v : String(v), from, to); }
+      // slice(xs, from, to, step): every step-th from `from` up to `to`, or
+      // down to it where the step is below nought -- a place below nought
+      // counted from the end, as it is everywhere else
+      var items = Array.isArray(v) ? v : String(v).split(""), n = items.length;
+      var by = Math.trunc(num(step));
+      if (!by) { throw new Error(TXT.r_zero); }
+      function at(x, low, high) {
+        x = Math.trunc(num(x));
+        if (x < 0) { x += n; }
+        return Math.max(low, Math.min(high, x));
+      }
+      var out = [], i;
+      if (by > 0) {
+        for (i = at(from, 0, n); i < at(to, 0, n); i += by) { out.push(items[i]); }
+      } else {
+        for (i = at(from, -1, n - 1); i > at(to, -1, n - 1); i += by) { out.push(items[i]); }
+      }
+      return Array.isArray(v) ? out : out.join("");
+    },
+    // grouped(1234567.891, 2) is "1,234,567.89": thousands kept apart by
+    // commas, to so many places where it says
+    grouped: function (v, places) {
+      var n = num(v);
+      var text = places === undefined ? readable(n) : n.toFixed(Math.max(0, Math.min(20, Math.trunc(num(places)))));
+      var minus = text.charAt(0) === "-";
+      if (minus) { text = text.slice(1); }
+      var halves = text.split(".");
+      halves[0] = halves[0].replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+      return (minus ? "-" : "") + halves.join(".");
+    },
+    // toJson(x): x the way JSON writes it -- {"a":1,"b":[2,3]}
+    tojson: function (v) {
+      function one(x) {
+        if (x === null || x === undefined) { return "null"; }
+        if (typeof x === "string") { return JSON.stringify(x); }
+        if (typeof x === "number") { return isFinite(x) ? String(x) : "null"; }
+        if (typeof x === "boolean") { return x ? "true" : "false"; }
+        if (Array.isArray(x)) { return "[" + x.map(one).join(",") + "]"; }
+        if (isTable(x)) {
+          var bits = [];
+          x.map.forEach(function (e) { bits.push(JSON.stringify(String(e[0])) + ":" + one(e[1])); });
+          return "{" + bits.join(",") + "}";
+        }
+        return "null";
+      }
+      return one(v);
+    },
+    // significant(x, 6): x to so many figures, the way C++ shows a number
+    // unless told otherwise -- 81.6667, 0.333333, 1.23457e+06
+    significant: function (v, n) {
+      var x = num(v), p = n === undefined ? 6 : Math.max(1, Math.min(21, Math.trunc(num(n))));
+      if (x === 0) { return "0"; }
+      if (!isFinite(x)) { return x > 0 ? "inf" : x < 0 ? "-inf" : "nan"; }
+      var exp = Math.floor(Math.log10(Math.abs(Number(x.toPrecision(p)))));
+      function bare(t) { return t.indexOf(".") >= 0 ? t.replace(/0+$/, "").replace(/\.$/, "") : t; }
+      if (exp < -4 || exp >= p) {
+        var m = /^(-?[\d.]+)e([+-])(\d+)$/.exec(x.toExponential(p - 1));
+        return bare(m[1]) + "e" + m[2] + (m[3].length < 2 ? "0" : "") + m[3];
+      }
+      return bare(x.toFixed(Math.max(0, p - 1 - exp)));
+    },
+    // toBase(255, 16) is "ff", fromBase("ff", 16) is 255: a whole number
+    // written in another base, and read back from one
+    tobase: function (v, base) {
+      var b = Math.max(2, Math.min(36, Math.trunc(num(base))));
+      return Math.trunc(num(v)).toString(b);
+    },
+    frombase: function (s, base) {
+      var b = Math.max(2, Math.min(36, Math.trunc(num(base))));
+      var t = String(s).trim().toLowerCase(), minus = t.charAt(0) === "-";
+      if (minus || t.charAt(0) === "+") { t = t.slice(1); }
+      if ((b === 16 && /^0x/.test(t)) || (b === 2 && /^0b/.test(t)) || (b === 8 && /^0o/.test(t))) { t = t.slice(2); }
+      var got = parseInt(t, b);
+      return isNaN(got) ? 0 : (minus ? -got : got);
     },
     substring: function (v, from, to) { return cut(String(v), from, to); },
     join: function (list, sep) {
@@ -847,6 +978,20 @@
       }
       return v;
     },
+    // deepCopy(x): a copy all the way down -- the lists, tables and
+    // records inside it copied as well
+    deepcopy: function (v) {
+      function one(x) {
+        if (Array.isArray(x)) { return x.map(one); }
+        if (isTable(x)) {
+          var made = new Table(x.kind);
+          x.map.forEach(function (e, k) { made.map.set(k, [e[0], one(e[1])]); });
+          return made;
+        }
+        return x;
+      }
+      return one(v);
+    },
     tostring: function (v) { return typeof v === "string" ? v : readable(v); },
     replace: function (s, a, b) { return String(s).split(String(a)).join(String(b)); },
     trim: function (s) { return String(s).trim(); },
@@ -914,6 +1059,25 @@
       var lists = Array.prototype.map.call(arguments, itemsOf), out = [];
       var n = Math.min.apply(null, lists.map(function (l) { return l.length; }));
       for (var i = 0; i < n; i++) { out.push(lists.map(function (l) { return l[i]; })); }
+      return out;
+    },
+    // bind(f, a, b): f, handed a and b first whenever it is called, and
+    // then whatever it is called with.  How a function made inside another
+    // takes the names it uses from there along with it.
+    bind: function (fn) {
+      if (!(fn instanceof FnRef)) { throw new Error(say("r_unknown_fn", { name: String(fn) })); }
+      var made = new FnRef(fn.mod, fn.built);
+      made.extra = (fn.extra || []).concat(Array.prototype.slice.call(arguments, 1));
+      return made;
+    },
+    // repr(x): x the way it is written inside a list -- words in quotes
+    repr: function (v) { return shownIn(v); },
+    // transpose(rows): the columns, each a list -- as many as the shortest row
+    transpose: function (v) {
+      var rows = itemsOf(v).map(itemsOf), out = [];
+      if (!rows.length) { return out; }
+      var n = Math.min.apply(null, rows.map(function (r) { return r.length; }));
+      for (var i = 0; i < n; i++) { out.push(rows.map(function (r) { return r[i]; })); }
       return out;
     },
     enumerate: function (v, from) {

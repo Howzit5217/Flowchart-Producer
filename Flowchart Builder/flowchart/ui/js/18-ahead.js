@@ -49,18 +49,19 @@
   function treeOf(text) {
     var ts = tokens(text), at = 0;
     function peek() { return ts[at]; }
+    function isOp(v) { var t = ts[at]; return !!t && t.t === "op" && t.v === v; }
     function take() { return ts[at++]; }
     function listed(close) {             // a, b, c ) -- up to the closing mark
       var out = [];
-      if (peek() && peek().v !== close) {
+      if (peek() && !isOp(close)) {
         out.push(expr(0));
-        while (peek() && peek().v === ",") {
+        while (isOp(",")) {
           take();
-          if (peek() && peek().v === close) { break; }
+          if (isOp(close)) { break; }
           out.push(expr(0));
         }
       }
-      if (peek() && peek().v === close) { take(); }
+      if (isOp(close)) { take(); }
       return out;
     }
     // After a value: an item of it, a part of it, a call made on it --
@@ -70,13 +71,13 @@
         var op = take();
         if (op.v === "[") {
           var pick = expr(0);
-          if (peek() && peek().v === "]") { take(); }
+          if (isOp("]")) { take(); }
           node = { index: node, at: pick };
           continue;
         }
         var nm = take();
         if (!nm || nm.t !== "name") { break; }
-        if (peek() && peek().v === "(") {
+        if (isOp("(")) {
           take();
           node = { call: String(nm.v), args: [node].concat(listed(")")), dotted: true };
           continue;
@@ -106,20 +107,30 @@
       if (tok.t === "str") { return { str: tok.v }; }
       if (tok.t === "op" && tok.v === "(") {
         var inside = expr(0);
-        if (peek() && peek().v === ")") { take(); }
+        if (isOp(",")) {                 // (3, 4): a tuple, which is a list here
+          var together = [inside];
+          while (isOp(",")) {
+            take();
+            if (isOp(")")) { break; }
+            together.push(expr(0));
+          }
+          if (isOp(")")) { take(); }
+          return { list: together, tuple: true };
+        }
+        if (isOp(")")) { take(); }
         return { group: inside };
       }
       if (tok.t === "op" && tok.v === "[") { return { list: listed("]") }; }
       if (tok.t === "op" && tok.v === "{") {
         var pairs = [];
-        while (peek() && peek().v !== "}") {
+        while (peek() && !isOp("}")) {
           var key = expr(0);
-          if (peek() && peek().v === ":") { take(); }
+          if (isOp(":")) { take(); }
           pairs.push([key, expr(0)]);
-          if (!peek() || peek().v !== ",") { break; }
+          if (!isOp(",")) { break; }
           take();
         }
-        if (peek() && peek().v === "}") { take(); }
+        if (isOp("}")) { take(); }
         return { table: pairs };
       }
       if (tok.t === "name") {
@@ -127,10 +138,10 @@
         if (low === "true" || low === "false") { return { bool: low === "true" }; }
         if (low === "new" && peek() && peek().t === "name") {
           var kind = String(take().v);
-          if (peek() && peek().v === "(") { take(); listed(")"); }
+          if (isOp("(")) { take(); listed(")"); }
           return { record: kind };
         }
-        if (peek() && peek().v === "(") {
+        if (isOp("(")) {
           take();
           return { call: String(tok.v), args: listed(")") };
         }
@@ -142,7 +153,7 @@
       var left = primary();
       while (peek()) {
         var tok = peek();
-        var op = tok.t === "op" ? tok.v : String(tok.v).toLowerCase();
+        var op = tok.t === "op" ? tok.v : tok.t === "name" ? String(tok.v).toLowerCase() : "";
         var rank = RANK[op];
         if (!rank || rank < least) { break; }
         take();
@@ -185,7 +196,7 @@
   // larger of two whole numbers is a whole number.
   var BUILT_KIND = { sqrt: "real", abs: "same", round: "int", floor: "int",
                      ceiling: "int", ceil: "int", int: "int", integer: "int",
-                     length: "int", toupper: "text", tolower: "text",
+                     length: "int", toupper: "text", tolower: "text", roundeven: "int",
                      random: "int", pow: "same", min: "same", max: "same" };
   var R_BUILT_WORDS = /^(length|toupper|tolower)$/;
 
@@ -227,10 +238,10 @@
     return "any";
   }
   // Whatever inside it nobody ever said, a number.
-  function settled(k) {
-    if (isListKind(k)) { return "list:" + settled(elemOf(k)); }
-    if (isTableKind(k)) { return "table:" + settled(tableKey(k) || "text") + ":" + settled(tableValue(k)); }
-    if (k === "none") { return "text"; }
+  function settled(k, keepNone) {
+    if (isListKind(k)) { return "list:" + settled(elemOf(k), keepNone); }
+    if (isTableKind(k)) { return "table:" + settled(tableKey(k) || "text", keepNone) + ":" + settled(tableValue(k), keepNone); }
+    if (k === "none") { return keepNone ? "none" : "text"; }
     return k || "real";
   }
   // What a kind of record holds by this name -- or, where the record is of
@@ -249,33 +260,43 @@
   function builtKind(low, kinds) {
     var a = kinds[0] || "";
     switch (low) {
-      case "length": case "indexof": case "count": case "ord": case "bitand": case "bitor":
+      case "length": case "indexof": case "lastindexof": case "compare": case "count": case "ord": case "bitand": case "bitor":
       case "bitxor": case "trunc": case "sign": return "int";
       case "contains": case "startswith": case "endswith": case "isdigit": case "isalpha":
       case "isupper": case "islower": case "isspace": case "any": case "all": case "isnumber":
         return "bool";
       case "join": case "tostring": case "replace": case "trim": case "chr": case "classof":
-      case "padleft": case "padright": case "fixed": case "substring": return "text";
+      case "padleft": case "padright": case "fixed": case "substring": case "repr": return "text";
       case "split": return "list:text";
+      case "tobase": return "text";
+      case "grouped": return "text";
+      case "tojson": return "text";
+      case "significant": return "text";
+      case "frombase": return "int";
       case "range": return "list:int";
       case "keys": return isTableKind(a) ? "list:" + tableKey(a) : "list:int";
       case "values": return "list:" + elemOf(a);
       case "items":
         return isTableKind(a) ? "list:list:" + (tableKey(a) === tableValue(a) ? tableKey(a) : "any")
                               : "list:list:" + (elemOf(a) === "int" ? "int" : "any");
-      case "reversed": case "copy":
+      case "reversed": case "copy": case "deepcopy":
         return a === "text" ? "text" : isTableKind(a) && low === "reversed" ? "list:" + tableKey(a) : a;
       case "sorted": case "unique": case "tolist": case "shuffled":
         return a === "text" ? "list:text" : isTableKind(a) ? "list:" + tableKey(a) : a;
       case "union": case "intersection":
         return a === "text" ? "list:text" : isTableKind(a) ? "list:" + tableKey(a) : a;
-      case "slice": case "reverse": case "sort": case "repeat": case "difference": return a;
+      case "slice": case "reverse": case "sort": case "repeat": case "difference": case "transpose": return a;
       case "sum": return elemOf(a) === "int" ? "int" : "real";
       case "min": case "max":
         if (kinds.length === 1 && isListKind(a)) { return elemOf(a); }
         return kinds.reduce(function (x, y) { return x === y ? x : bothKinds(x, y); });
       case "pop": case "choice": return elemOf(a);
-      case "get": return isTableKind(a) ? tableValue(a) || kinds[2] || "" : elemOf(a) || kinds[2] || "";
+      case "get": {
+        var held = isTableKind(a) ? tableValue(a) : elemOf(a);
+        // get(ages, "zz", "none") from a table of numbers: a number or words
+        if (held && kinds[2] && held !== kinds[2] && !(/^(int|real)$/.test(held) && /^(int|real)$/.test(kinds[2]))) { return "any"; }
+        return held || kinds[2] || "";
+      }
       case "newlist": {
         var made = kinds[kinds.length - 1] || "";
         for (var d = 0; d < kinds.length - 1; d++) { made = "list:" + made; }
@@ -284,6 +305,7 @@
       case "real": case "log": case "exp": case "sin": case "cos": case "tan": case "atan":
       case "atan2": case "hypot": case "log10": case "asin": case "acos": return "real";
       case "enumerate": return "list:list:" + (elemOf(a) === "int" ? "int" : "any");
+      case "bind": return "fn";
       case "zip":
         var both = elemOf(a);
         kinds.slice(1).forEach(function (k) { both = both === elemOf(k) ? both : "any"; });
@@ -445,10 +467,13 @@
     if (node.call) {
       var low = lowered(node.call);
       if (prog.byName[low]) { return prog.byName[low].gives; }
+      var held0 = lookUp(scope, node.call);
+      if (held0 && (held0.kind === "fn" || (!held0.kind && !holds(BUILT_KIND, low) && builtKind(low, []) === null))) { return "any"; }
       var listy = builtKind(low, node.args.map(function (arg) { return kindIn(arg, scope, prog); }));
       if (listy !== null && (!holds(BUILT_KIND, low) || /^(length|min|max)$/.test(low))) { return listy; }
       if (!holds(BUILT_KIND, low)) { return ""; }
       if (low === "random" && !node.args.length) { return "real"; }
+      if ((low === "round" || low === "roundeven") && node.args.length > 1) { return "real"; }
       if (BUILT_KIND[low] !== "same") { return BUILT_KIND[low]; }
       if (!node.args.length) { return ""; }
       return node.args.map(function (arg) { return kindIn(arg, scope, prog); })
@@ -465,7 +490,11 @@
         if (isListKind(b)) { return b; }
         if (a === "text" || b === "text") { return "text"; }
         return (a === "any" || b === "any") ? "real" : bothKinds(a, b);
-      case "-": case "mod": case "%": case "^":
+      case "^":
+        // 10 ^ -2 is a hundredth, whole numbers or not
+        if (node.right && (node.right.unary === "-" || (node.right.lit !== undefined && Number(node.right.lit) < 0))) { return "real"; }
+        return (a === "any" || b === "any") ? "real" : bothKinds(a, b);
+      case "-": case "mod": case "%":
         return (a === "any" || b === "any") ? "real" : bothKinds(a, b);
       case "/": return "real";
       case "div": return "int";
@@ -475,17 +504,14 @@
 
   // ---- the read-through ---------------------------------------------------
   function paramsOf(mod) {
-    return String(mod.params || "").split(",").map(function (p) {
-      var bits = p.trim().split(/\s+/).filter(Boolean);
-      if (!bits.length) { return null; }
-      var kind = "", cash = false, ref = false;
+    return paramBits(mod.params).map(function (p) {
+      var bits = p.words, kind = "", cash = false;
       bits.slice(0, -1).forEach(function (bit) {
         kind = kind || kindOfWord(bit);
         cash = cash || R_CASH_TYPE.test(bit);
-        ref = ref || R_REF.test(bit);
       });
-      return { name: bits[bits.length - 1], kind: kind, cash: cash, ref: ref };
-    }).filter(Boolean);
+      return { name: p.name, kind: kind, cash: cash, ref: p.ref, dflt: p.dflt };
+    });
   }
 
   function studying(ast) {
@@ -505,6 +531,7 @@
     }
 
     var prog = { mods: [], byName: Object.create(null), scopes: [], records: Object.create(null) };
+    studiedProg = prog;
     prog.shared = scopeFor([], null);
     (ast.modules || []).forEach(function (mod) {
       var said = kindOfWord(mod.returns);
@@ -529,6 +556,15 @@
         entry.kind = p.kind; entry.fixed = !!p.kind; entry.cash = p.cash;
         entry.param = true; entry.ref = p.ref;
         p.entry = entry;
+      });
+    });
+    // Integer step = 1: step is at least what 1 is
+    prog.mods.forEach(function (one) {
+      one.params.forEach(function (p) {
+        if (p.dflt && !p.entry.kind) {
+          var d0 = tree(p.dflt);
+          p.entry.kind = d0.str === "" ? "none" : kindIn(d0, one.scope, prog);
+        }
       });
     });
 
@@ -580,28 +616,38 @@
             // added up or compared with a number is words; so is a
             // parameter nobody passes anything to.
             if (!entry.kind) {
-              entry.kind = (entry.asked || entry.param) ? "text" : "real";
+              entry.kind = entry.param && scope.mod && scope.mod.asValue ? "any"
+                         : (entry.asked || entry.param) ? "text" : "real";
             }
-            entry.kind = settled(entry.kind);
+            entry.kind = settled(entry.kind, true);
           });
         });
         Object.keys(prog.shared.names).forEach(function (low) {
           if (!prog.shared.names[low].kind) {
             prog.shared.names[low].kind = "real";
           }
-          prog.shared.names[low].kind = settled(prog.shared.names[low].kind);
+          prog.shared.names[low].kind = settled(prog.shared.names[low].kind, true);
         });
         Object.keys(prog.records).forEach(function (kind) {
           var rec = prog.records[kind];
-          Object.keys(rec.fields).forEach(function (low) { rec.fields[low].kind = settled(rec.fields[low].kind); });
+          Object.keys(rec.fields).forEach(function (low) { rec.fields[low].kind = settled(rec.fields[low].kind, true); });
         });
       },
       function () {
         learnKinds(prog);
         prog.mods.forEach(function (one) {
           if (one.answers && !one.gives) { one.gives = "real"; }
-          if (one.gives) { one.gives = settled(one.gives); }
+          if (one.gives) { one.gives = settled(one.gives, true); }
         });
+        // and what is still nothing-yet after all that is words
+        prog.scopes.concat([prog.shared]).forEach(function (scope) {
+          Object.keys(scope.names).forEach(function (low) { scope.names[low].kind = settled(scope.names[low].kind); });
+        });
+        Object.keys(prog.records).forEach(function (kind) {
+          var rec = prog.records[kind];
+          Object.keys(rec.fields).forEach(function (low) { rec.fields[low].kind = settled(rec.fields[low].kind); });
+        });
+        prog.mods.forEach(function (one) { if (one.gives) { one.gives = settled(one.gives); } });
       },
       function () { placeNames(prog); markChanged(prog); }
     ] };
@@ -670,6 +716,19 @@
     }
   }
 
+  // A sum with a number in it past what a 32-bit whole number holds.
+  function tooBigForInt(node) {
+    var found = false;
+    (function look(n) {
+      if (!n || found || typeof n !== "object") { return; }
+      if (n.lit !== undefined && Math.abs(Number(n.lit)) > 2147483647) { found = true; return; }
+      if (n.op === "^" && n.left && n.right && n.left.lit !== undefined && n.right.lit !== undefined &&
+          Math.abs(Math.pow(Number(n.left.lit), Number(n.right.lit))) > 2147483647) { found = true; return; }
+      kidsOf(n).forEach(look);
+    })(node);
+    return found;
+  }
+
   // The whole reading, in one go.
   function studied(ast) {
     var it = studying(ast);
@@ -694,7 +753,7 @@
     // grid[y][x] = v: grid is a list of lists of what v is -- or, where the
     // place is a key, a table; p.x = v: p's kind of record has an x
     function learnPlace(scope, said, kind) {
-      var node = tree(said), depth = [];
+      var node = typeof said === "object" ? said : tree(said), depth = [];
       while (node && (node.index || node.field)) {
         if (node.field) {
           var holder = kindIn(node.field, scope, prog);
@@ -734,7 +793,22 @@
           return node.str === "" ? "none" : kindIn(node, scope, prog);
         }
         function calls(node) {
+          (function values(n) {             // a module handed over rather than called
+            if (!n || typeof n !== "object") { return; }
+            if (n.name && !n.field && !n.call && !lookUp(scope, n.name) && prog.byName[lowered(n.name)]) {
+              prog.byName[lowered(n.name)].asValue = true;
+            }
+            kidsOf(n).forEach(values);
+          })(node);
           eachCall(node, function (call) {
+            if (lowered(call.call) === "bind" && call.args[0] && call.args[0].name && !lookUp(scope, call.args[0].name)) {
+              var tied = prog.byName[lowered(call.args[0].name)];
+              if (tied) {
+                call.args.slice(1).forEach(function (arg, i) {
+                  if (tied.params[i]) { learn(tied.params[i].entry, arg.str === "" ? "none" : kindIn(arg, scope, prog)); }
+                });
+              }
+            }
             var mod = prog.byName[lowered(call.call)];
             if (!mod) { return; }
             call.args.forEach(function (arg, i) {
@@ -762,18 +836,36 @@
             }
             learn(home.names[lowered(item.var)], given);
           }
+          if ((item.op === "set" || item.op === "declare") && item.expr && R_JUST_A_NAME.test(item["var"] || "") && tooBigForInt(tree(item.expr))) {
+            var bigOne = item.op === "declare" ? home.names[lowered(item.var)] : lookUp(scope, bareName(item.var));
+            if (bigOne) { bigOne.big = true; }
+          }
           if (item.op === "set") {
             if (R_JUST_A_NAME.test(item["var"] || "")) { learn(lookUp(scope, bareName(item.var)), kind(item.expr)); }
             else { learnPlace(scope, item["var"], kind(item.expr)); }
           }
+          // Set r = "" or Set r = find(xs, 3) where find can hand back "":
+          // a number that is sometimes nothing yet
+          if ((item.op === "set" || item.op === "declare") && item.expr && R_JUST_A_NAME.test(item["var"] || "")) {
+            var mayBe = item.op === "declare" ? home.names[lowered(item.var)] : lookUp(scope, bareName(item.var));
+            if (mayBe && !mayBe.nullable && givesNothing(tree(item.expr), scope)) { mayBe.nullable = true; moved = true; }
+          }
           if (item.op === "foreach") {
             learn(lookUp(scope, item["var"]), elemOf(kind(item.over)) || (kind(item.over) === "text" ? "text" : ""));
+            // going round a list that can hold nothing-yet: the name can hold it too
+            var overNode = tree(item.over), overOne = overNode.name && !overNode.field && !overNode.index ? lookUp(scope, overNode.name) : null;
+            var eachOne = lookUp(scope, item["var"]);
+            if (overOne && overOne.elemNullable && eachOne && !eachOne.nullable) { eachOne.nullable = true; moved = true; }
           }
           if (item.op === "call") {
             // append(names, "Ada"): names is a list of words
             var made = callOf(item), puts = PUTS_IN[lowered(made.call)];
-            if (puts && made.args[0] && made.args[0].name && made.args[puts]) {
+            if (puts && made.args[0] && made.args[0].name && !made.args[0].field && made.args[puts]) {
               learn(lookUp(scope, made.args[0].name), "list:" + kindIn(made.args[puts], scope, prog));
+              var intoList = lookUp(scope, made.args[0].name);
+              if (intoList && !intoList.elemNullable && givesNothing(made.args[puts], scope)) { intoList.elemNullable = true; moved = true; }
+            } else if (puts && made.args[0] && (made.args[0].index || made.args[0].field) && made.args[puts]) {
+              learnPlace(scope, made.args[0], "list:" + kindIn(made.args[puts], scope, prog));
             }
             if (lowered(made.call) === "extend" && made.args[0] && made.args[0].name && made.args[1]) {
               learn(lookUp(scope, made.args[0].name), kindIn(made.args[1], scope, prog));
@@ -787,6 +879,10 @@
             var now = joinKinds(scope.mod.gives, kind(item.expr));
             if (now !== scope.mod.gives) { scope.mod.gives = now; moved = true; }
           }
+          if (item.op === "return" && item.expr && scope.mod && !scope.mod.givesNone && givesNothing(tree(item.expr), scope)) {
+            scope.mod.givesNone = true;
+            moved = true;
+          }
           sumsOf(item).forEach(function (src) { calls(tree(src)); });
           if (item.op === "call") { calls(callOf(item)); }
         });
@@ -794,6 +890,23 @@
     }
   }
 
+  // "" -- nothing yet -- or a call to a Function that can hand that back
+  function givesNothing(node, scope) {
+    if (!node) { return false; }
+    if (node.group) { return givesNothing(node.group, scope); }
+    if (node.str === "") { return true; }
+    // a name that can itself hold nothing-yet
+    if (scope && node.name && !node.field && !node.index && !node.call) {
+      var held = lookUp(scope, node.name);
+      return !!(held && held.nullable);
+    }
+    if (node.call && !node.field) {
+      var one = studiedProg && studiedProg.byName[lowered(node.call)];
+      return !!(one && one.givesNone);
+    }
+    return false;
+  }
+  var studiedProg = null;
   function eachCall(node, fn) {          // every call in it, inner ones too
     if (!node) { return; }
     if (node.call) { fn(node); }
@@ -870,8 +983,9 @@
           // Two things typed in and added together are two numbers far
           // more often than they are two halves of a sentence.
           var sum = node.op === "+" && unknown(node.left) && unknown(node.right);
-          hint(node.left, b || (sum ? "int" : ""));
-          hint(node.right, a || (sum ? "int" : ""));
+          // node <> "": "" there is nothing-yet, which says nothing of what node holds
+          hint(node.left, within(node.right) && within(node.right).str === "" && node.op !== "+" ? "none" : b || (sum ? "int" : ""));
+          hint(node.right, within(node.left) && within(node.left).str === "" && node.op !== "+" ? "none" : a || (sum ? "int" : ""));
         }
         look(node.left); look(node.right);
       }
@@ -895,7 +1009,7 @@
         var held = "";
         Object.keys(got).forEach(function (k) { if (compoundKind(k)) { held = joinKinds(held, k); } });
         hints[low].entry.kind = got.text ? "text" : got.real ? "real"
-                              : got.int ? "int" : got.bool ? "bool" : held;
+                              : got.int ? "int" : got.bool ? "bool" : held || (got.none ? "none" : "");
       });
     });
   }

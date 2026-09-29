@@ -36,6 +36,43 @@
       return lang === "cpp" ? /^(askWhole|askReal|askText|askFlag|money|nap|toUpper|toLower)$/
            : lang === "javascript" ? /^(ask|wait|stop)$/ : /^$/;
     }
+    // The small functions the page's writer puts in beside a program it
+    // writes out -- shown(), sortedList(), popAt() -- each with something in
+    // its body that only it has, so that a function of the program's own
+    // that happens to share a name is still read as the program's own.
+    // Code the page wrote, handed back, is read without them: a call to
+    // one is the chart's own word for what it does (pageCall).
+    // The classes a language keeps its own functions in: Convert.ToString(x)
+    var LIBRARY_CLASSES = /^(Convert|Math|String|string|Console|Integer|Double|Object|Arrays|Collections|Character|char|int|double|Enumerable|System|JSON|Number|Array|Boolean|Objects|Float|Long|decimal|bool|Int32|Int64|Char|Decimal|Single|StringBuilder|Regex|Pattern|std|math|random|Random|os|sys|re|itertools|functools|collections)$/;
+    var PAGE_HELPERS = {
+      python: { class_of: /isinstance/, is_number: /float/, copied: /vars/, to_base: /digits/ },
+      javascript: { classOf: /constructor/, shown: /constructor/, shuffle: /random/,
+                    roundEven: /round/, orderOf: /isArray/, deepCopy: /getPrototypeOf/, significant: /toPrecision/,
+                    sliceStep: /"by"/, toJson: /stringify/, popKey: /delete/ },
+      java: { shown: /instanceof|"shown"/, tableOf: /"put"/, joined: /"append"/, sortedList: /sort/,
+              sizeOf: /instanceof/, orderOf: /instanceof/, sortIn: /sort/, reverseIn: /reverse/,
+              reversedList: /reverse/, shuffledList: /shuffle/, itemsOf: /entrySet/,
+              filled: /filledFrom/, filledFrom: /filledFrom/, isNumber: /parseDouble/,
+              transpose: /MAX_VALUE/, listPlus: /addAll/, bind: /arraycopy/, setWork: /contains/,
+              zipped: /MAX_VALUE/, enumerated: /asList|enumerated/, chars: /toCharArray/,
+              classOf: /getSimpleName/, itemOf: /instanceof/, padded: /"pad"/, significant: /MathContext/,
+              deepCopy: /LinkedHashMap/, sliceStep: /"by"/, stepAt: /"low"/, toJson: /toJson/, indexFrom: /Objects/ },
+      csharp: { Shown: /IDictionary|IEnumerable/, OrderOf: /IList|CompareOrdinal/, SortIn: /Sort|OrderBy/,
+                ReverseIn: /Reverse/, PopAt: /RemoveAt/, SortedList: /OrderBy/, Shuffle: /Next/,
+                IsNumber: /TryParse/, ClassOf: /GetType/, ItemOf: /ToString|"string"/, PopKey: /Remove/,
+                Significant: /InvariantCulture/, DeepCopy: /CreateInstance/, SliceStep: /"by"/, ToBase: /digits/,
+                ToJson: /ToJson/ },
+      cpp: { shownIn: /"out"/, valueOrder: /valueOrder/, valueSame: /valueSame/, classOf: /"Nothing"/,
+             itemsOf: /push_back/, zipped: /push_back/, enumerated: /push_back/, popAt: /erase/, indexOf: /"find"/, joined: /"out"/,
+             splitText: /push_back/, chars: /push_back/, keysOf: /"first"/, valuesOf: /"second"/,
+             sortedList: /stable_sort/, reversedCopy: /reverse/, shuffleIn: /rand|swap/,
+             shuffledCopy: /shuffleIn/, repeated: /"out"/, rangeOf: /2147483647/, textOf: /"out"/,
+             replaced: /"replace"/, trimmed: /find_first_not_of/, allOf: /"test"/, isNumber: /strtod/,
+             uniqueOf: /"find"/, setWork: /"has"/, padded: /"size"/, fixedText: /setprecision/,
+             lastIndexOf: /"size"/, reprOf: /shownIn|"'"/, transpose: /"min"/, listPlus: /insert/,
+             realText: /setprecision/, significant: /setprecision/, popKey: /erase/, deepCopy: /deepCopy|"v":"v"/,
+             sliceStep: /"by"/, toBase: /digits/, grouped: /"whole"/, toJson: /toJson|true|"o"/ }
+    };
 
     // ------------------------------------------------------ saying why --
     function oops(key, line, fill) {
@@ -57,7 +94,7 @@
     // comment in this part (parts.lean_js cannot tell them from the real
     // thing, so it leaves the part whole to be safe).
     var TICK = String.fromCharCode(96), OPEN_NOTE = "/" + "*";
-    var OPS = [">>>=", "**=", "//=", "<<=", ">>=", "===", "!==", ">>>", "...",
+    var OPS = [">>>=", "**=", "//=", "<<=", ">>=", "??=", "||=", "&&=", "===", "!==", ">>>", "...",
                "**", "//", "==", "!=", "<=", ">=", "+=", "-=", "*=", "/=", "%=",
                "&=", "|=", "^=", ":=", "<<", ">>", "->", "::", "++", "--", "&&",
                "||", "=>", "??", "?."];
@@ -159,10 +196,16 @@
               if (braces === "{") {
                 var cut = specAt(inside);
                 if (cut >= 0) { spec = inside.slice(cut + 1); inside = inside.slice(0, cut); }
-                inside = inside.replace(/![rsa]$/, "").replace(/=\s*$/, "");
+                var conv = (/!([rsa])\s*$/.exec(inside) || [])[1] || "";
+                inside = inside.replace(/![rsa]\s*$/, "");
+                // f"{x=}": the words x= and then x, the way Python shows it
+                var shownAs = /=\s*$/.test(inside) && !/[=!<>]=\s*$/.test(inside) ? inside.replace(/=\s*$/, "") : "";
+                inside = shownAs || inside;
               }
               if (text) { parts.push(text); text = ""; }
-              parts.push({ code: inside.trim(), spec: spec.trim(), line: line });
+              if (shownAs) { parts.push(shownAs.trim() + "="); if (!conv && !spec) { conv = "r"; } }
+              parts.push({ code: inside.trim(), spec: spec.trim(), conv: conv || "", line: line });
+              conv = ""; shownAs = "";
               continue;
             }
           }
@@ -446,8 +489,7 @@
           }
           expect(":");
           var said = pyTernary();
-          return { k: "fn", params: lps, body: [{ k: "return", value: said, line: t.line }],
-                   line: t.line, lambda: true };
+          return { k: "fn", params: lps, body: doneOrGiven(said, t.line), line: t.line, lambda: true };
         }
         // (n := len(a)): a name given a value in the middle of a sum
         if (t.t === "name" && isOp(":=", 1)) {
@@ -727,7 +769,7 @@
         if (t.t === "str") { return { k: "str", v: t.v, ch: !!t.ch, line: t.line }; }
         return { k: "fstr", parts: t.v.map(function (p) {
           return typeof p === "string" ? p
-               : { e: subExpr(p.code, p.line), spec: p.spec };
+               : { e: subExpr(p.code, p.line), spec: p.spec, conv: p.conv || "" };
         }), line: t.line };
       }
       function joinStrings(a, b) {
@@ -830,7 +872,9 @@
         }
         return a;
       }
-      var CAST_WORDS = /^(int|long|short|byte|double|float|char|bool|boolean|decimal|string|String|unsigned|signed|Integer|Double|size_t)$/;
+      var CAST_WORDS = /^(int|long|short|byte|double|float|char|bool|boolean|decimal|string|String|unsigned|signed|Integer|Double|size_t|dynamic|object)$/;
+      // C++'s kinds of holder, made by name: std::vector<int>(3, 0)
+      var CPP_MADE = /^(vector|map|unordered_map|set|unordered_set|multiset|multimap|pair|tuple|deque|list|stack|queue|priority_queue|array|optional)$/;
       function cUnary() {
         var t = peek();
         if (t.t === "op" && (t.v === "!" || t.v === "-" || t.v === "+" || t.v === "~")) {
@@ -868,9 +912,113 @@
           next();
           var ct = typeName();
           expect(")");
+          // (Fn) (a_) -> f((int) a_[0]): the function made, the cast aside
+          if (arrowAhead()) {
+            var made = cArrow();
+            return java && ct.name === "Fn" ? spreadArgs(made) : made;
+          }
           return { k: "cast", type: ct.name, e: cUnary(), line: t.line };
         }
+        // C++'s static_cast<int>(x), dynamic_cast<Dog*>(p): a cast by another name
+        if (cpp && t.t === "name" && /^(std::)?(static_cast|dynamic_cast|reinterpret_cast|const_cast)$/.test(t.v) && isOp("<", 1)) {
+          next(); next();
+          var castTo = typeName();
+          expect(">");
+          expect("(");
+          var castOf = cAssign();
+          expect(")");
+          return cPostfix({ k: "cast", type: castTo.ptr ? castTo.name + "*" : castTo.name, e: castOf, line: t.line });
+        }
+        // C++'s char(x), int(x), double(x): the same, written as a call
+        if (cpp && t.t === "name" && CAST_WORDS.test(t.v) && isOp("(", 1) && /^(char|int|double|float|long|short|bool|unsigned)$/.test(t.v)) {
+          next(); next();
+          var fcOf = cAssign();
+          expect(")");
+          return cPostfix({ k: "cast", type: t.v, e: fcOf, line: t.line });
+        }
+        // the page's C++ Fn([](std::vector<Value> a_) -> Value { ... }): the function it holds
+        if (cpp && isName("Fn") && isOp("(", 1)) {
+          next(); next();
+          var held = cArgs(")");
+          if (!held.length) { return { k: "null", line: t.line }; }
+          if (held.length === 1 && held[0].k === "fn") { return spreadArgs(held[0]); }
+          return cPostfix({ k: "call", fn: { k: "name", v: "Fn", line: t.line }, args: held, line: t.line });
+        }
+        // C++: std::vector<int>{1, 2}, std::map<std::string, int>(), Point{1, 2}:
+        // a value made from its type, the same as a declaration's v{1, 2}
+        if (cpp && t.t === "name" && cppMadeAhead()) {
+          var mty = typeName(true);
+          if (accept("(")) { return cPostfix({ k: "new", type: mty, args: cArgs(")"), direct: true, line: t.line }); }
+          return cPostfix({ k: "new", type: mty, args: cInitList().items, direct: true, braces: true, line: t.line });
+        }
         return cPostfix(cPrimary());
+      }
+      // The page's Java hands a function everything in one array, a_:
+      // a_[0], a_[1] are the first and second things it was handed.
+      function spreadArgs(fn) {
+        if (fn.params.length !== 1 || fn.params[0].name !== "a_") { return fn; }
+        var most = -1, dflts = {};
+        function countOfA(x) {
+          x = stripParens(x);
+          if (!x) { return false; }
+          if (x.k === "call" && x.fn.k === "member" && x.fn.name === "size" && !x.args.length) { x = stripParens(x.fn.obj); }
+          else if (x.k === "member" && x.name === "length") { x = stripParens(x.obj); }
+          else { return false; }
+          return x.k === "name" && x.v === "a_";
+        }
+        eachNode(fn.body, function (x) {
+          if (x.k === "index" && x.obj.k === "name" && x.obj.v === "a_" && x.at.k === "num") { most = Math.max(most, Number(x.at.v)); }
+        });
+        function swap(x) {
+          if (!x || typeof x !== "object") { return x; }
+          if (Array.isArray(x)) { return x.map(swap); }
+          if (x.k === "index" && x.obj.k === "name" && x.obj.v === "a_" && x.at.k === "num") {
+            return { k: "name", v: "a_" + x.at.v, line: x.line };
+          }
+          if (x.k === "cond") {
+            var t0 = stripParens(x.test);
+            if (t0 && t0.k === "bin" && t0.op === ">" && stripParens(t0.b).k === "num" && countOfA(t0.a)) {
+              dflts[Number(stripParens(t0.b).v)] = x.b;
+              return swap(x.a);
+            }
+          }
+          var o = {};
+          for (var key in x) { o[key] = key === "line" ? x[key] : swap(x[key]); }
+          return o;
+        }
+        var body = swap(fn.body);
+        var params = [];
+        for (var i = 0; i <= most; i++) { params.push({ name: "a_" + i, type: null, dims: 0, ref: false, line: fn.line, dflt: dflts[i] || null }); }
+        // (a_) -> double_(((Number) a_[0]).intValue()): double_ itself
+        var only = body.length === 1 && body[0].k === "return" && body[0].value ? stripParens(body[0].value) : null;
+        if (only && !Object.keys(dflts).length && only.k === "call" && only.fn.k === "name" && only.args.length === params.length &&
+            only.args.every(function (a, n) {
+              var x = stripParens(a);
+              for (;;) {
+                if (x.k === "cast") { x = stripParens(x.e); continue; }
+                if (x.k === "call" && x.fn.k === "member" && /^(intValue|doubleValue|longValue)$/.test(x.fn.name) && !x.args.length) {
+                  x = stripParens(x.fn.obj); continue;
+                }
+                break;
+              }
+              return x.k === "name" && x.v === "a_" + n;
+            })) {
+          return { k: "name", v: only.fn.v, line: fn.line };
+        }
+        return Object.assign({}, fn, { params: params, body: body });
+      }
+      function cppMadeAhead() {
+        var save = pos;
+        try {
+          var ty = typeName(true);
+          if (ty.ptr || ty.dims || ty.ref) { return false; }
+          if (isOp("{")) { return true; }
+          return isOp("(") && ((ty.args.length > 0 && CPP_MADE.test(ty.name)) || ty.name === "string");
+        } catch (e) {
+          return false;
+        } finally {
+          pos = save;
+        }
       }
       // (Name) followed by something a value starts with
       function castAhead() {
@@ -983,8 +1131,10 @@
             }
             args.push({ k: "ref", e: cAssign(), line: t.line });
           } else if (cs && t.t === "name" && isOp(":", 1) && !isOp("::", 1)) {
-            next(); next();                  // a named argument: the name goes
-            args.push(cAssign());
+            next(); next();                  // a named argument: said where it goes
+            var namedArg = cAssign();
+            namedArg.argName = t.v;
+            args.push(namedArg);
           } else if (isOp("...")) {
             next();
             args.push({ k: "star", e: cAssign(), line: t.line });
@@ -999,19 +1149,21 @@
         return args;
       }
       function cPostfix(a) {
+        var optNext = false;
         for (;;) {
           var t = peek();
           if (isOp("<") && templateAhead()) { skipAngles(); continue; }
-          if (isOp("(")) { next(); a = { k: "call", fn: a, args: cArgs(")"), line: t.line }; }
+          if (isOp("(")) { next(); a = { k: "call", fn: a, args: cArgs(")"), line: t.line }; optNext = false; }
           else if (isOp(".") || (isOp("->") && cpp) || isOp("?.") || isOp("::")) {
             next();
             if (isOp("(") && t.v === "?.") { continue; }       // f?.(x)
-            if (isOp("[") && t.v === "?.") { continue; }       // a?.[i]
+            if (isOp("[") && t.v === "?.") { optNext = true; continue; }       // a?.[i]
             if (isOp("~")) { next(); }
             var nm = next();
             if (nm.t !== "name") { throw odd(nm); }
             if (nm.v === "template" && peek().t === "name") { nm = next(); }
             a = { k: "member", obj: a, name: nm.v, line: t.line };
+            if (t.v === "?." && js) { a.opt = true; }        // a?.b: nothing where a is nothing
           } else if (isOp("[")) {
             next();
             var at = cAssign();
@@ -1020,6 +1172,8 @@
             }
             expect("]");
             a = { k: "index", obj: a, at: at, line: t.line };
+            if (optNext && js) { a.opt = true; }
+            optNext = false;
           } else if (isOp("++") || isOp("--")) {
             if (peek().line !== toks[pos - 1].line && js) { break; }
             next();
@@ -1050,7 +1204,7 @@
           if (t.v === "true" || t.v === "false") { return { k: "bool", v: t.v === "true", line: t.line }; }
           if (t.v === "null" || t.v === "nullptr" || t.v === "undefined" || t.v === "NULL" ||
               (js && t.v === "NaN")) {
-            return { k: "null", line: t.line };
+            return t.v === "undefined" && js ? { k: "null", undef: true, line: t.line } : { k: "null", line: t.line };
           }
           if (t.v === "this" || (cs && t.v === "base") || t.v === "super") {
             return { k: "name", v: t.v === "base" ? "super" : t.v, line: t.line };
@@ -1141,6 +1295,11 @@
           return cInitList();
         }
         if (t.t === "op" && t.v === "...") { return { k: "star", e: cAssign(), line: t.line }; }
+        // C++'s ::isdigit -- a name from the outermost scope
+        if (t.t === "op" && t.v === "::" && cpp && peek().t === "name") {
+          var outer = next();
+          return { k: "name", v: outer.v, line: outer.line };
+        }
         throw odd(t);
       }
       // { a: 1, b, [key]: v, ...other, f() { } }
@@ -1166,6 +1325,8 @@
               values.push({ k: "fn", params: ps, body: cBraces(), line: kt.line });
             } else if (accept(":")) {
               values.push(cAssign());
+              // { y: undefined }: no y at all, as far as a default is concerned
+              if (values[values.length - 1] && values[values.length - 1].undef) { values.pop(); if (!accept(",")) { break; } continue; }
             } else {
               if (accept("=")) { cAssign(); }
               values.push({ k: "name", v: String(kt.v), line: kt.line });
@@ -1266,8 +1427,10 @@
             deep--;
             if (deep <= 0) {
               var after = toks[k + 1];
+              // and Comparer<T>.Default, EqualityComparer<string>.Create in C# and Java
               return !!after && after.t === "op" && (after.v === "(" || after.v === "::" ||
-                     (after.v === "{" && cpp));
+                     (after.v === "{" && cpp) ||
+                     (after.v === "." && (cs || java) && !!toks[k + 2] && toks[k + 2].t === "name"));
             }
             continue;
           }
@@ -1311,8 +1474,7 @@
           params = lambdaParams();
         }
         if (!accept("=>") && !accept("->")) { throw oops("cm_expected", peek().line, { what: "=>" }); }
-        var body = isOp("{") ? cBraces()
-                 : [{ k: "return", value: cAssign(), line: t.line }];
+        var body = isOp("{") ? cBraces() : doneOrGiven(cAssign(), t.line);
         return { k: "fn", params: params, body: body, line: t.line, lambda: true };
       }
       // A lambda's names, typed or not: (a, b), (int a, int b), ({x, y})
@@ -1325,16 +1487,18 @@
             var pat = cPrimary();
             params.push({ name: "arg" + (params.length + 1), pattern: pat, type: null, dims: 0, line: p.line });
           } else {
-            var words = [];
+            var words = [], rest = false;
+            // (...fns): everything handed over from here on, as one list
+            if (isOp("...")) { next(); rest = true; }
             while (!isOp(",") && !isOp(")") && !isOp("=")) {
               if (isOp("<")) { skipAngles(); continue; }
               var w = next();
               if (w.t === "eof") { throw odd(w); }
               if (w.t === "name") { words.push(w.v); }
             }
-            if (accept("=")) { cAssign(); }
+            var dflt = accept("=") ? cAssign() : null;
             params.push({ name: words[words.length - 1] || "arg", type: words.length > 1 ? words[0] : null,
-                          dims: 0, ref: false, line: p.line });
+                          dims: 0, ref: false, rest: rest, dflt: dflt, line: p.line });
           }
           if (!accept(",")) { break; }
         }
@@ -1353,6 +1517,16 @@
           if (t.t === "op" && t.v === "}") { deep--; }
         }
         return [];
+      }
+      function skipParens() {
+        expect("(");
+        var deep = 1;
+        while (deep) {
+          var t = next();
+          if (t.t === "eof") { throw oops("cm_expected", t.line, { what: ")" }); }
+          if (t.t === "op" && t.v === "(") { deep++; }
+          if (t.t === "op" && t.v === ")") { deep--; }
+        }
       }
 
       // ---- types, for the languages that write them down --------------
@@ -1419,24 +1593,29 @@
         var args = [];
         if (isOp("<")) { args = typeArgs(); }
         while (isOp("::") && peek(1).t === "name") { next(); name += "::" + next().v; }
-        var dims = 0, ptr = 0;
+        var dims = 0, ptr = 0, rect = 0;
         while (isOp("[") && (isOp("]", 1) || (isOp(",", 1) && !inNew))) {
           next();
-          while (accept(",")) { dims++; }
+          var commas = 0;
+          while (accept(",")) { dims++; commas++; }
+          if (commas && !rect) { rect = commas + 1; }     // C#'s int[,]: one block, not rows of rows
           expect("]");
           dims++;
         }
-        if (isOp("?") && (peek(1).t === "name" || isOp("[", 1))) { next(); }
+        // C#'s int? n, string?[] names -- not a ? that asks a question
+        if (cs && isOp("?") && (isOp("[", 1) || isOp(">", 1) || isOp(",", 1) || (peek(1).t === "name" &&
+            (isOp("=", 2) || isOp(";", 2) || isOp(",", 2) || isOp(")", 2) || isOp("{", 2) || isOp("(", 2) ||
+             isOp("=>", 2) || isName("in", 2))))) { next(); }
         var ref = false;
         while (isName("const")) { next(); }
         while (isOp("*")) { next(); ptr++; while (isName("const")) { next(); } }
-        if (isOp("&") || isOp("&&")) { next(); ref = true; }
+        if (cpp && (isOp("&") || isOp("&&"))) { next(); ref = true; }     // C++'s int& n
         var varargs = false;
         if (isOp("...")) { next(); dims++; varargs = true; }   // Java: int... nums
         name = name.replace(/^std::/, "");
         // a pointer to letters or numbers is an array of them
         if (ptr && KIND_OF_TYPE[name.toLowerCase()]) { dims += ptr; ptr = 0; }
-        return { name: name, dims: dims, ref: ref, args: args, ptr: ptr, varargs: varargs };
+        return { name: name, dims: dims, ref: ref, args: args, ptr: ptr, varargs: varargs, rect: rect };
       }
       function typeArgs() {
         expect("<");
@@ -1451,6 +1630,16 @@
             out.push({ name: "", dims: 0, args: [] });
           } else {
             out.push(typeName());
+            // std::function<int(int, int)>: what it hands back, then what it takes
+            if (isOp("(")) {
+              var parens = 0;
+              do {
+                var pt = next();
+                if (pt.t === "eof") { throw odd(pt); }
+                if (pt.t === "op" && pt.v === "(") { parens++; }
+                if (pt.t === "op" && pt.v === ")") { parens--; }
+              } while (parens > 0);
+            }
           }
           if (!accept(",")) { break; }
         }
@@ -1597,7 +1786,7 @@
         if (accept("(")) {
           bases = pyArgs(")").filter(function (a) { return a.k !== "kw"; })
                              .map(function (a) { return pathOf(a); })
-                             .filter(function (b) { return b && !/^(object|ABC|Exception|Enum|IntEnum)$/.test(b); });
+                             .filter(function (b) { return b && !/^(object|ABC)$/.test(b); });
         }
         var body = pyBlock();
         return { k: "class", name: nm.v, bases: bases, body: body, line: t.line };
@@ -1730,6 +1919,7 @@
               type = pyTernary();
               if (accept("as") || accept(",")) { name = next().v; }
             }
+            if (name) { CAUGHT[name] = true; }
             handlers.push({ type: type, name: name, body: pyBlock(), line: h.line });
             continue;
           }
@@ -1890,7 +2080,7 @@
               // SystemExit on purpose, anything else by way of an error:
               // either way the program stops there
               return [{ k: "exit", line: t.line, named: named,
-                        said: what && what.k === "call" ? what.args[0] || null : null }];
+                        said: what && what.k === "call" ? what.args[0] || null : null, made: what }];
             }
             case "del": {
               next();
@@ -2037,13 +2227,13 @@
               if (isName("var") && isOp("(", 1)) { next(); target = patternHere(); }
               else {
                 // a type, where one is written: KeyValuePair<string, int> kv
-                var typed0 = pos;
+                var typed0 = pos, eachType0 = null;
                 try {
-                  typeName();
-                  if (!(peek().t === "name" && isName("in", 1)) && !isOp("(")) { pos = typed0; }
-                } catch (e) { pos = typed0; }
+                  eachType0 = typeName();
+                  if (!(peek().t === "name" && isName("in", 1)) && !isOp("(")) { pos = typed0; eachType0 = null; }
+                } catch (e) { pos = typed0; eachType0 = null; }
                 if (isOp("(")) { target = patternHere(); }
-                else { var each = next(); target = { k: "name", v: each.v, line: each.line }; }
+                else { var each = next(); target = { k: "name", v: each.v, line: each.line, eachType: eachType0 }; }
               }
               expect("in");
               var over = cAssign();
@@ -2076,7 +2266,7 @@
               var tname = tt && tt.k === "new" ? String(tt.type && tt.type.name || "").replace(/^.*::/, "")
                         : tt && tt.k === "call" ? pathOf(tt.fn) : "";
               return [{ k: "exit", line: t.line, named: tname || "",
-                        said: tt && (tt.k === "new" || tt.k === "call") ? tt.args[0] || null : tt }];
+                        said: tt && (tt.k === "new" || tt.k === "call") ? tt.args[0] || null : tt, made: tt }];
             }
             case "goto": {
               next();
@@ -2240,7 +2430,10 @@
             next();
             value = { k: "new", type: type, args: cArgs(")"), direct: true, line: nm.line };
           } else if (isOp("{") && cpp) {        // C++: vector<int> v{1, 2}, Point p{1, 2}
-            value = { k: "new", type: type, args: cInitList().items, direct: true, braces: true, line: nm.line };
+            var braced = cInitList().items;
+            // Node* next{}: a pointer to nothing yet
+            value = type && type.ptr && !braced.length ? { k: "null", line: nm.line }
+                  : { k: "new", type: type, args: braced, direct: true, braces: true, line: nm.line };
           }
           names.push({ name: nm.v, value: value, dims: sizes.length + (type ? type.dims : 0),
                        sizes: sizes, line: nm.line });
@@ -2259,12 +2452,13 @@
         modifiers();
         var typed = js ? (isName("let") || isName("const") || isName("var")) : declAhead();
         if (typed || (js && peek().t === "name" && (isName("of", 1) || isName("in", 1)))) {
-          if (typed) { if (js) { next(); } else { typeName(); } }
+          var eachType = null;
+          if (typed) { if (js) { next(); } else { eachType = typeName(); } }
           var target = null;
           if (isOp("[") || isOp("{") || (isOp("(") && cs)) { target = patternHere(); }
           else if (peek().t === "name" && (isOp(":", 1) || isName("of", 1) || isName("in", 1))) {
             var each = next();
-            target = { k: "name", v: each.v, line: each.line };
+            target = { k: "name", v: each.v, line: each.line, eachType: eachType };
           }
           if (target && (isOp(":") || isName("of") || isName("in"))) {
             var how = next().v;
@@ -2275,6 +2469,17 @@
           }
         }
         pos = save;
+        // for (shared.n of shared.nums): each one put in a part of something
+        if (js && peek().t === "name" && isOp(".", 1)) {
+          var into = cPostfix(cPrimary());
+          if (into.k === "member" && (isName("of") || isName("in"))) {
+            var how2 = next().v;
+            var over2 = cAssign();
+            expect(")");
+            return { k: "foreach", target: into, over: over2, keysOf: how2 === "in", body: cBlockOrOne(), line: t.line };
+          }
+          pos = save;
+        }
         var init = [];
         if (!isOp(";")) {
           if (declAhead()) { init = cDeclaration(); pos--; }
@@ -2358,7 +2563,9 @@
         while (isName("catch")) {
           var h = next(), type = null, name = null;
           if (accept("(")) {
-            if (!isOp(")")) {
+            if (js && peek().t === "name" && isOp(")", 1)) {
+              name = next().v;                    // JavaScript: catch (e) names what was thrown
+            } else if (!isOp(")")) {
               modifiers();
               var ty = typeName();
               type = { k: "name", v: ty.name, line: h.line };
@@ -2368,6 +2575,7 @@
             expect(")");
           }
           if (isName("when")) { next(); expect("("); cAssign(); expect(")"); }
+          if (name) { CAUGHT[name] = true; }
           handlers.push({ type: type, name: name, body: cBraces(), line: h.line });
         }
         if (isName("finally")) { next(); fin = cBraces(); }
@@ -2399,6 +2607,17 @@
             if (type.ref && !/const/.test(p.v)) { ref = true; }
             if (isName("const")) { next(); }
             if (type.varargs) { rest = true; }
+          }
+          // C++: int (*test)(int) -- a function handed over, by where it is
+          if (cpp && isOp("(") && isOp("*", 1) && peek(2).t === "name" && isOp(")", 3)) {
+            next(); next();
+            var fp = next();
+            next();
+            skipParens();
+            params.push({ name: fp.v, type: "function", typeInfo: { name: "function", dims: 0, args: [] },
+                          dims: 0, ref: false, rest: false, dflt: null, line: fp.line });
+            if (!accept(",")) { break; }
+            continue;
           }
           var nm = peek().t === "name" ? next() : null;
           if (!nm) {
@@ -2454,6 +2673,16 @@
                                       target: { k: "member", obj: { k: "name", v: "this" }, name: rp.name },
                                       value: { k: "name", v: rp.name } } };
                            }) });
+          // and Java writes one out as Point[x=2, y=-3]
+          if (java && rps.length) {
+            var said = { k: "str", v: nt.v + "[" };
+            rps.forEach(function (rp, i) {
+              said = { k: "bin", op: "+", a: said, b: { k: "str", v: (i ? ", " : "") + rp.name + "=" } };
+              said = { k: "bin", op: "+", a: said, b: { k: "member", obj: { k: "name", v: "this" }, name: rp.name } };
+            });
+            cls.recordShown = { k: "func", name: "toString", params: [], line: kt.line, lead: [],
+                                body: [{ k: "return", line: kt.line, value: { k: "bin", op: "+", a: said, b: { k: "str", v: "]" } } }] };
+          }
         }
         var mode = (cpp || cs) ? "base" : null;
         while (!isOp("{") && !isOp(";") && peek().t !== "eof") {
@@ -2466,8 +2695,10 @@
           if (peek().t === "name") {
             var bt = typeName();
             var bn = bt.name.replace(/^.*::/, "");
-            if (mode === "base" && !(cs && /^I[A-Z]/.test(bn)) && !/^(Object|Exception|RuntimeException|Error)$/.test(bn)) {
+            if (mode === "base" && !(cs && /^I[A-Z]/.test(bn)) && !/^(Object)$/.test(bn)) {
               cls.bases.push(bn);
+            } else if (mode === "iface" || (mode === "base" && cs && /^I[A-Z]/.test(bn)) || (mode === "base" && kind === "interface")) {
+              (cls.ifaces = cls.ifaces || []).push(bn);
             }
             if (isOp("(")) { next(); cArgs(")"); }         // JS: extends mix(A)
             continue;
@@ -2477,6 +2708,10 @@
         if (accept(";")) { return cls; }                  // declared ahead: class P;
         expect("{");
         if (kind === "enum") { enumBody(cls); } else { classMembers(cls); }
+        // a record's own toString, where it has not written one
+        if (cls.recordShown && !cls.methods.some(function (m) { return m.name === "toString" && !m.params.length; })) {
+          cls.methods.push(cls.recordShown);
+        }
         expect("}");
         // struct P { ... } p1, p2;  -- names declared along with it
         while (cpp && peek().t === "name" && (isOp(",", 1) || isOp(";", 1))) { next(); if (!accept(",")) { break; } }
@@ -2490,9 +2725,10 @@
           if (nt.t !== "name") { throw odd(nt); }
           var val = null;
           if (accept("=")) { val = cAssign(); }
-          if (isOp("(")) { next(); cArgs(")"); }         // Java: RED("r")
+          var made = null;
+          if (isOp("(")) { next(); made = cArgs(")"); }  // Java: MARS(3.7), handed to the constructor
           if (isOp("{")) { skipBraces(); }               // Java: a constant with a body
-          cls.values.push({ name: nt.v, value: val, line: nt.line });
+          cls.values.push({ name: nt.v, value: val, args: made, line: nt.line });
           if (!accept(",")) { break; }
         }
         if (accept(";")) { classMembers(cls); }
@@ -2510,7 +2746,7 @@
           }
           if (isName("template")) { next(); skipAngles(); continue; }
           if (isName("using") || isName("typedef") || isName("static_assert") ||
-              (isName("friend") && !isOp("(", 2))) {
+              (isName("friend") && !isOp("(", 2) && !friendOperator())) {
             skipMember();
             continue;
           }
@@ -2561,7 +2797,8 @@
             if (isOp("(")) {
               var mps = cParams();
               cls.methods.push({ k: "func", name: String(mt.v), params: mps, rtype: null, body: cBraces(),
-                                 line: mt.line, statik: !!mods.static, kind: kind, gen: gen, lead: lead });
+                                 line: mt.line, statik: !!mods.static, kind: kind, gen: gen, lead: lead,
+                                 getter: kind === "get", setter: kind === "set" });
             } else {
               var fv = accept("=") ? cAssign() : null;
               accept(";");
@@ -2569,8 +2806,30 @@
             }
             continue;
           }
+          // static <T> void printAll(List<T> items): the method's own types
+          if (java && isOp("<")) { skipAngles(); }
+          // operator bool(), C#'s implicit operator double(Vec v): a conversion, left out;
+          // and C#'s delegate int Op(int a): a kind of function, which a chart has no need to name
+          if (isName("operator") || (cs && isName("delegate"))) { skipMember(); continue; }
           var rtype = typeName();
-          if (isName("operator")) { skipMember(); continue; }     // operator overloads
+          // Vec operator+(const Vec& o), C#'s static Vec operator +(Vec a, Vec b):
+          // a method under the name of what it does -- plus, equals, lessThan
+          if (isName("operator")) {
+            var opAt = pos;
+            next();
+            var opSign = operatorSign();
+            if (!opSign || !OP_NAMES[opSign] || !isOp("(")) { pos = opAt; skipMember(); continue; }
+            var opParams = cParams();
+            skipQualifiers();
+            if (accept(";")) { continue; }
+            if (isOp("=")) { skipMember(); continue; }
+            var opBody;
+            if (accept("=>")) { var ob = cAssign(); accept(";"); opBody = [{ k: "return", value: ob, line: t.line }]; }
+            else { opBody = cBraces(); }
+            var opFn = operatorMethod(cls.name, opSign, opParams, opBody, rtype, !!(mods.static || mods.friend), t.line, lead);
+            if (opFn) { cls.methods.push(opFn); }
+            continue;
+          }
           var nmt = next();
           if (nmt.t !== "name") { throw odd(nmt); }
           if (nmt.v === "operator") { skipMember(); continue; }
@@ -2580,7 +2839,7 @@
             var pe = cAssign();
             accept(";");
             cls.methods.push({ k: "func", name: nmt.v, params: [], body: [{ k: "return", value: pe, line: nmt.line }],
-                               rtype: rtype.name, line: nmt.line, statik: !!mods.static, kind: "get", lead: lead });
+                               rtype: rtype.name, line: nmt.line, statik: !!mods.static, kind: "get", getter: true, lead: lead });
             continue;
           }
           if (isOp("(") || (isOp("<", 0) && templateAhead())) {
@@ -2613,8 +2872,103 @@
           });
         }
       }
+      // friend Fraction operator*(...), friend ostream& operator<<(...):
+      // an operator the class says for itself, kept
+      function friendOperator() {
+        for (var at = 1; at < 8; at++) {
+          var t0 = peek(at);
+          if (!t0 || t0.t === "eof" || (t0.t === "op" && /^[;{(]$/.test(t0.v))) { return false; }
+          if (t0.t === "name" && t0.v === "operator") { return true; }
+        }
+        return false;
+      }
+      // just past the word operator: the sign -- +, ==, <<, [], ()
+      function operatorSign() {
+        if (isOp("(") && isOp(")", 1) && isOp("(", 2)) { next(); next(); return "()"; }
+        if (isOp("[") && isOp("]", 1)) { next(); next(); return "[]"; }
+        var sign = "";
+        while (peek().t === "op" && !isOp("(")) { sign += next().v; }
+        return sign;
+      }
+      // An operator made a method: `this` the thing on the left (the one
+      // named first, where it names both), and what it does its name.
+      // ostream& operator<<(ostream& os, const Vec& v) is the words v is
+      // written as -- its toString.
+      function operatorMethod(owner, sign, params, body, rtype, both, line, lead) {
+        if (/^(Value|Record)$/.test(String(owner || ""))) { return null; }
+        var mine = params.filter(function (q) { return !q.captured; });
+        if (sign === "<<") {
+          if (mine.length !== 2 || !/ostream$/.test(String(rtype && rtype.name || ""))) { return null; }
+          if (!mine[1].typeInfo || mine[1].typeInfo.ptr || /^(Record|Value)$/.test(String(mine[1].typeInfo.name || "").replace(/^.*::/, ""))) { return null; }
+          return { k: "func", name: "toString", params: [], rtype: "string", line: line, lead: lead || [], opSign: "<<",
+                   statik: false, kind: "method", body: streamText(renameIn(body, mine[1].name, "this"), mine[0].name, line) };
+        }
+        var name = OP_NAMES[sign];
+        if (both) {
+          var firstType = mine[0] && mine[0].typeInfo ? String(mine[0].typeInfo.name || "").replace(/^.*::/, "") : "";
+          if (!mine.length || firstType !== owner) { return null; }
+          body = renameIn(body, mine[0].name, "this");
+          mine = mine.slice(1);
+        }
+        if (sign === "-" && !mine.length) { name = "negated"; }
+        if (sign === "+" && !mine.length) { return null; }
+        return { k: "func", name: name, params: mine, rtype: rtype.name, rtypeInfo: rtype, rdims: rtype.dims,
+                 body: body, line: line, statik: false, kind: "method", lead: lead || [], opSign: mine.length ? sign : "u" + sign };
+      }
+      function renameIn(body, from, to) {
+        eachNode(body, function (x) { if (x.k === "name" && x.v === from) { x.v = to; } });
+        return body;
+      }
+      // os << "(" << x << ")"; return os;  -- the words it writes, given back
+      function streamText(body, os, line) {
+        var text = "text";
+        while (JSON.stringify(body).indexOf('"v":"' + text + '"') >= 0) { text += "_"; }
+        function pieces(e) {
+          e = stripParens(e);
+          if (e && e.k === "bin" && e.op === "<<") {
+            var head = pieces(e.a);
+            return head ? head.concat([e.b]) : null;
+          }
+          return e && e.k === "name" && e.v === os ? [] : null;
+        }
+        function said(ps, ln) {
+          return ps.filter(function (p) {
+            var sp = stripParens(p), pn = sp.k === "name" ? sp.v : sp.k === "call" ? pathOf(sp.fn) : "";
+            return !/^(std::)?(fixed|left|right|setw|setprecision|setfill|boolalpha|showpoint|flush)$/.test(String(pn || ""));
+          }).map(function (p) {
+            var sp = stripParens(p);
+            var v = sp.k === "name" && /^(std::)?endl$/.test(sp.v) ? { k: "str", v: "\n", line: ln }
+                  : sp.k === "str" ? p : { k: "call", fn: { k: "name", v: "to_string", line: ln }, args: [p], line: ln };
+            return { k: "expr", line: ln, e: { k: "assignx", op: "+=", target: { k: "name", v: text, line: ln }, value: v, line: ln } };
+          });
+        }
+        function conv(list) {
+          var made = [];
+          list.forEach(function (st) {
+            var ps = st.k === "expr" ? pieces(st.e) : st.k === "return" && st.value ? pieces(st.value) : null;
+            if (ps) {
+              made = made.concat(said(ps, st.line));
+              if (st.k === "return") { made.push({ k: "return", value: { k: "name", v: text, line: st.line }, line: st.line }); }
+              return;
+            }
+            var copy = Object.assign({}, st);
+            ["then", "orelse", "body"].forEach(function (key) { if (Array.isArray(copy[key])) { copy[key] = conv(copy[key]); } });
+            made.push(copy);
+          });
+          return made;
+        }
+        return [{ k: "decl", type: "string", typeInfo: { name: "string", dims: 0, args: [] }, dims: 0, line: line,
+                  names: [{ name: text, value: { k: "str", v: "", line: line }, line: line }] }].concat(conv(body));
+      }
       // const, noexcept, throws X, Y, override: after a method's brackets
       function skipQualifiers() {
+        // C#: where T : IComparable<T>, new()
+        while (cs && isName("where")) {
+          next();
+          while (!isOp("{") && !isOp(";") && !isOp("=>") && !isName("where") && peek().t !== "eof") {
+            if (isOp("<")) { skipAngles(); } else { next(); }
+          }
+        }
         while (peek().t === "name" && /^(const|throws|noexcept|override|final|volatile)$/.test(peek().v)) {
           var q = next().v;
           if (q === "throws") {
@@ -2668,12 +3022,12 @@
           return;
         }
         if (getter) {
-          cls.methods.push({ k: "func", name: nmt.v, params: [], body: getter, kind: "get", rtype: rtype.name,
+          cls.methods.push({ k: "func", name: nmt.v, params: [], body: getter, kind: "get", getter: true, rtype: rtype.name,
                              statik: !!mods.static, line: nmt.line });
         }
         if (setter) {
           cls.methods.push({ k: "func", name: nmt.v, params: [{ name: "value", type: rtype.name, line: nmt.line }],
-                             body: setter, kind: "set", rtype: "void", statik: !!mods.static, line: nmt.line });
+                             body: setter, kind: "set", setter: true, rtype: "void", statik: !!mods.static, line: nmt.line });
         }
       }
 
@@ -2707,6 +3061,13 @@
           }
           if (isName("template")) { next(); skipAngles(); }
           if (isName("typedef") || isName("static_assert")) { skipToSemi(); return; }
+          // the page's own C++ Value -- struct Value { enum Kind { ... } ... } --
+          // is not the program's, only the way C++ had to hold more than one kind
+          if (cpp && isName("struct") && isName("Value", 1) && isOp("{", 2) && isName("enum", 3) && isName("Kind", 4)) {
+            next(); next(); skipBraces(); accept(";");
+            out.valueStruct = true;
+            return;
+          }
           var save = pos;
           var mods = modifiers();
           if ((isName("class") || isName("struct") || isName("interface") || isName("enum") ||
@@ -2763,7 +3124,29 @@
             }
           } catch (e) { looks = false; }
           pos = fpos;
-          if (looks === "operator") { skipMember(); return; }
+          if (looks === "operator") {
+            // Vec operator+(const Vec& a, const Vec& b), ostream& operator<<(ostream& os, const Vec& v)
+            var topAt = pos;
+            var topType = typeName();
+            next();
+            var topSign = operatorSign();
+            if (!topSign || !OP_NAMES[topSign] || !isOp("(")) { pos = topAt; skipMember(); return; }
+            var topParams = cParams();
+            skipQualifiers();
+            if (accept(";")) { return; }
+            var topBody = cBraces();
+            var ownerP = topSign === "<<" ? topParams[1] : topParams[0];
+            var ownerName = ownerP && ownerP.typeInfo ? String(ownerP.typeInfo.name || "").replace(/^.*::/, "") : "";
+            // the page's own Value and Record say theirs: nothing of the program's
+            if (topParams.some(function (q) { return q.typeInfo && /^(Value|Record)$/.test(String(q.typeInfo.name || "").replace(/^.*::/, "")); })) { return; }
+            var asMethod = operatorMethod(ownerName, topSign, topParams, copyOf(topBody), topType, true, t.line, lead);
+            var asFree = topSign === "<<" ? null
+                       : { k: "func", name: OP_NAMES[topSign], params: topParams, rtype: topType.name, rtypeInfo: topType,
+                           rdims: topType.dims, body: topBody, line: t.line, lead: lead, opSign: topSign };
+            if (asMethod) { out.outside.push({ owner: ownerName, method: asMethod, orFree: asFree }); }
+            else if (asFree) { out.funcs.push(asFree); }
+            return;
+          }
           if (looks === "field") {                       // int Counter::count = 0;
             var ftype = typeName();
             var fowner = next().v;
@@ -2826,7 +3209,9 @@
         out.outside.forEach(function (one) {
           var cls = out.types.filter(function (c) { return c.name === one.owner; })[0];
           if (!cls) {
-            if (one.method) { out.funcs.push(one.method); }
+            if (one.owner === "Value" && out.valueStruct) { return; }
+            if (one.orFree) { out.funcs.push(one.orFree); return; }
+            if (one.method && !one.method.opSign) { out.funcs.push(one.method); }
             return;
           }
           if (one.ctor) { cls.ctors.push(one.ctor); }
@@ -2912,6 +3297,15 @@
       stringbuilder: "text", stringbuffer: "text",
       bool: "bool", boolean: "bool"
     };
+    // What each operator a class can say for itself is called in a chart
+    var OP_NAMES = { "+": "plus", "-": "minus", "*": "times", "/": "dividedBy", "%": "modulo",
+                     "==": "equals", "!=": "notEquals", "<": "lessThan", "<=": "atMost", ">": "greaterThan", ">=": "atLeast",
+                     "[]": "itemAt", "()": "called", "+=": "addOn", "-=": "takeOff", "*=": "timesBy", "/=": "divideBy",
+                     "<<": "toString", "!": "not" };
+    // and Python's way of saying the same: __add__ is +
+    var PY_OPS = { __add__: "+", __sub__: "-", __mul__: "*", __truediv__: "/", __mod__: "%", __eq__: "==", __ne__: "!=",
+                   __lt__: "<", __le__: "<=", __gt__: ">", __ge__: ">=", __getitem__: "[]", __call__: "()",
+                   __iadd__: "+=", __isub__: "-=", __neg__: "u-" };
     var LIST_TYPES = /^(List|ArrayList|LinkedList|Vector|vector|Stack|Queue|Deque|ArrayDeque|IList|IEnumerable|ICollection|Collection|Iterable|list|tuple|Tuple|deque|array|stack|queue|priority_queue|PriorityQueue|Array|Sequence|Iterator|IReadOnlyList|ReadOnlyCollection|span|Span|initializer_list)$/;
     var SET_TYPES = /^(Set|HashSet|TreeSet|LinkedHashSet|SortedSet|ISet|set|unordered_set|multiset|frozenset)$/;
     var MAP_TYPES = /^(Map|HashMap|TreeMap|LinkedHashMap|Dictionary|IDictionary|SortedDictionary|SortedList|map|unordered_map|multimap|dict|Dict|Hashtable|defaultdict|OrderedDict|Counter|Mapping|IReadOnlyDictionary)$/;
@@ -2927,10 +3321,17 @@
       // a class of the program's own, whatever else the name might mean
       if (!k && knownRecords[name]) { k = "obj:" + name; }
       var arg = info.args && info.args[0] ? kindOfType(info.args[0]) : null;
+      // Tuple<string, int>, pair<string, int>: a list of two kinds is a list of either
+      if (!k && /^(Tuple|ValueTuple|tuple|pair|Pair|KeyValuePair|Entry|Map::Entry|Map\.Entry)$/.test(name) && info.args && info.args.length > 1 &&
+          info.args.some(function (a) { return kindOfType(a) !== arg; })) {
+        k = "list";
+      }
       if (!k && LIST_TYPES.test(name)) { k = "list" + (arg ? "<" + arg + ">" : ""); }
       if (!k && SET_TYPES.test(name)) { k = "set" + (arg ? "<" + arg + ">" : ""); }
       if (!k && MAP_TYPES.test(name)) { k = "map"; }
       if (!k && /^(pair|Pair|KeyValuePair|Entry|Map::Entry|Map\.Entry)$/.test(name)) { k = "list"; }
+      // a function held in a name: std::function<int(int)>, Func<int, int>, the page's Fn
+      if (!k && !knownRecords[name] && /^(function|Func|Action|Predicate|Comparison|Fn|Callable|Function|BiFunction|Supplier|Consumer|Runnable)$/.test(name)) { k = "fn"; }
       if (!k && knownRecords[name]) { k = "obj:" + name; }
       for (var d = 0; d < (info.dims || 0); d++) { k = "list" + (k ? "<" + k + ">" : ""); }
       return k;
@@ -2941,6 +3342,9 @@
       if (m) { return m[1]; }
       return k === "text" ? "text" : null;
     }
+    // The names an error is caught under -- except ValueError as e, catch (e)
+    // -- which hold the words it was thrown with.
+    var CAUGHT = Object.create(null);
     function mergeKinds(a, b) {
       if (!a) { return b; }
       if (!b || a === b) { return a; }
@@ -2963,7 +3367,7 @@
     // What the runner does itself (15-sums.js): a function of the program's
     // own called one of these would take the name from it, so one is
     // given its class's name in front.
-    var BUILT_NAMES = /^(sqrt|abs|round|floor|ceiling|ceil|int|integer|length|toupper|tolower|random|pow|min|max|log|log10|exp|sin|cos|tan|atan|atan2|asin|acos|hypot|trunc|sign|real|append|insert|remove|pop|contains|indexof|count|slice|substring|join|split|sum|sort|sorted|reverse|reversed|shuffle|choice|repeat|range|keys|values|items|copy|tostring|replace|trim|startswith|endswith|isdigit|isalpha|isupper|islower|isspace|ord|chr|classof|any|all|newlist|get|clear|extend|isnumber|tolist|unique|zip|enumerate|union|intersection|difference|padleft|padright|find|number|text)$/i;
+    var BUILT_NAMES = /^(sqrt|abs|round|floor|ceiling|ceil|int|integer|length|toupper|tolower|random|pow|min|max|log|log10|exp|sin|cos|tan|atan|atan2|asin|acos|hypot|trunc|sign|real|append|insert|remove|pop|contains|indexof|count|slice|substring|join|split|sum|sort|sorted|reverse|reversed|shuffle|choice|repeat|range|keys|values|items|copy|deepcopy|tostring|replace|trim|startswith|endswith|isdigit|isalpha|isupper|islower|isspace|ord|chr|classof|any|all|newlist|get|clear|extend|isnumber|tolist|unique|zip|enumerate|union|intersection|difference|padleft|padright|find|number|text|lastindexof|compare|bind|repr|transpose|roundeven|tobase|frombase|grouped|tojson|significant|fixed|bitand|bitor|bitxor|shuffled)$/i;
 
     // A dotted name, for looking things up: Math.sqrt, System.out.println,
     // std::cout -- or null for anything that is not a plain path of names.
@@ -2979,9 +3383,17 @@
     function bare(path) {
       return String(path || "").replace(/^std\./, "")
         .replace(/^System\.(?=Console|Math|Threading|Convert|Environment|Linq|String|Array)/, "")
-        .replace(/^(java\.util|java\.lang)\./, "");
+        .replace(/^(java\.util\.stream|java\.util|java\.lang)\./, "");
     }
     function stripParens(e) { while (e && e.k === "paren") { e = e.e; } return e; }
+    // A lambda's one line: x => x * 2 gives something back, but
+    // s => Console.WriteLine(s) and x -> total += x do something instead
+    function doneOrGiven(e, line) {
+      var s = stripParens(e);
+      var done = s && (s.k === "assignx" || s.k === "incdec" ||
+                       (s.k === "call" && /^(Console\.(WriteLine|Write)|System\.out\.(println|print|printf)|console\.(log|error|warn|info)|print|printf|puts|alert)$/.test(pathOf(s.fn) || "")));
+      return [done ? { k: "expr", e: e, line: line } : { k: "return", value: e, line: line }];
+    }
     // Every piece of a tree, looked at: fn(node) for each object in it.
     function eachNode(x, fn) {
       if (!x || typeof x !== "object") { return; }
@@ -3147,7 +3559,8 @@
         var merged = { funcs: [], globals: [], main: [], head: chief.head || [],
                        trailing: chief.trailing || [], imports: [], classes: [],
                        mainFound: chief.mainFound, types: [], defines: [],
-                       mainClass: chief.mainClass || "", mainArgs: chief.mainArgs || null };
+                       mainClass: chief.mainClass || "", mainArgs: chief.mainArgs || null,
+                       valueStruct: parts.some(function (one) { return one.valueStruct; }) };
         parts.forEach(function (one) {
           merged.funcs = merged.funcs.concat(one.funcs);
           merged.globals = merged.globals.concat(one.globals);
@@ -3167,6 +3580,7 @@
       // the program being described, only of the way the language had to
       // go about it.
       var HELPERS = helpersOf(lang);
+      var pageHelpers = Object.create(null);     // the ones found, by name
       var devices = Object.create(null);
       function deviceOf(value) {
         value = stripParens(value);
@@ -3269,6 +3683,10 @@
       // out of sight.  What belongs to the class itself -- a static field,
       // a static method, an enum's values -- belongs to the whole program.
       var CLS = Object.create(null), clsOrder = [];
+      // what an error's kind is called: ValueError, IOException, std::runtime_error
+      var ERROR_NAMES = /(Exception|Error|Throwable|_error|^exception|^invalid_argument|^out_of_range)$/;
+      // and the ones that catch any error at all
+      var ANY_ERROR = /^(Exception|BaseException|Throwable|exception|std::exception|Error|RuntimeException|SystemException)$/;
       var selfWord = py ? "self" : "this";
       function low(s) { return String(s).toLowerCase(); }
       function nameNode(v, line) { return { k: "name", v: v, line: line || 0 }; }
@@ -3297,10 +3715,13 @@
               st.statik = true;
               st.clsParam = st.params[0] ? st.params[0].name : "cls";
               st.params = st.params.slice(1);
+              // cls(0), cls.scale: the class itself
+              st.body = renamed(st.body, st.clsParam, node.name);
               c.methods.push(st);
               return;
             }
             st.kind = has(/^property$/) ? "get" : has(/\.setter$/) ? "set" : "method";
+            st.getter = st.kind === "get"; st.setter = st.kind === "set";
             st.self = st.params[0] ? st.params[0].name : "self";
             st.params = st.params.slice(1);
             c.methods.push(st);
@@ -3345,6 +3766,98 @@
       clsOrder.forEach(function (c) {
         c.parent = (c.bases || []).filter(function (b) { return CLS[b] && b !== c.name; })[0] || null;
       });
+      // An error of the program's own -- class TooBig(Exception), class
+      // NotFound extends Error -- is a record like any other, holding what
+      // went wrong as its message, which is what printing it shows.
+      clsOrder.forEach(function (c) {
+        if ((c.bases || []).some(function (b) {
+              return !CLS[b] && ERROR_NAMES.test(String(b).replace(/^.*[.:]/, ""));
+            })) { c.isError = true; }
+      });
+      clsOrder.forEach(function (c) {
+        var up = c;
+        while (!c.isError && up && up.parent && CLS[up.parent]) { up = CLS[up.parent]; if (up.isError) { c.isError = true; } }
+      });
+      // An error the language has -- ArgumentException, ValueError -- thrown
+      // in a program with errors of its own is one of those records too, so
+      // that whatever catches it finds its message the same way
+      if (clsOrder.some(function (c) { return c.isError; })) {
+        eachNode([top.main, top.funcs, clsOrder.map(function (c) { return [c.methods, c.ctors]; })], function (x) {
+          if (x.k !== "exit" || !x.made || !x.named) { return; }
+          var nm = String(x.named).replace(/^(std|System)(::|\.)/, "");
+          var made = stripParens(x.made);
+          if (CLS[nm] || /[.:]/.test(nm) || !ERROR_NAMES.test(nm) || /^(SystemExit)$/.test(nm) ||
+              !made || (made.k !== "new" && made.k !== "call")) { return; }
+          addClass({ k: "class", name: nm, kind: "class", bases: [], fields: [], methods: [], ctors: [], values: [],
+                     inits: [], line: x.line, lead: [], statik: false });
+          CLS[nm].isError = true;
+          CLS[nm].made = true;
+          CLS[nm].builtIn = true;
+          x.named = nm;
+        });
+      }
+      // An interface's default methods -- Java's default String label() { },
+      // C#'s own -- are the methods of every class that says it has them,
+      // where that class does not have one of its own
+      clsOrder.forEach(function (c) {
+        (c.ifaces || []).forEach(function (name) {
+          var face = CLS[name];
+          if (!face || face.kind !== "interface") { return; }
+          var faces = [face].concat((face.ifaces || []).map(function (n0) { return CLS[n0]; }).filter(Boolean));
+          faces.forEach(function (f0) {
+            f0.methods.forEach(function (m) {
+              if (m.statik || !m.body || !m.body.length) { return; }
+              if (c.methods.some(function (own) { return own.name === m.name; })) { return; }
+              c.methods.push(copyOf(m));
+            });
+          });
+        });
+      });
+      // A Java enum with more to it than names -- MERCURY(3.7), a field, a
+      // method -- is a kind of record: each constant one of them, made at
+      // the start, holding its name and its place among the others.
+      clsOrder.forEach(function (c) {
+        if (c.kind !== "enum" || !java) { return; }
+        var rich = c.ctors.length > 0 || c.fields.some(function (f) { return !f.statik; }) ||
+                   c.methods.some(function (m) { return !m.statik; }) ||
+                   c.values.some(function (v) { return v.args && v.args.length; });
+        if (!rich) { return; }
+        c.richEnum = true;
+        var line = c.line;
+        function setOwn(name) {
+          return { k: "expr", line: line, e: { k: "assignx", op: "=", value: nameNode(name, line),
+                   target: { k: "member", obj: nameNode("this", line), name: name, line: line } } };
+        }
+        var named = [{ name: "name", line: line }, { name: "ordinal", line: line }];
+        if (!c.ctors.length) { c.ctors.push({ params: [], body: [], inits: [], line: line, lead: [] }); }
+        c.ctors.forEach(function (k0) {
+          k0.params = named.map(function (p0) { return Object.assign({}, p0); }).concat(k0.params);
+          k0.body = [setOwn("name"), setOwn("ordinal")].concat(k0.body);
+        });
+        if (!c.methods.some(function (m) { return /^(toString)$/.test(m.name) && !m.params.length; })) {
+          c.methods.push({ k: "func", name: "toString", params: [], line: line, lead: [],
+                           body: [{ k: "return", line: line, value: { k: "member", obj: nameNode("this", line), name: "name", line: line } }] });
+        }
+        // Planet.valueOf("EARTH"): the one of them so called
+        top.funcs.push({ k: "func", name: c.name + "_valueOf", line: line, lead: [], rtype: c.name,
+                         params: [{ name: "text", line: line }],
+                         body: [{ k: "foreach", line: line, target: nameNode("one", line), over: { k: "list", line: line,
+                                    items: c.values.map(function (v) { return nameNode(v.name, line); }) },
+                                  body: [{ k: "if", line: line, cond: { k: "bin", op: "==", line: line,
+                                             a: { k: "member", obj: nameNode("one", line), name: "name", line: line }, b: nameNode("text", line) },
+                                           then: [{ k: "return", value: nameNode("one", line), line: line }], orelse: [] }] },
+                                { k: "return", value: { k: "null", line: line }, line: line }] });
+      });
+      clsOrder.forEach(function (c) {
+        if (!c.isError || (c.parent && CLS[c.parent])) { return; }
+        var says = c.methods.some(function (m) { return /^(__str__|__repr__|toString|ToString)$/.test(m.name); });
+        if (!says) {
+          var me = py ? "self" : "this";
+          c.methods.push({ k: "func", name: py ? "__str__" : "toString", line: c.line, lead: [],
+                           params: [], self: py ? "self" : undefined,
+                           body: [{ k: "return", line: c.line, value: { k: "member", obj: nameNode(me, c.line), name: "message", line: c.line } }] });
+        }
+      });
       function ancestry(c) {
         var out = [], seen = {};
         while (c && !seen[c.name]) { seen[c.name] = true; out.push(c); c = c.parent ? CLS[c.parent] : null; }
@@ -3387,12 +3900,12 @@
       clsOrder.forEach(function (c) {
         var own = selfFields(c);
         c.fieldNames = Object.keys(own);
-        c.record = c.kind !== "enum" && c.kind !== "interface" && !c.isError &&
+        c.record = (c.kind !== "enum" || c.richEnum) && c.kind !== "interface" &&
                    (c.fieldNames.length > 0 || instanceMethods(c).length > 0 || c.ctors.length > 0 || !!c.made);
       });
       // a class made from a record class is one too
       clsOrder.forEach(function (c) {
-        if (!c.record && c.kind !== "enum" && !c.isError &&
+        if (!c.record && c.kind !== "enum" &&
             ancestry(c).some(function (a) { return a.record; })) { c.record = true; }
       });
       clsOrder.forEach(function (c) {
@@ -3418,7 +3931,7 @@
         var chain = ancestry(c);
         for (var i = 0; i < chain.length; i++) {
           var hit = chain[i].methods.filter(function (m) {
-            return !m.statik && (m.origName || m.name) === name && m.kind === "set";
+            return !m.statik && (m.origName || m.name) === name && (m.setter || m.kind === "set");
           })[0];
           if (hit) { return hit; }
         }
@@ -3435,7 +3948,13 @@
           var n = 0;
           c.values.forEach(function (v) {
             var value;
-            if (py) { value = v.value; }
+            if (c.richEnum) {
+              // MERCURY(3.7): made by the enum's constructor, with its name and place
+              value = { k: "call", fn: nameNode(c.name, v.line), line: v.line,
+                        args: [{ k: "str", v: v.name, line: v.line }, num(n)].concat(v.args || []) };
+              n++;
+            }
+            else if (py) { value = v.value; }
             else if (java || js || cs) { value = { k: "str", v: v.name, line: v.line }; }
             else {
               if (v.value && stripParens(v.value).k === "num") { n = parseInt(stripParens(v.value).v, 10); }
@@ -3461,6 +3980,26 @@
         });
         (c.inits || []).forEach(function (b) { if (b.statik) { main = b.body.concat(main); } });
       });
+      // The page's own helpers, where this is code the page wrote: left
+      // out, and each call to one read as the chart's word for it.
+      var TELLS = PAGE_HELPERS[lang] || {};
+      top.funcs = top.funcs.filter(function (fn) {
+        var tell = Object.prototype.hasOwnProperty.call(TELLS, fn.name) ? TELLS[fn.name]
+                 : cs && /^(BindV?\d+_\d+|Bind_\w+)$/.test(fn.name) ? /=>|lambda|"fn"/ : null;
+        var said = "";
+        try { said = JSON.stringify(fn.body || []); } catch (err) { said = ""; }
+        if (!tell || !tell.test(said)) { return true; }
+        pageHelpers[fn.name] = true;
+        // and what the page wrote above it, saying what it is
+        var above = fn.line - 1;
+        while (top.head && top.head.length && top.head[top.head.length - 1].line === above) { top.head.pop(); above--; }
+        return false;
+      });
+      // Java's Fn, the kind of thing a function handed about is: gone with them
+      if (java && pageHelpers.bind) {
+        clsOrder = clsOrder.filter(function (c) { return c.name !== "Fn"; });
+        delete CLS.Fn;
+      }
 
       // The name each method is called by.
       function free(name) {
@@ -3471,18 +4010,38 @@
         if (/^__\w+__$/.test(m)) { return m.replace(/^__|__$/g, ""); }
         return m;
       }
+      clsOrder.forEach(function (c) {
+        c.methods = c.methods.filter(function (m) {
+          if (!/^(copied|Copied|deepCopied|DeepCopied)$/.test(m.name) || (m.params || []).length) { return true; }
+          var said0 = "";
+          try { said0 = JSON.stringify(m.body || []); } catch (err) { said0 = ""; }
+          if (!/clone|MemberwiseClone|copied|Copied/.test(said0)) { return true; }
+          pageHelpers.recordCopy = true;
+          return false;
+        });
+      });
       var METHODS = Object.create(null);                            // method name -> { impl: name per class, via }
+      if (py) {
+        clsOrder.forEach(function (c) {
+          c.methods.forEach(function (m) {
+            var sign = PY_OPS[m.name];
+            if (!sign || m.statik) { return; }
+            m.opSign = sign;
+            m.name = sign === "u-" ? "negated" : OP_NAMES[sign];
+          });
+        });
+      }
       clsOrder.forEach(function (c) {
         if (!c.record) { return; }
         instanceMethods(c).forEach(function (m) {
           m.origName = m.name;
-          var key = (m.kind === "set" ? "set " : "") + m.name;
+          var key = (m.setter || m.kind === "set" ? "set " : "") + m.name;
           (METHODS[key] = METHODS[key] || { list: [] }).list.push({ cls: c, fn: m });
         });
       });
       Object.keys(METHODS).forEach(function (key) {
         var one = METHODS[key], first = one.list[0].fn;
-        var base = first.kind === "set" ? "set" + first.name.charAt(0).toUpperCase() + first.name.slice(1)
+        var base = first.setter || first.kind === "set" ? "set" + first.name.charAt(0).toUpperCase() + first.name.slice(1)
                                         : plainName(first.name);
         if (one.list.length === 1 && free(base)) {
           first.name = base;
@@ -3516,7 +4075,7 @@
           var runs = key.indexOf("set ") === 0 ? setterOf(cls, key.slice(4)) : methodOf(cls, key);
           var overridden = descendants(cls.name).some(function (d) {
             return d !== cls && d.methods.some(function (m) {
-              return !m.statik && (m.kind === "set" ? "set " : "") + m.origName === key;
+              return !m.statik && (m.setter || m.kind === "set" ? "set " : "") + m.origName === key;
             });
           });
           if (runs && !overridden) { return runs.name; }
@@ -3600,10 +4159,29 @@
             params = py && up ? up.ctors[0].params.slice() : [];
           }
           params = params || [];
+          // an error with no constructor of its own takes what went wrong
+          var bareError = !ctor && c.isError && !(c.parent && CLS[c.parent]);
+          if (bareError) { params = [{ name: "message", line: line, dflt: { k: "str", v: "" } }]; }
+          var aggregate = cpp && !ctor && !c.parent;
+          if (aggregate) {
+            params = c.fields.filter(function (f) { return !f.statik; }).map(function (f) {
+              var start = f.value || (f.sizes && f.sizes.length && f.sizes[0]
+                            ? { k: "newarr", elem: f.type, dims: f.sizes, line: f.line } : blankFor(f.type, f.line));
+              return { name: f.name, type: f.type ? f.type.name : null, typeInfo: f.type, line: f.line, dflt: start };
+            });
+          }
           var suffix = i ? String(params.length === (ctors[0] ? ctors[0].params.length : 0) ? i + 1 : params.length) : "";
           var fill = [];
           var chain = ctor ? chainOf(ctor, c) : null;
           var body = ctor ? ctor.body.filter(function (s) { return !chain || s !== chain.stmt; }) : [];
+          // super().__init__(msg), super(msg), : base(msg) -- handed to the
+          // language's own error: the message it holds
+          if (c.isError && (bareError || (chain && !chain.self && !(chain.to && CLS[chain.to])) ||
+                            (ctor && !chain && !(c.parent && CLS[c.parent])))) {
+            var msg = bareError ? nameNode("message", line) : chain && chain.args.length ? chain.args[0] : { k: "str", v: "" };
+            fill.push({ k: "assign", line: line, value: msg,
+                        target: { k: "member", obj: nameNode(self), name: "message", line: line } });
+          }
           if (chain && chain.to && CLS[chain.to] && CLS[chain.to].record) {
             fill.push({ k: "expr", line: line, e: { k: "call", made: "init", cls: CLS[chain.to],
                         fn: nameNode(chain.to), args: chain.args, self: self, line: line } });
@@ -3615,7 +4193,7 @@
           if (!chain || !chain.self) {
             c.fields.forEach(function (f) {
               if (f.statik || f.data && ctor && !ctor.fromFields) { return; }
-              var v = f.value;
+              var v = aggregate ? nameNode(f.name, f.line) : f.value;
               if (!v && f.sizes && f.sizes.length && f.sizes[0]) {
                 v = { k: "newarr", elem: f.type, dims: f.sizes, line: f.line };
               }
@@ -3687,7 +4265,7 @@
           if (!c.record) { return; }
           var runs = key.indexOf("set ") === 0 ? setterOf(c, key.slice(4)) : methodOf(c, key);
           if (!runs) { return; }
-          var call = { k: "call", fn: nameNode(runs.name), line: widest.line,
+          var call = { k: "call", fn: nameNode(runs.name), line: widest.line, dispatched: true,
                        args: params.slice(0, runs.params.length).map(function (p) { return nameNode(p.name); }) };
           cases.push({ labels: [{ k: "str", v: c.name, line: widest.line }], isDefault: false,
                        body: [gives ? { k: "return", value: call, line: widest.line }
@@ -3908,18 +4486,108 @@
           });
           if (!grew) { break; }
         }
+        // One that goes out of here as a value -- returned, kept, handed to
+        // something -- and changes a name it shares with this one: that
+        // name is kept in a record both of them hold (a closure's cell),
+        // so that what one does to it the other sees, call after call.
+        var cellVars = Object.create(null);
+        nested.forEach(function (n) {
+          var info = names[n.g.name], changed = assignedIn(n.g);
+          info.escapes = [host.body].concat(nested.map(function (m) { return m.g.body; })).some(function (b) {
+            return valueRefIn(b, n.g.name);
+          });
+          if (info.escapes) {
+            info.captured.forEach(function (v) { if (changed[v] === true) { cellVars[v] = true; } });
+          }
+        });
+        var cell = null;
+        if (Object.keys(cellVars).length) {
+          cell = "cell";
+          while (scope.set[cell] || !free(cell)) { cell += "_"; }
+          taken[low(cell)] = true;
+          var cellNames = Object.keys(cellVars);
+          host.body = [{ k: "assign", target: nameNode(cell, host.line), value: { k: "record", kind: "Closure", line: host.line }, line: host.line }]
+            .concat((host.params || []).filter(function (p0) { return cellVars[p0.name]; }).map(function (p0) {
+              return { k: "assign", target: { k: "member", obj: nameNode(cell, host.line), name: p0.name, line: host.line },
+                       value: nameNode(p0.name, host.line), line: host.line };
+            }))
+            .concat(intoCell(host.body, cellVars, cell));
+          nested.forEach(function (n) {
+            var info = names[n.g.name], uses = info.captured.some(function (v) { return cellVars[v]; });
+            n.g.body = intoCell(n.g.body, cellVars, cell);
+            info.captured = info.captured.filter(function (v) { return !cellVars[v]; });
+            if (uses) { info.captured.push(cell); }
+          });
+          scope.order.push(cell);
+          cellNames.forEach(function () {});
+        }
         nested.forEach(function (n) {
           var info = names[n.g.name], g = n.g, changed = assignedIn(g);
           info.captured.sort(function (a, b) { return scope.order.indexOf(a) - scope.order.indexOf(b); });
-          info.captured.forEach(function (v) {
-            g.params.push({ name: v, line: g.line, captured: true, ref: changed[v] === true });
-          });
+          g.params = info.captured.map(function (v) {
+            return { name: v, line: g.line, captured: true, ref: v !== cell && changed[v] === true && !info.escapes };
+          }).concat(g.params);
           g.name = info.to;
           g.liftedFrom = host.name || "main";
         });
         var all = nested.map(function (n) { return n.g; }).concat(inner);
         rewriteCalls([host.body].concat(all.map(function (g) { return g.body; })), names);
         return all;
+      }
+      // Is the function of this name used as a value here -- anywhere but
+      // as the thing called?
+      function valueRefIn(where, name) {
+        var found = false;
+        (function look(x, called) {
+          if (found || !x || typeof x !== "object") { return; }
+          if (Array.isArray(x)) { x.forEach(function (y) { look(y, false); }); return; }
+          if (x.k === "name" && x.v === name && !x.via && !called) { found = true; return; }
+          if (x.k === "func" || x.k === "class") { return; }
+          for (var key in x) {
+            if (key === "line" || key === "cls" || !x[key] || typeof x[key] !== "object") { continue; }
+            look(x[key], x.k === "call" && key === "fn");
+          }
+        })(where, false);
+        return found;
+      }
+      // count, where count is kept in a closure's cell: cell.count
+      function intoCell(where, vars, cell) {
+        function fix(x) {
+          if (!x || typeof x !== "object") { return x; }
+          if (Array.isArray(x)) {
+            var out = [];
+            x.forEach(function (y) {
+              if (y && y.k === "decl") {
+                // let count = start: the cell is given it, not a name of its own
+                var kept = [];
+                y.names.forEach(function (d) {
+                  if (d.name && vars[d.name]) {
+                    out.push({ k: "assign", target: { k: "member", obj: nameNode(cell, y.line), name: d.name, line: y.line },
+                               value: d.value ? fix(d.value) : { k: "null", line: y.line }, line: y.line });
+                  } else { kept.push(d); }
+                });
+                if (kept.length) { out.push(fix(Object.assign({}, y, { names: kept }))); }
+                return;
+              }
+              if (y && (y.k === "nonlocal" || y.k === "global")) {
+                var left = y.names.filter(function (v) { return !vars[v]; });
+                if (left.length) { out.push(Object.assign({}, y, { names: left })); }
+                return;
+              }
+              out.push(fix(y));
+            });
+            return out;
+          }
+          if (x.k === "name" && vars[x.v] && !x.via && !x.type) {
+            return { k: "member", obj: nameNode(cell, x.line), name: x.v, line: x.line };
+          }
+          var o = {};
+          for (var key in x) {
+            o[key] = key === "line" || key === "cls" || key === "fnNode" ? x[key] : fix(x[key]);
+          }
+          return o;
+        }
+        return fix(where);
       }
       function rewriteCalls(where, names) {
         function fix(x) {
@@ -3943,7 +4611,13 @@
                        return { k: "kw", name: v, value: nameNode(v, x.line), line: x.line };
                      })) };
           }
-          if (x.k === "name" && names[x.v] && !x.via) { return nameNode(names[x.v].to, x.line); }
+          if (x.k === "name" && names[x.v] && !x.via) {
+            var got = names[x.v];
+            if (!got.captured.length) { return nameNode(got.to, x.line); }
+            return builtinCall("bind", [nameNode(got.to, x.line)].concat(got.captured.map(function (v) {
+              return nameNode(v, x.line);
+            })), x.line);
+          }
           if (x.k === "func" || x.k === "class") { return x; }
           for (var key in x) {
             if (key !== "line" && key !== "cls" && x[key] && typeof x[key] === "object") { x[key] = fix(x[key]); }
@@ -3952,8 +4626,91 @@
         }
         where.forEach(fix);
       }
+      // (() => { let n = 0; return { inc: () => ++n }; })(): a function made
+      // and called on the spot -- given a name of its own, and called by it,
+      // so that what it makes inside is dealt with as any function's is
+      var madeOnSpot = 0;
+      function onTheSpot(list, into) {
+        function fix(x, target) {
+          if (!x || typeof x !== "object") { return x; }
+          if (Array.isArray(x)) { return x.map(function (y) { return fix(y, target); }); }
+          if (x.k === "func" || x.k === "class") { return x; }
+          if (x.k === "call" && stripParens(x.fn) && stripParens(x.fn).k === "fn") {
+            var made = stripParens(x.fn);
+            var nm = target ? "make" + target.charAt(0).toUpperCase() + target.slice(1) : "started" + (++madeOnSpot);
+            while (!free(nm) || top.funcs.some(function (f) { return low(f.name) === low(nm); })) { nm += "_"; }
+            into.push({ k: "func", name: nm, params: made.params, body: fix(made.body, null), line: made.line, lead: [], rtype: null });
+            return { k: "call", fn: nameNode(nm, x.line), args: fix(x.args, null), line: x.line };
+          }
+          var o = {};
+          for (var key in x) {
+            if (key === "line" || key === "cls") { o[key] = x[key]; continue; }
+            var t0 = null;
+            if (x.k === "decl" && key === "names") {
+              o[key] = x.names.map(function (d) { return Object.assign({}, d, { value: fix(d.value, d.name) }); });
+              continue;
+            }
+            if (x.k === "assign" && key === "value" && stripParens(x.target).k === "name") { t0 = stripParens(x.target).v; }
+            o[key] = fix(x[key], t0);
+          }
+          return o;
+        }
+        return fix(list, null);
+      }
+      if (js || py) {
+        var spotMade = [];
+        main = onTheSpot(main, spotMade);
+        top.funcs.forEach(function (fn) { fn.body = onTheSpot(fn.body, spotMade); });
+        top.funcs = top.funcs.concat(spotMade);
+      }
       var funcs0 = Object.create(null);
       top.funcs.forEach(function (fn) { funcs0[low(fn.name)] = true; });
+      var closuresMade = 0;
+      function nameClosures(host) {
+        var mine = localsOf(host).set;
+        function capturesChanging(fn) {
+          var own = localsOf({ params: fn.params, body: fn.body }).set, used = namesUsedIn(fn.body);
+          var changed = assignedIn({ body: fn.body });
+          return Object.keys(used).some(function (v) { return !own[v] && mine[v] && changed[v] === true; });
+        }
+        (function walkList(list) {
+          for (var i = 0; i < list.length; i++) {
+            var st = list[i];
+            if (!st || typeof st !== "object") { continue; }
+            if (st.k === "func" || st.k === "class") { continue; }
+            var before = [];
+            var outFn = function (x, escaping) {
+              if (!x || typeof x !== "object") { return x; }
+              if (Array.isArray(x)) { return x.map(function (y) { return outFn(y, escaping); }); }
+              if (x.k === "fn" && escaping && capturesChanging(x)) {
+                var nm = "closure" + (++closuresMade);
+                while (!free(nm) || mine[nm]) { nm = "closure" + (++closuresMade); }
+                before.push({ k: "assign", target: nameNode(nm, x.line), value: x, line: x.line || st.line });
+                return nameNode(nm, x.line);
+              }
+              if (x.k === "fn" || x.k === "func" || x.k === "class") { return x; }
+              var o = {};
+              for (var key in x) {
+                if (key === "line" || key === "cls") { o[key] = x[key]; continue; }
+                var esc = x.k === "return" && key === "value" ||
+                          (x.k === "list" || x.k === "tuple" || x.k === "dict") ||
+                          (x.k === "call" && key === "args" && x.fn && x.fn.k === "name" && funcs0[low(x.fn.v)]);
+                o[key] = ["then", "orelse", "body", "fin", "cases", "handlers"].indexOf(key) >= 0 ? x[key] : outFn(x[key], esc);
+              }
+              return o;
+            };
+            var fixed = outFn(st, false);
+            if (before.length) {
+              list.splice.apply(list, [i, 1].concat(before, [fixed]));
+              i += before.length;
+            } else { list[i] = fixed; }
+            ["then", "orelse", "body", "fin"].forEach(function (k) { if (Array.isArray(st[k])) { walkList(list[i][k]); } });
+            (list[i].cases || []).forEach(function (c) { walkList(c.body); });
+            (list[i].handlers || []).forEach(function (h) { walkList(h.body); });
+          }
+        })(host.body);
+      }
+      top.funcs.forEach(function (fn) { nameClosures(fn); });
       top.funcs.slice().forEach(function (fn) {
         liftedFns = liftedFns.concat(liftFrom(fn, { set: {}, order: [] }));
       });
@@ -3980,12 +4737,28 @@
         funcs[key] = fn;
         order.push(fn);
       });
-      function userFn(path, nargs) {
+      function userFn(path, nargs, args, ch) {
         if (!path) { return null; }
         var key = low(path);
         if (OVER[key] && nargs !== undefined) {
-          var fit = OVER[key].filter(function (f) { return fitsArgs(f.params, nargs); })[0];
-          if (fit) { return fit; }
+          var fits = OVER[key].filter(function (f) { return fitsArgs(f.params, nargs); });
+          // show(3), show(2.5), show("x"): the one whose kinds are the ones handed over
+          if (fits.length > 1 && args) {
+            var scored = fits.map(function (f) {
+              var score = 0;
+              f.params.forEach(function (p, i) {
+                var given = args[i];
+                if (!given || p.rest || p.captured) { return; }
+                var want = p.typeInfo ? kindOfType(p.typeInfo) : null, got = kindOf(given, ch);
+                if (!want || !got) { return; }
+                score += want === got ? 3 : (want === "real" && got === "int") ? 1 : -3;
+              });
+              return { f: f, score: score };
+            });
+            scored.sort(function (x, y) { return y.score - x.score; });
+            return scored[0].f;
+          }
+          if (fits[0]) { return fits[0]; }
         }
         return funcs[key] || null;
       }
@@ -4000,30 +4773,38 @@
         var pos = [], kws = {};
         (args || []).forEach(function (a) {
           if (a.k === "kw") { kws[a.name] = a.value; }
+          // C#'s Greet("Di", times: 2)
+          else if (a.argName && fn.params.some(function (p) { return p.name === a.argName; })) { kws[a.argName] = a; }
           else if (a.k !== "dstar") { pos.push(a.k === "ref" ? a.e : a); }
         });
         var out = [];
         var named = Object.keys(kws).length > 0;
-        var most = fn.params.some(function (p) { return p.rest; }) ? 1e9 : fn.params.length;
+        var own = fn.params.filter(function (p) { return !p.captured; });
+        var most = own.some(function (p) { return p.rest; }) ? 1e9 : own.length;
         // handed the wrong number of things, it is handed them as they were,
         // for the runner to say so
-        if (!named && (pos.length > most || pos.length < fn.params.filter(function (p) {
-              return !p.dflt && !p.rest && !p.captured; }).length)) {
-          return pos;
+        if (!named && (pos.length > most || pos.length < own.filter(function (p) {
+              return !p.dflt && !p.rest; }).length)) {
+          return fn.params.filter(function (p) { return p.captured; }).map(function (p) {
+            return kws[p.name] || nameNode(p.name);
+          }).concat(pos);
         }
-        fn.params.forEach(function (p, i) {
+        var at = 0;
+        fn.params.forEach(function (p) {
+          if (p.captured) { out.push(kws[p.name] || nameNode(p.name)); return; }
           if (p.rest && !p.named) {
-            var more = pos.slice(i);
+            var more = pos.slice(at);
             if (more.length === 1 && stripParens(more[0]).k === "star") { out.push(stripParens(more[0]).e); }
+            // Java's sum(arr), C#'s params: an array handed over is the whole of them
+            else if ((java || cs) && more.length === 1 && isListKind(kindOf(more[0], kindChart))) { out.push(more[0]); }
             else { out.push({ k: "list", items: more, line: fn.line }); }
-            pos = pos.slice(0, i);
+            at = pos.length;
             return;
           }
           if (p.rest && p.named) { out.push({ k: "dict", keys: [], values: [], line: fn.line }); return; }
-          if (i < pos.length && !p.kwOnly) { out.push(pos[i]); return; }
+          if (at < pos.length && !p.kwOnly) { out.push(pos[at++]); return; }
           if (kws[p.name]) { out.push(kws[p.name]); return; }
           if (p.dflt) { out.push(p.dflt); return; }
-          if (p.captured) { out.push(nameNode(p.name)); return; }
           out.push({ k: "null", line: fn.line });
         });
         return out;
@@ -4099,8 +4880,90 @@
       //   stop wait note break continue
       function lower(list, ch) {
         var out = [];
-        list.forEach(function (st) { lowerOne(st, ch, out); });
+        for (var i = 0; i < list.length; i++) {
+          // v = parseInt(s); if (isNaN(v)) ...: s made a number only where it is one
+          var parsed = js ? parseThenAsk(list, i) : null;
+          if (parsed) { list = parsed; }
+          // C++'s int& r = n: r is n by another name, from there on
+          var alias = cpp ? refAlias(list[i], list.slice(i + 1)) : null;
+          if (alias) {
+            list = list.slice(0, i + 1).concat(swapName(list.slice(i + 1), alias.name, alias.place));
+            continue;
+          }
+          lowerOne(list[i], ch, out);
+        }
         return out;
+      }
+      // while (in >> word), while (getline(in, part, ',')), where in is a
+      // string stream: going through its words, or its pieces
+      function wordsRead(cond, ch) {
+        function stream(x) {
+          x = stripParens(x);
+          var one = x && x.k === "name" ? (ch.names[x.v] || ch.params[x.v] || globalChart.names[x.v]) : null;
+          return one && one.stringStream ? x : null;
+        }
+        if (cond && cond.k === "bin" && cond.op === ">>" && stream(cond.a) && stripParens(cond.b).k === "name") {
+          return { into: stripParens(cond.b), over: builtinCall("split", [stream(cond.a)]) };
+        }
+        if (cond && cond.k === "call" && /^(std::)?getline$/.test(pathOf(cond.fn) || "") && cond.args.length >= 2 &&
+            stream(cond.args[0]) && stripParens(cond.args[1]).k === "name") {
+          var sep = cond.args[2] ? stripParens(cond.args[2]) : { k: "str", v: "\n" };
+          return { into: stripParens(cond.args[1]), over: builtinCall("split", [stream(cond.args[0]), sep]) };
+        }
+        return null;
+      }
+      function parseThenAsk(list, i) {
+        var st = list[i], nx = list[i + 1];
+        if (!st || !nx || nx.k !== "if" || nx.parsedAsk) { return null; }
+        var target = null, value = null, ex = st.k === "expr" ? stripParens(st.e) : null;
+        if (st.k === "decl" && st.names.length === 1) { target = st.names[0].name; value = st.names[0].value; }
+        else if (st.k === "assign" && stripParens(st.target).k === "name") { target = stripParens(st.target).v; value = st.value; }
+        else if (ex && ex.k === "assignx" && ex.op === "=" && stripParens(ex.target).k === "name") { target = stripParens(ex.target).v; value = ex.value; }
+        var v = stripParens(value);
+        if (!v || v.k !== "call" || !v.args.length || !/^(parseInt|parseFloat|Number|Number\.parseInt|Number\.parseFloat)$/.test(pathOf(v.fn) || "")) { return null; }
+        var src = stripParens(v.args[0]);
+        if (!/^(name|member|index|str)$/.test(src.k)) { return null; }
+        var asks = false;
+        var cond = (function swap(x) {
+          if (!x || typeof x !== "object") { return x; }
+          if (Array.isArray(x)) { return x.map(swap); }
+          if (x.k === "call" && /^(isNaN|Number\.isNaN)$/.test(pathOf(x.fn) || "") && x.args.length === 1 &&
+              stripParens(x.args[0]).k === "name" && stripParens(x.args[0]).v === target) {
+            asks = true;
+            return Object.assign({}, x, { args: [src] });
+          }
+          var o = {};
+          for (var key in x) { o[key] = key === "line" ? x[key] : swap(x[key]); }
+          return o;
+        })(nx.cond);
+        if (!asks) { return null; }
+        var line = st.line;
+        var first = st.k === "decl"
+          ? [Object.assign({}, st, { names: [Object.assign({}, st.names[0], { value: num(0) })] })]
+          : [];
+        var guarded = { k: "if", line: line, orelse: [], cond: builtinCall("isNumber", [src], line),
+                        then: [{ k: "assign", target: nameNode(target, line), value: value, line: line }] };
+        return list.slice(0, i).concat(first, [guarded, Object.assign({}, nx, { cond: cond, parsedAsk: true })], list.slice(i + 2));
+      }
+      function refAlias(st, rest) {
+        if (!st || st.k !== "decl" || !st.typeInfo || !st.typeInfo.ref || st.names.length !== 1 || !st.names[0].value) { return null; }
+        var k = kindOfType(st.typeInfo);
+        if (k && !/^(int|real|bool|text)$/.test(k)) { return null; }
+        var place = stripParens(st.names[0].value), steady = true;
+        (function look(x) {
+          x = stripParens(x);
+          if (!x) { steady = false; return; }
+          if (x.k === "name") { return; }
+          if (x.k === "member") { look(x.obj); return; }
+          if (x.k === "index") {
+            look(x.obj);
+            var at = stripParens(x.at);
+            if (!(at.k === "num" || at.k === "str" || (at.k === "name" && !assigns(rest, at.v)))) { steady = false; }
+            return;
+          }
+          steady = false;
+        })(place);
+        return steady ? { name: st.names[0].name, place: place } : null;
       }
       function lowered(fill) { var o = []; fill(o); return o; }
       // A ? B : C inside a statement: the statement twice, once each way,
@@ -4139,7 +5002,10 @@
           if (!x || typeof x !== "object") { return x; }
           if (Array.isArray(x)) { return x.map(walk); }
           switch (x.k) {
-            case "fn": return liftLambda(x, ch, "lambda");
+            case "fn": {
+              var plainFn = cs ? plainCallOf(x) : null;       // the page's C# (a, b) => f(a, b)
+              return plainFn ? { k: "name", v: plainFn, line: x.line, fnRef: true } : asValue(liftLambda(x, ch, "lambda"));
+            }
             case "comp": {
               var tmp = nameNode(fresh(ch, x.kind === "dict" ? "table" : "items"), x.line);
               compInto(tmp, x, ch, out);
@@ -4149,6 +5015,15 @@
               var sw = nameNode(fresh(ch, "choice"), x.line);
               switchInto(sw, x, ch, out);
               return sw;
+            }
+            // a ? b : c where a statement could not take it apart -- in an
+            // If's test, a loop's: worked out on lines of its own first
+            case "cond": {
+              var gotIt = gotOrElse(x);
+              if (gotIt) { return walk(gotIt); }
+              var picked = nameNode(fresh(ch, "choice"), x.line);
+              assign(picked, x, ch, out, x.line);
+              return copyOf(picked);
             }
             case "assignx": {
               statementExpr(x, ch, out, x.line);
@@ -4161,6 +5036,58 @@
               return copyOf(stripParens(x.target));
             }
             case "call": {
+              x = unstatic(x);
+              // adder(1)(1), counter.inc(), fns[0](v): the function worked
+              // out first, into a name, and then called by it
+              var callee = stripParens(x.fn);
+              var heldFn = callee.k === "call" && !callee.builtin ? callee
+                         : callee.k === "index" && (js || py || cs || cpp) ? callee
+                         : js && callee.k === "member" && kindOf(callee.obj, ch) === "map" &&
+                           !(madeAsMap(callee.obj, ch) && /^(get|set|has|delete|forEach|keys|values|entries|clear|size)$/.test(callee.name))
+                           ? { k: "index", obj: callee.obj, at: { k: "str", v: callee.name }, line: x.line } : null;
+              if (heldFn && !(callee.k === "call" && callee.fn && stripParens(callee.fn).k === "fn")) {
+                var fnHeld = nameNode(fresh(ch, "fn"), x.line);
+                out.push({ k: "set", target: fnHeld, value: walk(heldFn), line: x.line });
+                ch.meet(fnHeld.v, { set: true, kind: "fn" });
+                return { k: "call", fn: fnHeld, args: x.args.map(walk), line: x.line };
+              }
+              // math.gcd(a, b), math.lcm(a, b), math.factorial(n): worked
+              // out on lines of their own, the way they are done by hand
+              var mathOne = bare(pathOf(x.fn) || "").replace(/^math\./, "");
+              if (py && /^math\./.test(bare(pathOf(x.fn) || "")) && !userFn(mathOne) &&
+                  ((/^(gcd|lcm)$/.test(mathOne) && x.args.length === 2) || (/^(factorial|isqrt)$/.test(mathOne) && x.args.length === 1))) {
+                return mathByHand(mathOne, x.args.map(walk), x.line);
+              }
+              if (py && x.fn.k === "member") {
+                var byHand = pyWordsByHand(x, walk);
+                if (byHand) { return byHand; }
+              }
+              // "a-b-c".replace("-", "+") in JavaScript: the first one only
+              if (js && x.fn.k === "member" && x.fn.name === "replace" && x.args.length === 2 &&
+                  kindOf(x.fn.obj, ch) !== "list" && !isListKind(kindOf(x.fn.obj, ch))) {
+                var pat0 = stripParens(x.args[0]);
+                if (pat0.k === "str" || (pat0.k === "regex" && !/g/.test(pat0.flags || "") && !/[\\^$.*+?()[\]{}|]/.test(pat0.v))) {
+                  var once = { k: "call", line: x.line, args: [pat0.k === "regex" ? { k: "str", v: pat0.v } : x.args[0], x.args[1], num(1)],
+                               fn: { k: "member", obj: x.fn.obj, name: "replace", line: x.line } };
+                  var onceDone = pyWordsByHand(once, walk, true);
+                  if (onceDone) { return onceDone; }
+                }
+              }
+              // s.trimStart(), s.lstrip(), s.TrimStart(), s.stripLeading() -- and the other end
+              if (x.fn.k === "member" && /^(trimStart|trimLeft|lstrip|TrimStart|stripLeading|trimEnd|trimRight|rstrip|TrimEnd|stripTrailing)$/.test(x.fn.name) &&
+                  x.args.length <= 1 && (!kindOf(x.fn.obj, ch) || kindOf(x.fn.obj, ch) === "text")) {
+                return trimByHand(x, walk, /^(trimStart|trimLeft|lstrip|TrimStart|stripLeading)$/.test(x.fn.name));
+              }
+              // d.pop("k", fallback): what is under k, or the fallback -- and k gone
+              if (py && x.fn.k === "member" && x.fn.name === "pop" && x.args.length === 2 && kindOf(x.fn.obj, ch) === "map") {
+                var table0 = walk(x.fn.obj), key0 = walk(x.args[0]);
+                var got0 = nameNode(fresh(ch, "taken"), x.line);
+                out.push({ k: "set", target: got0, value: builtinCall("get", [table0, key0, walk(x.args[1])], x.line), line: x.line });
+                ch.meet(got0.v, { set: true });
+                out.push({ k: "if", cond: builtinCall("contains", [copyOf(table0), copyOf(key0)], x.line), orelse: [], line: x.line,
+                           then: [{ k: "call", e: builtinCall("remove", [copyOf(table0), copyOf(key0)], x.line), line: x.line }] });
+                return copyOf(got0);
+              }
               var asked = inputOf(x);
               if (asked) {
                 var into = nameNode(fresh(ch, answerName(asked.prompt)), x.line);
@@ -4170,6 +5097,65 @@
                 }
                 askFor(into, out, x.line, ch);
                 return into;
+              }
+              if (py && x.fn.k === "name" && x.fn.v === "dict" && !userFn("dict") && x.args.length) {
+                var kwArgs = x.args.filter(function (a0) { return a0.k === "kw"; });
+                if (kwArgs.length === x.args.length) {
+                  return { k: "dict", keys: kwArgs.map(function (a0) { return { k: "str", v: a0.name }; }),
+                           values: kwArgs.map(function (a0) { return walk(a0.value); }), line: x.line };
+                }
+                if (x.args.length === 1 && !kwArgs.length) {
+                  var from = walk(x.args[0]);
+                  if (kindOf(from, ch) === "map") { return builtinCall("copy", [from], x.line); }
+                  var table = nameNode(fresh(ch, "table"), x.line);
+                  out.push({ k: "set", target: table, value: { k: "dict", keys: [], values: [], line: x.line }, line: x.line });
+                  ch.meet(table.v, { set: true, kind: "map" });
+                  var pair = fresh(ch, "pair");
+                  ch.meet(pair, { set: true, loop: true, elem: { of: from } });
+                  out.push({ k: "foreach", v: pair, over: from, line: x.line, body: [{
+                    k: "set", line: x.line,
+                    target: { k: "index", obj: copyOf(table), at: { k: "index", obj: nameNode(pair, x.line), at: num(0) } },
+                    value: { k: "index", obj: nameNode(pair, x.line), at: num(1) } }] });
+                  return copyOf(table);
+                }
+              }
+              // if (seen.Add(x)): whether x was new -- and it is in there now
+              if ((cs || java) && x.fn.k === "member" && /^(Add|add)$/.test(x.fn.name) && x.args.length === 1 &&
+                  /^set/.test(kindOf(x.fn.obj, ch) || "")) {
+                var setHeld = walk(x.fn.obj), newOne = walk(x.args[0]);
+                var wasNew = nameNode(fresh(ch, "added"), x.line);
+                out.push({ k: "set", target: wasNew, line: x.line,
+                           value: { k: "un", op: "!", a: builtinCall("contains", [setHeld, newOne], x.line) } });
+                ch.meet(wasNew.v, { set: true, kind: "bool" });
+                out.push({ k: "if", cond: copyOf(wasNew), orelse: [], line: x.line,
+                           then: [{ k: "call", e: builtinCall("append", [copyOf(setHeld), copyOf(newOne)], x.line), line: x.line }] });
+                return copyOf(wasNew);
+              }
+              // s.Split(seps, StringSplitOptions.RemoveEmptyEntries): the pieces, none of them empty
+              if (cs && x.fn.k === "member" && x.fn.name === "Split" && x.args.length >= 2 &&
+                  /RemoveEmptyEntries$/.test(pathOf(stripParens(x.args[x.args.length - 1])) || "")) {
+                return walk({ k: "call", line: x.line, fn: { k: "member", name: "Where", line: x.line,
+                                                             obj: Object.assign({}, x, { args: x.args.slice(0, -1) }) },
+                              args: [{ k: "fn", lambda: true, line: x.line, params: [{ name: "part", line: x.line }],
+                                       body: [{ k: "return", line: x.line, value: { k: "bin", op: "!=", a: nameNode("part", x.line),
+                                                                                     b: { k: "str", v: "" }, line: x.line } }] }] });
+              }
+              // s.IndexOfAny(letters): where the first of any of them is
+              if (cs && x.fn.k === "member" && x.fn.name === "IndexOfAny" && x.args.length === 1) {
+                var inWords = walk(x.fn.obj), anyOf = walk(x.args[0]);
+                var firstAt = nameNode(fresh(ch, "position"), x.line), oneOf = fresh(ch, "letter"), atNow = nameNode(fresh(ch, "at"), x.line);
+                out.push({ k: "set", target: firstAt, value: { k: "un", op: "-", a: num(1) }, line: x.line });
+                ch.meet(firstAt.v, { set: true, kind: "int" });
+                ch.meet(atNow.v, { set: true, kind: "int" });
+                ch.meet(oneOf, { set: true, loop: true, elem: { of: anyOf } });
+                out.push({ k: "foreach", v: oneOf, over: anyOf, line: x.line, body: [
+                  { k: "set", target: atNow, value: builtinCall("indexOf", [inWords, nameNode(oneOf, x.line)], x.line), line: x.line },
+                  { k: "if", line: x.line, orelse: [],
+                    cond: { k: "bin", op: "&&", line: x.line, a: { k: "bin", op: ">=", a: copyOf(atNow), b: num(0) },
+                            b: { k: "paren", e: { k: "bin", op: "||", a: { k: "bin", op: "<", a: copyOf(firstAt), b: num(0) },
+                                                                        b: { k: "bin", op: "<", a: copyOf(atNow), b: copyOf(firstAt) } } } },
+                    then: [{ k: "set", target: copyOf(firstAt), value: copyOf(atNow), line: x.line }] }] });
+                return copyOf(firstAt);
               }
               var inline = higherOrder(x, ch, out, walk);
               if (inline) { return inline; }
@@ -4188,7 +5174,66 @@
               }
               break;
             }
+            // { ...o, z: 3 }: a new table, o's keys first and then z
+            case "dict":
+              if (x.values.some(function (v) { return v && v.k === "dstar"; })) {
+                var made = nameNode(fresh(ch, "merged"), x.line);
+                out.push({ k: "set", target: made, value: { k: "dict", keys: [], values: [], line: x.line }, line: x.line });
+                ch.meet(made.v, { set: true, kind: "map" });
+                x.values.forEach(function (v, i) {
+                  if (v && v.k === "dstar") {
+                    var from = walk(v.e), key = fresh(ch, "key");
+                    ch.meet(key, { set: true, loop: true });
+                    out.push({ k: "foreach", v: key, over: builtinCall("keys", [from], x.line), line: x.line, body: [{
+                      k: "set", line: x.line, target: { k: "index", obj: copyOf(made), at: nameNode(key, x.line) },
+                      value: { k: "index", obj: copyOf(from), at: nameNode(key, x.line) } }] });
+                  } else {
+                    out.push({ k: "set", line: x.line, target: { k: "index", obj: copyOf(made), at: walk(x.keys[i]) }, value: walk(v) });
+                  }
+                });
+                return copyOf(made);
+              }
+              break;
+            // a?.b, a?.[i]: nothing where a is nothing, or has no b
+            case "member":
+              if (js && x.opt) { return builtinCall("get", [lenient(x.obj), { k: "str", v: x.name }, { k: "str", v: "" }], x.line); }
+              break;
+            case "index":
+              if (js && x.opt) {
+                var byPlace = stripParens(x.at).k === "num" || kindOf(x.at, ch) === "int";
+                return builtinCall("get", [lenient(x.obj, byPlace), walk(x.at), { k: "str", v: "" }], x.line);
+              }
+              break;
             case "bin":
+              // o.w === undefined, o.w !== undefined: whether o has a w
+              if (js && /^(===|==|!==|!=)$/.test(x.op)) {
+                var ul = stripParens(x.a), ur = stripParens(x.b);
+                if (ur.k === "member" && ul.k === "null" && ul.undef) { var uw = ul; ul = ur; ur = uw; }
+                if (ul.k === "member" && !ul.opt && ur.k === "null" && ur.undef &&
+                    !recordOf(kindOf(ul.obj, ch))) {
+                  var has = builtinCall("contains", [walk(ul.obj), { k: "str", v: ul.name }], x.line);
+                  return /^!/.test(x.op) ? has : { k: "un", op: "!", a: has, line: x.line };
+                }
+              }
+              // C++: s.rfind(x, 0) == 0 -- s starts with x
+              if (cpp && (x.op === "==" || x.op === "!=")) {
+                var rl = stripParens(x.a), rr = stripParens(x.b);
+                if (rr.k === "call" && rl.k === "num") { var sw0 = rl; rl = rr; rr = sw0; }
+                if (rl.k === "call" && rl.fn.k === "member" && rl.fn.name === "rfind" && rl.args.length === 2 &&
+                    stripParens(rl.args[1]).k === "num" && stripParens(rl.args[1]).v === "0" &&
+                    rr.k === "num" && rr.v === "0") {
+                  var starts = builtinCall("startsWith", [walk(rl.fn.obj), walk(rl.args[0])], x.line);
+                  return x.op === "==" ? starts : { k: "un", op: "!", a: starts, line: x.line };
+                }
+              }
+              // C++: m.count(k) > 0, m.count(k) != 0 -- m has k
+              if (cpp && (x.op === ">" || x.op === "!=") && stripParens(x.b).k === "num" && stripParens(x.b).v === "0") {
+                var cl = stripParens(x.a);
+                if (cl.k === "call" && cl.fn.k === "member" && cl.fn.name === "count" && cl.args.length === 1 &&
+                    /^(map|set)/.test(kindOf(cl.fn.obj, ch) || "")) {
+                  return builtinCall("contains", [walk(cl.fn.obj), walk(cl.args[0])], x.line);
+                }
+              }
               if ((x.op === "||" || x.op === "??") && stripParens(x.a).k === "call") {
                 var gc = stripParens(x.a);
                 if (gc.fn.k === "member" && gc.fn.name === "get" && gc.args.length === 1) {
@@ -4207,6 +5252,183 @@
           return o;
         }
         return walk(e);
+        // Python's words asked things there is no one word for in a chart --
+        // s.swapcase(), s.title(), s.isalnum(), s.center(9), s.partition(" "),
+        // s.replace(a, b, 2), s.split(",", 1) -- done a letter at a time
+        function pyWordsByHand(x, walk, any) {
+          var m = x.fn.name, args = x.args.filter(function (a0) { return a0.k !== "kw"; }), line = x.line;
+          var sk = kindOf(x.fn.obj, ch);
+          if (sk && sk !== "text" && !any) { return null; }
+          if (!/^(swapcase|title|isalnum|center|partition|rpartition)$/.test(m) &&
+              !(m === "replace" && args.length === 3) && !(m === "split" && args.length === 2)) { return null; }
+          if (m === "center" && !args.length) { return null; }
+          function set(name, value) { out.push({ k: "set", target: nameNode(name, line), value: value, line: line }); }
+          function setTo(name, value) { return { k: "set", target: nameNode(name, line), value: value, line: line }; }
+          function kept(e, base, kind) {
+            var w0 = walk(e), plain = stripParens(w0);
+            if (plain.k === "name" || plain.k === "str" || plain.k === "num") { return w0; }
+            var t = fresh(ch, base);
+            ch.meet(t, { set: true, kind: kind });
+            set(t, w0);
+            return nameNode(t, line);
+          }
+          function B(fn, a0) { return builtinCall(fn, a0, line); }
+          function plus(a0, b0) { return { k: "bin", op: "+", a: a0, b: b0, line: line }; }
+          var s = kept(x.fn.obj, "text", "text");
+          var o, c;
+          if (m === "swapcase" || m === "title") {
+            o = fresh(ch, m === "title" ? "titled" : "swapped");
+            c = fresh(ch, "letter");
+            ch.meet(o, { set: true, kind: "text" });
+            ch.meet(c, { set: true, loop: true, elem: { of: s } });
+            set(o, { k: "str", v: "" });
+            var prev = m === "title" ? fresh(ch, "before") : null;
+            if (prev) { ch.meet(prev, { set: true, kind: "text" }); set(prev, { k: "str", v: " " }); }
+            var ask = m === "title" ? B("isAlpha", [nameNode(prev, line)]) : B("isUpper", [nameNode(c, line)]);
+            var body = [{ k: "if", cond: ask, line: line,
+                          then: [setTo(o, plus(nameNode(o, line), B("toLower", [nameNode(c, line)])))],
+                          orelse: [setTo(o, plus(nameNode(o, line), B("toUpper", [nameNode(c, line)])))] }];
+            if (prev) { body.push(setTo(prev, nameNode(c, line))); }
+            out.push({ k: "foreach", v: c, over: copyOf(s), body: body, line: line });
+            return nameNode(o, line);
+          }
+          if (m === "isalnum") {
+            o = fresh(ch, "allLettersOrDigits");
+            c = fresh(ch, "letter");
+            ch.meet(o, { set: true, kind: "bool" });
+            ch.meet(c, { set: true, loop: true, elem: { of: s } });
+            set(o, { k: "bin", op: ">", a: B("length", [copyOf(s)]), b: num(0), line: line });
+            out.push({ k: "foreach", v: c, over: copyOf(s), line: line, body: [{ k: "if", orelse: [], line: line,
+              cond: { k: "un", op: "!", a: { k: "bin", op: "||", a: B("isAlpha", [nameNode(c, line)]), b: B("isDigit", [nameNode(c, line)]), line: line }, line: line },
+              then: [setTo(o, { k: "bool", v: false })] }] });
+            return nameNode(o, line);
+          }
+          if (m === "center") {
+            // Python's centre: the odd one over goes on the left when the width is odd
+            var wide = kept(args[0], "width", "int"), fill = args[1] ? walk(args[1]) : { k: "str", v: " " };
+            var gap = { k: "bin", op: "-", a: wide, b: B("length", [copyOf(s)]), line: line };
+            var leftN = { k: "bin", op: "+", line: line, a: B("floor", [{ k: "bin", op: "/", a: gap, b: num(2), line: line }]),
+                          b: { k: "bin", op: "*", line: line, a: { k: "paren", e: { k: "bin", op: "%", a: copyOf(gap), b: num(2), pyMod: true, line: line } },
+                               b: { k: "paren", e: { k: "bin", op: "%", a: copyOf(wide), b: num(2), pyMod: true, line: line } } } };
+            return B("padRight", [B("padLeft", [copyOf(s), plus(B("length", [copyOf(s)]), leftN), fill]), copyOf(wide), copyOf(fill)]);
+          }
+          if (m === "partition" || m === "rpartition") {
+            var sep = kept(args[0], "sep", "text"), at = fresh(ch, "at");
+            o = fresh(ch, "parts");
+            ch.meet(at, { set: true, kind: "int" });
+            ch.meet(o, { set: true });
+            set(at, B(m === "partition" ? "indexOf" : "lastIndexOf", [copyOf(s), copyOf(sep)]));
+            var found = { k: "tuple", line: line, items: [B("substring", [copyOf(s), num(0), nameNode(at, line)]), copyOf(sep),
+                          B("substring", [copyOf(s), plus(nameNode(at, line), B("length", [copyOf(sep)]))])] };
+            var missing = m === "partition" ? { k: "tuple", items: [copyOf(s), { k: "str", v: "" }, { k: "str", v: "" }], line: line }
+                                            : { k: "tuple", items: [{ k: "str", v: "" }, { k: "str", v: "" }, copyOf(s)], line: line };
+            out.push({ k: "if", line: line, cond: { k: "bin", op: ">=", a: nameNode(at, line), b: num(0), line: line },
+                       then: [setTo(o, found)], orelse: [setTo(o, missing)] });
+            return nameNode(o, line);
+          }
+          // s.replace(old, new, n): only the first n; s.split(sep, n): at most n cuts
+          var what = kept(args[0], "old", "text"), most = kept(args[args.length - 1], "most", "int");
+          var rest = fresh(ch, "rest"), k0 = fresh(ch, "done"), at2 = fresh(ch, "at");
+          ch.meet(rest, { set: true, kind: "text" });
+          ch.meet(k0, { set: true, kind: "int" });
+          ch.meet(at2, { set: true, kind: "int" });
+          o = fresh(ch, m === "replace" ? "replaced" : "parts");
+          ch.meet(o, { set: true, kind: m === "replace" ? "text" : "list<text>" });
+          set(o, m === "replace" ? { k: "str", v: "" } : { k: "list", items: [], line: line });
+          set(rest, copyOf(s));
+          set(k0, num(0));
+          var piece = B("substring", [nameNode(rest, line), num(0), nameNode(at2, line)]);
+          var took = m === "replace" ? setTo(o, plus(plus(nameNode(o, line), piece), walk(args[1])))
+                                     : { k: "call", e: B("append", [nameNode(o, line), piece]), line: line };
+          out.push({ k: "while", line: line,
+                     cond: { k: "bin", op: "&&", line: line, a: { k: "bin", op: "<", a: nameNode(k0, line), b: copyOf(most), line: line },
+                             b: { k: "bin", op: ">=", a: B("indexOf", [nameNode(rest, line), copyOf(what)]), b: num(0), line: line } },
+                     body: [setTo(at2, B("indexOf", [nameNode(rest, line), copyOf(what)])), took,
+                            setTo(rest, B("substring", [nameNode(rest, line), plus(nameNode(at2, line), B("length", [copyOf(what)]))])),
+                            setTo(k0, plus(nameNode(k0, line), num(1)))] });
+          if (m === "replace") { return plus(nameNode(o, line), nameNode(rest, line)); }
+          out.push({ k: "call", e: B("append", [nameNode(o, line), nameNode(rest, line)]), line: line });
+          return nameNode(o, line);
+        }
+        // a JavaScript Map -- new Map() -- rather than an object of the program's
+        function madeAsMap(e0, ch0) {
+          var x0 = stripParens(e0);
+          if (x0.k !== "name") { return true; }
+          var one = ch0 && (ch0.names[x0.v] || ch0.params[x0.v]) || globalChart.names[x0.v];
+          if (!one || !(one.values || []).length) { return true; }
+          if (one.askingMap) { return false; }
+          one.askingMap = true;
+          try {
+            return (one.values || []).some(function (v) {
+              v = stripParens(v);
+              // let o2 = merged: a Map where merged is one
+              if (v && v.k === "name" && v.v !== x0.v) { return madeAsMap(v, ch0); }
+              // let a2 = people[0]: a Map where people is a list of them
+              if (v && v.k === "index" && stripParens(v.obj).k === "name") {
+                var listed = stripParens(v.obj), holder = ch0 && (ch0.names[listed.v] || ch0.params[listed.v]) || globalChart.names[listed.v];
+                return !!holder && (holder.values || []).some(function (lv) {
+                  lv = stripParens(lv);
+                  return lv && lv.k === "list" && lv.items.length > 0 && lv.items.every(function (it) {
+                    it = stripParens(it);
+                    return it && it.k === "new" && /^(Map|WeakMap)$/.test(String(it.type && it.type.name || ""));
+                  });
+                });
+              }
+              return v && ((v.k === "new" && /^(Map|WeakMap)$/.test(String(v.type && v.type.name || ""))) || v.k === "call" && v.builtin);
+            });
+          } finally { one.askingMap = false; }
+        }
+        // what comes before a ?. in JavaScript: o.address, which is nothing
+        // (not a mistake) where o has no address
+        function lenient(e0, byPlace) { return walk(lenientChain(e0, ch, byPlace)); }
+        // what is left of some words with the spaces -- or the letters it
+        // names -- taken off the one end
+        function trimByHand(x, walk, front) {
+          var line = x.line, t = fresh(ch, "trimmed");
+          ch.meet(t, { set: true, kind: "text" });
+          out.push({ k: "set", target: nameNode(t, line), value: walk(x.fn.obj), line: line });
+          var chars = x.args.length ? walk(x.args[0]) : null;
+          var len = builtinCall("length", [nameNode(t, line)], line);
+          var end = front ? builtinCall("substring", [nameNode(t, line), num(0), num(1)], line)
+                          : builtinCall("substring", [nameNode(t, line), { k: "bin", op: "-", a: len, b: num(1), line: line }], line);
+          var gone = chars ? builtinCall("contains", [chars, end], line) : builtinCall("isSpace", [end], line);
+          var rest = front ? builtinCall("substring", [nameNode(t, line), num(1)], line)
+                           : builtinCall("substring", [nameNode(t, line), num(0), { k: "bin", op: "-", a: copyOf(len), b: num(1), line: line }], line);
+          out.push({ k: "while", line: line,
+                     cond: { k: "bin", op: "&&", a: { k: "bin", op: ">", a: copyOf(len), b: num(0), line: line }, b: gone, line: line },
+                     body: [{ k: "set", target: nameNode(t, line), value: rest, line: line }] });
+          return nameNode(t, line);
+        }
+        function mathByHand(what, args, line) {
+          function set(name, value) {
+            out.push({ k: "set", target: nameNode(name, line), value: value, line: line });
+            ch.meet(name, { set: true, kind: "int" });
+          }
+          if (what === "isqrt") { return builtinCall("floor", [builtinCall("sqrt", [args[0]], line)], line); }
+          if (what === "factorial") {
+            var f = fresh(ch, "product"), i = fresh(ch, "i");
+            set(f, num(1));
+            ch.meet(i, { kind: "int", set: true, loop: true });
+            out.push({ k: "for", v: i, from: num(2), to: args[0], by: null, line: line,
+                       body: [{ k: "set", target: nameNode(f, line), line: line,
+                                value: { k: "bin", op: "*", a: nameNode(f, line), b: nameNode(i, line), line: line } }] });
+            return nameNode(f, line);
+          }
+          // Euclid's way: the larger made the remainder until nothing is left
+          var x0 = fresh(ch, "a"), y0 = fresh(ch, "b"), t0 = fresh(ch, "t");
+          set(x0, builtinCall("abs", [args[0]], line));
+          set(y0, builtinCall("abs", [args[1]], line));
+          ch.meet(t0, { set: true, kind: "int" });
+          out.push({ k: "while", line: line, cond: { k: "bin", op: "!=", a: nameNode(y0, line), b: num(0), line: line }, body: [
+            { k: "set", target: nameNode(t0, line), value: nameNode(y0, line), line: line },
+            { k: "set", target: nameNode(y0, line), value: { k: "bin", op: "%", a: nameNode(x0, line), b: nameNode(y0, line), line: line }, line: line },
+            { k: "set", target: nameNode(x0, line), value: nameNode(t0, line), line: line }] });
+          if (what === "gcd") { return nameNode(x0, line); }
+          // lcm: the two multiplied, shared out by what they have in common
+          return { k: "bin", op: "//", line: line,
+                   a: builtinCall("abs", [{ k: "bin", op: "*", a: copyOf(args[0]), b: copyOf(args[1]), line: line }], line),
+                   b: nameNode(x0, line) };
+        }
       }
       // d.TryGetValue(k, out v), int.TryParse(s, out n): the name handed
       // out is set first, and what is asked is whether it could be
@@ -4216,7 +5438,9 @@
         if (!into || !cs) { return null; }
         if (x.fn.k === "member" && x.fn.name === "TryGetValue" && a.length === 2) {
           var table = walk(x.fn.obj), key = walk(a[0]);
-          assign(into, builtinCall("get", [table, key, { k: "null" }], x.line), ch, out, x.line);
+          var intoOne = into.k === "name" ? (ch.names[into.v] || ch.params[into.v]) : null;
+          var none = intoOne && intoOne.typeInfo ? blankFor(intoOne.typeInfo, x.line) : null;
+          assign(into, builtinCall("get", [table, key, none || { k: "null" }], x.line), ch, out, x.line);
           return builtinCall("contains", [table, key], x.line);
         }
         if (/^(int|double|decimal|long|float|Int32|Double)\.TryParse$/.test(p) && a.length === 2) {
@@ -4257,7 +5481,7 @@
       // function of its own, named for what it is for.
       var lambdasMade = 0;
       function liftLambda(fn, ch, base) {
-        if (fn.liftedAs) { return { k: "name", v: fn.liftedAs, line: fn.line, fnRef: true }; }
+        if (fn.liftedAs) { return { k: "name", v: fn.liftedAs, line: fn.line, fnRef: true, captured: fn.liftedCaptured || [] }; }
         var nm = base + (++lambdasMade);
         while (!free(nm)) { nm = base + (++lambdasMade); }
         taken[low(nm)] = true;
@@ -4267,11 +5491,26 @@
         made.params.forEach(function (p) {
           if (fn.params.filter(function (q) { return q.name === p.name; })[0].pattern) { p.pattern = true; }
         });
+        // what it uses of the chart it was made in: handed to it as well
+        var own = localsOf({ params: fn.params, body: fn.body }).set, used = namesUsedIn(fn.body);
+        var captured = ch ? Object.keys(used).filter(function (v) {
+          return !own[v] && (ch.names[v] || ch.params[v]) && !funcs[low(v)] && v !== nm;
+        }) : [];
+        made.params = captured.map(function (v) { return { name: v, line: fn.line, captured: true }; }).concat(made.params);
         funcs[low(nm)] = made;
         order.push(made);
         lateFns.push(made);
         fn.liftedAs = nm;
-        return { k: "name", v: nm, line: fn.line, fnRef: true };
+        fn.liftedCaptured = captured;
+        return { k: "name", v: nm, line: fn.line, fnRef: true, captured: captured };
+      }
+      // The function a lambda was made into, as a value: bound to what it
+      // took from where it was made, where it took anything.
+      function asValue(ref) {
+        if (!ref || !ref.captured || !ref.captured.length) { return ref; }
+        return builtinCall("bind", [{ k: "name", v: ref.v, line: ref.line, fnRef: true }].concat(ref.captured.map(function (v) {
+          return nameNode(v, ref.line);
+        })), ref.line);
       }
       var lateFns = [];
 
@@ -4280,14 +5519,40 @@
       // when x is something, and y when it is not: the question it asks,
       // written as one.  Two yes-or-noes stay the OR they are.
       function valueOrs(e, ch) {
-        if (!(py || js) || !e || typeof e !== "object") { return e; }
+        if (!(py || js || cs) || !e || typeof e !== "object") { return e; }
         if (Array.isArray(e)) { return e.map(function (x) { return valueOrs(x, ch); }); }
         if (e.k === "fn" || e.k === "comp") { return e; }
+        // C#'s || and && are only ever yes-or-no; its ?? is the one that picks
+        if (cs && e.k === "bin" && e.op === "??") {
+          var a0 = valueOrs(e.a, ch), b0 = valueOrs(e.b, ch);
+          if (stripParens(a0).k === "null") { return b0; }
+          return { k: "cond", test: { k: "bin", op: "!=", a: a0, b: { k: "null" } }, a: copyOf(a0), b: b0, line: e.line };
+        }
+        if (cs && e.k === "bin") {
+          return Object.assign({}, e, { a: valueOrs(e.a, ch), b: valueOrs(e.b, ch) });
+        }
         if (e.k === "bin" && (e.op === "||" || e.op === "??") && stripParens(e.a).k === "call") {
           // m.get(k) || 0: what is under k, or 0
           var gc = stripParens(e.a);
           if (gc.fn.k === "member" && gc.fn.name === "get" && gc.args.length === 1) {
             return builtinCall("get", [valueOrs(gc.fn.obj, ch), valueOrs(gc.args[0], ch), valueOrs(e.b, ch)], e.line);
+          }
+        }
+        if (e.k === "bin" && (e.op === "||" || e.op === "??") && stripParens(e.a).k === "index") {
+          var ix = stripParens(e.a), ik = kindOf(ix.obj, ch);
+          // xs[i] ?? d: xs[i], or d where there is no item i
+          if (ik === "map" || (!ik && !isListKind(ik)) || ix.opt || (js && e.op === "??" && isListKind(ik))) {
+            return builtinCall("get", [valueOrs(ix.opt ? lenientChain(ix.obj, ch, stripParens(ix.at).k === "num" || kindOf(ix.at, ch) === "int") : ix.obj, ch),
+                                     valueOrs(ix.at, ch), valueOrs(e.b, ch)], e.line);
+          }
+        }
+        // null ?? x, "" || x, 5 ?? x: settled already
+        if (e.k === "bin" && (e.op === "||" || e.op === "??") && js) {
+          var lit = stripParens(e.a);
+          if (lit.k === "null") { return valueOrs(e.b, ch); }
+          if (lit.k === "num" || lit.k === "bool" || lit.k === "str") {
+            var truthy = lit.k === "num" ? Number(lit.v) !== 0 : lit.k === "bool" ? lit.v : lit.v !== "";
+            return e.op === "??" || truthy ? lit : valueOrs(e.b, ch);
           }
         }
         if (e.k === "bin" && (e.op === "||" || e.op === "&&" || e.op === "??")) {
@@ -4303,14 +5568,100 @@
         for (var key in e) { o[key] = key === "cls" || key === "line" ? e[key] : valueOrs(e[key], ch); }
         return o;
       }
+      // m.has(k) ? m.get(k) : d, i >= 0 && i < xs.length ? xs[i] : d --
+      // what is under k or at i, or d: get(m, k, d), however it was put.
+      function gotOrElse(x) {
+        x = stripParens(x);
+        if (!x || x.k !== "cond") { return null; }
+        var t = stripParens(x.test), a = stripParens(x.a), m = null, k = null;
+        if (t.k === "bin" && t.op === ">" && stripParens(t.b).k === "num" && stripParens(t.b).v === "0") { t = stripParens(t.a); }
+        if (t.k === "call" && t.fn.k === "member" && t.args.length === 1 &&
+            /^(has|containsKey|ContainsKey|count|contains|Contains)$/.test(t.fn.name)) {
+          m = t.fn.obj; k = t.args[0];
+        } else if (t.k === "bin" && t.op === "in") {
+          m = t.b; k = t.a;
+        } else if (t.k === "bin" && (t.op === "&&" || t.op === "and")) {
+          // i >= 0 && i < xs.size(): a place in the list
+          var lo = stripParens(t.a), hi = stripParens(t.b);
+          if (lo.k === "bin" && lo.op === ">=" && stripParens(lo.b).k === "num" && stripParens(lo.b).v === "0" &&
+              hi.k === "bin" && hi.op === "<" && same(lo.a, hi.a)) {
+            var size = stripParens(hi.b);
+            if (size.k === "cast") { size = stripParens(size.e); }
+            if (size.k === "call" && size.fn.k === "member" && /^(size)$/.test(size.fn.name) && !size.args.length) { m = size.fn.obj; }
+            else if (size.k === "member" && /^(length|Count|Length)$/.test(size.name)) { m = size.obj; }
+            else if (size.k === "call" && pathOf(size.fn) === "len" && size.args.length === 1) { m = size.args[0]; }
+            k = lo.a;
+          }
+        }
+        if (!m) { return null; }
+        var am = null, ak = null;
+        if (a.k === "call" && a.fn.k === "member" && /^(get|at)$/.test(a.fn.name) && a.args.length === 1) { am = a.fn.obj; ak = a.args[0]; }
+        else if (a.k === "index") { am = a.obj; ak = a.at; }
+        if (!am || !same(am, m) || !same(ak, k)) { return null; }
+        var d = stripParens(x.b);
+        var empty = d && d.k === "list" && d.braces && !d.items.length;
+        return builtinCall("get", [m, k].concat(empty ? [] : [x.b]), x.line);
+      }
+      function withGets(e) {
+        if (!e || typeof e !== "object") { return e; }
+        if (Array.isArray(e)) { return e.map(withGets); }
+        if (e.k === "fn" || e.k === "comp") { return e; }
+        var got = gotOrElse(e);
+        if (got) { return Object.assign({}, got, { args: got.args.map(withGets) }); }
+        var o = {};
+        for (var key in e) { o[key] = key === "cls" || key === "line" ? e[key] : withGets(e[key]); }
+        return o;
+      }
+      // C++: cout << (done ? "True" : "False") -- the page's C++ printing a
+      // yes or no the way the chart does, which is done itself, printed
+      function flagsShown(e) {
+        var x = stripParens(e);
+        if (!x || x.k !== "bin" || x.op !== "<<") { return e; }
+        var b = stripParens(x.b);
+        var nb = b && b.k === "cond" && stripParens(b.a).k === "str" && stripParens(b.a).v === "True" &&
+                 stripParens(b.b).k === "str" && stripParens(b.b).v === "False"
+               ? { k: "paren", e: b.test, shownAsWord: true, line: b.line } : x.b;
+        return Object.assign({}, x, { a: flagsShown(x.a), b: nb });
+      }
+      // o.address before a ?.: nothing, not a mistake, where o has no address
+      function lenientChain(e0, ch, byPlace) {
+        var x0 = stripParens(e0);
+        if (x0 && x0.k === "member" && !recordOf(kindOf(x0.obj, ch)) && kindOf(x0.obj, ch) !== "text" && !isListKind(kindOf(x0.obj, ch))) {
+          // looked into further, so nothing there is an empty table -- or,
+          // looked into by place, an empty list -- not empty words
+          var none0 = byPlace ? { k: "list", items: [], line: x0.line } : { k: "dict", keys: [], values: [], line: x0.line };
+          return builtinCall("get", [lenientChain(x0.obj, ch), { k: "str", v: x0.name }, none0], x0.line);
+        }
+        return e0;
+      }
       function lowerOne(st, ch, out) {
         var line = st.line;
+        if (cpp && st.k === "expr" && stripParens(st.e) && stripParens(st.e).k === "bin" && stripParens(st.e).op === "<<") {
+          st = Object.assign({}, st, { e: flagsShown(st.e) });
+        }
+        // the expressions of this statement, not the statements inside it
+        ["e", "value", "cond", "over", "subject"].forEach(function (key) {
+          if (st[key] && typeof st[key] === "object" && firstTernary(st[key])) {
+            st = Object.assign({}, st); st[key] = withGets(st[key]);
+          }
+        });
+        if (st.k === "decl" && st.names.some(function (d) { return d.value && firstTernary(d.value); })) {
+          st = Object.assign({}, st, { names: st.names.map(function (d) { return d.value ? Object.assign({}, d, { value: withGets(d.value) }) : d; }) });
+        }
         if (st.k === "expr" && stripParens(st.e) && stripParens(st.e).k === "call") {
           st = Object.assign({}, st, { e: valueOrs(st.e, ch) });
         } else if ((st.k === "return" || st.k === "yield") && st.value) {
           st = Object.assign({}, st, { value: valueOrs(st.value, ch) });
         } else if (st.k === "assign" && st.value) {
           st = Object.assign({}, st, { value: valueOrs(st.value, ch) });
+        } else if (st.k === "expr" && stripParens(st.e) && stripParens(st.e).k === "assignx" && stripParens(st.e).value) {
+          // counts[ch] = (counts[ch] || 0) + 1, written as JavaScript writes it
+          var ax = stripParens(st.e);
+          st = Object.assign({}, st, { e: Object.assign({}, ax, { value: valueOrs(ax.value, ch) }) });
+        } else if (st.k === "decl") {
+          st = Object.assign({}, st, { names: st.names.map(function (d) {
+            return d.value ? Object.assign({}, d, { value: valueOrs(d.value, ch) }) : d;
+          }) });
         }
         var q = (st.k === "return" || st.k === "expr" || st.k === "yield" || (st.k === "assign" &&
                  stripParens(st.value) && stripParens(st.value).k !== "cond"))
@@ -4352,7 +5703,9 @@
               out.push({ k: "return", value: nameNode(ch.gen), line: line });
               return;
             }
-            var rv = st.value ? ready(st.value, ch, out) : null;
+            var given = st.value;
+            if (given && cpp && ch.fn) { given = bracedAs(given, kindOfType(ch.fn.rtypeInfo || ch.fn.rtype)); }
+            var rv = given ? ready(given, ch, out) : null;
             if (rv && rv.post.length) {
               var keep = nameNode(fresh(ch, "result"), line);
               out.push({ k: "set", target: keep, value: rv.e, line: line });
@@ -4382,6 +5735,14 @@
               if (dev) { devices[one.name] = dev; return; }
               var ti = st.typeInfo || (st.type ? { name: st.type, dims: st.dims || 0, args: [] } : null);
               if (ti && one.dims && !ti.dims) { ti = Object.assign({}, ti, { dims: one.dims }); }
+              // C++'s istringstream in(s), ostringstream out: words, read from or added to
+              if (cpp && ti && /^(istringstream|stringstream|ostringstream)$/.test(String(ti.name).replace(/^.*::/, ""))) {
+                var sv = one.value && stripParens(one.value);
+                var fromText = sv && sv.k === "new" && sv.args && sv.args.length === 1 ? sv.args[0] : sv && sv.k !== "new" ? sv : null;
+                ch.meet(one.name, { kind: "text", declared: true }).stringStream = true;
+                assign(nameNode(one.name, one.line), fromText || { k: "str", v: "" }, ch, out, line, true, { name: "string", dims: 0, args: [] });
+                return;
+              }
               var kind = kindOfType(ti);
               ch.meet(one.name, { kind: kind, declared: true, konst: st.konst, type: st.type, typeInfo: ti });
               var value = one.value;
@@ -4393,6 +5754,7 @@
               if (!value && cpp && ti && !ti.ptr && (isListKind(kind) || kind === "map" || recordOf(kind))) {
                 value = { k: "new", type: ti, args: [], line: line, direct: true };
               }
+              if (value) { value = bracedAs(value, kind); }
               var braced = value && stripParens(value);
               if (kind === "map" && braced && braced.k === "list" && braced.items.every(function (it) {
                     it = stripParens(it);
@@ -4400,6 +5762,12 @@
                   })) {
                 value = { k: "dict", keys: braced.items.map(function (it) { return stripParens(it).items[0]; }),
                           values: braced.items.map(function (it) { return stripParens(it).items[1]; }), line: line };
+              }
+              // set<int> s = {5, 1, 4, 1}: 1, 4, 5
+              var setTy = cpp && ti ? String(ti.name).replace(/^.*::/, "") : "";
+              if (value && (setTy === "set" || setTy === "multiset") && /^(list|dict)$/.test(stripParens(value).k)) {
+                var listed = stripParens(value).k === "dict" ? { k: "list", items: [], line: line } : value;
+                value = builtinCall("sorted", [setTy === "set" ? builtinCall("unique", [listed], line) : listed], line);
               }
               if (value) {
                 assign(nameNode(one.name, one.line), value, ch, out, line, true, ti);
@@ -4431,6 +5799,18 @@
           }
           case "while": {
             var cond = stripParens(st.cond);
+            var readsWords = cpp ? wordsRead(cond, ch) : null;
+            if (readsWords) {
+              var piece = readsWords.into, pk = kindNow(piece);
+              var eachWord = pk === "int" || pk === "real" ? fresh(ch, "word") : stripParens(piece).v;
+              var wordsBody = st.body;
+              if (eachWord !== stripParens(piece).v) {
+                wordsBody = [{ k: "assign", target: piece, line: line,
+                               value: { k: "call", fn: nameNode(pk === "int" ? "int" : "real"), args: [nameNode(eachWord, line)], builtin: true, line: line } }].concat(st.body);
+              }
+              lowerForeach({ k: "foreach", target: nameNode(eachWord, line), over: readsWords.over, body: wordsBody, line: line, label: st.label }, ch, out);
+              return;
+            }
             if ((cond.k === "bool" && cond.v) || (cond.k === "num" && cond.v !== "0")) {
               var forever = foreverLoop(st.body.slice(), ch, line, st.label);
               if (forever.k === "block") { out.push.apply(out, forever.body); }
@@ -4494,6 +5874,13 @@
                 if (fnName === "pop" && kindNow(obj) !== "map" && !isListKind(kindNow(obj))) { fnName = "remove"; }
                 if (isListKind(kindNow(obj))) { fnName = "pop"; }
                 out.push({ k: "call", e: builtinCall(fnName, [obj, at], line), line: line });
+              } else if (t.k === "slice" && !t.step) {
+                // del xs[1:4]: what is left either side of them
+                var holder = ready(t.obj, ch, out).e;
+                var cutFrom = t.from ? ready(t.from, ch, out).e : num(0);
+                var left = builtinCall("slice", [holder, num(0), cutFrom], line);
+                var right = t.to ? builtinCall("slice", [copyOf(holder), ready(t.to, ch, out).e], line) : { k: "list", items: [], line: line };
+                out.push({ k: "set", target: copyOf(holder), value: { k: "bin", op: "+", a: left, b: right, line: line }, line: line });
               } else if (t.k === "slice") {
                 out.push({ k: "note", text: "del " + (pathOf(t.obj) || "") + "[:]", line: line });
               }
@@ -4538,7 +5925,117 @@
       // something goes wrong has nothing in a chart to set it off -- except
       // the one every course teaches, a number typed in that is not a
       // number: that is a question the chart can ask (isNumber).
+      // A finally runs on the way out, however the way out is taken: before
+      // each Return inside the try, as well as after it.
+      function finallyFirst(list, fin) {
+        return list.map(function (x) {
+          if (!x || typeof x !== "object") { return x; }
+          if (x.k === "return") { return { k: "block", line: x.line, body: copyOf(fin).concat([x]) }; }
+          if (x.k === "func" || x.k === "fn" || x.k === "class") { return x; }
+          var o = Object.assign({}, x);
+          ["then", "orelse", "body"].forEach(function (k) { if (Array.isArray(o[k])) { o[k] = finallyFirst(o[k], fin); } });
+          if (o.cases) { o.cases = o.cases.map(function (c) { return Object.assign({}, c, { body: finallyFirst(c.body, fin) }); }); }
+          if (o.handlers) { o.handlers = o.handlers.map(function (h) { return Object.assign({}, h, { body: finallyFirst(h.body, fin) }); }); }
+          return o;
+        });
+      }
+      var R_CONVERTS = /^(int|float|Integer\.parseInt|Double\.parseDouble|int\.Parse|double\.Parse|Convert\.ToInt32|Convert\.ToDouble|stoi|stod|Number|parseInt|parseFloat|Integer\.valueOf|Double\.valueOf|decimal\.Parse|long\.Parse|Long\.parseLong)$/;
+      var R_BAD_NUMBER = /^(ValueError|Exception|NumberFormatException|FormatException|InputMismatchException|invalid_argument|exception|std\.invalid_argument|std\.exception|Error|RuntimeException|SystemException|BaseException|IllegalArgumentException|ArgumentException)$/;
+      var R_ZERO = /^(ZeroDivisionError|ArithmeticError|ArithmeticException|DivideByZeroException|Exception|exception|std\.exception|Error|RuntimeException|SystemException|BaseException)$/;
+      var R_OUT_OF_RANGE = /^(IndexError|LookupError|IndexOutOfBoundsException|ArrayIndexOutOfBoundsException|StringIndexOutOfBoundsException|IndexOutOfRangeException|ArgumentOutOfRangeException|out_of_range|std\.out_of_range|Exception|exception|std\.exception|Error|RuntimeException|SystemException|BaseException)$/;
+      var R_NO_KEY = /^(KeyError|LookupError|KeyNotFoundException|NoSuchElementException|out_of_range|std\.out_of_range|Exception|exception|std\.exception|Error|RuntimeException|SystemException|BaseException)$/;
+      function handlerOf(st, test) {
+        return (st.handlers || []).filter(function (h) {
+          var types = !h.type ? [] : stripParens(h.type).k === "tuple" ? stripParens(h.type).items : [h.type];
+          return !types.length || types.some(function (t) { return test.test(String(pathOf(t) || "").replace(/^.*\./, "")); });
+        })[0] || null;
+      }
+      // The first thing in these statements that can go wrong in a way the
+      // chart can ask about beforehand.
+      function riskIn(stmt, st, ch, declared) {
+        var found = null;
+        eachNode(stmt, function (x) {
+          if (found) { return false; }
+          if (x.k === "func" || x.k === "fn" || x.k === "class" || x.k === "try") { return false; }
+          if (x.k === "call" && x.args.length >= 1 && !inputOf(x) && R_CONVERTS.test(bare(pathOf(x.fn) || "")) &&
+              handlerOf(st, R_BAD_NUMBER)) {
+            found = { what: "number", of: x.args[0], handler: handlerOf(st, R_BAD_NUMBER) };
+            return false;
+          }
+          // xs[5], xs.get(5), v.at(5): a place that may not be there -- and
+          // d["k"], where d is a table, a key it may not hold
+          var holder = null, place = null;
+          if (x.k === "index" && !js && !cpp) { holder = x.obj; place = x.at; }
+          if (x.k === "call" && x.fn.k === "member" && x.args.length === 1 &&
+              ((java && x.fn.name === "get") || (cpp && x.fn.name === "at") || (cs && x.fn.name === "ElementAt"))) {
+            holder = x.fn.obj; place = x.args[0];
+          }
+          if (holder) {
+            var hk = kindOf(holder, ch);
+            // int[] xs = new int[2]; xs[5] = 1 -- declared in the try itself
+            if (!hk && declared && stripParens(holder).k === "name") { hk = declared[stripParens(holder).v] || null; }
+            if (hk === "map" && handlerOf(st, R_NO_KEY)) {
+              found = { what: "key", of: place, on: holder, handler: handlerOf(st, R_NO_KEY) };
+              return false;
+            }
+            if ((isListKind(hk) || hk === "text") && handlerOf(st, R_OUT_OF_RANGE)) {
+              found = { what: "index", of: place, on: holder, handler: handlerOf(st, R_OUT_OF_RANGE) };
+              return false;
+            }
+          }
+          if (x.k === "bin" && /^(\/|\/\/|%)$/.test(x.op) && !(x.op === "%" && py && stripParens(x.a).k === "str") &&
+              handlerOf(st, R_ZERO)) {
+            var by = stripParens(x.b);
+            var sure = by.k === "num" && Number(by.v) !== 0;
+            var whole = x.op !== "/" || !(py || js) || true;
+            if (!sure && whole) { found = { what: "zero", of: x.b, handler: handlerOf(st, R_ZERO) }; return false; }
+          }
+        });
+        return found;
+      }
       function lowerTry(st, ch, out) {
+        if (st.fin && st.fin.length) {
+          st = Object.assign({}, st, { body: finallyFirst(st.body, st.fin), orelse: finallyFirst(st.orelse || [], st.fin),
+                                       handlers: (st.handlers || []).map(function (h) {
+                                         return Object.assign({}, h, { body: finallyFirst(h.body, st.fin) });
+                                       }) });
+        }
+        // what can go wrong, asked about just before it
+        var real0 = st.body.filter(function (s0) { return s0.k !== "note"; });
+        var declared0 = {};
+        for (var ri = 0; ri < real0.length; ri++) {
+          var risk = riskIn(real0[ri], st, ch, declared0);
+          if (real0[ri].k === "decl") {
+            real0[ri].names.forEach(function (d) {
+              var ti0 = real0[ri].typeInfo || (real0[ri].type ? { name: real0[ri].type, dims: real0[ri].dims || 0, args: [] } : null);
+              if (ti0 && d.dims && !ti0.dims) { ti0 = Object.assign({}, ti0, { dims: d.dims }); }
+              declared0[d.name] = kindOfType(ti0) || (d.value ? kindOf(d.value, ch) : null);
+            });
+          }
+          if (!risk) { continue; }
+          // a division by zero is only an error in the languages that stop
+          // for it: JavaScript's is Infinity
+          if (risk.what === "zero" && js) { break; }
+          var at0 = st.body.indexOf(real0[ri]);
+          var before0 = lower(st.body.slice(0, at0), ch);
+          out.push.apply(out, before0);
+          var asked0 = [];
+          var what0 = ready(risk.of, ch, asked0).e;
+          var on0 = risk.on ? ready(risk.on, ch, asked0).e : null;
+          out.push.apply(out, asked0);
+          var size0 = on0 ? builtinCall("length", [on0], st.line) : null;
+          var cond0 = risk.what === "number" ? builtinCall("isNumber", [what0], st.line)
+                    : risk.what === "key" ? builtinCall("contains", [on0, what0], st.line)
+                    : risk.what === "index" ? { k: "bin", op: "&&", line: st.line,
+                        a: { k: "bin", op: ">=", a: what0, b: py ? { k: "un", op: "-", a: size0 } : num(0), line: st.line },
+                        b: { k: "bin", op: "<", a: copyOf(what0), b: copyOf(size0), line: st.line } }
+                    : { k: "bin", op: "!=", a: what0, b: num(0), line: st.line };
+          out.push({ k: "if", cond: cond0, line: st.line,
+                     then: lower(st.body.slice(at0).concat(st.orelse || []), ch),
+                     orelse: lower(risk.handler.body, ch) });
+          out.push.apply(out, lower(st.fin || [], ch));
+          return;
+        }
         var box = caughtThrows(st, ch);
         if (box) {
           out.push({ k: "trybox", label: box.label, body: lower(box.body.concat(st.orelse || []), ch), line: st.line });
@@ -4608,18 +6105,59 @@
             return types.some(function (t) {
               var tn = String(pathOf(t) || "").replace(/^.*\./, "");
               return tn === named || /^(Exception|BaseException|Throwable|exception|std::exception|Error|RuntimeException|SystemException)$/.test(tn) ||
-                     (named === "" && /Exception|Error/.test(tn));
+                     (named === "" && ERROR_NAMES.test(tn));
             });
           })[0] || null;
+        }
+        // an error come back from a call, of no one kind known here: each
+        // handler in turn asks whether it is the kind that handler is for
+        function sorted(x) {
+          var typed = handlers.some(function (h) { return typesOf(h).some(function (tn) { return CLS[tn] && CLS[tn].record; }); });
+          if (x.named || !typed || !x.said) { return null; }
+          var chainHead = null, last = null;
+          handlers.forEach(function (h) {
+            var tns = typesOf(h), ask = null;
+            tns.forEach(function (tn) {
+              var kinds = CLS[tn] && CLS[tn].record && !(CLS[tn].builtIn && ANY_ERROR.test(tn)) ? descendants(tn).map(function (d) { return d.name; }) : null;
+              (kinds || []).forEach(function (kn) {
+                var one = { k: "bin", op: "==", a: builtinCall("classOf", [copyOf(x.said)], x.line), b: { k: "str", v: kn }, line: x.line };
+                ask = ask ? { k: "bin", op: "||", a: ask, b: one, line: x.line } : one;
+              });
+              if (!kinds) { ask = { k: "bool", v: true }; }
+            });
+            if (!tns.length) { ask = { k: "bool", v: true }; }
+            // the name the handler gives it holds that kind of record
+            var recType = tns.filter(function (tn) { return CLS[tn] && CLS[tn].record; })[0];
+            var given = recType ? { k: "cast", type: recType, e: x.said, line: x.line } : x.said;
+            var told = h.name ? [{ k: "assign", target: nameNode(h.name, x.line), value: given, line: x.line }] : [];
+            if (x.reset) { told.push({ k: "assign", target: nameNode(x.reset, x.line), value: { k: "str", v: "" }, line: x.line }); }
+            var step = { k: "if", cond: ask, line: x.line, orelse: [],
+                         then: told.concat(copyOf(h.body), [{ k: "break", label: label, line: x.line }]) };
+            if (!chainHead) { chainHead = step; } else { last.orelse = [step]; }
+            last = step;
+          });
+          if (!chainHead) { return null; }
+          last.orelse = [x];            // none of them: on out, as it was going
+          any = true;
+          return chainHead;
+        }
+        function typesOf(h) {
+          var types = h.type ? (stripParens(h.type).k === "tuple" ? stripParens(h.type).items : [h.type]) : [];
+          return types.map(function (t) { return String(pathOf(t) || "").replace(/^.*\./, ""); });
         }
         function swap(list) {
           return list.map(function (x) {
             if (x.k === "exit") {
+              var picked = sorted(x);
+              if (picked) { return picked; }
               var h = handlerFor(x);
               if (!h) { return x; }
               any = true;
               var told = h.name ? [{ k: "assign", target: nameNode(h.name, x.line),
                                      value: x.said || { k: "str", v: x.named || "" }, line: x.line }] : [];
+              if (x.reset) {
+                told.push({ k: "assign", target: nameNode(x.reset, x.line), value: { k: "str", v: "" }, line: x.line });
+              }
               return { k: "block", line: x.line, body: told.concat(copyOf(h.body), [{ k: "break", label: label, line: x.line }]) };
             }
             if (x.k === "func" || x.k === "fn" || x.k === "class" || x.k === "try") { return x; }
@@ -4722,6 +6260,24 @@
       // A C for: a counting one is a For; anything else is the While it is.
       function cFor(st, ch) {
         var line = st.line;
+        // for (auto it = m.begin(); it != m.end(); ++it): each one in turn, it->first its key
+        if (cpp && st.init.length === 1 && st.init[0].k === "decl" && st.init[0].names.length === 1 && st.cond && st.step.length === 1) {
+          var itName = st.init[0].names[0].name, itFrom = stripParens(st.init[0].names[0].value);
+          var cond0 = stripParens(st.cond), step0 = stripParens(st.step[0].e);
+          var began = itFrom && itFrom.k === "call" && itFrom.fn.k === "member" && /^(c?begin|c?rbegin)$/.test(itFrom.fn.name) && !itFrom.args.length;
+          var endCall = cond0 && cond0.k === "bin" && (cond0.op === "!=" || cond0.op === "<") &&
+                        stripParens(cond0.a).k === "name" && stripParens(cond0.a).v === itName ? stripParens(cond0.b) : null;
+          var ends = endCall && endCall.k === "call" && endCall.fn.k === "member" && /^(c?end|c?rend)$/.test(endCall.fn.name);
+          var steps = step0 && step0.k === "incdec" && step0.op === "++" &&
+                      stripParens(step0.target).k === "name" && stripParens(step0.target).v === itName;
+          if (began && ends && steps && same(itFrom.fn.obj, endCall.fn.obj) && !assigns(st.body, itName)) {
+            var turned = /rbegin$/.test(itFrom.fn.name);
+            return lowered(function (o) {
+              lowerForeach({ k: "foreach", target: nameNode(itName, line), line: line, label: st.label, body: st.body,
+                             over: turned ? builtinCall("reversed", [itFrom.fn.obj], line) : itFrom.fn.obj }, ch, o);
+            });
+          }
+        }
         var initSets = [], counter = null, from = null, declared = false;
         st.init.forEach(function (one) {
           if (one.k === "decl") {
@@ -4763,7 +6319,7 @@
           // declared by the for itself, it is the For's own and needs no
           // Declare; declared further up, it keeps the one it has
           var kind = kindOfType(initSets[0].type) || "int";
-          ch.meet(counter, { kind: kind, set: true, loop: declared });
+          ch.meet(counter, { kind: kind, set: true, loop: declared }).ownLoop = declared;
           var by = step.by === "1" && step.up ? null
                  : step.up ? { k: "num", v: step.by } : { k: "un", op: "-", a: { k: "num", v: step.by } };
           if (step.expr) { by = step.up ? step.expr : { k: "un", op: "-", a: { k: "paren", e: step.expr } }; }
@@ -4849,7 +6405,9 @@
         var cases = st.cases, out = [];
         var pre = [];
         var subject = ready(st.subject, ch, pre).e;
-        var plainLabels = cases.every(function (c) {
+        // switch (true) { case n < 0: ... }: each case its own test
+        var byTests = stripParens(st.subject) && stripParens(st.subject).k === "bool";
+        var plainLabels = !byTests && cases.every(function (c) {
           return !c.guard && c.labels.every(function (l) { return l.k !== "typecase" && l.k !== "rel"; });
         });
         var bodies = cases.map(function (c, i) {
@@ -4873,7 +6431,7 @@
         });
         if (!plainLabels) {
           var subj = subject;
-          if (stripParens(subj).k !== "name") {
+          if (!byTests && stripParens(subj).k !== "name") {
             subj = nameNode(fresh(ch, "choice"), st.line);
             pre.push({ k: "set", target: subj, value: subject, line: st.line });
             ch.meet(subj.v, { set: true }).values = [subject];
@@ -4891,6 +6449,7 @@
                 return typeTest(subj, l.type, c.line);
               }
               if (l.k === "rel") { return { k: "bin", op: l.op, a: subj, b: l.e, line: c.line }; }
+              if (byTests) { return stripParens(st.subject).v ? l : { k: "un", op: "!", a: l, line: c.line }; }
               return { k: "bin", op: "==", a: subj, b: l, line: c.line };
             });
             var test = tests.reduce(function (a, b) { return a ? { k: "bin", op: "||", a: a, b: b } : b; }, null);
@@ -5063,6 +6622,20 @@
       // and what is under it.
       function lowerForeach(st, ch, out) {
         var line = st.line, target = stripParens(st.target), over = stripParens(st.over);
+        // for (box.n of xs): a name of its own for each one, and each one put in box.n
+        if (target.k === "member" || target.k === "index") {
+          var each0 = fresh(ch, target.name || "item");
+          st = Object.assign({}, st, { target: nameNode(each0, line),
+                                       body: [{ k: "assign", target: target, value: nameNode(each0, line), line: line }].concat(st.body) });
+          target = stripParens(st.target);
+        }
+        // C#'s foreach over an int[,]: every one, row by row
+        if (cs && !st.rows && rectOf(over, ch) > 1) {
+          var rowName = fresh(ch, "row");
+          lowerForeach(Object.assign({}, st, { target: nameNode(rowName, line), orelse: null, rows: true,
+                                               body: [Object.assign({}, st, { over: nameNode(rowName, line), label: null })] }), ch, out);
+          return;
+        }
         var label = st.label || null, orelse = st.orelse ? lower(st.orelse, ch) : null;
         var fn = over.k === "call" ? bare(pathOf(over.fn) || (over.fn.k === "member" ? "." + over.fn.name : "")) : "";
         var dot = over.k === "call" && over.fn.k === "member" ? over.fn.name : null;
@@ -5114,12 +6687,27 @@
           return;
         }
         var src;
-        if ((dot === "keys" || dot === "keySet" || dot === "Keys") && !args.length) {
-          src = builtinCall("keys", [ready(over.fn.obj, ch, out).e], line);
+        // TreeMap, SortedDictionary, C++'s map: gone round in the order of the keys
+        var inOrder = dot && sortedMap(over.fn.obj, ch);
+        function keyed(what, obj) {
+          var made = builtinCall(what, [obj], line);
+          return inOrder ? builtinCall("sorted", [made], line) : made;
+        }
+        if (inOrder && (dot === "values" || dot === "Values") && !args.length && target.k === "name") {
+          var sm = ready(over.fn.obj, ch, out).e, sk0 = fresh(ch, "key");
+          ch.meet(sk0, { set: true, loop: true });
+          ch.meet(target.v, { set: true, loop: true });
+          var vbody = [{ k: "set", target: nameNode(target.v, line), value: { k: "index", obj: sm, at: nameNode(sk0, line) }, line: line }];
+          out.push({ k: "foreach", v: sk0, over: keyed("keys", sm), body: vbody.concat(lower(st.body, ch)),
+                     line: line, label: label, orelse: orelse });
+          return;
+        }
+        if ((dot === "keys" || dot === "keySet" || dot === "Keys" || dot === "navigableKeySet") && !args.length) {
+          src = keyed("keys", ready(over.fn.obj, ch, out).e);
         } else if ((dot === "values" || dot === "Values") && !args.length) {
           src = builtinCall("values", [ready(over.fn.obj, ch, out).e], line);
         } else if ((dot === "items" || dot === "entrySet") && !args.length) {
-          src = builtinCall("items", [ready(over.fn.obj, ch, out).e], line);
+          src = keyed("items", ready(over.fn.obj, ch, out).e);
         } else if (fn === "Object.keys" && args.length === 1) {
           src = builtinCall("keys", [ready(args[0], ch, out).e], line);
         } else if (fn === "Object.values" && args.length === 1) {
@@ -5132,10 +6720,37 @@
           if (st.keysOf) { src = builtinCall("keys", [src], line); }
           var sk = kindNow(src);
           // a table gone round in C#, Java or C++ gives key-and-value pairs
-          if (sk === "map" && !py && !js && !st.keysOf) { src = builtinCall("items", [src], line); }
+          // (in JavaScript only a Map can be gone round with of, and it gives pairs too)
+          if (sk === "map" && !py && !st.keysOf) {
+            src = builtinCall("items", [src], line);
+            if (sortedMap(st.over, ch)) { src = builtinCall("sorted", [src], line); }
+          }
+        }
+        if (target.k === "name" && target.eachType && target.eachType.ref && cpp &&
+            assignedIn({ body: st.body })[target.v] === true && stripParens(src).k === "name") {
+          var at0 = fresh(ch, "i");
+          ch.meet(at0, { set: true, loop: true, kind: "int" });
+          var place0 = { k: "index", obj: copyOf(src), at: nameNode(at0, line), line: line };
+          out.push({ k: "for", v: at0, from: num(0), line: line, label: label,
+                     to: { k: "bin", op: "-", a: builtinCall("length", [copyOf(src)], line), b: num(1) },
+                     body: lower(swapName(st.body, target.v, place0), ch) });
+          return;
+        }
+        // for (auto p : ps) changing p: each one a copy, as C++ makes it
+        if (cpp && target.k === "name" && target.eachType && !target.eachType.ref && !target.eachType.ptr &&
+            changesInside(st.body, target.v)) {
+          var eachT = /^(auto)$/.test(String(target.eachType.name)) ? placeType({ k: "index", obj: src, at: num(0) }, ch) : target.eachType;
+          if (valueType(eachT)) {
+            st = Object.assign({}, st, { body: [{ k: "assign", target: nameNode(target.v, line), line: line,
+                                                  value: builtinCall(copyNameFor(eachT), [nameNode(target.v, line)], line) }].concat(st.body) });
+          }
         }
         if (target.k === "name") {
-          ch.meet(target.v, { set: true, loop: true, elem: { of: src } });
+          var eachHow = { set: true, loop: true, elem: { of: src } };
+          if (target.eachType && !/^(auto|var|let|const)$/.test(String(target.eachType.name))) {
+            eachHow.typeInfo = target.eachType;
+          }
+          ch.meet(target.v, eachHow);
           out.push({ k: "foreach", v: target.v, over: src, body: lower(st.body, ch),
                      line: line, label: label, orelse: orelse });
           return;
@@ -5178,10 +6793,273 @@
       function builtinCall(name, args, line) {
         return { k: "call", fn: nameNode(name, line), args: args, builtin: true, line: line || 0 };
       }
+      // /^[0-9]+$/.test(s), s.matches("[A-Za-z]+"), re.fullmatch(r"\s+", s):
+      // a pattern that asks what kind of letters s is made of, in the
+      // chart's words -- isDigit(s), isAlpha(s), isSpace(s) -- and one that
+      // looks for a capital anywhere, s <> toLower(s).
+      function letterClass(e) {
+        var p = bare(pathOf(e.fn) || ""), dot = e.fn.k === "member" ? e.fn.name : null;
+        var self = dot ? stripParens(e.fn.obj) : null, a = e.args, pat = null, on = null, whole = false;
+        function lit(x) { x = stripParens(x); return x && (x.k === "str" || x.k === "regex") ? String(x.v) : null; }
+        if (js && dot === "test" && self && self.k === "regex" && a.length === 1 && !/[gy]/.test(self.flags || "")) {
+          pat = self.v; on = a[0];
+        } else if (java && dot === "matches" && a.length === 1 && lit(a[0]) !== null) {
+          pat = lit(a[0]); on = e.fn.obj; whole = true;
+        } else if (cs && /^(Regex\.IsMatch)$/.test(p) && a.length === 2 && lit(a[1]) !== null) {
+          pat = lit(a[1]); on = a[0];
+        } else if (py && /^re\.(fullmatch|match|search)$/.test(p) && a.length === 2 && lit(a[0]) !== null) {
+          pat = lit(a[0]); on = a[1];
+          whole = p === "re.fullmatch";
+          if (p === "re.match" && !/^\^/.test(pat)) { pat = "^" + pat; }
+        }
+        if (pat === null) { return null; }
+        if (!whole) {
+          if (/^\^/.test(pat) && /\$$/.test(pat) && !/\\\$$/.test(pat)) { pat = pat.slice(1, -1); }
+          else { pat = ".*" + pat.replace(/^\^/, "").replace(/\$$/, "") + ".*"; }
+        }
+        var line = e.line;
+        function B(fn, args) { return builtinCall(fn, args, line); }
+        if (/^(\[0-9\]|\\d)\+$/.test(pat)) { return B("isDigit", [on]); }
+        if (/^\[(A-Za-z|a-zA-Z)\]\+$/.test(pat)) { return B("isAlpha", [on]); }
+        if (/^\\s\+$/.test(pat)) { return B("isSpace", [on]); }
+        if (pat === ".*[A-Z].*") { return { k: "bin", op: "!=", a: on, b: B("toLower", [on]), line: line }; }
+        if (pat === ".*[a-z].*") { return { k: "bin", op: "!=", a: on, b: B("toUpper", [on]), line: line }; }
+        return null;
+      }
+      // C#'s Enumerable.Where(xs, f), Enumerable.ToList(xs) -- LINQ called
+      // the long way round, as the page's C# does where it cannot say the
+      // kind -- read as xs.Where(f) and xs.ToList()
+      function unstatic(e) {
+        if (!cs || !e || e.k !== "call" || e.fn.k !== "member" || !e.args.length) { return e; }
+        var p = pathOf(e.fn) || "";
+        if (!/^(System\.Linq\.)?Enumerable\.\w+$/.test(p) || /\.(Range|Repeat|Empty|Reverse)$/.test(p)) { return e; }
+        return { k: "call", fn: { k: "member", obj: e.args[0], name: e.fn.name, line: e.line }, args: e.args.slice(1), line: e.line };
+      }
+      // The pieces something prints -- words, and values shown some way --
+      // as one piece of words: "Total: " + fixed(x, 2)
+      function textOfPieces(bits, line) {
+        if (!bits.length) { return { k: "str", v: "" }; }
+        var asText = bits.map(function (b) {
+          return b.k === "str" || b.k === "places" || kindOf(b, null) === "text" ? b : builtinCall("toString", [b], line);
+        });
+        return asText.slice(1).reduce(function (sum, b) { return { k: "bin", op: "+", a: sum, b: b, line: line }; }, asText[0]);
+      }
+      // A call to one of the page's own helpers (PAGE_HELPERS), in the
+      // chart's words: sortedList(xs) is sorted(xs), popAt(xs, 0) is pop(xs, 0).
+      function pageCall(name, e, ch) {
+        var a = e.args.filter(function (x) { return x.k !== "kw"; });
+        var line = e.line;
+        function B(fn, args) { return builtinCall(fn, args, line); }
+        function order(x) { return x ? [fnValue(x, ch, "compare")] : []; }
+        switch (name) {
+          case "class_of": case "classOf": case "ClassOf": return B("classOf", [a[0]]);
+          case "is_number": case "isNumber": case "IsNumber": return B("isNumber", [a[0]]);
+          case "shown": case "Shown": {
+            // shown(x, true) is x the way a list shows it: words in quotes
+            var inside = stripParens(a[1]);
+            return inside && inside.k === "bool" && inside.v ? B("repr", [a[0]]) : a[0];
+          }
+          case "shuffle": case "Shuffle": case "shuffleIn": return B("shuffle", [a[0]]);
+          case "shuffledList": case "shuffledCopy": return B("shuffled", [a[0]]);
+          case "roundEven": return B("roundEven", a);
+          case "orderOf": case "OrderOf": return B("compare", a.slice(0, 2));
+          case "tableOf": {
+            var keys = [], values = [];
+            for (var i = 0; i + 1 < a.length; i += 2) { keys.push(a[i]); values.push(a[i + 1]); }
+            return { k: "dict", keys: keys, values: values, line: line };
+          }
+          case "joined": return B("join", [a[0], a[1] || { k: "str", v: "" }]);
+          case "sortedList": case "SortedList": return B("sorted", [a[0]].concat(order(a[1])));
+          case "sizeOf": return B("length", [a[0]]);
+          case "sortIn": case "SortIn": return B("sort", [a[0]].concat(order(a[1])));
+          case "reverseIn": case "ReverseIn": return B("reverse", [a[0]]);
+          case "reversedList": case "reversedCopy": return B("reversed", [a[0]]);
+          case "itemsOf": return B("items", [a[0]]);
+          case "filled": return { k: "sized", dims: a.slice(1), fill: a[0], kind: kindOf(a[0], ch), line: line };
+          case "transpose": return B("transpose", [a[0]]);
+          case "listPlus": return { k: "bin", op: "+", a: a[0], b: a[1], line: line };
+          case "bind": return B("bind", [fnValue(a[0], ch, "fn")].concat(a.slice(1)));
+          case "setWork": {
+            var how = stripParens(a[2]);
+            return B(["intersection", "difference", "union"][how && how.k === "num" ? Number(how.v) : 2] || "union", [a[0], a[1]]);
+          }
+          case "zipped": return B("zip", a);
+          case "enumerated": return B("enumerate", a);
+          case "chars": return B("toList", [a[0]]);
+          case "itemOf": case "ItemOf": return { k: "index", obj: a[0], at: a[1], line: line };
+          case "popAt": case "PopAt": return B("pop", a);
+          case "indexOf": return B("indexOf", a);
+          case "lastIndexOf": return B("lastIndexOf", a);
+          case "splitText": return B("split", a);
+          case "keysOf": return B("keys", [a[0]]);
+          case "valuesOf": return B("values", [a[0]]);
+          case "repeated": return B("repeat", a);
+          case "rangeOf": return B("range", a);
+          case "textOf": return B("toString", [a[0]]);
+          case "replaced": return B("replace", a);
+          case "trimmed": return B("trim", [a[0]]);
+          case "allOf": {
+            var test = String(pathOf(a[1]) || "").replace(/^.*[.:]/, "");
+            var word = { isdigit: "isDigit", isalpha: "isAlpha", isupper: "isUpper", islower: "isLower", isspace: "isSpace" }[test];
+            return word ? B(word, [a[0]]) : null;
+          }
+          case "uniqueOf": return B("unique", [a[0]]);
+          case "padded": {
+            var left = stripParens(a[3]);
+            return B(left && left.k === "bool" && !left.v ? "padRight" : "padLeft", [a[0], a[1], a[2]]);
+          }
+          case "fixedText": return B("fixed", [a[0], a[1]]);
+          case "reprOf": return B("repr", [a[0]]);
+          case "copied": return B("copy", [a[0]]);
+          case "deepCopy": case "DeepCopy": return B("deepCopy", [a[0]]);
+          case "significant": case "Significant": return B("significant", a);
+          case "popKey": case "PopKey": return B("pop", a);
+          // the page's C++ Value, put in order and compared
+          case "valueOrder": return B("compare", a.slice(0, 2));
+          case "valueSame": return { k: "bin", op: "==", a: a[0], b: a[1], line: line };
+          case "sliceStep": case "SliceStep": return B("slice", a);
+          case "toBase": case "ToBase": return B("toBase", a);
+          case "toJson": case "ToJson": return B("toJson", [a[0]]);
+          case "grouped": return B("grouped", a);
+          case "indexFrom": return B("indexOf", a);
+          case "to_base": return B("toBase", a);
+          // a number with a point, the way the chart writes one: the number
+          case "realText": return Object.assign({}, a[0], { chartReal: true });
+        }
+        if (cs && /^(BindV?\d+_\d+|Bind_\w+)$/.test(name)) { return B("bind", [fnValue(a[0], ch, "fn")].concat(a.slice(1))); }
+        return null;
+      }
       function num(n) { return { k: "num", v: String(n) }; }
+      // ---- C++'s values and C#'s structs ----------------------------------
+      // `P q = p;` in C++ makes a second P, not a second name for the first,
+      // and so does handing a vector, a map or a C# struct to a variable, a
+      // list or a function.  The chart hands the one thing about, so where
+      // the language would have copied, it says copy(p) -- deepCopy(p)
+      // where what is inside is copied too, as a vector of vectors is.
+      function valueType(ti) {
+        if (!ti || ti.ptr || ti.ref || ti.dims) { return false; }
+        var name = String(ti.name || "").replace(/^.*::/, "");
+        if (cpp) {
+          if (/^(shared_ptr|unique_ptr|weak_ptr|auto|string|function)$/.test(name)) { return false; }
+          var k = kindOfType(ti);
+          return isListKind(k) || k === "map" || !!(recordOf(k) && CLS[recordOf(k)]);
+        }
+        if (cs) { return !!(CLS[name] && CLS[name].kind === "struct"); }
+        return false;
+      }
+      // C#'s int[,] grid: how many ways it goes (2), where it is one block
+      function rectOf(e, ch) {
+        var ti = placeType(e, ch);
+        return ti && ti.rect && ti.dims >= ti.rect ? ti.rect : 0;
+      }
+      // What a place was declared as: a name, a field, an item of a list
+      function placeType(e, ch) {
+        e = stripParens(e);
+        if (!e) { return null; }
+        var ti = null;
+        if (e.k === "name") {
+          var one = ch.params[e.v] || ch.names[e.v] || globalChart.names[e.v];
+          ti = one ? (one.placeType || one.typeInfo) : null;
+        } else if (e.k === "deref") {
+          var pt = placeType(e.e, ch);
+          ti = pt && pt.ptr ? Object.assign({}, pt, { ptr: pt.ptr - 1 }) : null;
+        } else if (e.k === "member") {
+          var r = recordOf(kindOf(e.obj, ch));
+          var chain = r && CLS[r] ? ancestry(CLS[r]) : [];
+          for (var i = 0; i < chain.length && !ti; i++) {
+            var f = chain[i].fields.filter(function (x) { return x.name === e.name && !x.statik; })[0];
+            if (f && f.type) { ti = f.dims && !f.type.dims ? Object.assign({}, f.type, { dims: f.dims }) : f.type; }
+          }
+        } else if (e.k === "index") {
+          var o = placeType(e.obj, ch);
+          var on = o ? String(o.name || "").replace(/^.*::/, "") : "";
+          if (o && o.dims) { ti = Object.assign({}, o, { dims: o.dims - 1 }); }
+          else if (o && /^(vector|array|deque|list|List)$/.test(on)) { ti = (o.args || [])[0] || null; }
+          else if (o && /^(map|unordered_map|Dictionary|SortedDictionary)$/.test(on)) { ti = (o.args || [])[1] || null; }
+        }
+        return ti && ti.ref ? Object.assign({}, ti, { ref: false }) : ti;
+      }
+      function copyNameFor(ti) {
+        if (!cpp) { return "copy"; }
+        var nested = false, pointers = false, seen = {};
+        (function look(t, depth) {
+          if (!t || pointers) { return; }
+          var name = String(t.name || "").replace(/^.*::/, "");
+          if (t.ptr || /^(shared_ptr|unique_ptr|weak_ptr)$/.test(name)) { pointers = true; return; }
+          if (depth && (t.dims || isListKind(kindOfType(t)) || kindOfType(t) === "map" || CLS[name])) { nested = true; }
+          (t.args || []).forEach(function (a) { look(a, depth + 1); });
+          if (CLS[name] && !seen[name]) {
+            seen[name] = true;
+            ancestry(CLS[name]).forEach(function (c) {
+              c.fields.forEach(function (f) { if (!f.statik) { look(f.type, depth + 1); } });
+            });
+          }
+        })(ti, 0);
+        return pointers || !nested ? "copy" : "deepCopy";
+      }
+      // v, as the language hands it over: copied where v is a place holding
+      // a value -- not something made just now -- going into one
+      function valueCopy(v, ch, into) {
+        if (!cpp && !cs) { return v; }
+        var s = stripParens(v);
+        if (!s || !/^(name|member|index|deref)$/.test(s.k) || (s.k === "name" && s.v === "this")) { return v; }
+        var from = placeType(s, ch);
+        if (!valueType(from)) { return v; }
+        if (into && !valueType(into) && !/^(auto|var)$/.test(String(into.name)) ) { return v; }
+        if (into && (into.ref || into.ptr)) { return v; }
+        return builtinCall(copyNameFor(from), [v], v.line);
+      }
+      // Whether a body changes what is inside a name -- p.x = 1,
+      // v.push_back(2), v[0]++, sort(v.begin(), v.end()) -- rather than only
+      // reading it, or setting it whole.
+      var READS_ONLY = /^(size|length|empty|at|find|count|contains|begin|end|cbegin|cend|rbegin|rend|front|back|substr|c_str|get|first|second|Count|Length|Contains|IndexOf|ToString|Equals|GetHashCode|CompareTo|str|data|compare|lower_bound|upper_bound|equal_range|max_size|capacity|key_comp|value_comp)$/;
+      function changesInside(body, name) {
+        var hit = false;
+        function rooted(e, bare) {
+          e = stripParens(e);
+          var steps = 0;
+          while (e && (e.k === "member" || e.k === "index" || e.k === "deref")) { e = stripParens(e.obj || e.e); steps++; }
+          return (steps > 0 || bare) && !!e && e.k === "name" && e.v === name;
+        }
+        eachNode(body, function (x) {
+          if (hit) { return false; }
+          if ((x.k === "assign" || x.k === "aug" || x.k === "assignx" || x.k === "incdec") && rooted(x.target)) { hit = true; }
+          if (x.k === "call" && x.fn && x.fn.k === "member" && rooted(x.fn.obj, true) && !READS_ONLY.test(x.fn.name)) { hit = true; }
+          if (x.k === "call" && x.fn && x.fn.k === "name" &&
+              /^(sort|stable_sort|reverse|fill|iota|swap|shuffle|random_shuffle|next_permutation|prev_permutation|transform|rotate|getline|partial_sort|nth_element|replace|remove|unique)$/.test(x.fn.v.replace(/^std::/, "")) &&
+              x.args.some(function (a) { return rooted(a, true) || mentions(a, name); })) { hit = true; }
+          if (x.k === "bin" && x.op === ">>" && rooted(x.b, true)) { hit = true; }
+        });
+        return hit;
+      }
+      // `void f(P p)` changing p: the function's own copy, made first
+      function ownCopies(params, body) {
+        var made = [];
+        params.forEach(function (p) {
+          var ti = p.typeInfo || (p.type ? { name: p.type, dims: p.dims || 0, args: [] } : null);
+          if (!p.self && !p.ref && valueType(ti) && changesInside(body, p.name)) {
+            made.push({ k: "assign", target: nameNode(p.name, p.line), line: p.line,
+                        value: builtinCall(copyNameFor(ti), [nameNode(p.name, p.line)], p.line) });
+          }
+        });
+        return made.length ? made.concat(body) : body;
+      }
       function assign(target, value, ch, out, line, fromDecl, typeInfo) {
         target = stripParens(target);
         if (!target) { return; }
+        if (js && target.k === "member" && target.name === "length" && isListKind(kindOf(target.obj, ch))) {
+          var cut = stripParens(value);
+          if (cut && cut.k === "num" && cut.v === "0") { out.push({ k: "call", e: builtinCall("clear", [ready(target.obj, ch, out).e], line), line: line }); return; }
+          assign(target.obj, builtinCall("slice", [target.obj, num(0), value], line), ch, out, line);
+          return;
+        }
+        // auto found = m.find(k): k, and a note that it is a place in m
+        var mf = cpp && target.k === "name" ? stripParens(value) : null;
+        if (mf && mf.k === "call" && mf.fn.k === "member" && mf.fn.name === "find" && mf.args.length === 1 &&
+            kindOf(mf.fn.obj, ch) === "map") {
+          ch.meet(target.v, { set: true }).iterOf = mf.fn.obj;
+          value = mf.args[0];
+        }
         if (target.k === "tuple" || target.k === "list" || target.k === "objpat") {
           assignMany(target, value, ch, out, line);
           return;
@@ -5240,6 +7118,20 @@
         if (t2.k === "name" && isChar(t2, ch) && (charMath(v2, ch) || kindOf(v2, ch) === "int")) {
           v2 = builtinCall("chr", [v2], line);
         }
+        // C++'s P q = p, a C# struct handed on: a copy of its own
+        if ((cpp || cs) && !sized0 && !sized) {
+          var into = fromDecl ? typeInfo : placeType(t2, ch);
+          if (fromDecl && t2.k === "name" && typeInfo && /^(auto|var)$/.test(String(typeInfo.name)) && !typeInfo.ptr) {
+            var madeFrom = placeType(v2, ch);
+            if (madeFrom) { ch.meet(t2.v).placeType = madeFrom; }
+          }
+          var vs = stripParens(v2);
+          if (vs.k === "list" && valueType(into)) {
+            vs.items = vs.items.map(function (it) { return valueCopy(it, ch, null); });
+          } else {
+            v2 = valueCopy(v2, ch, into);
+          }
+        }
         if (t2.k === "name") {
           var met = ch.meet(t2.v, { set: true });
           met.values = (met.values || []).concat([v2]);
@@ -5279,7 +7171,8 @@
           var dims = [];
           for (var i = 0; i < e.dims.length && e.dims[i]; i++) { dims.push(e.dims[i]); }
           var ek = kindOfType(e.elem ? { name: e.elem.name, dims: 0, args: e.elem.args } : null);
-          if (dims.length < e.dims.length) { return { dims: dims, fill: { k: "null" }, kind: null }; }
+          // new int[3][]: three rows, each an empty list until it is given one
+          if (dims.length < e.dims.length) { return { dims: dims, fill: { k: "list", items: [] }, kind: null }; }
           return { dims: dims, fill: blank(ek), kind: ek };
         }
         if (e.k === "bin" && e.op === "*" && py) {
@@ -5322,19 +7215,25 @@
           return null;
         }
         // C++: vector<int>(n, 0), vector<vector<int>>(h, vector<int>(w))
-        if ((e.k === "new" && e.type && /^(vector|std::vector)$/.test(e.type.name) && e.args.length) ||
+        if ((e.k === "new" && e.type && /^(vector|std::vector)$/.test(e.type.name) && e.args.length && !e.braces) ||
             (e.k === "call" && /^vector$/.test(bare(pathOf(e.fn) || "")) && e.args.length)) {
           var ty = e.k === "new" ? e.type : null;
           var elemTy = ty && ty.args && ty.args[0];
           var ekind = kindOfType(elemTy);
           if (e.args.length === 1 && stripParens(e.args[0]).k !== "list") {
+            // vector<vector<int>>(3): three empty rows, as C++ makes them
             if (isListKind(ekind)) {
-              return { dims: [e.args[0]], fill: { k: "null" }, kind: ekind };
+              return { dims: [e.args[0]], fill: { k: "list", items: [] }, kind: ekind };
             }
             return { dims: [e.args[0]], fill: blank(ekind), kind: ekind };
           }
           if (e.args.length === 2) {
             if (scalar(e.args[1])) { return { dims: [e.args[0]], fill: e.args[1], kind: ekind || kindOf(e.args[1]) }; }
+            // vector<vector<int>>(3, vector<int>{}): three empty rows
+            var emptyRow = stripParens(e.args[1]);
+            if ((emptyRow.k === "new" && !(emptyRow.args || []).length) || (emptyRow.k === "list" && !emptyRow.items.length)) {
+              return { dims: [e.args[0]], fill: { k: "list", items: [] }, kind: ekind };
+            }
             var innerC = sizedOf(e.args[1]);
             if (innerC) { return { dims: [e.args[0]].concat(innerC.dims), fill: innerC.fill, kind: innerC.kind }; }
           }
@@ -5345,9 +7244,72 @@
       // away, so where a place on the left is read on the right it goes
       // through a spare name first.  Anything else on the right is one
       // value, taken apart.
+      // A table that keeps its keys in order: TreeMap, SortedDictionary,
+      // SortedList, and C++'s map (its unordered_map does not).
+      function sortedMap(e, ch) {
+        var x = stripParens(e);
+        if (!x || x.k !== "name") { return false; }
+        var one = ch && (ch.names[x.v] || ch.params[x.v]) || globalChart.names[x.v];
+        var ty = one && one.typeInfo ? String(one.typeInfo.name).replace(/^.*::/, "") : "";
+        var made = one && (one.values || []).map(stripParens).filter(function (v) { return v && v.k === "new"; })[0];
+        var madeTy = made && made.type ? String(made.type.name || "").replace(/^.*::/, "") : "";
+        return /^(TreeMap|SortedMap|NavigableMap|SortedDictionary|SortedList)$/.test(ty) ||
+               /^(TreeMap|SortedDictionary|SortedList)$/.test(madeTy) || (cpp && ty === "map");
+      }
+      // C++'s set, Java's TreeSet, C#'s SortedSet: kept in order, each once
+      // (a multiset more than once)
+      function sortedSet(e, ch) {
+        var x = stripParens(e);
+        if (!x || x.k !== "name") { return null; }
+        var one = ch && (ch.names[x.v] || ch.params[x.v]) || globalChart.names[x.v];
+        var ty = one && one.typeInfo ? String(one.typeInfo.name).replace(/^.*::/, "") : "";
+        var made = one && (one.values || []).map(stripParens).filter(function (v) { return v && v.k === "new"; })[0];
+        var madeTy = made && made.type ? String(made.type.name || "").replace(/^.*::/, "") : "";
+        if ((cpp && ty === "multiset")) { return "many"; }
+        return (cpp && ty === "set") || /^(TreeSet|SortedSet)$/.test(ty) || /^(TreeSet|SortedSet)$/.test(madeTy) ? "once" : null;
+      }
+      // A queue: first in is first out, and its peek is its front.
+      function isQueue(e, ch) {
+        var x = stripParens(e);
+        if (!x || x.k !== "name") { return false; }
+        var one = ch && (ch.names[x.v] || ch.params[x.v]) || globalChart.names[x.v];
+        var ty = one && one.typeInfo ? String(one.typeInfo.name).replace(/^.*::/, "") : "";
+        if (!ty || ty === "var" || ty === "auto") {
+          var made = one && (one.values || []).map(stripParens).filter(function (v) { return v && v.k === "new"; })[0];
+          ty = made && made.type ? String(made.type.name || "").replace(/^.*::/, "") : ty;
+        }
+        return /^(Queue|queue|ConcurrentLinkedQueue|BlockingQueue|LinkedBlockingQueue|ConcurrentQueue)$/.test(ty);
+      }
+      // A priority queue: "min" (Java's, C#'s -- smallest out first) or "max" (C++'s)
+      function priorityOf(e, ch) {
+        var x = stripParens(e);
+        if (!x || x.k !== "name") { return null; }
+        var one = ch && (ch.names[x.v] || ch.params[x.v]) || globalChart.names[x.v];
+        var ty = one && one.typeInfo ? String(one.typeInfo.name).replace(/^.*::/, "") : "";
+        if (!ty || ty === "var" || ty === "auto" || ty === "Queue") {
+          var made = one && (one.values || []).map(stripParens).filter(function (v) { return v && v.k === "new"; })[0];
+          ty = made && made.type ? String(made.type.name || "").replace(/^.*::/, "") : ty;
+        }
+        return ty === "PriorityQueue" ? "min" : ty === "priority_queue" ? "max" : null;
+      }
+      // null, None, undefined: nothing there
+      function saysNothing(x) {
+        var s0 = stripParens(x);
+        return !!s0 && (s0.k === "null" || (s0.k === "name" && /^(undefined|None|null|nullptr)$/.test(s0.v)));
+      }
       function assignMany(target, value, ch, out, line) {
         var v = stripParens(value);
         var items = target.items || [];
+        // [a, b = 5] and {x, y = 0}: what each is given when there is nothing there
+        var dflts = items.map(function (t) {
+          var d = t && stripParens(t);
+          return !d ? null : d.dflt ? d.dflt : d.k === "assignx" && d.op === "=" ? d.value : null;
+        });
+        items = items.map(function (t, i) {
+          if (!dflts[i]) { return t; }
+          var d = stripParens(t);
+          return d.dflt ? Object.assign({}, d, { dflt: undefined }) : d.target;
+        });
         var starAt = -1;
         items.forEach(function (t, i) { if (t && t.k === "star") { starAt = i; } });
         if (target.k !== "objpat" && v && (v.k === "tuple" || v.k === "list") && starAt < 0 &&
@@ -5362,7 +7324,8 @@
               assign(tmp, copyOf(t), ch, out, line);
               for (var j = i + 1; j < values.length; j++) { values[j] = swapPlace(values[j], t, tmp); }
             }
-            assign(t, values[i], ch, out, line);
+            var given = values[i];
+            assign(t, dflts[i] && saysNothing(given) ? dflts[i] : given, ch, out, line);
           });
           return;
         }
@@ -5377,6 +7340,10 @@
               target.keys.forEach(function (k) {
                 if (k) { out.push({ k: "call", e: builtinCall("remove", [t.e, { k: "str", v: k }], line), line: line }); }
               });
+              return;
+            }
+            if (dflts[i]) {
+              assign(t, builtinCall("get", [src, { k: "str", v: target.keys[i] }, dflts[i]], line), ch, out, line);
               return;
             }
             assign(t, { k: "member", obj: src, name: target.keys[i], line: line }, ch, out, line);
@@ -5395,6 +7362,12 @@
           var at = starAt >= 0 && i > starAt
                  ? { k: "bin", op: "-", a: builtinCall("length", [src], line), b: num(n - i) }
                  : num(i);
+          if (dflts[i]) {
+            // [1, undefined, 3]: the default where the list says nothing
+            var said = (v.k === "list" || v.k === "tuple") && (starAt < 0 || i < starAt) ? v.items[i] : null;
+            assign(t, said && saysNothing(said) ? dflts[i] : builtinCall("get", [src, at, dflts[i]], line), ch, out, line);
+            return;
+          }
           assign(t, { k: "index", obj: src, at: at, line: line }, ch, out, line);
         });
       }
@@ -5598,13 +7571,25 @@
                        then: lowered(function (o) { assign(e.target, e.value, ch, o, line); }), orelse: [] });
             return;
           }
-          if (op === "||" || op === "&&") { op = op === "||" ? "||" : "&&"; }
+          // x ||= 9: x, where x is something; else 9 -- x &&= 9 the other way round
+          if ((op === "||" || op === "&&") && kindOf(e.target, ch) !== "bool") {
+            var held = ready(e.target, ch, out).e;
+            out.push({ k: "if", cond: op === "||" ? { k: "un", op: "!", a: truth(held, ch), line: line } : truth(held, ch), line: line,
+                       then: lowered(function (o) { assign(e.target, e.value, ch, o, line); }), orelse: [] });
+            return;
+          }
           if (op === ">>>") { op = ">>"; }
           augment(e.target, op, e.value, ch, out, line, true);
           return;
         }
         if (e.k === "incdec") {
           augment(e.target, e.op === "++" ? "+" : "-", { k: "num", v: "1" }, ch, out, line);
+          return;
+        }
+        // xs.splice(1, 1)[0]; with nothing done with what it gives: the
+        // call, done for what it does
+        if ((e.k === "index" || e.k === "member") && stripParens(e.obj) && stripParens(e.obj).k === "call") {
+          statementExpr(e.obj, ch, out, line, st);
           return;
         }
         if (e.k === "cond") {
@@ -5636,6 +7621,29 @@
               if (t.k === "name") { ch.meet(t.v, { set: true }); }
               askFor(t.k === "name" ? t : ready(t, ch, out).e, out, line, ch);
             });
+            return;
+          }
+          var streamed = cpp && at.k === "name" ? (ch.names[at.v] || ch.params[at.v] || globalChart.names[at.v]) : null;
+          if (streamed && streamed.stringStream) {
+            if (e.op === "<<") {
+              // what it is told to write, in its own fixed and setprecision
+              var coutWas = coutSays;
+              coutSays = streamed.says = streamed.says || { fixed: false, places: null, width: null, align: ">", fill: " ", words: false };
+              var wrote = streamOut(chain, line);
+              coutSays = coutWas;
+              var sum0 = nameNode(at.v, line);
+              wrote.lines.forEach(function (parts, li) {
+                if (li) { sum0 = { k: "bin", op: "+", a: sum0, b: { k: "str", v: "\n" }, line: line }; }
+                parts.forEach(function (x) {
+                  sum0 = { k: "bin", op: "+", a: sum0, line: line,
+                           b: stripParens(x).k === "str" || kindNow(x) === "text" ? x : builtinCall("toString", [x], line) };
+                });
+              });
+              if (!wrote.open) { sum0 = { k: "bin", op: "+", a: sum0, b: { k: "str", v: "\n" }, line: line }; }
+              out.push({ k: "set", target: nameNode(at.v, line), value: ready(sum0, ch, out).e, line: line });
+              return;
+            }
+            chain.forEach(function (t) { takeWord(at, t, ch, out, line); });
             return;
           }
         }
@@ -5728,6 +7736,47 @@
         lowerPost(r.post, ch, out);
       }
 
+      // print(hand): a list of records, each the way its class says it --
+      // [2s, 9h, 11d], not the fields of each
+      function describedList(x, ch, out, line) {
+        var rec = recordOf(elemKind(kindOf(x, ch)) || "");
+        if (!rec || !CLS[rec]) { return null; }
+        var probe = described({ k: "record", kind: rec, line: line });
+        if (!probe || probe.k !== "call") { return null; }
+        var src = ready(x, ch, out).e;
+        var texts = nameNode(fresh(ch, "shown"), line), each = fresh(ch, "item");
+        out.push({ k: "set", target: texts, value: { k: "list", items: [] }, line: line });
+        ch.meet(texts.v, { set: true, kind: "list<text>" });
+        ch.meet(each, { set: true, loop: true, elem: { of: src } });
+        out.push({ k: "foreach", v: each, over: src, line: line, body: lowered(function (o) {
+          lowerOne({ k: "expr", line: line, e: builtinCall("append", [copyOf(texts), described(nameNode(each, line))], line) }, ch, o);
+        }) });
+        return { k: "bin", op: "+", line: line, b: { k: "str", v: "]" },
+                 a: { k: "bin", op: "+", a: { k: "str", v: "[" }, b: builtinCall("join", [copyOf(texts), { k: "str", v: ", " }], line), line: line } };
+      }
+      // A TreeMap printed: its keys in order, the way Java prints one
+      function sortedCopy(x, ch, out, line) {
+        var tbl = ready(x, ch, out).e;
+        var made = nameNode(fresh(ch, "inOrder"), line), key = fresh(ch, "key");
+        out.push({ k: "set", target: made, value: { k: "dict", keys: [], values: [], line: line }, line: line });
+        ch.meet(made.v, { set: true, kind: "map" });
+        var keysInOrder = builtinCall("sorted", [builtinCall("keys", [tbl], line)], line);
+        ch.meet(key, { set: true, loop: true, elem: { of: keysInOrder } });
+        out.push({ k: "foreach", v: key, over: keysInOrder, line: line, body: [{ k: "set", line: line,
+                   target: { k: "index", obj: copyOf(made), at: nameNode(key, line) },
+                   value: { k: "index", obj: copyOf(tbl), at: nameNode(key, line) } }] });
+        return copyOf(made);
+      }
+      // in >> x: the first word of what in holds, into x -- a number where x
+      // holds one -- and in left holding the rest
+      function takeWord(stream, t, ch, out, line) {
+        var words = builtinCall("split", [nameNode(stream.v, line)], line);
+        var first = { k: "index", obj: words, at: num(0), line: line };
+        var tk = kindNow(t);
+        assign(t, tk === "int" ? builtinCall("int", [first], line) : tk === "real" ? builtinCall("real", [first], line) : first, ch, out, line);
+        out.push({ k: "set", target: nameNode(stream.v, line), line: line,
+                   value: builtinCall("join", [builtinCall("slice", [copyOf(words), num(1)], line), { k: "str", v: " " }], line) });
+      }
       // Displays: one per line printed, or -- for a line not yet finished --
       // added to lineOut, which the next line that ends takes with it.
       function emitPrint(said, st, ch, out, line) {
@@ -5736,13 +7785,19 @@
         var after = [];                      // n-- printed: n is one less after
         groups.forEach(function (parts, i) {
           var last = i === groups.length - 1;
-          var ps = parts.map(function (x) { var r = ready(x, ch, out); after = after.concat(r.post); return r.e; });
+          var ps = parts.map(function (x) {
+            if (java && sortedMap(x, ch)) { x = sortedCopy(x, ch, out, line); }
+            if (py || java) { x = describedList(x, ch, out, line) || x; }
+            var r = ready(x, ch, out); after = after.concat(r.post); return r.e;
+          });
           if (last && open) {
             if (ps.length === 1 && ps[0].k === "str" && ps[0].v === "") { return; }
             var sum = nameNode(LINE, line);
             ps.forEach(function (x) {
               var xx = stripParens(x);
               if (xx.k === "places") { xx = x; }
+              var told = described(xx);
+              if (told !== xx) { xx = ready(told, ch, out).e; }
               sum = { k: "bin", op: "+", a: sum, b: kindOf(xx, ch) === "text" || xx.k === "str" ? xx : builtinCall("toString", [xx], line), line: line };
             });
             out.push({ k: "set", target: nameNode(LINE, line), value: sum, line: line });
@@ -5828,20 +7883,52 @@
         }
         return null;
       }
+      // What cout has been told so far: fixed and setprecision stay said,
+      // setw is for the next thing only.
+      var coutSays = { fixed: false, places: null, width: null, align: ">", fill: " ", words: false };
       function streamOut(chain, line) {
-        var parts = [], open = true;
+        var parts = [], open = true, cs0 = coutSays;
         chain.forEach(function (one, i) {
           var s = stripParens(one);
           var p = bare(pathOf(s) || "");
           var lastOne = i === chain.length - 1;
           if (p === "endl") { parts.push({ k: "str", v: "\n" }); if (lastOne) { open = false; } return; }
-          if (/^(fixed|setprecision|setw|left|right|showpoint|boolalpha|flush|noshowpoint)$/.test(p) ||
-              (s.k === "call" && /^(setprecision|setw|setfill)$/.test(bare(pathOf(s.fn) || "")))) {
+          var told = s.k === "call" ? bare(pathOf(s.fn) || "") : "";
+          if (p === "fixed") { cs0.fixed = true; return; }
+          if (/^(scientific|defaultfloat)$/.test(p)) { cs0.fixed = false; return; }
+          if (p === "left" || p === "right") { cs0.align = p === "left" ? "<" : ">"; return; }
+          if (p === "boolalpha") { cs0.words = true; return; }
+          if (p === "noboolalpha") { cs0.words = false; return; }
+          if (/^(showpoint|flush|noshowpoint|ws)$/.test(p)) { return; }
+          if (told === "setprecision" && s.args.length === 1) { cs0.places = s.args[0]; return; }
+          if (told === "setw" && s.args.length === 1) { cs0.width = s.args[0]; return; }
+          if (told === "setfill" && s.args.length === 1) {
+            var f0 = stripParens(s.args[0]);
+            cs0.fill = f0.k === "str" ? f0.v : " ";
             return;
           }
           if (lastOne && s.k === "str" && /\n$/.test(s.v)) { open = false; }
           if (lastOne && s.k === "str" && s.v === "\n") { open = false; }
-          parts.push.apply(parts, piecesOf(one));
+          var bits = piecesOf(one), k0 = kindNow(one);
+          if (bits.length === 1 && !(s.k === "str")) {
+            var bit = bits[0];
+            if (k0 === "bool" && !cs0.words && !(one && one.shownAsWord)) { bit = builtinCall("int", [bit], line); }
+            if (k0 === "real" && cs0.fixed && cs0.places) { bit = { k: "places", e: bit, n: Number(stripParens(cs0.places).v) }; }
+            // a number with a point, not told fixed: six figures, or as many as setprecision said
+            else if (k0 === "real" && !cs0.fixed && stripParens(bit).k !== "num" &&
+                     !(s.k === "call" && pathOf(s.fn) === "realText" && pageHelpers.realText)) {
+              bit = builtinCall("significant", [bit, cs0.places || num(6)], line);
+            }
+            bits = [bit];
+          }
+          if (cs0.width) {
+            var w0 = stripParens(cs0.width);
+            bits = [builtinCall(cs0.align === "<" ? "padRight" : "padLeft",
+                                [bits.length === 1 ? bits[0] : bits.reduce(function (x, y) { return { k: "bin", op: "+", a: x, b: y }; }),
+                                 w0].concat(cs0.fill !== " " ? [{ k: "str", v: cs0.fill }] : []), line)];
+            cs0.width = null;
+          }
+          parts.push.apply(parts, bits);
         });
         if (!chain.length) { open = false; }
         return { lines: lines(parts), open: open };
@@ -5878,7 +7965,18 @@
           var out = [];
           a.parts.forEach(function (p) {
             if (typeof p === "string") { if (p) { out.push({ k: "str", v: p }); } }
-            else { out.push(shown(described(shownPlain(p.e)), p.spec)); }
+            else {
+              // C#'s {price,8:F1}: eight wide, lined up on the right, to one place
+              var wideAt = cs && /^(-?\d+)(?::(.*))?$/.exec(p.spec || "");
+              if (wideAt) {
+                var wide = parseInt(wideAt[1], 10);
+                out.push(shown(described(shownPlain(p.e)), wideAt[2] || "", Math.abs(wide), wide < 0 ? "<" : ">"));
+              } else {
+                // f"{s!r}": s the way it is written inside a list, words in quotes
+                var said0 = p.conv === "r" || p.conv === "a" ? builtinCall("repr", [p.e]) : described(shownPlain(p.e));
+                out.push(shown(said0, p.spec));
+              }
+            }
           });
           return out;
         }
@@ -5914,14 +8012,20 @@
           for (var i = 0; i < chain.length; i++) {
             if (kindNow(chain[i]) === "text") { firstText = i; break; }
           }
-          if (firstText >= 0 && !chain.some(function (x) { return isListKind(kindNow(x)); })) {
+          // (in Python a list + a list is one list; elsewhere a list met with
+          // words is words -- JavaScript's 1,2, Java's [1, 2])
+          if (firstText >= 0 && (!py || !chain.some(function (x) { return isListKind(kindNow(x)); }))) {
             var out2 = [];
+            var asWords = function (one) {
+              var so = stripParens(one), paged = so && so.k === "call" && so.fn.k === "name" && pageHelpers[so.fn.v];
+              return js && !paged && isListKind(kindNow(one)) ? [builtinCall("join", [one, { k: "str", v: "," }], a.line)] : piecesOf(one);
+            };
             if (firstText > 1) {
               var sum = chain[0];
               for (var j = 1; j < firstText; j++) { sum = { k: "bin", op: "+", a: sum, b: chain[j] }; }
               out2.push(sum);
-            } else if (firstText === 1) { out2.push(chain[0]); }
-            chain.slice(firstText).forEach(function (one) { out2.push.apply(out2, piecesOf(one)); });
+            } else if (firstText === 1) { out2.push.apply(out2, asWords(chain[0])); }
+            chain.slice(firstText).forEach(function (one) { out2.push.apply(out2, asWords(one)); });
             return out2;
           }
         }
@@ -5966,18 +8070,81 @@
         var s = String(spec || "");
         var py0 = /^(?:(.)?([<>^=]))?[+\- ]?#?(0?)(\d*),?(?:\.(\d+))?[bcdeEfFgGnosxX%]?$/.exec(s);
         var got = e;
-        var m = /\.(\d+)[fF%]?$|^[FfNn](\d+)$|^0\.(0+)$/.exec(s.replace(/^[<>^]?\d*,?/, ""));
-        if (m) {
-          got = { k: "places", e: e, n: parseInt(m[1] || m[2] || String((m[3] || "").length), 10) };
+        // Python's whole format spec: [[fill]align][sign][#][0][width][,][.places][type]
+        var full = py ? /^(?:(.)?([<>^=]))?([+\- ])?(#)?(0)?(\d*)([,_])?(?:\.(\d+))?([bcdeEfFgGnosxX%])?$/.exec(s) : null;
+        // C#'s N2, X4, D5: grouped, in base sixteen, filled with noughts
+        var csSpec = cs ? /^([NnXxDdPpFfCcGg])(\d*)$/.exec(s) : null;
+        // and its own patterns: "000", "0.00", "#,##0.00", "0.##"
+        var csOwn = cs && !csSpec && /^[#0,]*(\.[#0]+)?$/.test(s) && /[0#]/.test(s) ? s.split(".") : null;
+        var type = full ? full[9] || "" : "";
+        if (full && type === "%") {
+          got = { k: "bin", op: "+", a: { k: "places", e: { k: "bin", op: "*", a: e, b: num(100) }, n: full[8] ? parseInt(full[8], 10) : 6 },
+                  b: { k: "str", v: "%" } };
+        } else if (full && /^[xXob]$/.test(type)) {
+          got = builtinCall("toBase", [e, num({ x: 16, X: 16, o: 8, b: 2 }[type])]);
+          if (type === "X") { got = builtinCall("toUpper", [got]); }
+          if (full[4]) { got = { k: "bin", op: "+", a: { k: "str", v: "0" + type }, b: got }; }
+        } else if (full && full[7]) {
+          got = builtinCall("grouped", [e].concat(full[8] && type !== "d" ? [num(parseInt(full[8], 10))] : []));
+        } else if (full && /^[gG]$/.test(type)) {                       // {:g}, {:.3g}: so many figures
+          got = builtinCall("significant", [e, num(full[8] ? parseInt(full[8], 10) : 6)]);
+        } else if (full && /^[n]$/.test(type)) {
+          got = builtinCall("toString", [e]);
+        } else if (csSpec && /[Nn]/.test(csSpec[1])) {
+          got = builtinCall("grouped", [e, num(csSpec[2] === "" ? 2 : parseInt(csSpec[2], 10))]);
+        } else if (csSpec && /[Xx]/.test(csSpec[1])) {
+          got = builtinCall("toBase", [e, num(16)]);
+          if (csSpec[1] === "X") { got = builtinCall("toUpper", [got]); }
+          if (csSpec[2]) { got = builtinCall("padLeft", [got, num(parseInt(csSpec[2], 10)), { k: "str", v: "0" }]); }
+        } else if (csSpec && /[Dd]/.test(csSpec[1])) {
+          if (csSpec[2]) { got = builtinCall("padLeft", [e, num(parseInt(csSpec[2], 10)), { k: "str", v: "0" }]); }
+        } else if (csSpec && /[Pp]/.test(csSpec[1])) {                  // P1: 25.6%
+          got = { k: "bin", op: "+", b: { k: "str", v: "%" },
+                  a: builtinCall("grouped", [{ k: "bin", op: "*", a: e, b: num(100) }, num(csSpec[2] === "" ? 2 : parseInt(csSpec[2], 10))]) };
+        } else if (csSpec && /[Cc]/.test(csSpec[1])) {                  // C: $1,234.50
+          got = { k: "bin", op: "+", a: { k: "str", v: "$" }, b: builtinCall("grouped", [e, num(csSpec[2] === "" ? 2 : parseInt(csSpec[2], 10))]) };
+        } else if (csSpec && /[Ff]/.test(csSpec[1])) {
+          got = { k: "places", e: e, n: csSpec[2] === "" ? 2 : parseInt(csSpec[2], 10) };
+        } else if (csSpec && /[Gg]/.test(csSpec[1])) {
+          got = csSpec[2] ? builtinCall("significant", [e, num(parseInt(csSpec[2], 10))]) : builtinCall("toString", [e]);
+        } else if (csOwn) {
+          var whole = csOwn[0], part = csOwn[1] || "";
+          var fixedN = (part.match(/0/g) || []).length, someN = (part.match(/#/g) || []).length;
+          var noughts = whole.replace(/[#,]/g, "").length;
+          if (/,/.test(whole.replace(/,+$/, ""))) {
+            got = builtinCall("grouped", [e, num(fixedN)]);
+          } else if (someN) {                                            // 0.## -- as many as there are, up to two
+            got = builtinCall("round", [e, num(fixedN + someN)]);
+          } else if (fixedN) {
+            got = { k: "places", e: e, n: fixedN };
+          } else {
+            got = builtinCall("round", [e]);
+          }
+          if (noughts > 1) {                                             // 000: at least three figures
+            got = builtinCall("padLeft", [got, num(noughts + (fixedN ? fixedN + 1 : 0)), { k: "str", v: "0" }]);
+          }
+        } else {
+          var m = /\.(\d+)[fF%]?$|^[FfNn](\d+)$|^0\.(0+)$/.exec(s.replace(/^[<>^]?\d*,?/, ""));
+          if (m) {
+            got = { k: "places", e: e, n: parseInt(m[1] || m[2] || String((m[3] || "").length), 10) };
+          }
         }
         if (py0 && py0[4] && !width) {
           width = parseInt(py0[4], 10);
           align = py0[2] || align;
           fill = py0[1] || (py0[3] ? "0" : fill);
         }
+        if (width && align === "^") {
+          // in the middle: what is left over split, the odd one to the right
+          var t0 = got.k === "str" ? got : builtinCall("toString", [got]);
+          var fillWith = fill && fill !== " " ? [{ k: "str", v: fill }] : [];
+          var leftBy = builtinCall("floor", [{ k: "bin", op: "/", a: { k: "bin", op: "-", a: num(width), b: builtinCall("length", [t0]) }, b: num(2) }]);
+          return builtinCall("padRight", [builtinCall("padLeft", [copyOf(t0), { k: "bin", op: "+", a: builtinCall("length", [copyOf(t0)]), b: leftBy }].concat(fillWith)),
+                                          num(width)].concat(fillWith.map(copyOf)));
+        }
         if (width) {
           // numbers line up on the right, words on the left, unless it says
-          var right = align ? align !== "<" : kindNow(e) !== "text";
+          var right = align ? align !== "<" : kindNow(e) !== "text" && type !== "s";
           got = builtinCall(right ? "padLeft" : "padRight",
                             [got, num(width)].concat(fill && fill !== " " ? [{ k: "str", v: fill }] : []));
         }
@@ -6007,7 +8174,8 @@
         while ((m = re.exec(f))) {
           if (m.index > at) { out.push({ k: "str", v: f.slice(at, m.index) }); }
           var arg = m[1] === "" ? pos[auto++] : /^\d+$/.test(m[1]) ? pos[parseInt(m[1], 10)] : kws[m[1]];
-          out.push(shown(described(arg || { k: "str", v: "" }), m[2]));
+          var wanted = arg || { k: "str", v: "" };
+          out.push(shown(/!r/.test(m[0]) ? builtinCall("repr", [wanted]) : described(wanted), m[2]));
           at = re.lastIndex;
         }
         if (at < f.length) { out.push({ k: "str", v: f.slice(at) }); }
@@ -6016,7 +8184,7 @@
         });
       }
       function printfPieces(f, args, line) {
-        var out = [], re = /%([-+ 0#]*\d*(?:\.(\d+))?)(?:l|ll|h|L)?([dioufFeEgGsScbxX%n])/g, at = 0, m, k = 0;
+        var out = [], re = /%([-+ 0#,(]*\d*(?:\.(\d+))?)(?:l|ll|h|L)?([dioufFeEgGsScbBxX%n])/g, at = 0, m, k = 0;
         while ((m = re.exec(f))) {
           if (m.index > at) { out.push({ k: "str", v: f.slice(at, m.index) }); }
           at = re.lastIndex;
@@ -6024,9 +8192,23 @@
           if (m[3] === "n") { out.push({ k: "str", v: "\n" }); continue; }
           var arg = args[k++] || { k: "str", v: "" };
           // %-10s, %5d, %05d, %8.2f: a width, and which side it lines up on
-          var flags = /^([-+ 0#]*)(\d*)/.exec(m[1]);
+          var flags = /^([-+ 0#,(]*)(\d*)/.exec(m[1]);
           var wide = flags[2] ? parseInt(flags[2], 10) : 0;
           var left = flags[1].indexOf("-") >= 0, zero = flags[1].indexOf("0") >= 0;
+          var given0 = null;
+          // %,d and %,.2f: thousands kept apart; %x, %o: in base sixteen, eight; %c: a letter
+          if (flags[1].indexOf(",") >= 0 && /[dfF]/.test(m[3])) {
+            given0 = builtinCall("grouped", [arg].concat(m[2] !== undefined && /[fF]/.test(m[3]) ? [num(parseInt(m[2], 10))] : /[fF]/.test(m[3]) ? [num(6)] : []), line);
+          } else if (/[xXo]/.test(m[3])) {
+            given0 = builtinCall("toBase", [arg, num(m[3] === "o" ? 8 : 16)], line);
+            if (m[3] === "X") { given0 = builtinCall("toUpper", [given0], line); }
+          } else if (m[3] === "c" && kindOf(arg, null) === "int") {
+            given0 = builtinCall("chr", [arg], line);
+          }
+          if (given0) {
+            out.push(wide ? builtinCall(left ? "padRight" : "padLeft", [given0, num(wide)].concat(zero && !left ? [{ k: "str", v: "0" }] : []), line) : given0);
+            continue;
+          }
           out.push(shown(m[2] !== undefined && /[fFeEgG]/.test(m[3]) ? arg : described(arg),
                          m[2] !== undefined && /[fFeEgG]/.test(m[3]) ? "." + m[2] + "f" : "",
                          wide, wide ? (left ? "<" : ">") : undefined, zero && !left ? "0" : undefined));
@@ -6036,6 +8218,39 @@
       }
 
       // ---- calls to the program's own functions -----------------------
+      // {"Ann", 72} where a Player is wanted, or a list of them: made into
+      // Players, field by field -- C++'s way of making a struct with no
+      // constructor of its own
+      function bracedAs(value, kind) {
+        var v = stripParens(value);
+        if (!cpp || !v || !kind || v.k !== "list") { return value; }
+        var rec = recordOf(kind);
+        if (rec && CLS[rec] && CLS[rec].record) {
+          var made = pickArity(FACTORIES[rec], v.items.length);
+          if (!made) { return value; }
+          var fields = CLS[rec].fields.filter(function (f) { return !f.statik; });
+          return userCallNode(made, v.items.map(function (it, i) {
+            return fields[i] ? bracedAs(it, kindOfType(fields[i].type)) : it;
+          }), v.line);
+        }
+        if (isListKind(kind)) {
+          var ek = elemKind(kind);
+          return Object.assign({}, v, { items: v.items.map(function (it) { return bracedAs(it, ek); }) });
+        }
+        return value;
+      }
+      // Something with a minus in it, which may come to less than nought.
+      function mayBeNegative(e) {
+        var x = stripParens(e);
+        if (!x) { return false; }
+        if (x.k === "num") { return /^-/.test(String(x.v)); }
+        if (x.k === "un" && x.op === "-") { return true; }
+        if (x.k === "bin") {
+          if (x.op === "-") { return true; }
+          if (/^[+*]$/.test(x.op)) { return mayBeNegative(x.a) || mayBeNegative(x.b); }
+        }
+        return false;
+      }
       function userCallNode(fn, args, line) {
         return { k: "call", fn: nameNode(fn.name, line), args: callArgs(fn, args), mine: true, line: line || 0 };
       }
@@ -6068,7 +8283,7 @@
             var viaM = methodOf(CLS[f.via], f.v);
             if (viaM) { return userCallNode(viaM, py ? args : [nameNode("this")].concat(args), e.line); }
           }
-          var fn = userFn(f.v, argCount(args));
+          var fn = userFn(f.v, argCount(args), args, ch);
           if (fn && !fn.methodOf) { return userCallNode(fn, args, e.line); }
           return null;
         }
@@ -6087,9 +8302,12 @@
               return { k: "member", obj: recv, name: f.name, line: e.line };
             }
           }
-          if (METHODS[f.name]) {
+          // Convert.ToString(x), String.valueOf(x): the language's own, not a method of the program's
+          var library = recv.k === "name" && LIBRARY_CLASSES.test(recv.v) && !CLS[recv.v] &&
+                        !(ch && (ch.names[recv.v] || ch.params[recv.v])) && !globalChart.names[recv.v];
+          if (METHODS[f.name] && !library) {
             var rk = kindOf(recv, ch);
-            if (recordOf(rk) || !(isListKind(rk) || rk === "map" || rk === "text")) {
+            if (recordOf(rk) || !(isListKind(rk) || rk === "map" || rk === "text" || rk === "int" || rk === "real" || rk === "bool")) {
               var target = methodTarget(f.name, rk);
               if (target && funcs[low(target)]) { return userCallNode(funcs[low(target)], [recv].concat(args), e.line); }
             }
@@ -6121,7 +8339,7 @@
         var one = METHODS[member.name];
         if (!one) { return null; }
         var recv = stripParens(member.obj), k = kindOf(recv, ch), cls = recordOf(k) && CLS[recordOf(k)];
-        var isGetter = one.list.some(function (x) { return x.fn.kind === "get"; });
+        var isGetter = one.list.some(function (x) { return x.fn.getter || x.fn.kind === "get"; });
         if (!isGetter) { return null; }
         if (cls && allFields(cls)[member.name]) { return null; }
         var fnName = methodTarget(member.name, k);
@@ -6160,14 +8378,32 @@
             return e;
           }
           var ref = liftLambda(fn, ch, "lambda");
-          return { k: "call", fn: nameNode(ref.v), args: given.slice(0, fn.params.length), mine: true };
+          return { k: "call", fn: nameNode(ref.v), mine: true,
+                   args: (ref.captured || []).map(function (v) { return nameNode(v); }).concat(given.slice(0, fn.params.length)) };
         }
         if (fn.k === "member" && fn.obj.k === "name" && !CLS[fn.obj.v] &&
             /^(System\.out|Console|console)$/.test(pathOf(fn.obj) || "")) {
           return null;
         }
         if (fn.k === "member") {                              // String::length, Integer::parseInt
+          // counts.get, obj.scoreOf: a method of something the program holds,
+          // called on it -- and a table's get, what it holds under that key
+          var heldObj = fn.obj.k === "name" && ch && (ch.names[fn.obj.v] || ch.params[fn.obj.v] || globalChart.names[fn.obj.v]);
+          if (heldObj || (fn.obj.k === "member" && stripParens(fn.obj.obj).k === "name" && /^(self|this)$/.test(stripParens(fn.obj.obj).v))) {
+            if (/^(get|__getitem__)$/.test(fn.name) && given.length === 1 && kindOf(fn.obj, ch) === "map") {
+              return { k: "index", obj: fn.obj, at: given[0], line: fn.line };
+            }
+            return { k: "call", fn: fn, args: given, line: fn.line };
+          }
           var owner = pathOf(fn.obj) || "";
+          // Integer::sum, Math::max, String::concat, Integer::compare: two things made one
+          if (given.length >= 2 && /^(Integer|Long|Double|Float|Math)$/.test(owner) && /^(sum|max|min)$/.test(fn.name)) {
+            return fn.name === "sum" ? { k: "bin", op: "+", a: given[0], b: given[1] } : builtinCall(fn.name, [given[0], given[1]]);
+          }
+          if (given.length >= 2 && owner === "String" && fn.name === "concat") { return { k: "bin", op: "+", a: given[0], b: given[1] }; }
+          if (given.length >= 2 && /^(Integer|Long|Double|Character|Boolean)$/.test(owner) && fn.name === "compare") {
+            return builtinCall("compare", [given[0], given[1]]);
+          }
           if (/^(Integer|Double|Math|String|Character|Long|Float|Boolean|Arrays|Collections|Objects)$/.test(owner) &&
               /^(parseInt|parseDouble|valueOf|abs|sqrt|max|min|isDigit|isLetter|toUpperCase|toLowerCase|toString|round|floor|ceil)$/.test(fn.name) &&
               !(owner === "String" && /^(toUpperCase|toLowerCase)$/.test(fn.name))) {
@@ -6185,6 +8421,12 @@
       }
       function eachStatement(e, ch, out, line) {
         var f = e.fn;
+        // C++'s for_each(v.begin(), v.end(), f): the same as v.forEach(f)
+        if (cpp && f.k === "name" && /^(std::)?for_each$/.test(f.v) && e.args.length === 3 &&
+            beginOf(e.args[0]) !== stripParens(e.args[0]) && !userFn("for_each")) {
+          return eachStatement({ k: "call", line: e.line, args: [e.args[2]],
+                                 fn: { k: "member", obj: beginOf(e.args[0]), name: "forEach", line: e.line } }, ch, out, line);
+        }
         if (f.k !== "member" || !/^(forEach|ForEach)$/.test(f.name) || !e.args.length) { return false; }
         var fn = stripParens(e.args[0]), src = ready(f.obj, ch, out).e, sk = kindOf(src, ch);
         if (sk === "map" && fn.k === "fn" && fn.params.length === 2) {       // map.forEach((k, v) -> ...)
@@ -6237,7 +8479,16 @@
         x.args.forEach(function (a) { if (a.k === "kw") { kws[a.name] = a.value; } });
         var p = bare(pathOf(f) || ""), dot = f.k === "member" ? f.name : null;
         var line = x.line;
-        function isFn(a) { a = stripParens(a); return a && (a.k === "fn" || (a.k === "member" && a.obj.k === "name" && pathOf(a.obj) && !a.args) || (a.k === "name" && (userFn(a.v) || /^(str|int|float|len|abs|bool|round|ord|chr)$/.test(a.v)))); }
+        function isFn(a) {
+          a = stripParens(a);
+          return a && (a.k === "fn" || (a.k === "call" && kindOf(a, ch) === "fn") ||
+                       (a.k === "member" && a.obj.k === "name" && pathOf(a.obj) && !a.args) ||
+                       (a.k === "name" && (userFn(a.v) || /^(str|int|float|len|abs|bool|round|ord|chr)$/.test(a.v) ||
+                                           kindOf(a, ch) === "fn" ||
+                                           // a name holding something, not a number or words
+                                           ((ch.names[a.v] || ch.params[a.v]) &&
+                                            !/^(int|real|text|bool|list|set|map|obj|rec)/.test(kindOf(a, ch) || "")))));
+        }
         if (py && (p === "map" || p === "filter") && args.length === 2 && isFn(args[0])) {
           return built(p, walk(args[1]), args[0]);
         }
@@ -6248,6 +8499,8 @@
           return best(walk(args[0]), kws.key, p === "max");
         }
         if (py && /^(sorted)$/.test(p) && args.length === 1 && (kws.key || kws.reverse)) {
+          var down = kws.reverse && stripParens(kws.reverse).v ? downBy(kws.key, ch) : null;
+          if (down) { return builtinCall("sorted", [walk(args[0]), down], line); }
           var sorted = builtinCall("sorted", [walk(args[0])].concat(kws.key ? [fnValue(kws.key, ch, "key")] : []), line);
           return kws.reverse && stripParens(kws.reverse).v ? builtinCall("reversed", [sorted], line) : sorted;
         }
@@ -6268,9 +8521,41 @@
           if (p === "IntStream.rangeClosed") { return builtinCall("range", [walk(args[0]), { k: "bin", op: "+", a: walk(args[1]), b: num(1) }], line); }
           return builtinCall("range", [walk(args[0]), { k: "bin", op: "+", a: walk(args[0]), b: walk(args[1]) }], line);
         }
+        // C++: std::all_of(v.begin(), v.end(), f), any_of, none_of
+        if (cpp && /^(all_of|any_of|none_of)$/.test(p) && args.length === 3 && isFn(args[2])) {
+          var flag0 = flagged(walk(beginOf(args[0])), args[2], p !== "all_of");
+          return p === "none_of" ? { k: "un", op: "!", a: flag0, line: line } : flag0;
+        }
+        // C++'s count_if(v.begin(), v.end(), f), find_if(...), accumulate(b, e, start, f)
+        if (cpp && /^(count_if|find_if|accumulate)$/.test(p) && args.length >= 3 && beginOf(args[0]) !== stripParens(args[0]) && !userFn(p)) {
+          var rng = walk(beginOf(args[0]));
+          if (p === "count_if" && isFn(args[2])) { return builtinCall("length", [built("filter", rng, args[2])], line); }
+          if (p === "find_if" && isFn(args[2])) { return found(rng, args[2], true); }
+          if (p === "accumulate" && args.length === 4) { return folded(rng, args[3], walk(args[2])); }
+        }
         if (!dot) { return null; }
         var recv = f.obj;
         var rk = kindOf(recv, ch);
+        // C#: s.All(char.IsDigit), s.Any(char.IsUpper) -- what kind of letters s is made of
+        if (cs && rk === "text" && /^(All|Any)$/.test(dot) && args.length === 1) {
+          var group = bare(pathOf(stripParens(args[0])) || "");
+          var whole = { All: { "char.IsDigit": "isDigit", "char.IsLetter": "isAlpha", "char.IsWhiteSpace": "isSpace" } }[dot];
+          if (whole && whole[group]) { return builtinCall(whole[group], [walk(recv)], line); }
+          if (dot === "Any" && /^char\.(IsUpper|IsLower)$/.test(group)) {
+            return { k: "bin", op: "!=", a: walk(recv), line: line,
+                     b: builtinCall(group === "char.IsUpper" ? "toLower" : "toUpper", [walk(recv)], line) };
+          }
+        }
+        // C#'s LINQ over a string walks its letters: text.Select(c => ...)
+        if (cs && rk === "text" && /^(Select|Where|All|Any|Count|OrderBy|OrderByDescending|Distinct|ToList|ToArray|Sum|Max|Min|First|FirstOrDefault|Last|Take|Skip|Reverse)$/.test(dot)) {
+          recv = builtinCall("toList", [recv], line);
+          rk = "list<text>";
+        }
+        // and over a Dictionary, its pairs: ages.Select(p => p.Key + "=" + p.Value)
+        if (cs && rk === "map" && /^(Select|Where|All|Any|OrderBy|OrderByDescending|ToList|ToArray|Sum|Max|Min|First|FirstOrDefault|Last|Take|Skip)$/.test(dot)) {
+          recv = builtinCall("items", [recv], line);
+          rk = "list<list>";
+        }
         if (rk === "text" && !/^(chars|codePoints)$/.test(dot)) { return null; }
         if (recordOf(rk) && METHODS[dot]) { return null; }
         switch (dot) {
@@ -6285,21 +8570,71 @@
               return builtinCall("join", [walk(recv), how.args[0] ? walk(how.args[0]) : { k: "str", v: "" }], line);
             }
             if (/Collectors\.toSet$/.test(hp)) { return builtinCall("unique", [walk(recv)], line); }
+            // Collectors.groupingBy(f): a table of lists, each under what f says;
+            // groupingBy(f, Collectors.counting()): how many under each
+            if (/Collectors\.groupingBy$/.test(hp) && how.args.length >= 1 && isFn(how.args[0])) {
+              var counting = how.args[1] && /Collectors\.counting$/.test(bare(pathOf(stripParens(how.args[1]).fn) || ""));
+              var groups = nameNode(fresh(ch, "groups"), line), one0 = fresh(ch, "item"), src0 = walk(recv);
+              out.push({ k: "set", target: groups, value: { k: "dict", keys: [], values: [], line: line }, line: line });
+              ch.meet(groups.v, { set: true, kind: "map" });
+              ch.meet(one0, { set: true, loop: true, elem: { of: src0 } });
+              var keyOf = applied(how.args[0], [nameNode(one0, line)], ch);
+              var slot = { k: "index", obj: copyOf(groups), at: keyOf, line: line };
+              out.push({ k: "foreach", v: one0, over: src0, line: line, body: lowered(function (o) {
+                lowerOne({ k: "if", line: line, cond: { k: "un", op: "!", a: builtinCall("contains", [copyOf(groups), copyOf(keyOf)], line) },
+                           then: [{ k: "assign", target: copyOf(slot), value: counting ? num(0) : { k: "list", items: [] }, line: line }], orelse: [] }, ch, o);
+                lowerOne(counting ? { k: "assign", target: copyOf(slot), value: { k: "bin", op: "+", a: copyOf(slot), b: num(1) }, line: line }
+                                  : { k: "expr", e: builtinCall("append", [copyOf(slot), nameNode(one0, line)], line), line: line }, ch, o);
+              }) });
+              return copyOf(groups);
+            }
             return walk(recv);
           }
-          case "map": case "Select": case "mapToInt": case "mapToDouble": case "mapToObj": case "mapToLong":
+          case "map": case "Select": case "mapToInt": case "mapToDouble": case "mapToObj": case "mapToLong": case "ConvertAll":
             return args.length === 1 && isFn(args[0]) ? built("map", walk(recv), args[0]) : null;
-          case "filter": case "Where":
+          // xs.RemoveAll(f): the ones f is not true of kept, and how many went
+          case "RemoveAll": case "removeIf": case "RemoveWhere": {
+            var placeR = stripParens(recv);
+            if (args.length !== 1 || !isFn(args[0]) || !/^(name|member|index)$/.test(placeR.k)) { return null; }
+            var before0 = nameNode(fresh(ch, "before"), line);
+            out.push({ k: "set", target: before0, value: builtinCall("length", [walk(recv)], line), line: line });
+            ch.meet(before0.v, { set: true, kind: "int" });
+            lowerOne({ k: "assign", target: recv, line: line,
+                       value: { k: "call", fn: { k: "member", obj: recv, name: "Where", line: line }, args: [negatedFn(args[0])], line: line } }, ch, out);
+            var gone0 = { k: "bin", op: "-", a: before0, b: builtinCall("length", [walk(recv)], line), line: line };
+            return java ? { k: "bin", op: ">", a: gone0, b: num(0), line: line } : gone0;
+          }
+          case "filter": case "Where": case "FindAll":
+            // xs.filter(Boolean): the items that are something.  A split on
+            // spaces has no empty ones to begin with.
+            if (js && args.length === 1 && stripParens(args[0]).k === "name" && stripParens(args[0]).v === "Boolean") {
+              var whole = walk(recv), sw = stripParens(whole);
+              if (sw && sw.k === "call" && sw.builtin && sw.fn.v === "split" && sw.args.length === 1) { return whole; }
+              var nothing = /^(int|real)$/.test(elemKind(kindOf(recv, ch)) || "") ? num(0) : { k: "str", v: "" };
+              return built("filter", whole, { k: "fn", params: [{ name: "x", line: line }], line: line, lambda: true,
+                                             body: [{ k: "return", line: line,
+                                                      value: { k: "bin", op: "!=", a: nameNode("x", line), b: nothing, line: line } }] });
+            }
             return args.length === 1 && isFn(args[0]) ? built("filter", walk(recv), args[0]) : null;
+          // xs.reduceRight(f, start): the same, from the last one back
+          case "reduceRight":
+            if (!args.length) { return null; }
+            return folded(builtinCall("reversed", [walk(recv)], line), args[0], args[1] ? walk(args[1]) : null);
           case "reduce": case "Aggregate": {
             if (!args.length) { return null; }
             if (dot === "Aggregate") { return args.length === 2 ? folded(walk(recv), args[1], walk(args[0])) : folded(walk(recv), args[0], null); }
             if (java && args.length === 2) { return folded(walk(recv), args[1], walk(args[0])); }
             return folded(walk(recv), args[0], args[1] ? walk(args[1]) : null);
           }
-          case "some": case "anyMatch": case "Any":
+          case "some": case "anyMatch": case "Any": case "Exists":
+            if (js && args.length === 1 && stripParens(args[0]).k === "name" && stripParens(args[0]).v === "Boolean") {
+              return builtinCall("any", [walk(recv)], line);          // xs.some(Boolean)
+            }
             return args.length === 1 && isFn(args[0]) ? flagged(walk(recv), args[0], true) : null;
-          case "every": case "allMatch": case "All":
+          case "every": case "allMatch": case "All": case "TrueForAll":
+            if (js && args.length === 1 && stripParens(args[0]).k === "name" && stripParens(args[0]).v === "Boolean") {
+              return builtinCall("all", [walk(recv)], line);
+            }
             return args.length === 1 && isFn(args[0]) ? flagged(walk(recv), args[0], false) : null;
           case "noneMatch":
             return args.length === 1 ? { k: "un", op: "!", a: flagged(walk(recv), args[0], true) } : null;
@@ -6307,16 +8642,53 @@
             return args.length === 1 && isFn(args[0]) ? found(walk(recv), args[0], false) : null;
           case "findIndex": case "FindIndex":
             return args.length === 1 && isFn(args[0]) ? found(walk(recv), args[0], true) : null;
+          // xs.findLast(f), xs.findLastIndex(f): the same, looking from the end
+          case "findLast": case "FindLast":
+            return args.length === 1 && isFn(args[0]) ? found(walk(recv), args[0], false, true) : null;
+          case "findLastIndex": case "FindLastIndex":
+            return args.length === 1 && isFn(args[0]) ? found(walk(recv), args[0], true, true) : null;
+          // [[1, 2], [3]].flat(): the items of the lists in it, one list; flatMap maps first
+          case "flat":
+            return args.length === 0 || (args.length === 1 && stripParens(args[0]).k === "num" && stripParens(args[0]).v === "1")
+                 ? flattened(walk(recv)) : null;
+          case "flatMap":
+            return args.length === 1 && isFn(args[0]) ? flattened(built("map", walk(recv), args[0])) : null;
+          // new Array(3).fill(7): three sevens; xs.fill(0): every one made 0
+          case "fill": {
+            if (args.length !== 1) { return null; }
+            var made0 = stripParens(recv);
+            if ((made0.k === "new" && /^Array$/.test(String(made0.type && made0.type.name || "")) ||
+                 made0.k === "call" && pathOf(made0.fn) === "Array") && made0.args.length === 1) {
+              return { k: "sized", dims: [walk(made0.args[0])], fill: walk(args[0]), kind: kindOf(args[0], ch), line: line };
+            }
+            var whole0 = itemsName(walk(recv), ch, out), at0 = fresh(ch, "i");
+            ch.meet(at0, { kind: "int", set: true, loop: true });
+            out.push({ k: "for", v: at0, from: num(0), to: { k: "bin", op: "-", a: builtinCall("length", [whole0]), b: num(1) }, by: null, line: line,
+                       body: [{ k: "set", target: { k: "index", obj: copyOf(whole0), at: nameNode(at0, line) }, value: walk(args[0]), line: line }] });
+            return copyOf(whole0);
+          }
           case "Count": case "count":
             return args.length === 1 && isFn(args[0]) ? builtinCall("length", [built("filter", walk(recv), args[0])], line) : null;
           case "Sum": case "Max": case "Min": case "Average":
             if (args.length === 1 && isFn(args[0])) {
               var mapped = built("map", walk(recv), args[0]);
-              if (dot === "Average") { return { k: "bin", op: "/", a: builtinCall("sum", [mapped]), b: builtinCall("length", [mapped]) }; }
+              if (dot === "Average") { return { k: "bin", op: "/", real: true, a: builtinCall("sum", [mapped]), b: builtinCall("length", [mapped]) }; }
               return builtinCall(dot.toLowerCase(), [mapped], line);
             }
             return null;
           case "OrderBy": case "OrderByDescending": case "sortBy": case "SortBy":
+            // OrderBy(x => x, StringComparer.Ordinal): letter by letter, as the chart does
+            if (args.length === 2 && /(^|\.)StringComparer\.(Ordinal|InvariantCulture|CurrentCulture)$/.test(pathOf(stripParens(args[1])) || "")) {
+              args = [args[0]];
+            }
+            // OrderBy(x => x, Comparer<T>.Create(order)): put in order by order
+            if (args.length === 2) {
+              var made2 = stripParens(args[1]);
+              if (made2.k === "call" && made2.fn.k === "member" && made2.fn.name === "Create" && made2.args.length === 1) {
+                var byC = builtinCall("sorted", [walk(recv), fnValue(made2.args[0], ch, "compare")], line);
+                return dot === "OrderByDescending" ? builtinCall("reversed", [byC], line) : byC;
+              }
+            }
             if (args.length === 1) {
               var ob = builtinCall("sorted", [walk(recv), fnValue(args[0], ch, "key")], line);
               return dot === "OrderByDescending" ? builtinCall("reversed", [ob], line) : ob;
@@ -6327,8 +8699,54 @@
               return builtinCall("sorted", [walk(recv)].concat(args.length ? [fnValue(args[0], ch, "compare")] : []), line);
             }
             return null;
+          // xs.OrderBy(f).ThenBy(g): by f, and where f is the same, by g
+          case "ThenBy": case "ThenByDescending": {
+            var steps1 = [], at1 = stripParens(x);
+            while (at1 && at1.k === "call" && at1.fn.k === "member" && at1.args.length === 1 &&
+                   /^(OrderBy|OrderByDescending|ThenBy|ThenByDescending)$/.test(at1.fn.name)) {
+              steps1.unshift({ key: at1.args[0], down: /Descending$/.test(at1.fn.name) });
+              if (/^OrderBy/.test(at1.fn.name)) { break; }
+              at1 = stripParens(at1.fn.obj);
+            }
+            if (!at1 || at1.k !== "call" || !/^OrderBy/.test(at1.fn.name)) { return null; }
+            return builtinCall("sorted", [walk(at1.fn.obj), liftLambda(comparatorFn(steps1, line), ch, "compare")], line);
+          }
+          // a.Zip(b, (x, y) => ...): the two taken a place at a time
+          case "Zip": {
+            if (!args.length) { return null; }
+            var zipped = builtinCall("zip", [walk(recv), walk(args[0])], line);
+            var how2 = args[1] ? stripParens(args[1]) : null;
+            if (!how2) { return zipped; }
+            if (how2.k !== "fn" || how2.params.length !== 2) { return null; }
+            var made3 = how2.body.length === 1 && how2.body[0].k === "return" ? stripParens(how2.body[0].value) : null;
+            var listed = made3 && (made3.k === "list" || made3.k === "tuple" || (made3.k === "new" && made3.init && made3.init.k === "list")) ?
+                         (made3.items || made3.init.items) : null;
+            if (listed && listed.length === 2 && listed.every(function (it, n) { var y = stripParens(it); return y.k === "name" && y.v === how2.params[n].name; })) {
+              return zipped;
+            }
+            var t3 = nameNode(fresh(ch, "items"), line);
+            out.push({ k: "set", target: t3, value: { k: "list", items: [] }, line: line });
+            ch.meet(t3.v, { set: true, kind: "list" });
+            var pairName = fresh(ch, "pair");
+            ch.meet(pairName, { set: true, loop: true, elem: { of: zipped } });
+            var val3 = applied(how2, [{ k: "index", obj: nameNode(pairName), at: num(0) }, { k: "index", obj: nameNode(pairName), at: num(1) }], ch);
+            out.push({ k: "foreach", v: pairName, over: zipped, line: line, body: lowered(function (o) {
+              lowerOne({ k: "expr", e: builtinCall("append", [t3, val3], line), line: line }, ch, o);
+            }) });
+            return t3;
+          }
           case "distinct": case "Distinct":
             return args.length ? null : builtinCall("unique", [walk(recv)], line);
+          case "Take": case "limit":
+            return args.length === 1 ? builtinCall("slice", [walk(recv), num(0), walk(args[0])], line) : null;
+          case "Skip": case "skip":
+            return args.length === 1 ? builtinCall("slice", [walk(recv), walk(args[0])], line) : null;
+          case "Last": case "LastOrDefault":
+            if (args.length) { return null; }
+            var lr = walk(recv);
+            return { k: "index", obj: lr, at: { k: "un", op: "-", a: num(1) }, line: line };
+          case "ElementAt":
+            return args.length === 1 ? { k: "index", obj: walk(recv), at: walk(args[0]), line: line } : null;
           case "flatMap": case "SelectMany":
             return null;
         }
@@ -6340,7 +8758,8 @@
           ch.meet(t.v, { set: true, kind: "list" });
           var each = loopName(fn, 0, ch, singular(src));
           ch.meet(each, { set: true, loop: true, elem: { of: src } });
-          var val = applied(fn, [nameNode(each)], ch) || nameNode(each);
+          var at = countedAlong(fn, out);
+          var val = applied(fn, at ? [nameNode(each), nameNode(at)] : [nameNode(each)], ch) || nameNode(each);
           var body;
           if (how === "map") {
             body = lowered(function (o) {
@@ -6354,8 +8773,22 @@
             });
             noteElem(ch, t.v, { of: src });
           }
-          out.push({ k: "foreach", v: each, over: src, body: body, line: line });
+          out.push({ k: "foreach", v: each, over: src, body: body.concat(countedOn(at)), line: line });
           return t;
+        }
+        // xs.map((x, i) => ...): JavaScript hands the place along too, and
+        // a count kept beside the loop is that place
+        function countedAlong(fn, out) {
+          var fnS = stripParens(fn);
+          if ((!js && !cs) || !fnS || fnS.k !== "fn" || fnS.params.length < 2 || fnS.params[1].name === "_") { return null; }
+          var at = loopName(fn, 1, ch, "i");
+          out.push({ k: "set", target: nameNode(at, line), value: num(0), line: line });
+          ch.meet(at, { set: true, kind: "int" });
+          return at;
+        }
+        function countedOn(at) {
+          return at ? [{ k: "set", target: nameNode(at, line), line: line,
+                         value: { k: "bin", op: "+", a: nameNode(at, line), b: num(1), line: line } }] : [];
         }
         function folded(src, fn, start) {
           var fnS = stripParens(fn);
@@ -6390,15 +8823,27 @@
           ch.meet(flag.v, { set: true, kind: "bool" });
           var each = loopName(fn, 0, ch, singular(src));
           ch.meet(each, { set: true, loop: true, elem: { of: src } });
-          var test = applied(fn, [nameNode(each)], ch);
+          var at = countedAlong(fn, out);
+          var test = applied(fn, at ? [nameNode(each), nameNode(at)] : [nameNode(each)], ch);
           var body = lowered(function (o) {
             lowerOne({ k: "if", cond: any ? test : { k: "un", op: "!", a: test }, orelse: [], line: line,
                        then: [{ k: "assign", target: flag, value: { k: "bool", v: any }, line: line }] }, ch, o);
           });
-          out.push({ k: "foreach", v: each, over: src, body: body, line: line });
+          out.push({ k: "foreach", v: each, over: src, body: body.concat(countedOn(at)), line: line });
           return flag;
         }
-        function found(src, fn, index) {
+        function flattened(src) {
+          var flat = nameNode(fresh(ch, "flat"), line), each = fresh(ch, "item");
+          out.push({ k: "set", target: flat, value: { k: "list", items: [] }, line: line });
+          ch.meet(flat.v, { set: true, kind: "list" });
+          ch.meet(each, { set: true, loop: true, elem: { of: src } });
+          out.push({ k: "foreach", v: each, over: src, line: line, body: [{ k: "if", line: line,
+            cond: { k: "bin", op: "==", a: builtinCall("classOf", [nameNode(each, line)]), b: { k: "str", v: "List" }, line: line },
+            then: [{ k: "call", e: builtinCall("extend", [copyOf(flat), nameNode(each, line)], line), line: line }],
+            orelse: [{ k: "call", e: builtinCall("append", [copyOf(flat), nameNode(each, line)], line), line: line }] }] });
+          return copyOf(flat);
+        }
+        function found(src, fn, index, fromEnd) {
           var list = itemsName(src, ch, out);
           var got = nameNode(fresh(ch, index ? "position" : "match"), line);
           out.push({ k: "set", target: got, value: index ? num(-1) : { k: "null" }, line: line });
@@ -6413,8 +8858,9 @@
                        then: [{ k: "assign", target: got, line: line,
                                 value: index ? nameNode(k) : { k: "index", obj: list, at: nameNode(k) } }] }, ch, o);
           });
-          out.push({ k: "for", v: k, from: num(0), to: { k: "bin", op: "-", a: builtinCall("length", [list]), b: num(1) },
-                     by: null, body: body, line: line });
+          var last = { k: "bin", op: "-", a: builtinCall("length", [list]), b: num(1) };
+          out.push(fromEnd ? { k: "for", v: k, from: last, to: num(0), by: { k: "un", op: "-", a: num(1) }, body: body, line: line }
+                           : { k: "for", v: k, from: num(0), to: last, by: null, body: body, line: line });
           return got;
         }
         function best(src, key, most) {
@@ -6449,14 +8895,105 @@
       // A function handed over as a value: its name, or a lambda made one.
       function fnValue(fn, ch, base) {
         fn = stripParens(fn);
-        if (fn && fn.liftedAs) { return { k: "name", v: fn.liftedAs, fnRef: true }; }
+        if (fn && fn.liftedAs) {
+          return asValue({ k: "name", v: fn.liftedAs, fnRef: true, captured: fn.liftedCaptured || [] });
+        }
         var got = fnValueOf(fn, ch, base);
-        if (fn && got && got.fnRef && fn.k !== "fn") { fn.liftedAs = got.v; }
-        return got;
+        if (fn && got && got.fnRef && fn.k !== "fn") { fn.liftedAs = got.v; fn.liftedCaptured = got.captured || []; }
+        return asValue(got);
+      }
+      // sorted(xs, key=len, reverse=True): Python puts them largest first
+      // and leaves the ones that tie as they were -- a comparison of b with a
+      function downBy(key, ch) {
+        if (!key) { return null; }
+        var k = stripParens(key), line = k.line || 0;
+        function by(x) {
+          if (k.k === "fn" && k.params.length === 1) { return applied(k, [x], ch); }
+          if (k.k === "name") { return { k: "call", fn: k, args: [x], line: line }; }
+          if (k.k === "member" && k.obj.k === "name" && k.obj.v === "str") {
+            return { k: "call", fn: { k: "member", obj: x, name: k.name, line: line }, args: [], line: line };
+          }
+          return null;
+        }
+        if (!by(nameNode("a"))) { return null; }
+        var made = { k: "fn", lambda: true, line: line, params: [{ name: "a", line: line }, { name: "b", line: line }],
+                     body: [{ k: "return", line: line, value: builtinCall("compare", [by(nameNode("b", line)), by(nameNode("a", line))], line) }] };
+        return fnValue(made, ch, "compare");
+      }
+      // Comparator.comparing(f).thenComparing(g), .reversed(), naturalOrder():
+      // the steps, in turn -- each a key (or the things themselves) and a way round
+      function comparatorSteps(fn) {
+        fn = stripParens(fn);
+        if (!fn || fn.k !== "call") { return null; }
+        var p0 = bare(pathOf(fn.fn) || ""), d0 = fn.fn.k === "member" ? fn.fn.name : "";
+        if (/^Comparator\.(comparing|comparingInt|comparingDouble|comparingLong)$/.test(p0) && fn.args.length === 1) { return [{ key: fn.args[0], down: false }]; }
+        if (/^Comparator\.naturalOrder$/.test(p0)) { return [{ key: null, down: false }]; }
+        if (/^(Comparator|Collections)\.reverseOrder$/.test(p0)) { return [{ key: null, down: true }]; }
+        var before = fn.fn.k === "member" ? comparatorSteps(fn.fn.obj) : null;
+        if (!before) { return null; }
+        if (d0 === "reversed" && !fn.args.length) { return before.map(function (st0) { return { key: st0.key, down: !st0.down }; }); }
+        if (/^(thenComparing|thenComparingInt|thenComparingDouble|thenComparingLong)$/.test(d0) && fn.args.length === 1) {
+          var inner = comparatorSteps(fn.args[0]);
+          return before.concat(inner || [{ key: fn.args[0], down: false }]);
+        }
+        return null;
+      }
+      function comparatorFn(steps, line) {
+        function keyOf(k0, x) {
+          if (!k0) { return x; }
+          var k1 = stripParens(k0);
+          // x => x.Length: x's length, said there and then
+          if (k1.k === "fn" && k1.params.length === 1 && k1.body.length === 1 && k1.body[0].k === "return" && k1.body[0].value) {
+            return applied(k1, [x], null);
+          }
+          if (k1.k === "fn") { return { k: "call", fn: k1, args: [x], line: line }; }
+          if (k1.k === "member") { return { k: "call", fn: { k: "member", obj: x, name: k1.name, line: line }, args: [], line: line }; }
+          return { k: "call", fn: k1, args: [x], line: line };
+        }
+        var body = steps.map(function (st0) {
+          var a0 = keyOf(st0.key, nameNode(st0.down ? "b" : "a", line)), b0 = keyOf(st0.key, nameNode(st0.down ? "a" : "b", line));
+          var c0 = builtinCall("compare", [a0, b0], line);
+          return { k: "if", line: line, cond: { k: "bin", op: "!=", a: c0, b: num(0), line: line },
+                   then: [{ k: "return", value: copyOf(c0), line: line }], orelse: [] };
+        });
+        body.push({ k: "return", value: num(0), line: line });
+        return { k: "fn", lambda: true, line: line, params: [{ name: "a", line: line }, { name: "b", line: line }], body: body };
+      }
+      // x => f(x), (a, b) => f(a, b) -- and the page's (a, b) => f(a, (b ?? 1)),
+      // where f has a default of its own there: the name of f
+      function plainCallOf(fn) {
+        fn = stripParens(fn);
+        if (!fn || fn.k !== "fn" || fn.body.length !== 1 || fn.body[0].k !== "return" || !fn.body[0].value) { return null; }
+        var only = stripParens(fn.body[0].value);
+        var mine = only.k === "call" && only.fn.k === "name" ? userFn(only.fn.v) : null;
+        if (!mine || only.args.length !== fn.params.length) { return null; }
+        var same = fn.params.every(function (p, n) {
+          var x = stripParens(only.args[n]);
+          if (x.k === "bin" && x.op === "??" && mine.params[n] && mine.params[n].dflt) { x = stripParens(x.a); }
+          return !p.pattern && x.k === "name" && x.v === p.name;
+        });
+        return same ? mine.name : null;
       }
       function fnValueOf(fn, ch, base) {
+        // a chain of comparisons, or one the other way round
+        var steps0 = java ? comparatorSteps(fn) : null;
+        if (steps0 && (steps0.length > 1 || steps0[0].down || !steps0[0].key)) {
+          return liftLambda(comparatorFn(steps0, fn.line || 0), ch, "compare");
+        }
+        // new Func<int, int>(f), new Comparison<T>(f), the page's new Fn_f(...): f
+        if (fn.k === "new" && fn.type && /^(Func|Action|Predicate|Comparison|Converter|Fn_\w+)$/.test(String(fn.type.name || "")) &&
+            (fn.args || []).length === 1) {
+          return fnValueOf(stripParens(fn.args[0]), ch, base);
+        }
+        // x => f(x), (a, b) => f(a, b): f itself
+        var plain = plainCallOf(fn);
+        if (plain) { return nameNode(plain); }
         if (fn.k === "fn") { return liftLambda(fn, ch, base); }
         if (fn.k === "name" && userFn(fn.v)) { return nameNode(userFn(fn.v).name); }
+        // the page's orderOf, handed to a sort: the chart's own order -- and
+        // C#'s string.CompareOrdinal, which is the same order for words
+        if (fn.k === "name" && pageHelpers[fn.v] && /^(orderOf|OrderOf)$/.test(fn.v)) { return nameNode("compare"); }
+        if (cs && /^(string|String)\.CompareOrdinal$/.test(pathOf(fn) || "")) { return nameNode("compare"); }
         if (fn.k === "name" && /^(len|str|int|float|abs)$/.test(fn.v)) {
           return nameNode({ len: "length", str: "toString", int: "int", float: "real", abs: "abs" }[fn.v]);
         }
@@ -6474,6 +9011,10 @@
           if (/^(Comparator\.reverseOrder|Collections\.reverseOrder)$/.test(p)) {
             return liftLambda({ k: "fn", params: [{ name: "a" }, { name: "b" }], line: fn.line,
                                 body: [{ k: "return", value: { k: "cond", test: { k: "bin", op: "<", a: nameNode("a"), b: nameNode("b") }, a: num(1), b: { k: "cond", test: { k: "bin", op: ">", a: nameNode("a"), b: nameNode("b") }, a: { k: "un", op: "-", a: num(1) }, b: num(0) } } }] }, ch, base);
+          }
+          // functools.cmp_to_key(f): f itself, which takes two and compares them
+          if (/^(functools\.cmp_to_key|cmp_to_key)$/.test(p) && fn.args.length === 1) {
+            return fnValueOf(stripParens(fn.args[0]), ch, base);
           }
           if (/^(std\.greater|greater)$/.test(p)) {
             return liftLambda({ k: "fn", params: [{ name: "a" }, { name: "b" }], line: fn.line,
@@ -6578,6 +9119,72 @@
           return v && v.k === "new" && v.type && /^(StringBuilder|StringBuffer)$/.test(v.type.name);
         }));
       }
+      // The order a class says its own go in -- C#'s CompareTo, Java's
+      // compareTo, C++'s operator< -- as the function a sort is handed
+      function ownOrder(list, ch) {
+        var rec = recordOf(elemKind(kindOf(list, ch)) || "");
+        if (!rec || !CLS[rec]) { return null; }
+        if (cpp || py) {
+          var lt = methodOfSign(CLS[rec], "<");
+          return lt ? nameNode(methodTarget(lt.origName || lt.name, "obj:" + rec) || lt.name) : null;
+        }
+        var keys = ["CompareTo", "compareTo"];
+        for (var i = 0; i < keys.length; i++) {
+          var m = methodOf(CLS[rec], keys[i]);
+          var target = m ? methodTarget(keys[i], "obj:" + rec) : null;
+          if (target) { return nameNode(target); }
+        }
+        return null;
+      }
+      // The method a class says a sign is: operator+, __add__ -- plus
+      function methodOfSign(cls, sign) {
+        var chain = ancestry(cls);
+        for (var i = 0; i < chain.length; i++) {
+          var hit = chain[i].methods.filter(function (m) { return m.opSign === sign && !m.statik; })[0];
+          if (hit) { return hit; }
+        }
+        return null;
+      }
+      // a + b, a == b, -a where a is a record whose class says what the sign
+      // does: that method, called -- plus(a, b).  And the ones said by way
+      // of another: a != b is NOT equals(a, b), a > b is lessThan(b, a).
+      function operatorCall(op, a, b, ch, line) {
+        if (!(cpp || cs || py) || !OP_NAMES[op] || op === "<<") { return null; }
+        var ka = kindOf(a, ch), rec = recordOf(ka), cls = rec && CLS[rec];
+        if (!cls) {
+          // Vec operator*(int k, const Vec& v): a function of the program's own
+          var free = b !== undefined ? userFn(OP_NAMES[op]) : null;
+          if (free && free.opSign === op && recordOf(kindOf(b, ch))) {
+            return { k: "call", fn: nameNode(free.name, line), args: [a, b], line: line, mine: true };
+          }
+          return null;
+        }
+        function call(sign, x, y) {
+          var m = methodOfSign(cls, sign);
+          if (!m) { return null; }
+          var target = methodTarget(m.origName || m.name, ka) || m.name;
+          return { k: "call", fn: nameNode(target, line), args: y === undefined ? [x] : [x, y], line: line, mine: true };
+        }
+        if (b === undefined) { return call("u" + op, a); }
+        var direct = call(op, a, b);
+        if (direct) { return direct; }
+        function not(x) { return x ? { k: "un", op: "!", a: x, line: line } : null; }
+        if (op === "!=") { return not(call("==", a, b)); }
+        if (op === ">") { return call("<", b, a); }
+        if (op === "<=") { return not(call("<", b, a)); }
+        if (op === ">=") { return not(call("<", a, b)); }
+        return null;
+      }
+      // x => !f(x): a test the other way round
+      function negatedFn(fn) {
+        var f = stripParens(fn);
+        if (f.k === "fn" && f.params.length === 1 && f.body.length === 1 && f.body[0].k === "return" && f.body[0].value) {
+          return Object.assign({}, f, { body: [{ k: "return", line: f.line,
+                                                 value: { k: "un", op: "!", a: { k: "paren", e: f.body[0].value } } }] });
+        }
+        return { k: "fn", params: [{ name: "item", line: f.line }], lambda: true, line: f.line,
+                 body: [{ k: "return", line: f.line, value: { k: "un", op: "!", a: { k: "call", fn: fn, args: [nameNode("item")], line: f.line } } }] };
+      }
       function libStatement(e, ch, out, line) {
         var f = e.fn, p = bare(pathOf(f) || "");
         var args = e.args.filter(function (a) { return a.k !== "kw"; });
@@ -6587,7 +9194,7 @@
         function call(name, list) { out.push({ k: "call", e: builtinCall(name, list, line), line: line }); return true; }
         function put(t, v) { assign(t, v, ch, out, line); return true; }
         function addTo(list, x) {
-          var r = R(x);
+          var r = valueCopy(R(x), ch, null);
           if (list.k === "name") { noteElem(ch, list.v, { value: r }); }
           return call("append", [list, r]);
         }
@@ -6599,7 +9206,8 @@
           if (kindOf(beginOf(args[0]), ch) === "text") {
             return put(beginOf(args[0]), builtinCall("join", [builtinCall("sorted", [R(beginOf(args[0]))]), { k: "str", v: "" }], line));
           }
-          return call("sort", [R(beginOf(args[0]))].concat(cmp ? [fnValue(cmp, ch, "compare")] : []));
+          var own0 = cmp ? null : ownOrder(beginOf(args[0]), ch);
+          return call("sort", [R(beginOf(args[0]))].concat(cmp ? [fnValue(cmp, ch, "compare")] : own0 ? [own0] : []));
         }
         if (/^(Collections\.reverse|Array\.Reverse|reverse|std\.reverse)$/.test(p) && args.length && !userFn(p)) {
           var turned = beginOf(args[0]);
@@ -6627,6 +9235,52 @@
                      body: [{ k: "set", target: { k: "index", obj: arr, at: nameNode(k) }, value: val, line: line }] });
           return true;
         }
+        // C++'s transform(v.begin(), v.end(), out.begin(), f): each one made again, into out
+        if (cpp && p === "transform" && args.length === 4 && beginOf(args[0]) !== stripParens(args[0]) && !userFn(p)) {
+          var srcT = beginOf(args[0]), dstT = stripParens(args[2]), fT = args[3];
+          var fName = String(pathOf(stripParens(fT)) || "").replace(/^(::|std\.|std::)/, "");
+          if (kindOf(srcT, ch) === "text" && /^(toupper|tolower)$/.test(fName) && beginOf(dstT) !== dstT) {
+            return put(beginOf(dstT), builtinCall(fName === "toupper" ? "toUpper" : "toLower", [R(srcT)], line));
+          }
+          var intoT = dstT.k === "call" && /^(back_inserter)$/.test(bare(pathOf(dstT.fn) || "")) ? dstT.args[0] : null;
+          var srcList = R(srcT);
+          if (intoT) {
+            var eachT = fresh(ch, "item");
+            ch.meet(eachT, { set: true, loop: true, elem: { of: srcList } });
+            out.push({ k: "foreach", v: eachT, over: srcList, line: line, body: lowered(function (o) {
+              libStatement({ k: "call", fn: { k: "member", obj: intoT, name: "push_back", line: line },
+                             args: [applied(fT, [nameNode(eachT, line)], ch)], line: line }, ch, o, line);
+            }) });
+            return true;
+          }
+          if (beginOf(dstT) === dstT) { return false; }
+          var iT = fresh(ch, "i");
+          ch.meet(iT, { kind: "int", set: true, loop: true });
+          out.push({ k: "for", v: iT, from: num(0), to: { k: "bin", op: "-", a: builtinCall("length", [srcList], line), b: num(1) }, line: line,
+                     body: lowered(function (o) {
+                       assign({ k: "index", obj: beginOf(dstT), at: nameNode(iT, line), line: line },
+                              applied(fT, [{ k: "index", obj: srcT, at: nameNode(iT, line), line: line }], ch), ch, o, line);
+                     }) });
+          return true;
+        }
+        // copy(v.begin(), v.end(), back_inserter(out)): all of v added on to out
+        if (cpp && p === "copy" && args.length === 3 && beginOf(args[0]) !== stripParens(args[0]) && !userFn(p)) {
+          var dstC = stripParens(args[2]);
+          if (dstC.k === "call" && /^(back_inserter)$/.test(bare(pathOf(dstC.fn) || ""))) {
+            return call("extend", [R(dstC.args[0]), R(beginOf(args[0]))]);
+          }
+        }
+        // iota(v.begin(), v.end(), 1): 1, 2, 3 and on, one in each place
+        if (cpp && p === "iota" && args.length === 3 && beginOf(args[0]) !== stripParens(args[0]) && !userFn(p)) {
+          var iotaL = R(beginOf(args[0])), iI = fresh(ch, "i");
+          ch.meet(iI, { kind: "int", set: true, loop: true });
+          out.push({ k: "for", v: iI, from: num(0), to: { k: "bin", op: "-", a: builtinCall("length", [iotaL], line), b: num(1) }, line: line,
+                     body: [{ k: "set", target: { k: "index", obj: copyOf(iotaL), at: nameNode(iI, line) }, line: line,
+                              value: { k: "bin", op: "+", a: R(args[2]), b: nameNode(iI, line), line: line } }] });
+          return true;
+        }
+        // heapq.heapify(xs): put in order, smallest first
+        if (/^(heapq\.heapify)$/.test(p) && args.length === 1) { return call("sort", [R(args[0])]); }
         if (/^(heapq\.heappush|bisect\.insort)$/.test(p) && args.length === 2) {
           var hl = R(args[0]);
           addTo(hl, args[1]);
@@ -6634,6 +9288,24 @@
         }
         if (f.k !== "member") { return false; }
         var m = f.name, obj = stripParens(f.obj);
+        // ss.str(""): a string stream emptied; ss.clear(): only its flags put back
+        var ssHeld = cpp && obj.k === "name" ? (ch.names[obj.v] || ch.params[obj.v] || globalChart.names[obj.v]) : null;
+        if (ssHeld && ssHeld.stringStream) {
+          if (m === "str" && args.length === 1) { return put(obj, args[0]); }
+          if (m === "clear" && !args.length) { return true; }
+        }
+        var BUILDS = /^(append|Append|AppendLine|AppendFormat|Insert|insert|Replace|replace|Remove|delete|deleteCharAt|reverse|Reverse)$/;
+        // sb.Append(1).Append(","): the first, and then the next on the same one
+        var chained = stripParens(obj);
+        if (chained && chained.k === "call" && chained.fn.k === "member" &&
+            BUILDS.test(chained.fn.name) && BUILDS.test(m)) {
+          var root = chained;
+          while (root.k === "call" && root.fn.k === "member") { root = stripParens(root.fn.obj); }
+          if (root.k === "name" && isBuilder(root, ch)) {
+            libStatement(chained, ch, out, line);
+            return libStatement(Object.assign({}, e, { fn: Object.assign({}, e.fn, { obj: root }) }), ch, out, line);
+          }
+        }
         var ok = kindOf(obj, ch);
         if (recordOf(ok)) { return false; }
         var o = R(obj);
@@ -6653,7 +9325,22 @@
               return put(obj, builtinCall("reversed", [o], line));
             case "setLength": case "Clear": case "clear":
               return put(obj, { k: "str", v: "" });
+            // sb.setCharAt(3, 'H'): that one letter changed
+            case "setCharAt":
+              if (args.length === 2) { return put({ k: "index", obj: obj, at: args[0], line: line }, args[1]); }
+              break;
             case "deleteCharAt": case "erase":
+              // C++'s s.erase(3): everything from 3 on; s.erase(3, 2): two from 3;
+              // s.erase(s.begin() + 3): the one letter there
+              if (cpp && m === "erase") {
+                var byPlace = beginOf(args[0]) !== stripParens(args[0]);
+                var fromE = byPlace ? offsetOf(args[0]) : args[0];
+                var toE = byPlace ? (args[1] ? offsetOf(args[1]) : { k: "bin", op: "+", a: fromE, b: num(1) })
+                        : args[1] ? { k: "bin", op: "+", a: args[0], b: args[1] } : null;
+                if (!toE) { return put(obj, builtinCall("substring", [o, num(0), fromE], line)); }
+                return put(obj, { k: "bin", op: "+", a: builtinCall("substring", [o, num(0), fromE]),
+                                  b: builtinCall("substring", [copyOf(o), toE]), line: line });
+              }
               if (args.length === 1) {
                 return put(obj, { k: "bin", op: "+", a: builtinCall("substring", [o, num(0), args[0]]),
                                   b: builtinCall("substring", [o, { k: "bin", op: "+", a: args[0], b: num(1) }]), line: line });
@@ -6662,31 +9349,104 @@
             case "pop_back":
               return put(obj, builtinCall("substring", [o, num(0), { k: "un", op: "-", a: num(1) }], line));
           }
+          // what only a StringBuilder does to itself: C#'s Replace(a, b) and
+          // Remove(at, n); Java's replace(from, to, s) and delete(from, to)
+          if (isBuilder(obj, ch)) {
+            if (m === "Replace" && args.length === 2) { return put(obj, builtinCall("replace", [o, R(args[0]), R(args[1])], line)); }
+            if ((m === "Remove" || m === "delete") && args.length === 2) {
+              var cutTo = m === "Remove" ? { k: "bin", op: "+", a: args[0], b: args[1], line: line } : args[1];
+              return put(obj, { k: "bin", op: "+", a: builtinCall("substring", [o, num(0), args[0]]),
+                                b: builtinCall("substring", [copyOf(o), cutTo]), line: line });
+            }
+            // Java's replace(from, to, s); C++'s replace(at, n, s) -- n of them from at
+            if (m === "replace" && args.length === 3) {
+              var cutEnd = cpp ? { k: "bin", op: "+", a: args[0], b: args[1], line: line } : args[1];
+              return put(obj, { k: "bin", op: "+", line: line,
+                                a: { k: "bin", op: "+", a: builtinCall("substring", [o, num(0), args[0]]), b: args[2] },
+                                b: builtinCall("substring", [copyOf(o), cutEnd]) });
+            }
+          }
           if (ok === "text") { return false; }
         }
         var isSet = /^set/.test(ok || "");
         var isMap = ok === "map";
+        // a priority queue: kept in order, smallest first -- C++'s biggest last
+        var heap = priorityOf(obj, ch);
+        if (heap) {
+          if (/^(add|offer|push|emplace|Enqueue)$/.test(m) && args.length >= 1) {
+            addTo(o, args[0]);
+            return call("sort", [o]);
+          }
+          if (/^(poll|remove|pop|Dequeue)$/.test(m) && !args.length) {
+            return call("pop", heap === "max" ? [o] : [o, num(0)]);
+          }
+        }
         switch (m) {
           case "append": case "push": case "push_back": case "emplace_back": case "addLast": case "offer":
           case "offerLast": case "Enqueue": case "enqueue": case "Push": case "add": case "Add": case "AddLast":
             if (isMap && args.length === 2) { return put({ k: "index", obj: o, at: args[0] }, args[1]); }
             if ((m === "add" || m === "Add") && args.length === 2 && java) { return call("insert", [o, R(args[0]), R(args[1])]); }
             if (isSet || (py && m === "add")) {
+              var inOrder = sortedSet(obj, ch);
               args.forEach(function (a) {
                 var r = R(a);
-                out.push({ k: "if", cond: { k: "un", op: "!", a: builtinCall("contains", [o, r]) }, orelse: [], line: line,
-                           then: [{ k: "call", e: builtinCall("append", [o, r], line), line: line }] });
+                var putIn = [{ k: "call", e: builtinCall("append", [o, r], line), line: line }];
+                if (inOrder) { putIn.push({ k: "call", e: builtinCall("sort", [copyOf(o)], line), line: line }); }
+                if (inOrder === "many") { out.push.apply(out, putIn); }
+                else { out.push({ k: "if", cond: { k: "un", op: "!", a: builtinCall("contains", [o, r]) }, orelse: [], line: line, then: putIn }); }
                 if (o.k === "name") { noteElem(ch, o.v, { value: r }); }
               });
               return true;
             }
             if (!args.length) { return false; }
-            args.forEach(function (a) { addTo(o, a); });
+            // emplace_back("Ann", 72): one Player, made from all of them
+            if (cpp && recordOf(elemKind(ok)) && (m === "emplace_back" || args.length === 1)) {
+              addTo(o, bracedAs(m === "emplace_back" && !(args.length === 1 && recordOf(kindOf(args[0], ch)))
+                                  ? { k: "list", items: args, line: line } : args[0], elemKind(ok)));
+              return true;
+            }
+            args.forEach(function (a) {
+              // xs.push(...ys): every one of ys
+              if (stripParens(a).k === "star") { call("extend", [o, R(stripParens(a).e)]); } else { addTo(o, a); }
+            });
             return true;
+          // xs.RemoveAll(f), xs.removeIf(f): only the ones f is not true of kept
+          case "RemoveAll": case "removeIf": case "RemoveWhere":
+            if (args.length !== 1 || isMap) { return false; }
+            return put(f.obj, { k: "call", fn: { k: "member", obj: f.obj, name: "Where", line: line }, args: [negatedFn(args[0])], line: line });
           case "unshift": case "addFirst": case "push_front": case "offerFirst": case "appendleft": case "AddFirst":
             args.slice().reverse().forEach(function (a) { call("insert", [o, num(0), R(a)]); });
             return true;
+          // xs.splice(at, n, a, b): n taken out from at, then a and b put in there
+          case "splice": {
+            if (!js || !args.length || isMap) { return false; }
+            var from0 = R(args[0]);
+            if (args.length === 1) { return put(o, builtinCall("slice", [o, num(0), from0], line)); }
+            var gone = stripParens(args[1]);
+            if (gone.k === "num" && Number(gone.v) <= 6) {
+              for (var g = 0; g < Number(gone.v); g++) { call("pop", [o, copyOf(from0)]); }
+            } else {
+              var times = fresh(ch, "n");
+              ch.meet(times, { set: true, loop: true, kind: "int" });
+              out.push({ k: "for", v: times, from: num(1), to: R(args[1]), line: line,
+                         body: [{ k: "call", e: builtinCall("pop", [o, copyOf(from0)], line), line: line }] });
+            }
+            args.slice(2).forEach(function (a, j) {
+              call("insert", [o, j ? { k: "bin", op: "+", a: copyOf(from0), b: num(j), line: line } : copyOf(from0), R(a)]);
+            });
+            return true;
+          }
           case "insert": case "Insert": case "emplace":
+            // v.insert(v.end(), w.begin(), w.end()): all of w on the end
+            if (cpp && args.length === 3 && beginOf(args[1]) !== stripParens(args[1])) {
+              var at0 = stripParens(args[0]);
+              var toEnd = at0.k === "call" && at0.fn.k === "member" && at0.fn.name === "end";
+              var from1 = beginOf(args[1]);
+              if (toEnd) { return call("extend", [o, R(from1)]); }
+              if (at0.k === "call" && at0.fn.k === "member" && at0.fn.name === "begin") {       // at the front
+                return put(o, { k: "bin", op: "+", a: R(from1), b: o, line: line });
+              }
+            }
             if (cpp && args.length === 2 && beginOf(args[0]) !== stripParens(args[0])) {
               return call("insert", [o, R(offsetOf(args[0])), R(args[1])]);
             }
@@ -6700,6 +9460,17 @@
             if (args.length === 2) { return call("insert", [o, R(args[0]), R(args[1])]); }
             return false;
           case "extend": case "addAll": case "AddRange": case "concat": case "update":
+            // d.update({"b": 20, "d": 4}), d.update(b=20): each one put in
+            var given = args.length === 1 ? stripParens(args[0]) : null;
+            if ((isMap || (py && m === "update" && !isSet)) && ((given && given.k === "dict" && given.keys.every(Boolean)) ||
+                (py && m === "update" && !args.length && Object.keys(kw).length))) {
+              if (given) {
+                given.keys.forEach(function (key, i) { put({ k: "index", obj: o, at: key }, given.values[i]); });
+              } else {
+                Object.keys(kw).forEach(function (name) { put({ k: "index", obj: o, at: { k: "str", v: name } }, kw[name]); });
+              }
+              return true;
+            }
             if (isMap || (py && m === "update" && !isSet)) {
               var other = R(args[0]), key = fresh(ch, "key");
               ch.meet(key, { set: true, loop: true });
@@ -6734,8 +9505,37 @@
             return call("pop", [o, R(args[0])]);
           case "remove": case "Remove": case "discard": case "erase": case "delete": case "Delete":
             if (!args.length) { return false; }
-            if (cpp && beginOf(args[0]) !== stripParens(args[0])) { return call("pop", [o, R(offsetOf(args[0]))]); }
+            // C++: v.erase(std::find(v.begin(), v.end(), x)) takes out the first x;
+            // v.erase(std::remove(v.begin(), v.end(), x), v.end()) takes out every one
+            var found0 = stripParens(args[0]);
+            if (cpp && m === "erase" && found0.k === "call" && found0.args.length === 3 &&
+                bare(pathOf(found0.fn) || "") === "remove_if") {
+              return put(f.obj, { k: "call", fn: { k: "member", obj: f.obj, name: "Where", line: line }, args: [negatedFn(found0.args[2])], line: line });
+            }
+            if (cpp && m === "erase" && found0.k === "call" && found0.args.length === 3 &&
+                /^(find|remove)$/.test(bare(pathOf(found0.fn) || ""))) {
+              var what0 = R(found0.args[2]);
+              if (bare(pathOf(found0.fn)) === "find") { return call("remove", [o, what0]); }
+              out.push({ k: "while", cond: builtinCall("contains", [o, what0], line), line: line,
+                         body: [{ k: "call", e: builtinCall("remove", [o, copyOf(what0)], line), line: line }] });
+              return true;
+            }
+            if (cpp && beginOf(args[0]) !== stripParens(args[0])) {
+              // v.erase(v.begin() + a, v.begin() + b): from a up to b
+              if (args.length === 2 && beginOf(args[1]) !== stripParens(args[1])) {
+                return put(o, { k: "bin", op: "+", line: line,
+                                a: builtinCall("slice", [o, num(0), R(offsetOf(args[0]))], line),
+                                b: builtinCall("slice", [o, R(offsetOf(args[1]))], line) });
+              }
+              return call("pop", [o, R(offsetOf(args[0]))]);
+            }
             if (isMap) { return call("remove", [o, R(args[0])]); }
+            var boxed = stripParens(args[0]);
+            var asValue = boxed && ((boxed.k === "call" && /^(Integer\.valueOf|Long\.valueOf|Double\.valueOf|Character\.valueOf)$/.test(pathOf(boxed.fn) || "")) ||
+                                    (boxed.k === "cast" && /^(Integer|Object|Long|Character|Double)$/.test(String(boxed.type))));
+            if (java && m === "remove" && asValue) {
+              return call("remove", [o, R(boxed.k === "call" ? boxed.args[0] : boxed.e)]);
+            }
             if (java && m === "remove" && kindOf(args[0], ch) === "int" && !/^set/.test(ok || "")) {
               return call("pop", [o, R(args[0])]);
             }
@@ -6750,8 +9550,11 @@
             return call("clear", [o]);
           case "sort": case "Sort": {
             var how = args[0] || kw.key || kw.cmp;
+            var downSort = py && kw.reverse && stripParens(kw.reverse).v && !kw.cmp ? downBy(kw.key, ch) : null;
+            if (downSort) { return call("sort", [o, downSort]); }
+            var own1 = how || js ? null : ownOrder(obj, ch);
             call("sort", [o].concat(how ? [fnValue(how, ch, args[0] && stripParens(args[0]).k === "fn" &&
-                                                      stripParens(args[0]).params.length === 2 ? "compare" : "key")] : []));
+                                                      stripParens(args[0]).params.length === 2 ? "compare" : "key")] : own1 ? [own1] : []));
             if (kw.reverse && stripParens(kw.reverse).v) { call("reverse", [o]); }
             return true;
           }
@@ -6794,8 +9597,298 @@
         }
         if (e.k === "member") { return propOf(e, ch); }
         if (e.k !== "call" || e.builtin || e.mine) { return null; }
+        e = unstatic(e);
+        // the page's own ways of saying copy(p) and deepCopy(p): its Record's copied()
+        if (e.fn.k === "member" && /^(copied|Copied)$/.test(e.fn.name) && !e.args.length && pageHelpers.recordCopy) {
+          return builtinCall("copy", [e.fn.obj], e.line);
+        }
+        if (e.fn.k === "member" && /^(deepCopied|DeepCopied)$/.test(e.fn.name) && !e.args.length && pageHelpers.recordCopy) {
+          return builtinCall("deepCopy", [e.fn.obj], e.line);
+        }
         var mine = resolveCall(e, ch);
         if (mine) { return mine; }
+        var helper = e.fn.k === "name" ? e.fn.v : null;
+        if (helper && pageHelpers[helper]) {
+          var paged = pageCall(helper, e, ch);
+          if (paged) { return paged; }
+        }
+        var classed = letterClass(e);
+        if (classed) { return classed; }
+        // the page's C++ f(std::vector<Value>{a, b}): f called with a and b
+        if (cpp && top.valueStruct && e.fn.k === "name" && e.args.length === 1 && kindOf(e.fn, ch) === "fn") {
+          var packed = stripParens(e.args[0]);
+          if (packed.k === "new" && packed.braces && /vector$/.test(String(packed.type && packed.type.name || ""))) {
+            return { k: "call", fn: e.fn, args: packed.args, line: e.line };
+          }
+        }
+        // the page's C++ Value(): nothing yet; Value(x): x
+        if (cpp && top.valueStruct && e.fn.k === "name" && e.fn.v === "Value" && e.args.length <= 1) {
+          return e.args.length ? e.args[0] : { k: "null", line: e.line };
+        }
+        var pth = bare(pathOf(e.fn) || "");
+        if (js && pth === "Object.assign" && e.args.length === 2) {
+          var made0 = stripParens(e.args[0]);
+          if (made0.k === "call" && pathOf(made0.fn) === "Object.create" && made0.args.length === 1) { return builtinCall("copy", [e.args[1]], e.line); }
+        }
+        // Java's Objects.toString(n, ""): n, or nothing where it holds nothing
+        if (java && pth === "Objects.toString" && e.args.length >= 1) { return e.args[0]; }
+        // C#'s xs.Cast<dynamic>(): the same items
+        if (cs && e.fn.k === "member" && /^(Cast|OfType)$/.test(e.fn.name) && !e.args.length) { return e.fn.obj; }
+        // JavaScript's n.toLocaleString("en-US"): thousands kept apart by commas
+        if (js && e.fn.k === "member" && e.fn.name === "toLocaleString" && e.args.length >= 1) {
+          var opts = e.args[1] ? stripParens(e.args[1]) : null, placesJs = null;
+          if (opts && opts.k === "dict") {
+            opts.keys.forEach(function (key, n) { if (/^(minimumFractionDigits|maximumFractionDigits)$/.test(stripParens(key).v)) { placesJs = opts.values[n]; } });
+          }
+          var num0 = stripParens(e.fn.obj);
+          if (num0.k === "call" && pathOf(num0.fn) === "Number" && num0.args.length === 1) { num0 = num0.args[0]; }
+          return builtinCall("grouped", placesJs ? [num0, placesJs] : [num0], e.line);
+        }
+        // Python's format(x, ",.2f"), anywhere: x shown that way
+        if (py && pth === "format" && e.args.length === 2 && stripParens(e.args[1]).k === "str" && !userFn("format")) {
+          return shown(e.args[0], stripParens(e.args[1]).v);
+        }
+        // out.str(): the words a string stream holds
+        if (cpp && e.fn.k === "member" && e.fn.name === "str" && !e.args.length && stripParens(e.fn.obj).k === "name") {
+          var sso = ch && (ch.names[stripParens(e.fn.obj).v] || ch.params[stripParens(e.fn.obj).v]) || globalChart.names[stripParens(e.fn.obj).v];
+          if (sso && sso.stringStream) { return e.fn.obj; }
+        }
+        // C++: m.begin()->first, *v.begin(), m.rbegin()->first: the first there is, or the last
+        if (cpp && e.fn.k === "member" && /^(c?begin|c?rbegin)$/.test(e.fn.name) && !e.args.length) {
+          var fromAll = e.fn.obj;
+          if (kindOf(fromAll, ch) === "map") {
+            fromAll = builtinCall("items", [fromAll], e.line);
+            if (sortedMap(e.fn.obj, ch)) { fromAll = builtinCall("sorted", [fromAll], e.line); }
+          }
+          return { k: "index", obj: fromAll, at: /rbegin/.test(e.fn.name) ? { k: "un", op: "-", a: num(1) } : num(0), line: e.line };
+        }
+        // *max_element(v.begin(), v.end()): the biggest -- with a comparison, the last in its order
+        if (cpp && /^(max_element|min_element)$/.test(pth) && (e.args.length === 2 || e.args.length === 3) &&
+            beginOf(e.args[0]) !== stripParens(e.args[0])) {
+          var whole0 = beginOf(e.args[0]), most = pth === "max_element";
+          if (e.args.length === 2) { return builtinCall(most ? "max" : "min", [whole0], e.line); }
+          return { k: "index", obj: builtinCall("sorted", [whole0, fnValue(e.args[2], ch, "compare")], e.line),
+                   at: most ? { k: "un", op: "-", a: num(1) } : num(0), line: e.line };
+        }
+        // count(v.begin(), v.end(), x), binary_search(v.begin(), v.end(), x)
+        if (cpp && /^(count|binary_search)$/.test(pth) && e.args.length === 3 && beginOf(e.args[0]) !== stripParens(e.args[0]) && !userFn(pth)) {
+          return builtinCall(pth === "count" ? "count" : "contains", [beginOf(e.args[0]), e.args[2]], e.line);
+        }
+        // find(v.begin(), v.end(), x): where x is, and -1 for v.end()
+        if (cpp && pth === "find" && e.args.length === 3 && beginOf(e.args[0]) !== stripParens(e.args[0]) && !userFn("find")) {
+          return builtinCall("indexOf", [beginOf(e.args[0]), e.args[2]], e.line);
+        }
+        // C#'s grid.GetLength(1): how many there are along that way -- down, then across
+        if (cs && e.fn.k === "member" && /^(GetLength|GetUpperBound)$/.test(e.fn.name) && e.args.length === 1 &&
+            stripParens(e.args[0]).k === "num") {
+          var along = e.fn.obj;
+          for (var gl = 0; gl < parseInt(stripParens(e.args[0]).v, 10); gl++) { along = { k: "index", obj: along, at: num(0), line: e.line }; }
+          var alongN = builtinCall("length", [along], e.line);
+          return e.fn.name === "GetLength" ? alongN : { k: "bin", op: "-", a: alongN, b: num(1), line: e.line };
+        }
+        // int("ff", 16), Integer.parseInt("101", 2), parseInt("ff", 16): a whole number read in a base
+        if (/^(int|Integer\.parseInt|Integer\.valueOf|Long\.parseLong|parseInt|Convert\.ToInt32|Convert\.ToInt64|stoi|std\.stoi|stol|stoll)$/.test(pth) &&
+            ((!cpp && e.args.length === 2) || (cpp && e.args.length === 3)) &&
+            !(stripParens(e.args[e.args.length - 1]).k === "num" && stripParens(e.args[e.args.length - 1]).v === "10")) {
+          return builtinCall("fromBase", [e.args[0], e.args[e.args.length - 1]], e.line);
+        }
+        // f.call(x): the function f holds, called -- the page's Java Fn, and
+        // JavaScript's f.call(null, x)
+        if (e.fn.k === "member" && e.fn.name === "call" && e.fn.obj.k === "name" && !userFn(e.fn.obj.v)) {
+          var callee = stripParens(e.fn.obj), held = ch && (ch.names[callee.v] || ch.params[callee.v]) || globalChart.names[callee.v];
+          var heldType = held && held.typeInfo ? String(held.typeInfo.name || "") : "";
+          if (java && (heldType === "Fn" || (pageHelpers.bind && kindOf(callee, ch) !== "text"))) {
+            return { k: "call", fn: callee, args: e.args, line: e.line };
+          }
+          if (js && e.args.length && /^(null|name)$/.test(stripParens(e.args[0]).k) &&
+              (stripParens(e.args[0]).k === "null" || /^(this|undefined)$/.test(stripParens(e.args[0]).v)) &&
+              kindOf(callee, ch) === "fn") {
+            return { k: "call", fn: callee, args: e.args.slice(1), line: e.line };
+          }
+        }
+        // String.format("%6s", x) as a value, not only where it is printed:
+        // its pieces joined into one piece of words
+        if (/^(String\.format|string\.Format)$/.test(pth) && e.args.length && stripParens(e.args[0]).k === "str") {
+          var fs0 = stripParens(e.args[0]).v;
+          var bitsF = pth === "string.Format" ? composite(fs0, e.args.slice(1), e.line) : printfPieces(fs0, e.args.slice(1), e.line);
+          return textOfPieces(bitsF, e.line);
+        }
+        // Pattern.quote(",") -- the separator taken as it is written
+        if (/^((regex\.)?Pattern\.quote|Regex\.Escape|Text\.RegularExpressions\.Regex\.Escape|re\.escape)$/.test(pth) && e.args.length === 1) {
+          return e.args[0];
+        }
+        // ((Number) x).doubleValue(): the number x is
+        if (e.fn.k === "member" && /^(doubleValue|floatValue)$/.test(e.fn.name) && !e.args.length) { return e.fn.obj; }
+        if (e.fn.k === "member" && /^(intValue|longValue|shortValue)$/.test(e.fn.name) && !e.args.length) {
+          return builtinCall("int", [e.fn.obj], e.line);
+        }
+        // Math.signum(x), Integer.signum(x), Math.Sign(x): -1, 0 or 1
+        if (/^(Math\.signum|Integer\.signum|Long\.signum|Math\.Sign|Math\.sign|np\.sign)$/.test(pth) && e.args.length === 1) {
+          return builtinCall("compare", [e.args[0], num(0)], e.line);
+        }
+        // C++: s.rfind(x): the last place x is
+        if (cpp && e.fn.k === "member" && e.fn.name === "rfind" && e.args.length === 1) {
+          return builtinCall("lastIndexOf", [e.fn.obj, e.args[0]], e.line);
+        }
+        // C++: a.compare(from, n, b) -- a's piece from `from`, put in order with b
+        if (cpp && e.fn.k === "member" && e.fn.name === "compare" && kindOf(e.fn.obj, ch) === "text" &&
+            (e.args.length === 1 || e.args.length === 3)) {
+          if (e.args.length === 1) { return builtinCall("compare", [e.fn.obj, e.args[0]], e.line); }
+          var npos = /(^|\.)(npos)$/.test(pathOf(stripParens(e.args[1])) || "");
+          var piece = builtinCall("substring", [e.fn.obj, e.args[0]].concat(npos ? [] :
+                        [{ k: "bin", op: "+", a: e.args[0], b: e.args[1], line: e.line }]), e.line);
+          return builtinCall("compare", [piece, e.args[2]], e.line);
+        }
+        // std::nearbyint(x), Math.rint(x): rounded, a half going to the even one
+        if (/^(nearbyint|rint|Math\.rint|std\.rint)$/.test(pth) && e.args.length === 1) {
+          return builtinCall("roundEven", [e.args[0]], e.line);
+        }
+        // C#: Enumerable.Reverse(xs), a copy the other way round;
+        // string.Concat(Enumerable.Repeat("-", 18)), eighteen of them
+        if (cs && /^(System\.Linq\.)?Enumerable\.Reverse$/.test(pth) && e.args.length === 1) {
+          return builtinCall("reversed", [e.args[0]], e.line);
+        }
+        if (cs && /^(string|String)\.Concat$/.test(pth) && e.args.length === 1) {
+          var inner0 = stripParens(e.args[0]);
+          if (inner0.k === "call" && /^(System\.Linq\.)?Enumerable\.Repeat$/.test(bare(pathOf(inner0.fn) || "")) && inner0.args.length === 2) {
+            return builtinCall("repeat", [inner0.args[0], inner0.args[1]], e.line);
+          }
+          return builtinCall("join", [e.args[0], { k: "str", v: "" }], e.line);
+        }
+        if (cs && /^(string|String)\.Concat$/.test(pth) && e.args.length > 1) {
+          return textOfPieces(e.args, e.line);
+        }
+        if (cs && /^(System\.Linq\.)?Enumerable\.Repeat$/.test(pth) && e.args.length === 2) {
+          return builtinCall("repeat", [{ k: "list", items: [e.args[0]], line: e.line }, e.args[1]], e.line);
+        }
+        // Python's sets asked by name: a.issubset(b), a.union(b), a.symmetric_difference(b)
+        if (py && e.fn.k === "member" && e.args.length === 1 &&
+            /^(issubset|issuperset|isdisjoint|union|intersection|difference|symmetric_difference)$/.test(e.fn.name) &&
+            (isListKind(kindOf(e.fn.obj, ch)) || stripParens(e.fn.obj).k === "set")) {
+          var sa = e.fn.obj, sb = e.args[0];
+          switch (e.fn.name) {
+            case "issubset": return subsetTest(sa, sb, false, e.line);
+            case "issuperset": return subsetTest(sb, sa, false, e.line);
+            case "isdisjoint":
+              return { k: "bin", op: "==", a: builtinCall("length", [builtinCall("intersection", [sa, sb], e.line)], e.line), b: num(0), line: e.line };
+            case "symmetric_difference":
+              return builtinCall("union", [builtinCall("difference", [sa, sb], e.line), builtinCall("difference", [copyOf(sb), copyOf(sa)], e.line)], e.line);
+            default: return builtinCall(e.fn.name, [sa, sb], e.line);
+          }
+        }
+        // a.Concat(b): the one list and then the other
+        if (cs && e.fn.k === "member" && e.fn.name === "Concat" && e.args.length === 1 && kindOf(e.fn.obj, ch) !== "text") {
+          return { k: "bin", op: "+", a: e.fn.obj, b: e.args[0], line: e.line };
+        }
+        // string.CompareOrdinal(a, b), string.Compare(a, b, StringComparison.Ordinal): which comes first
+        if (cs && (/^(string|String)\.CompareOrdinal$/.test(pth) && e.args.length === 2 ||
+                   /^(string|String)\.Compare$/.test(pth) && e.args.length === 3 &&
+                   /Ordinal$/.test(pathOf(stripParens(e.args[2])) || ""))) {
+          return builtinCall("compare", [e.args[0], e.args[1]], e.line);
+        }
+        // a.Intersect(b), a.Union(b), a.Except(b)
+        if (cs && e.fn.k === "member" && /^(Intersect|Union|Except)$/.test(e.fn.name) && e.args.length === 1) {
+          return builtinCall({ Intersect: "intersection", Union: "union", Except: "difference" }[e.fn.name],
+                             [e.fn.obj, e.args[0]], e.line);
+        }
+        // "a,b,c".split(",", 2) in JavaScript: only the first two pieces
+        if (js && e.fn.k === "member" && e.fn.name === "split" && e.args.length === 2) {
+          var cutAt = stripParens(e.args[0]);
+          var parts0 = builtinCall("split", [e.fn.obj, cutAt.k === "regex" ? { k: "str", v: cutAt.v } : e.args[0]], e.line);
+          return builtinCall("slice", [parts0, num(0), e.args[1]], e.line);
+        }
+        // JSON.stringify(x), json.dumps(x): x the way JSON writes it
+        if (/^(JSON\.stringify|json\.dumps)$/.test(pth) && e.args.length >= 1 && (js || py) &&
+            !(py && e.args.some(function (a0) { return a0.k === "kw" && a0.name === "indent"; })) &&
+            !(js && e.args.length > 1)) {
+          return builtinCall("toJson", [e.args[0]], e.line);
+        }
+        // C#'s Enum.GetValues(typeof(Level)), GetNames, Parse, IsDefined
+        if (cs && /^(Enum\.(GetValues|GetNames|Parse|IsDefined))$/.test(pth) && e.args.length >= 1) {
+          var enC = typeofEnum(e.args[0]);
+          if (enC) {
+            var byNumber = enC.values.map(function (v, i) { return { v: v, n: enumNumbers(enC).list[i] }; })
+                                     .sort(function (a, b) { return a.n - b.n; });
+            if (/GetValues$/.test(pth)) { return { k: "list", items: byNumber.map(function (x) { return nameNode(x.v.name, e.line); }), line: e.line }; }
+            if (/GetNames$/.test(pth)) { return { k: "list", items: byNumber.map(function (x) { return { k: "str", v: x.v.name }; }), line: e.line }; }
+            if (/Parse$/.test(pth) && e.args.length >= 2) { return e.args[1]; }
+            if (/IsDefined$/.test(pth) && e.args.length === 2) { return builtinCall("contains", [enumNames(enC, e.line), e.args[1]], e.line); }
+          }
+        }
+        // Java's enums: Planet.values(), Planet.valueOf("EARTH"), p.ordinal(), p.name()
+        if (java) {
+          var enums = clsOrder.filter(function (c0) { return c0.kind === "enum"; });
+          var enumOf = function (x0) {
+            var sx = stripParens(x0), k0 = recordOf(kindOf(sx, ch));
+            if (k0 && CLS[k0] && CLS[k0].kind === "enum") { return CLS[k0]; }
+            if (sx.k === "name" && enumValues[sx.v]) { return CLS[enumValues[sx.v].cls]; }
+            var held0 = sx.k === "name" ? (ch && (ch.names[sx.v] || ch.params[sx.v]) || globalChart.names[sx.v]) : null;
+            var ty0 = held0 && held0.typeInfo ? String(held0.typeInfo.name || "") : "";
+            if (CLS[ty0] && CLS[ty0].kind === "enum") { return CLS[ty0]; }
+            return enums.length === 1 ? enums[0] : null;
+          };
+          var named0 = /^(\w+)\.(values|valueOf)$/.exec(pth);
+          var whole0 = named0 && CLS[named0[1]] && CLS[named0[1]].kind === "enum" ? CLS[named0[1]]
+                     : (pth === "values" || pth === "valueOf") && enums.length === 1 && !userFn(pth) ? enums[0] : null;
+          var what0 = named0 ? named0[2] : pth;
+          if (whole0 && what0 === "values" && !e.args.length) {
+            return { k: "list", items: whole0.values.map(function (v) { return nameNode(v.name, e.line); }), line: e.line };
+          }
+          if (whole0 && what0 === "valueOf" && e.args.length === 1) {
+            return whole0.richEnum ? userCallNode(userFn(whole0.name + "_valueOf"), [e.args[0]], e.line) : e.args[0];
+          }
+          if (e.fn.k === "member" && /^(ordinal|name)$/.test(e.fn.name) && !e.args.length && enums.length) {
+            var en = enumOf(e.fn.obj);
+            if (en) {
+              if (en.richEnum) { return { k: "member", obj: e.fn.obj, name: e.fn.name, line: e.line }; }
+              return e.fn.name === "name" ? e.fn.obj
+                   : builtinCall("indexOf", [{ k: "list", items: en.values.map(function (v) { return nameNode(v.name, e.line); }), line: e.line }, e.fn.obj], e.line);
+            }
+          }
+        }
+        // a.localeCompare(b): in order the way a dictionary puts words, capitals aside
+        if (js && e.fn.k === "member" && e.fn.name === "localeCompare" && e.args.length >= 1) {
+          return builtinCall("compare", [builtinCall("toLower", [e.fn.obj], e.line), builtinCall("toLower", [e.args[0]], e.line)], e.line);
+        }
+        // s.search("W"): where it first is
+        if (js && e.fn.k === "member" && e.fn.name === "search" && e.args.length === 1) {
+          var sought = stripParens(e.args[0]);
+          if (sought.k === "str" || (sought.k === "regex" && !/[\\^$.*+?()[\]{}|]/.test(sought.v))) {
+            return builtinCall("indexOf", [e.fn.obj, sought.k === "regex" ? { k: "str", v: sought.v } : sought], e.line);
+          }
+        }
+        // Math.cbrt(x): the cube root, below nought too
+        if (/^(Math\.cbrt|cbrt|std\.cbrt|Math\.Cbrt|numpy\.cbrt|np\.cbrt)$/.test(pth) && e.args.length === 1) {
+          return { k: "bin", op: "*", line: e.line, a: builtinCall("compare", [e.args[0], num(0)], e.line),
+                   b: { k: "bin", op: "**", a: builtinCall("abs", [copyOf(e.args[0])], e.line), b: { k: "paren", e: { k: "bin", op: "/", a: num(1), b: num(3) } }, line: e.line } };
+        }
+        // Math.floorDiv(a, b), Math.floorMod(a, b): divided rounding down, and what that leaves
+        if (/^(Math\.floorDiv|Math\.floorMod)$/.test(pth) && e.args.length === 2) {
+          if (pth === "Math.floorDiv") { return builtinCall("floor", [{ k: "bin", op: "/", real: true, a: e.args[0], b: e.args[1], line: e.line }], e.line); }
+          return { k: "bin", op: "%", pyMod: true, line: e.line, b: e.args[1],
+                   a: { k: "paren", e: { k: "bin", op: "+", a: { k: "bin", op: "%", a: e.args[0], b: copyOf(e.args[1]), pyMod: true, line: e.line }, b: copyOf(e.args[1]) } } };
+        }
+        // Character.getNumericValue('7'), char.GetNumericValue(c): the digit as a number
+        if (/^(Character\.getNumericValue|char\.GetNumericValue|Char\.GetNumericValue|Character\.digit)$/.test(pth) && e.args.length >= 1) {
+          return builtinCall("int", [e.args[0]], e.line);
+        }
+        // Collections.frequency(xs, x): how many of xs are x
+        if (pth === "Collections.frequency" && e.args.length === 2) { return builtinCall("count", [e.args[0], e.args[1]], e.line); }
+        // x.isInfinite(), Double.isInfinite(x), double.IsInfinity(x), std::isinf(x)
+        var infOf = e.fn.k === "member" && e.fn.name === "isInfinite" && !e.args.length ? e.fn.obj
+                  : /^(Double\.isInfinite|double\.IsInfinity|Double\.IsInfinity|std\.isinf|isinf|math\.isinf)$/.test(bare(pathOf(e.fn) || "")) && e.args.length === 1 ? e.args[0] : null;
+        if (infOf) {
+          return { k: "bin", op: "==", a: builtinCall("abs", [infOf], e.line), b: { k: "name", v: "Infinity", constant: true }, line: e.line };
+        }
+        // f.bind(null, a): f, handed a first whenever it is called
+        if (js && e.fn.k === "member" && e.fn.name === "bind" && e.args.length >= 1 &&
+            /^(null|name)$/.test(stripParens(e.args[0]).k) &&
+            (stripParens(e.args[0]).k === "null" || /^(this|undefined)$/.test(stripParens(e.args[0]).v))) {
+          var boundFn = stripParens(e.fn.obj);
+          if (boundFn.k === "fn" || (boundFn.k === "name" && (userFn(boundFn.v) || kindOf(boundFn, ch) === "fn"))) {
+            return builtinCall("bind", [fnValue(boundFn, ch, "fn")].concat(e.args.slice(1)), e.line);
+          }
+        }
         var p = bare(pathOf(e.fn) || "");
         var a = e.args.filter(function (x) { return x.k !== "kw"; });
         var kw = {};
@@ -6814,23 +9907,28 @@
         if (/^(floor|Floor)$/.test(name) && a.length === 1) { return B("floor", a); }
         if (/^(ceil|Ceiling|ceiling)$/.test(name) && a.length === 1) { return B("ceiling", a); }
         if (/^(round|Round|lround|rint)$/.test(name) && a.length >= 1) {
-          if (a.length === 2) {
-            var n = stripParens(a[1]);
-            if (n.k === "num") {
-              var scale = Math.pow(10, parseInt(n.v, 10));
-              return bin("/", B("round", [bin("*", a[0], num(scale))]), num(scale));
-            }
-          }
-          return B("round", [a[0]]);
+          var away = a.some(function (x) { return /AwayFromZero/.test(pathOf(x) || ""); });
+          var even = !away && ((py && p === "round") || (cs && p === "Math.Round") || /^(rint|Math\.rint)$/.test(p));
+          var places = a.filter(function (x) { return !/MidpointRounding/.test(pathOf(x) || ""); })[1];
+          return B(even ? "roundEven" : "round", places ? [a[0], places] : [a[0]]);
         }
         if (/^(pow|Pow)$/.test(name) && a.length === 2) { return bin("**", a[0], a[1]); }
         if (/^(min|max|Min|Max|fmin|fmax)$/.test(name) && a.length >= 1 && !(self && !/^(Math|math|std)$/.test(pathOf(self) || ""))) {
+          // max(hand) where a Card says what < is: the last in that order, min the first
+          var ownLt0 = py && a.length === 1 && !kw.key ? ownOrder(a[0], ch) : null;
+          if (ownLt0) {
+            return { k: "index", obj: B("sorted", [a[0], ownLt0]), at: name === "max" ? { k: "un", op: "-", a: num(1) } : num(0), line: e.line };
+          }
           if (a.length === 1 && a[0].k === "star") { return B(name.replace(/^f/, "").toLowerCase(), [a[0].e]); }
           return B(name.replace(/^f/, "").toLowerCase(), a.map(beginOf));
         }
         if (/^(log|Log|exp|Exp|sin|Sin|cos|Cos|tan|Tan|atan|Atan|atan2|Atan2|hypot|log10|Log10|trunc|Truncate|sign|Sign|asin|acos)$/.test(name) && p !== "" && /^(math|Math|std|cmath)?\.?/.test(p)) {
           var low2 = name.toLowerCase().replace("truncate", "trunc");
           return B(low2, a);
+        }
+        // Convert.ToInt32(3.5) is 4, and of 4.5 is 4 too: to the even one
+        if (cs && /^(Convert\.ToInt32|Convert\.ToInt64|Convert\.ToInt16)$/.test(p) && a.length === 1 && kindOf(a[0], ch) === "real") {
+          return B("roundEven", [a[0]]);
         }
         if (/^(int|Math\.trunc|trunc|Integer\.parseInt|int\.Parse|Int32\.Parse|Convert\.ToInt32|parseInt|stoi|long\.Parse|Integer\.valueOf|Long\.parseLong|stol|atoi|Convert\.ToInt64)$/.test(p) && a.length) {
           return B("int", [a[0]]);
@@ -6839,7 +9937,7 @@
           var fk = kindOf(a[0], ch);
           return fk === "int" || fk === "real" ? a[0] : B("real", [a[0]]);
         }
-        if (/^(str|String|String\.valueOf|to_string|Integer\.toString|Double\.toString|Convert\.ToString|std\.to_string|JSON\.stringify|repr)$/.test(p) && a.length === 1) {
+        if (/^(str|String|String\.valueOf|to_string|Integer\.toString|Double\.toString|Convert\.ToString|std\.to_string|JSON\.stringify)$/.test(p) && a.length === 1) {
           var d = described(a[0]);
           if (d !== a[0]) { return d; }
           return kindOf(a[0], ch) === "text" ? a[0] : B("toString", [a[0]]);
@@ -6862,21 +9960,69 @@
           return B(/upper/i.test(p) ? "toUpper" : "toLower", [a[0]]);
         }
         if (dot && /^(strip|trim|Trim|lstrip|rstrip|trimStart|trimEnd|TrimStart|TrimEnd)$/.test(dot) && !a.length) { return B("trim", [self]); }
-        if (dot && /^(equals|Equals|equalsIgnoreCase)$/.test(dot) && a.length === 1) { return bin("==", self, a[0]); }
+        if (dot && /^(equalsIgnoreCase)$/.test(dot) && a.length === 1) {
+          return bin("==", B("toLower", [self]), B("toLower", [a[0]]));
+        }
+        if (dot === "Equals" && a.length === 2 && /IgnoreCase/.test(pathOf(a[1]) || "")) {
+          return bin("==", B("toLower", [self]), B("toLower", [a[0]]));
+        }
+        if (/^(string\.Equals|String\.Equals)$/.test(p) && a.length === 3 && /IgnoreCase/.test(pathOf(a[2]) || "")) {
+          return bin("==", B("toLower", [a[0]]), B("toLower", [a[1]]));
+        }
+        if (dot && /^(equals|Equals)$/.test(dot) && a.length === 1) { return bin("==", self, a[0]); }
+        // C#'s s.Remove(4), s.Remove(1, 3), s.Insert(4, "-"): new words, s as it was
+        if (cs && dot === "Remove" && kindOf(self, ch) === "text" && (a.length === 1 || a.length === 2)) {
+          if (a.length === 1) { return B("substring", [self, num(0), a[0]]); }
+          return bin("+", B("substring", [self, num(0), a[0]]), B("substring", [copyOf(self), bin("+", copyOf(a[0]), a[1])]));
+        }
+        if (cs && dot === "Insert" && kindOf(self, ch) === "text" && a.length === 2) {
+          return bin("+", bin("+", B("substring", [self, num(0), a[0]]), a[1]), B("substring", [copyOf(self), copyOf(a[0])]));
+        }
         if (/^(Objects\.equals|object\.Equals|string\.Equals)$/.test(p) && a.length === 2) { return bin("==", a[0], a[1]); }
-        if (dot && /^(compareTo|CompareTo|compare)$/.test(dot) && a.length === 1) {
+        if (dot && /^(lastIndexOf|LastIndexOf|rfind|rindex)$/.test(dot) && a.length === 1) {
+          return B("lastIndexOf", [self, a[0]]);
+        }
+        if (dot && /^(compareTo|CompareTo|compare|localeCompare)$/.test(dot) && a.length === 1) {
           return { k: "compare", a: self, b: a[0], line: e.line };
         }
         if (/^(string\.Compare|String\.Compare|strcmp|string\.CompareOrdinal|Integer\.compare|Double\.compare)$/.test(p) && a.length === 2) {
           return { k: "compare", a: a[0], b: a[1], line: e.line };
         }
-        if (/^(fmod|math\.fmod|Math\.IEEERemainder)$/.test(p) && a.length === 2) { return bin("%", a[0], a[1]); }
+        // fmod keeps the sign of what was divided, as MOD does: not Python's %
+        if (/^(fmod|math\.fmod|Math\.IEEERemainder)$/.test(p) && a.length === 2) { return Object.assign(bin("%", a[0], a[1]), { pyMod: true }); }
         if (/^(divmod)$/.test(p) && a.length === 2) {
-          return { k: "list", items: [bin("//", a[0], a[1]), bin("%", a[0], a[1])], line: e.line };
+          return { k: py ? "tuple" : "list", items: [bin("//", a[0], a[1]), bin("%", a[0], a[1])], line: e.line };
         }
+        // pow(a, b, m): a to the b, what is left over from m
+        if (py && p === "pow" && a.length === 3) { return bin("%", bin("**", a[0], a[1]), a[2]); }
+        // bin(10) is "0b1010", hex(255) "0xff", oct(8) "0o10"; int("ff", 16) is 255
+        if (py && /^(bin|hex|oct)$/.test(p) && a.length === 1) {
+          var baseOf = { bin: 2, hex: 16, oct: 8 }[p], lead = { bin: "0b", hex: "0x", oct: "0o" }[p];
+          return bin("+", { k: "str", v: lead }, B("toBase", [a[0], num(baseOf)]));
+        }
+        // Integer.toBinaryString(10), Integer.toHexString(255), Integer.toString(n, 2),
+        // Convert.ToString(n, 2), n.toString(16)
+        if (/^(Integer|Long)\.(toBinaryString|toHexString|toOctalString)$/.test(p) && a.length === 1) {
+          return B("toBase", [a[0], num(/Binary/.test(p) ? 2 : /Hex/.test(p) ? 16 : 8)]);
+        }
+        if (/^(Integer\.toString|Long\.toString|Convert\.ToString)$/.test(p) && a.length === 2) {
+          return B("toBase", [a[0], a[1]]);
+        }
+        if (js && dot === "toString" && a.length === 1) { return B("toBase", [self, a[0]]); }
         // words
         if (dot && /^(split|Split)$/.test(dot)) {
           var sep = a[0] ? stripParens(a[0]) : null;
+          // C#'s Split(new[] { ", " }, StringSplitOptions.None): the one separator
+          if (sep && (sep.k === "list" || sep.k === "newarr") && (sep.items || (sep.init && sep.init.items) || []).length === 1) {
+            sep = stripParens((sep.items || sep.init.items)[0]);
+            a = [sep];
+          }
+          // C#'s Split(new char[0], ...), Split((char[])null, ...), Split(null): on spaces
+          if (cs && sep && ((sep.k === "newarr" && !sep.init && sep.dims.length === 1 && stripParens(sep.dims[0]) &&
+                             stripParens(sep.dims[0]).k === "num" && stripParens(sep.dims[0]).v === "0") ||
+                            sep.k === "null" || (sep.k === "cast" && stripParens(sep.e).k === "null"))) {
+            return B("split", [self]);
+          }
           if (!sep || (sep.k === "regex" && /^\\s[+*]?$/.test(sep.v)) || (sep.k === "str" && /^(\\\\s\+|\\s\+|\s+)$/.test(sep.v) && java) ||
               (sep.k === "str" && sep.v === " " && (java || js) && false)) {
             return B("split", [self]);
@@ -6894,6 +10040,8 @@
               return B("join", [joined.fors[0].iter, self]);
             }
           }
+          // "-".join("abc"), "".join(reversed(s)): the letters of some words
+          if (kindOf(a[0], ch) === "text") { return B("join", [B("toList", [a[0]]), self]); }
           return B("join", [a[0], self]);
         }
         if (dot === "join" && (js || java || cs) && a.length <= 1 && !/^(String|string)$/.test(pathOf(self) || "")) {
@@ -6910,6 +10058,18 @@
         }
         if (dot === "find" && cpp && a.length === 1) {
           return isListKind(sk) ? B("indexOf", [self, a[0]]) : B("indexOf", [self, a[0]]);
+        }
+        // s.find("o", 5), s.indexOf("o", 5): looking from 5 on
+        if (dot && /^(find|indexOf|IndexOf|index)$/.test(dot) && a.length === 2 && !(dot === "find" && cpp && sk !== "text") &&
+            (sk === "text" || isListKind(sk) || !sk)) {
+          return B("indexOf", [self, a[0], a[1]]);
+        }
+        if (dot === "rfind" && py && a.length === 1) { return B("lastIndexOf", [self, a[0]]); }
+        // s.startswith(("he", "x")): any one of them
+        if (py && dot && /^(startswith|endswith)$/.test(dot) && a.length === 1 && stripParens(a[0]).k === "tuple") {
+          var which = dot === "startswith" ? "startsWith" : "endsWith";
+          return stripParens(a[0]).items.map(function (one) { return B(which, [copyOf(self), one]); })
+                   .reduce(function (x, y) { return bin("||", x, y); });
         }
         if (dot && /^(count|Count)$/.test(dot) && a.length === 1 && stripParens(a[0]).k !== "fn") {
           if (cpp && sk === "map") { return B("contains", [self, a[0]]); }
@@ -6987,8 +10147,18 @@
         if (dot === "concat" && a.length >= 1) {
           return a.reduce(function (acc, x) { return bin("+", acc, x); }, self);
         }
+        // s.charCodeAt(i): the code of the letter at i, the first where it says no more
+        if (dot && /^(charCodeAt|codePointAt)$/.test(dot)) {
+          // "A".charCodeAt(0) is ord("A"): a letter's first letter is itself
+          var firstOf = !a.length || (stripParens(a[0]).k === "num" && stripParens(a[0]).v === "0");
+          if (firstOf && (oneLetter(self, ch) || !a.length)) { return B("ord", [self]); }
+          return B("ord", [a.length ? { k: "index", obj: self, at: a[0], line: e.line } : self]);
+        }
         if (/^(ord|charCodeAt)$/.test(dot || p)) { return B("ord", dot ? [self] : a); }
         if (/^(chr|String\.fromCharCode)$/.test(p) && a.length === 1) { return B("chr", a); }
+        if (p === "String.fromCharCode" && a.length > 1) {
+          return a.map(function (x) { return B("chr", [x]); }).reduce(function (x, y) { return bin("+", x, y); });
+        }
         // lists
         if (/^(sum|Sum)$/.test(p) && a.length >= 1) {
           var total = B("sum", [a[0]]);
@@ -6996,17 +10166,31 @@
         }
         if (dot && /^(sum|Sum)$/.test(dot) && !a.length) { return B("sum", [self]); }
         if (dot && /^(max|Max|min|Min)$/.test(dot) && !a.length) { return B(dot.toLowerCase(), [self]); }
-        if (dot && /^(average|Average)$/.test(dot) && !a.length) { return bin("/", B("sum", [self]), B("length", [self])); }
+        if (dot && /^(average|Average)$/.test(dot) && !a.length) {
+          return Object.assign(bin("/", B("sum", [self]), B("length", [self])), { real: true });
+        }
         if (dot && /^(getAsInt|getAsDouble|orElse|get|Value|orElseThrow)$/.test(dot) && self && stripParens(self).k === "call") {
           return self;
         }
-        if (/^(std\.accumulate|accumulate)$/.test(p) && a.length >= 3) { return bin("+", B("sum", [beginOf(a[0])]), a[2]); }
+        if (/^(std\.accumulate|accumulate)$/.test(p) && a.length === 3) { return bin("+", B("sum", [beginOf(a[0])]), a[2]); }
         if (/^(std\.count|count)$/.test(p) && a.length === 3 && cpp) { return B("count", [beginOf(a[0]), a[2]]); }
         if (/^(std\.max_element|max_element|std\.min_element|min_element)$/.test(p) && a.length >= 2) {
           return B(/max/.test(p) ? "max" : "min", [beginOf(a[0])]);
         }
         if (/^(std\.find|find)$/.test(p) && a.length === 3 && cpp) { return B("indexOf", [beginOf(a[0]), a[2]]); }
+        // sorted(hand), max(hand) where a Card says what < is: in that order
+        if (py && /^(sorted|max|min)$/.test(p) && a.length === 1 && !kw.key) {
+          var ownLt = ownOrder(a[0], ch);
+          if (ownLt) {
+            var inOrder = B("sorted", [a[0], ownLt]);
+            if (p === "max") { return { k: "index", obj: inOrder, at: { k: "un", op: "-", a: num(1) }, line: e.line }; }
+            if (p === "min") { return { k: "index", obj: inOrder, at: num(0), line: e.line }; }
+            return kw.reverse && stripParens(kw.reverse).v ? B("reversed", [inOrder]) : inOrder;
+          }
+        }
         if (/^(sorted)$/.test(p) && a.length === 1) {
+          var downS = py && kw.reverse && stripParens(kw.reverse).v ? downBy(kw.key, ch) : null;
+          if (downS) { return B("sorted", [a[0], downS]); }
           var sorted = B("sorted", [a[0]].concat(kw.key ? [fnValue(kw.key, ch, "key")] : []));
           return kw.reverse && stripParens(kw.reverse).v ? B("reversed", [sorted]) : sorted;
         }
@@ -7019,10 +10203,48 @@
         if (/^(list|tuple)$/.test(p) && !a.length) { return { k: "list", items: [] }; }
         if (/^(set|frozenset)$/.test(p)) { return a.length ? B("unique", [a[0]]) : { k: "list", items: [] }; }
         if (/^(dict|Dict)$/.test(p) && !a.length) { return { k: "dict", keys: [], values: [] }; }
+        // copy.deepcopy(x), structuredClone(x): a copy all the way down; copy.copy(x) one level
+        if ((py && /^(copy\.deepcopy|deepcopy)$/.test(p)) || (js && p === "structuredClone")) {
+          if (a.length === 1) { return B("deepCopy", [a[0]]); }
+        }
+        if (py && /^(copy\.copy)$/.test(p) && a.length === 1) { return B("copy", [a[0]]); }
+        // dict.fromkeys(xs): each thing in xs once, in the order met
+        if (py && p === "dict.fromkeys" && a.length === 1) { return B("unique", [a[0]]); }
+        // functools.partial(f, a): f, handed a first whenever it is called
+        if (py && /^(functools\.partial|partial)$/.test(p) && a.length >= 1) {
+          return B("bind", [fnValue(a[0], ch, "fn")].concat(a.slice(1)));
+        }
         if (p === "range" && a.length >= 1) { return B("range", a); }
         if (/^(any|all)$/.test(p) && a.length === 1) { return B(p, a); }
+        if (p === "zip" && a.length === 1 && stripParens(a[0]).k === "star") {
+          return B("transpose", [stripParens(a[0]).e]);
+        }
         if (/^(enumerate|zip)$/.test(p)) { return B(p, a); }
+        if (py && p === "repr" && a.length === 1) {
+          var dr = described(a[0]);
+          return dr !== a[0] ? dr : B("repr", a);
+        }
         if (dot && /^(index)$/.test(dot) && a.length === 1) { return B("indexOf", [self, a[0]]); }
+        if (dot && /^(peek|Peek|element|front)$/.test(dot) && !a.length && isQueue(self, ch)) {
+          return { k: "index", obj: self, at: num(0), line: e.line };
+        }
+        // a TreeMap's firstKey(), lastKey(): its smallest key and its biggest
+        if (dot && /^(firstKey|lastKey|headKey)$/.test(dot) && !a.length) {
+          return B(dot === "lastKey" ? "max" : "min", [B("keys", [self])]);
+        }
+        if (dot && /^(firstEntry|lastEntry)$/.test(dot) && !a.length) {
+          var endKey = B(dot === "lastEntry" ? "max" : "min", [B("keys", [self])]);
+          return { k: "list", items: [endKey, { k: "index", obj: copyOf(self), at: copyOf(endKey), line: e.line }], line: e.line };
+        }
+        // heapq.heappop(h): the smallest, taken out
+        if (py && p === "heapq.heappop" && a.length === 1) { return B("pop", [a[0], num(0)]); }
+        var heapOf = dot ? priorityOf(self, ch) : null;
+        if (heapOf && /^(peek|element|top|Peek)$/.test(dot) && !a.length) {
+          return { k: "index", obj: self, at: heapOf === "max" ? bin("-", B("length", [self]), num(1)) : num(0), line: e.line };
+        }
+        if (heapOf && /^(poll|remove|pop|Dequeue)$/.test(dot) && !a.length) {
+          return B("pop", heapOf === "max" ? [self] : [self, num(0)]);
+        }
         if (dot && /^(peek|Peek|back|top|last|Last|getLast|peekLast|lastElement)$/.test(dot) && !a.length) {
           return { k: "index", obj: self, at: bin("-", B("length", [self]), num(1)), line: e.line };
         }
@@ -7048,10 +10270,22 @@
         if (/^(make_pair|std\.make_pair|pair|std\.pair|make_tuple|std\.make_tuple|Tuple\.Create|Map\.entry|entry)$/.test(p) && a.length >= 2) {
           return { k: "list", items: a, line: e.line };
         }
-        if (/^(Collections\.max|Collections\.min)$/.test(p) && a.length === 1) { return B(/max/.test(p) ? "max" : "min", a); }
+        if (/^(Collections\.max|Collections\.min)$/.test(p) && a.length === 1) {
+          // of Cards that say how they compare: the last in that order, or the first
+          var ownCmp = ownOrder(a[0], ch);
+          if (ownCmp) { return { k: "index", obj: B("sorted", [a[0], ownCmp]), at: /max/.test(p) ? { k: "un", op: "-", a: num(1) } : num(0), line: e.line }; }
+          return B(/max/.test(p) ? "max" : "min", a);
+        }
         if (/^(Array\.isArray)$/.test(p) && a.length === 1) { return bin("==", B("classOf", a), { k: "str", v: "List" }); }
         if (/^(Number\.isInteger)$/.test(p) && a.length === 1) { return bin("==", a[0], B("int", a)); }
-        if (/^(isNaN|Number\.isNaN)$/.test(p) && a.length === 1) { return { k: "un", op: "!", a: B("isNumber", a) }; }
+        if (/^(isNaN|Number\.isNaN)$/.test(p) && a.length === 1) {
+          // isNaN(Number(s)): whether s is not a number, not whether its number is
+          var tested = stripParens(a[0]);
+          if (tested.k === "call" && tested.args.length >= 1 && /^(Number|parseInt|parseFloat)$/.test(bare(pathOf(tested.fn) || ""))) {
+            tested = tested.args[0];
+          }
+          return { k: "un", op: "!", a: B("isNumber", [tested]) };
+        }
         if (/^(isinstance)$/.test(p) && a.length === 2) {
           var types = stripParens(a[1]).k === "tuple" ? stripParens(a[1]).items : [a[1]];
           return types.map(function (t) { return typeTest(a[0], pathOf(t) || "", e.line); })
@@ -7059,6 +10293,15 @@
         }
         if (/^(type)$/.test(p) && a.length === 1) { return B("classOf", a); }
         if (dot === "getClass" || dot === "GetType") { return B("classOf", [self]); }
+        if (dot && /^(getKey|getValue)$/.test(dot) && !a.length && self) {
+          return { k: "index", obj: self, at: num(dot === "getKey" ? 0 : 1), line: e.line };
+        }
+        if (dot && /^(getMessage|what|getLocalizedMessage|ToString|toString)$/.test(dot) && !a.length &&
+            self && stripParens(self).k === "name" && CAUGHT[stripParens(self).v]) {
+          // an error of the program's own holds its message; any other is its message
+          if (recordErrors && !/^(ToString|toString)$/.test(dot)) { return { k: "member", obj: self, name: "message", line: e.line }; }
+          return self;
+        }
         // x.getClass().getSimpleName(): the name of the class is what classOf says
         if (dot && /^(getSimpleName|getName)$/.test(dot) && !a.length && self) {
           var asked = stripParens(self);
@@ -7097,10 +10340,104 @@
       }
       // a part of something that is really a call: s.length, list.Count,
       // a record's property with something that works it out
+      // ---- C#'s enums: each one its name, with a number behind it --------
+      // typeof(Level), where Level is an enum: Level
+      function typeofEnum(x) {
+        var t = stripParens(x);
+        var name = t && t.k === "un" && t.op === "typeof " ? pathOf(stripParens(t.a))
+                 : t && t.k === "call" && pathOf(t.fn) === "typeof" && t.args.length === 1 ? pathOf(t.args[0]) : null;
+        name = String(name || "").replace(/^.*[.:]/, "");
+        return CLS[name] && CLS[name].kind === "enum" && !CLS[name].richEnum ? CLS[name] : null;
+      }
+      function csEnumOf(x, ch) {
+        var sx = stripParens(x);
+        if (!cs || !sx) { return null; }
+        // Enum.Parse(typeof(Level), "High")
+        if (sx.k === "call" && /^Enum\.(Parse|ToObject)$/.test(bare(pathOf(sx.fn) || "")) && sx.args.length >= 1) { return typeofEnum(sx.args[0]); }
+        function isEnum(name) { name = String(name || "").replace(/^.*[.:]/, ""); return CLS[name] && CLS[name].kind === "enum" && !CLS[name].richEnum ? CLS[name] : null; }
+        if (sx.k === "name" && enumValues[sx.v]) { return isEnum(enumValues[sx.v].cls); }
+        if (sx.k === "member" && sx.obj.k === "name" && isEnum(sx.obj.v)) { return isEnum(sx.obj.v); }
+        if (sx.k === "cast") { return isEnum(sx.type && sx.type.name || sx.type); }
+        var ti = placeType(sx, ch);
+        return ti ? isEnum(ti.name) : null;
+      }
+      // the numbers behind an enum's names -- Low = 1, Medium = 5 -- and
+      // whether they are simply 0, 1, 2 in turn
+      function enumNumbers(en) {
+        var n = 0, plain = true, known = true, list = [];
+        en.values.forEach(function (v, i) {
+          var sv = v.value ? stripParens(v.value) : null;
+          if (sv && sv.k === "num") { n = parseInt(sv.v, 10); }
+          else if (sv && sv.k === "un" && sv.op === "-" && stripParens(sv.a).k === "num") { n = -parseInt(stripParens(sv.a).v, 10); }
+          else if (sv) { known = false; }
+          if (n !== i) { plain = false; }
+          list.push(n);
+          n++;
+        });
+        return { list: list, plain: plain, known: known };
+      }
+      function enumNames(en, line) {
+        return { k: "list", items: en.values.map(function (v) { return nameNode(v.name, line); }), line: line };
+      }
+      // (int)level: the number behind the name
+      function enumNumber(en, x, line) {
+        var nums = enumNumbers(en);
+        if (nums.plain || !nums.known) { return builtinCall("indexOf", [enumNames(en, line), x], line); }
+        return builtinCall("get", [{ k: "dict", line: line, keys: en.values.map(function (v) { return { k: "str", v: v.name }; }),
+                                     values: nums.list.map(function (n) { return num(n); }) }, x], line);
+      }
+      // (Level)10: the name with that number behind it
+      function enumFromNumber(en, x, line) {
+        var nums = enumNumbers(en);
+        if (nums.plain || !nums.known) { return { k: "index", obj: enumNames(en, line), at: x, line: line }; }
+        return builtinCall("get", [{ k: "dict", line: line, keys: nums.list.map(function (n) { return num(n); }),
+                                     values: en.values.map(function (v) { return nameNode(v.name, line); }) }, x,
+                                   builtinCall("toString", [copyOf(x)], line)], line);
+      }
+      // whether the program puts a message into something itself -- this_.message = ...
+      var messageSeen = null;
+      function messageSet() {
+        if (messageSeen === null) {
+          messageSeen = false;
+          eachNode([top.main, top.funcs, clsOrder.map(function (c) { return [c.methods, c.ctors]; })], function (x) {
+            if (messageSeen) { return false; }
+            var t = (x.k === "assign" || x.k === "assignx") ? stripParens(x.target) : null;
+            if (t && t.k === "member" && /^(message|Message)$/.test(t.name)) {
+              messageSeen = true;
+            }
+          });
+        }
+        return messageSeen;
+      }
       function propOf(e, ch) {
         var getter = getterCall(e, ch);
         if (getter) { return getter; }
+        if (/^(Keys|Values)$/.test(e.name) && (sk === "map" || cs)) {
+          var mapKeys = builtinCall(e.name === "Keys" ? "keys" : "values", [e.obj], e.line);
+          return e.name === "Keys" && sortedMap(e.obj, ch) ? builtinCall("sorted", [mapKeys], e.line) : mapKeys;
+        }
+        if (/^(message|Message)$/.test(e.name) && stripParens(e.obj).k === "name" && CAUGHT[stripParens(e.obj).v]) {
+          // errors that are records hold their message: e.Message is its message field
+          var heldAsRecords = recordErrors || messageSet() ||
+                              clsOrder.some(function (c) { return c.record && (c.fieldNames || []).indexOf("message") >= 0; });
+          if (heldAsRecords) { return e.name === "message" ? null : { k: "member", obj: e.obj, name: "message", line: e.line }; }
+          return e.obj;
+        }
         var sk = kindOf(e.obj, ch);
+        // found->first, found->second, where found = m.find(k): k, and m[k]
+        var itObj = cpp && stripParens(e.obj).k === "name" ? (ch && (ch.names[stripParens(e.obj).v] || ch.params[stripParens(e.obj).v]) || globalChart.names[stripParens(e.obj).v]) : null;
+        if (itObj && itObj.iterOf && /^(first|second)$/.test(e.name)) {
+          return e.name === "first" ? e.obj : { k: "index", obj: copyOf(itObj.iterOf), at: e.obj, line: e.line };
+        }
+        // an int[,]'s Length: every one in it, rows times columns
+        if (cs && e.name === "Length" && rectOf(e.obj, ch) > 1) {
+          var all = builtinCall("length", [e.obj], e.line), inner = e.obj;
+          for (var rd = 1; rd < rectOf(e.obj, ch); rd++) {
+            inner = { k: "index", obj: inner, at: num(0), line: e.line };
+            all = { k: "bin", op: "*", a: all, b: builtinCall("length", [inner], e.line), line: e.line };
+          }
+          return all;
+        }
         if (/^(length|Length|Count|size)$/.test(e.name) && !recordOf(sk)) { return builtinCall("length", [e.obj], e.line); }
         if (/^(first|Key|key)$/.test(e.name) && (isListKind(sk) || sk === null) && !recordOf(sk) && (cpp || cs)) {
           return { k: "index", obj: e.obj, at: num(0), line: e.line };
@@ -7108,10 +10445,18 @@
         if (/^(second|Value|value)$/.test(e.name) && (isListKind(sk) || sk === null) && !recordOf(sk) && (cpp || cs)) {
           return { k: "index", obj: e.obj, at: num(1), line: e.line };
         }
+        // C#'s int? n: n.HasValue is whether it holds anything, n.Value what
+        if (cs && e.name === "HasValue") { return { k: "bin", op: "!=", a: e.obj, b: { k: "null" }, line: e.line }; }
+        if (cs && e.name === "Value" && /^(int|real|bool|text)$/.test(sk || "")) { return e.obj; }
+        // a C# Tuple's Item1, Item2: its first, its second
+        var itemN = cs && !recordOf(sk) ? /^Item([1-7])$/.exec(e.name) : null;
+        if (itemN) { return { k: "index", obj: e.obj, at: num(parseInt(itemN[1], 10) - 1), line: e.line }; }
         var path = pathOf(e) || "";
         if (/^(Math\.PI|math\.pi|M_PI|Math\.Pi|numbers\.pi)$/.test(path)) { return { k: "num", v: "3.141592653589793", real: true }; }
         if (/^(Math\.E|math\.e)$/.test(path)) { return { k: "num", v: "2.718281828459045", real: true }; }
-        if (/^(Integer\.MAX_VALUE|int\.MaxValue|INT_MAX|Int32\.MaxValue|sys\.maxsize|Number\.MAX_SAFE_INTEGER|Long\.MAX_VALUE|LLONG_MAX)$/.test(path)) { return { k: "num", v: "2147483647" }; }
+        if (/^(Integer\.MAX_VALUE|int\.MaxValue|INT_MAX|Int32\.MaxValue)$/.test(path)) { return { k: "num", v: "2147483647" }; }
+        if (/^(Number\.MAX_SAFE_INTEGER)$/.test(path)) { return { k: "num", v: "9007199254740991" }; }
+        if (/^(sys\.maxsize|Long\.MAX_VALUE|LLONG_MAX|long\.MaxValue|Int64\.MaxValue)$/.test(path)) { return { k: "num", v: "9223372036854775807" }; }
         if (/^(Integer\.MIN_VALUE|int\.MinValue|INT_MIN|Int32\.MinValue)$/.test(path)) { return { k: "un", op: "-", a: { k: "num", v: "2147483648" } }; }
         if (/^(math\.inf|Double\.MAX_VALUE|double\.MaxValue|Number\.MAX_VALUE|Infinity|Number\.POSITIVE_INFINITY|Double\.POSITIVE_INFINITY|double\.PositiveInfinity|DBL_MAX|FLT_MAX)$/.test(path)) {
           return { k: "name", v: "Infinity", constant: true };
@@ -7130,6 +10475,10 @@
         var ty = e.type || {};
         var name = String(ty.name || "").replace(/^.*::/, "");
         var args = e.args || [];
+        if (cpp && CLS[name] && args.length === 1 && stripParens(args[0]).k === "deref" &&
+            recordOf(kindOf(stripParens(args[0]).e, ch)) === name) {
+          return builtinCall("copy", [stripParens(args[0]).e], e.line);
+        }
         if (CLS[name] && CLS[name].record) {
           var made = pickArity(FACTORIES[name], args.length);
           if (made) {
@@ -7146,11 +10495,15 @@
         if (/^(StringBuilder|StringBuffer)$/.test(name)) {
           return args.length && kindOf(args[0], ch) === "text" ? args[0] : { k: "str", v: "" };
         }
+        if (/^(Tuple|ValueTuple|KeyValuePair)$/.test(name) && args.length >= 2) { return { k: "list", items: args, line: e.line }; }
         if (/^(string|String|wstring)$/.test(name)) {
           if (args.length === 2 && cpp) { return builtinCall("repeat", [args[1], args[0]], e.line); }
           if (args.length === 2 && cs && kindOf(args[1], ch) === "int") { return builtinCall("repeat", [args[0], args[1]], e.line); }
           if (args.length === 1 && isListKind(kindOf(args[0], ch))) { return builtinCall("join", [args[0], { k: "str", v: "" }], e.line); }
           return args[0] || { k: "str", v: "" };
+        }
+        if (/^(PriorityQueue|priority_queue)$/.test(name) && args.length === 1 && !/^(int|real)$/.test(kindOf(args[0], ch) || "")) {
+          return builtinCall("sorted", [args[0]], e.line);
         }
         if (isListKind(kind) || /^(Array)$/.test(name)) {
           if (e.init && e.init.k === "list") { return e.init; }
@@ -7160,13 +10513,24 @@
           if (args.length === 1 && (isListKind(kindOf(args[0], ch)) || stripParens(args[0]).k === "list" || stripParens(args[0]).k === "call")) {
             return /^set/.test(kind) || /Set/.test(name) ? builtinCall("unique", [args[0]], e.line) : builtinCall("copy", [args[0]], e.line);
           }
-          if (cpp && args.length === 2 && beginOf(args[0]) !== stripParens(args[0])) { return builtinCall("copy", [beginOf(args[0])], e.line); }
+          if (cpp && args.length === 2 && beginOf(args[0]) !== stripParens(args[0])) {
+            // vector<int>(v.begin() + 1, v.end()): a piece of v, or all of it
+            var from2 = stripParens(offsetOf(args[0])), last2 = stripParens(args[1]);
+            var toEnd2 = last2.k === "call" && last2.fn.k === "member" && last2.fn.name === "end";
+            if (from2.k === "num" && from2.v === "0" && toEnd2) { return builtinCall("copy", [beginOf(args[0])], e.line); }
+            return builtinCall("slice", [beginOf(args[0]), offsetOf(args[0])].concat(toEnd2 ? [] : [offsetOf(args[1])]), e.line);
+          }
           if (args.length > 1 && js) { return { k: "list", items: args, line: e.line }; }
           if (cpp && args.length && e.braces) { return { k: "list", items: args, line: e.line }; }
           return { k: "list", items: [], line: e.line };
         }
         if (kind === "map" || /^(Map|Object)$/.test(name)) {
           if (e.init && e.init.k === "dict") { return e.init; }
+          // std::map<std::string, int>{{"apple", 3}, {"pear", 0}}: the pairs it starts with
+          if (cpp && e.braces && args.length && args.every(function (it) { it = stripParens(it); return it.k === "list" && it.items.length === 2; })) {
+            return { k: "dict", keys: args.map(function (it) { return stripParens(it).items[0]; }),
+                     values: args.map(function (it) { return stripParens(it).items[1]; }), line: e.line };
+          }
           if (e.init && e.init.k === "list") {
             var ks = [], vs = [];
             e.init.items.forEach(function (it) { it = stripParens(it); if (it.k === "list" && it.items.length === 2) { ks.push(it.items[0]); vs.push(it.items[1]); } });
@@ -7181,6 +10545,7 @@
           return { k: "dict", keys: [], values: [], line: e.line };
         }
         if (/^(Integer|Double|Long|Boolean|Float|Number)$/.test(name) && args.length === 1) { return args[0]; }
+        if (/^(Func|Action|Predicate|Comparison|Converter)$/.test(name) && args.length === 1) { return fnValue(args[0], ch, "fn"); }
         if (/^(Date|DateTime|Random|Scanner)$/.test(name)) { return null; }
         if (/^(pair|Pair|tuple|Tuple|KeyValuePair)$/.test(name)) { return { k: "list", items: args, line: e.line }; }
         return null;
@@ -7244,16 +10609,41 @@
       // ---- what kind of thing an expression is, as far as can be told --
       var kindChart = null;
       function kindNow(e) { return kindOf(e, kindChart); }
+      // what a function hands back -- its kind, not what sort of member it
+      // was ("method", "get"), which the same word says for a class's own
+      function givesKind(fn) {
+        var said = /^(method|get|set|init)$/.test(fn.kind || "") ? null : fn.kind;
+        return said || kindOfType(fn.rtypeInfo || fn.rtype) || plainlyReturns(fn);
+      }
       var BUILT_KIND = { length: "int", indexOf: "int", count: "int", ord: "int", random: null,
                          contains: "bool", startsWith: "bool", endsWith: "bool", isDigit: "bool",
                          isAlpha: "bool", isUpper: "bool", isLower: "bool", isSpace: "bool", any: "bool",
                          all: "bool", isNumber: "bool", join: "text", toString: "text", replace: "text",
                          trim: "text", toUpper: "text", toLower: "text", chr: "text", classOf: "text",
-                         padLeft: "text", padRight: "text", fixed: "text", split: "list<text>", range: "list<int>",
+                         padLeft: "text", padRight: "text", fixed: "text", repr: "text", split: "list<text>", range: "list<int>",
+                         lastIndexOf: "int", compare: "int", bind: "fn", roundEven: "int", toBase: "text", fromBase: "int", grouped: "text", toJson: "text", significant: "text",
                          sqrt: "real", real: "real", floor: "int", ceiling: "int", int: "int", round: "int",
                          keys: "list", values: "list", items: "list<list>", sin: "real", cos: "real",
                          tan: "real", log: "real", exp: "real", log10: "real", atan: "real", atan2: "real",
                          hypot: "real", trunc: "int" };
+      // What a function hands back, where it says so plainly -- a table, a
+      // function, a list -- before the kinds of everything are settled
+      function plainlyReturns(fn) {
+        if (!fn || !fn.body) { return null; }
+        if (fn.plainKind !== undefined) { return fn.plainKind; }
+        var k = null, seen = false;
+        fn.plainKind = null;
+        eachNode(fn.body, function (x) {
+          if (x.k === "fn" || x.k === "func" || x.k === "class") { return false; }
+          if (x.k === "return" && x.value) {
+            var v = stripParens(x.value), vk = v.k === "dict" ? "map" : v.k === "fn" ? "fn" : v.k === "list" ? "list"
+                  : v.k === "call" && v.builtin && v.fn.v === "bind" ? "fn" : null;
+            if (!seen) { k = vk; seen = true; } else if (k !== vk) { k = null; }
+          }
+        });
+        fn.plainKind = k;
+        return k;
+      }
       function kindOf(e, ch) {
         e = stripParens(e);
         if (!e) { return null; }
@@ -7317,6 +10707,17 @@
                 one.values.forEach(function (v) { early = mergeKinds(early, kindOf(v, ch)); });
               } finally { one.reading = false; }
             }
+            // For Each f In fs: what fs holds
+            if (!early && one.loopOnly && one.elems && one.elems.length && !one.reading) {
+              var itemOf = one.elems.filter(function (el) { return el.item && el.of; })[0];
+              if (itemOf) {
+                one.reading = true;
+                try {
+                  var overK = kindOf(itemOf.of, ch);
+                  early = overK === "text" ? "text" : elemKind(overK);
+                } finally { one.reading = false; }
+              }
+            }
             return early;
           }
           case "un": return e.op === "!" ? "bool" : kindOf(e.a, ch);
@@ -7330,13 +10731,18 @@
           case "slice": return kindOf(e.obj, ch);
           case "addr": case "deref": return kindOf(e.e, ch);
           case "bin": {
+            if (e.op === "%" && py && stripParens(e.a).k === "str") { return "text"; }
+            if (OP_NAMES[e.op] && !/^(<<|==|!=|<|>|<=|>=)$/.test(e.op) && (cpp || cs || py) && recordOf(kindOf(e.a, ch))) {
+              var ownOpK = operatorCall(e.op, e.a, e.b, ch, e.line);
+              if (ownOpK) { return kindOf(ownOpK, ch); }
+            }
             var a = kindOf(e.a, ch), b = kindOf(e.b, ch);
             if (/^(&&|\|\||==|!=|<|>|<=|>=|in|not in|instanceof|is)$/.test(e.op)) { return "bool"; }
             if (e.op === "+" && isListKind(a) && isListKind(b)) { return mergeKinds(a, b); }
             if (e.op === "+" && (a === "text" || b === "text")) { return "text"; }
             if (e.op === "*" && (isListKind(a) || isListKind(b))) { return isListKind(a) ? a : b; }
             if (e.op === "*" && py && (a === "text" || b === "text")) { return "text"; }
-            if (e.op === "/") { return py || js ? "real" : (a === "int" && b === "int" ? "int" : a && b ? "real" : null); }
+            if (e.op === "/") { return py || js || e.real ? "real" : (a === "int" && b === "int" ? "int" : a && b ? "real" : null); }
             if (e.op === "//") { return a === "int" && b === "int" ? "int" : a && b ? "real" : null; }
             if (e.op === "**") { return a === "int" && b === "int" && py ? "int" : "real"; }
             if (a === "real" || b === "real") { return "real"; }
@@ -7350,7 +10756,7 @@
                 if (bn === "random") { return e.args.length ? "int" : "real"; }
                 return BUILT_KIND[bn];
               }
-              if (/^(sorted|reversed|copy|unique|slice|substring|toList|shuffled|repeat|sort|reverse)$/.test(bn)) {
+              if (/^(sorted|reversed|copy|deepCopy|unique|slice|substring|toList|shuffled|repeat|sort|reverse|transpose)$/.test(bn)) {
                 var fk = kindOf(first, ch);
                 if (bn === "toList" || bn === "sorted" || bn === "unique" || bn === "shuffled") {
                   return fk === "text" ? "list<text>" : fk === "map" ? "list" : fk;
@@ -7373,14 +10779,14 @@
             if (e.mine) {
               var fn = userFn(e.fn.v);
               if (fn && fn.factoryOf) { return "obj:" + fn.factoryOf; }
-              return fn ? fn.kind || kindOfType(fn.rtypeInfo || fn.rtype) || null : null;
+              return fn ? givesKind(fn) : null;
             }
             var asked = inputOf(e);
             if (asked) { return asked.kind; }
             var lc2 = libCall(e, ch);
             if (lc2 && lc2 !== e) { return kindOf(lc2, ch); }
             var mine = e.fn.k === "name" ? userFn(e.fn.v) : null;
-            if (mine) { return mine.factoryOf ? "obj:" + mine.factoryOf : mine.kind || kindOfType(mine.rtypeInfo || mine.rtype) || null; }
+            if (mine) { return mine.factoryOf ? "obj:" + mine.factoryOf : givesKind(mine); }
             return null;
           }
           case "member": {
@@ -7393,6 +10799,11 @@
               for (var i = 0; i < chain.length; i++) {
                 var fk2 = FIELD_KINDS[chain[i].name];
                 if (fk2 && fk2[e.name]) { return fk2[e.name]; }
+              }
+              // before any are settled: what the field says it holds
+              for (var j = 0; j < chain.length; j++) {
+                var said = (chain[j].fields || []).filter(function (f) { return f.name === e.name && f.type; })[0];
+                if (said && kindOfType(said.type)) { return kindOfType(said.type); }
               }
             }
             return null;
@@ -7636,6 +11047,188 @@
         }
       }
 
+      // ---- an error thrown in one function and caught in another ----------
+      // raise and throw, caught by the same function, are the try box above.
+      // Caught further out -- by whoever called, or whoever called them --
+      // they are said the way a program with no exceptions says it: a name
+      // the whole program shares, `error`, set to what went wrong; a way out
+      // of every function on the way back up, each asking straight after
+      // the call; and, at the try that catches it, the handler.
+      // raise TooBig(n), throw new NotFound(v): where the error is one of
+      // the program's own records, what is thrown is the whole record
+      var recordErrors = false;
+      eachNode([order.map(function (fn) { return fn.body; }), main], function (x) {
+        if (x.k === "func" || x.k === "fn" || x.k === "class") { return; }
+        if (x.k === "exit" && x.made && CLS[x.named] && CLS[x.named].record && !x.recordSaid) {
+          x.said = x.made;
+          x.recordSaid = true;
+          recordErrors = true;
+        }
+      });
+      (function throwsAcross() {
+        function catching(st) { return st.k === "try" && (st.handlers || []).length > 0; }
+        function stops(x) { return x.k === "exit" && /^(SystemExit|sys\.exit|exit)$/.test(String(x.named || "")); }
+        // every node of these statements outside the body of a try that catches
+        function outside(list, fn) {
+          eachNode(list, function (x) {
+            if (x.k === "func" || x.k === "fn" || x.k === "class") { return false; }
+            if (catching(x)) {
+              outside(x.handlers.map(function (h) { return h.body; }), fn);
+              outside(x.orelse || [], fn);
+              outside(x.fin || [], fn);
+              return false;
+            }
+            fn(x);
+          });
+        }
+        function reaches(x) {
+          if (x.k !== "call" || !x.fn) { return []; }
+          if (x.fn.k === "name" && !x.fn.via) { var f = userFn(x.fn.v); return f ? [f] : []; }
+          if (x.fn.k === "member" && METHODS[x.fn.name]) {
+            return METHODS[x.fn.name].list.map(function (m) { return funcs[low(m.fn.name)] || m.fn; }).filter(Boolean);
+          }
+          return [];
+        }
+        var mayThrow = [];
+        function throws(f) { return mayThrow.indexOf(f) >= 0; }
+        for (var round = 0; round < 50; round++) {
+          var more = false;
+          order.forEach(function (fn) {
+            if (throws(fn)) { return; }
+            var hit = false;
+            outside(fn.body, function (x) {
+              if (hit) { return false; }
+              if (x.k === "exit" && !stops(x)) { hit = true; }
+              if (x.k === "call" && reaches(x).some(throws)) { hit = true; }
+            });
+            if (hit) { mayThrow.push(fn); more = true; }
+          });
+          if (!more) { break; }
+        }
+        if (!mayThrow.length) { return; }
+        var err = "error";
+        while (!free(err) || globalChart.names[err]) { err += "_"; }
+        taken[low(err)] = true;
+        var g = globalChart.meet(err, { kind: recordErrors ? null : "text", declared: true, set: true });
+        g.value = { k: "str", v: "" };
+        g.values = [g.value];
+        // holding records too, where the program has errors of its own: of no one kind
+        if (recordErrors) { g.values.push({ k: "record", kind: "", line: 0 }); g.mixed = true; }
+        var tempsMade = 0;
+        function nothingWrong() { return { k: "bin", op: "==", a: nameNode(err), b: { k: "str", v: "" } }; }
+        function somethingWrong() { return { k: "bin", op: "!=", a: nameNode(err), b: { k: "str", v: "" } }; }
+        // What to do straight after a call that may have gone wrong.
+        function check(ctx, line) {
+          var then = ctx.inTry ? [{ k: "exit", named: "", said: nameNode(err, line), reset: err, line: line }]
+                   : ctx.inFn ? [{ k: "return", value: null, line: line }]
+                   : [{ k: "exit", named: "SystemExit", line: line }];
+          return { k: "if", cond: somethingWrong(), then: then, orelse: [], line: line };
+        }
+        function riskyCalls(e) {
+          var found = [];
+          (function look(x) {
+            if (!x || typeof x !== "object") { return; }
+            if (Array.isArray(x)) { x.forEach(look); return; }
+            if (x.k === "fn" || x.k === "func" || x.k === "comp" || x.k === "class") { return; }
+            for (var key in x) {
+              if (key !== "line" && key !== "cls" && x[key] && typeof x[key] === "object") { look(x[key]); }
+            }
+            if (x.k === "call" && reaches(x).some(throws)) { found.push(x); }
+          })(e);
+          return found;
+        }
+        function swapNode(e, from, to) {
+          if (e === from) { return to; }
+          if (!e || typeof e !== "object") { return e; }
+          if (Array.isArray(e)) { return e.map(function (y) { return swapNode(y, from, to); }); }
+          var o = {};
+          for (var key in e) { o[key] = key === "cls" || key === "line" ? e[key] : swapNode(e[key], from, to); }
+          return o;
+        }
+        function rewrite(list, ctx, own) {
+          var out = [];
+          (list || []).forEach(function (st) {
+            if (!st || typeof st !== "object") { out.push(st); return; }
+            var line = st.line;
+            if (st.k === "func" || st.k === "class") { out.push(st); return; }
+            if (st.k === "exit" && !stops(st) && !ctx.inTry && ctx.inFn) {
+              out.push({ k: "assign", target: nameNode(err, line),
+                         value: st.said || { k: "str", v: st.named || "error" }, line: line });
+              out.push({ k: "return", value: null, line: line });
+              return;
+            }
+            var copy = Object.assign({}, st);
+            if (catching(st)) {
+              copy.body = rewrite(st.body, { inFn: ctx.inFn, inTry: true }, own);
+              copy.handlers = st.handlers.map(function (h) { return Object.assign({}, h, { body: rewrite(h.body, ctx, own) }); });
+              copy.orelse = rewrite(st.orelse || [], ctx, own);
+              copy.fin = rewrite(st.fin || [], ctx, own);
+            } else {
+              ["then", "orelse", "body", "fin"].forEach(function (k) { if (Array.isArray(st[k])) { copy[k] = rewrite(st[k], ctx, own); } });
+              if (st.cases) { copy.cases = st.cases.map(function (c) { return Object.assign({}, c, { body: rewrite(c.body, ctx, own) }); }); }
+              if (st.handlers) { copy.handlers = st.handlers.map(function (h) { return Object.assign({}, h, { body: rewrite(h.body, ctx, own) }); }); }
+            }
+            // the calls that may go wrong in what this statement works out
+            var heads = st.k === "if" ? ["cond"] : st.k === "foreach" ? ["iter", "over"]
+                      : /^(expr|assign|aug|decl|return|switch)$/.test(st.k) ? ["e", "value", "names", "subject"] : [];
+            var risky = [];
+            heads.forEach(function (k) { if (copy[k]) { risky = risky.concat(riskyCalls(copy[k])); } });
+            if (!risky.length) { out.push(copy); return; }
+            var whole = (st.k === "expr" && risky.length === 1 && stripParens(copy.e) === risky[0]) ||
+                        (st.k === "assign" && risky.length === 1 && stripParens(copy.value) === risky[0] &&
+                         stripParens(copy.target).k === "name");
+            if (whole) { out.push(copy); out.push(check(ctx, line)); return; }
+            // innermost first, each one worked out once: s.deposit(10).deposit(20)
+            // is the first deposit, then the second on what that gave back
+            var temps = [];
+            function applyTemps(node) {
+              if (!node || typeof node !== "object") { return node; }
+              if (Array.isArray(node)) { return node.map(applyTemps); }
+              for (var ti = 0; ti < temps.length; ti++) { if (temps[ti].from === node) { return nameNode(temps[ti].to, line); } }
+              var o = {};
+              for (var key in node) { o[key] = key === "cls" || key === "line" ? node[key] : applyTemps(node[key]); }
+              return o;
+            }
+            // print(s.balance, s.addInterest()): what comes before the call is
+            // read before it, so it is kept aside first, in the order it was
+            var headCall = copy.k === "expr" ? stripParens(copy.e) : null;
+            if (headCall && headCall.k === "call") {
+              var firstRisky = -1;
+              headCall.args.forEach(function (arg, ai) { if (firstRisky < 0 && riskyCalls(arg).length) { firstRisky = ai; } });
+              headCall.args.slice(0, Math.max(0, firstRisky)).forEach(function (arg) {
+                var plainArg = stripParens(arg);
+                if (/^(num|str|bool|null|name|fstr)$/.test(plainArg.k)) { return; }
+                var kept = "before" + (++tempsMade);
+                while (!free(kept) || own[kept]) { kept = "before" + (++tempsMade); }
+                out.push({ k: "assign", target: nameNode(kept, line), value: arg, line: line });
+                temps.push({ from: arg, to: kept });
+              });
+            }
+            risky.forEach(function (call) {
+              var tmp = "result" + (++tempsMade);
+              while (!free(tmp) || own[tmp]) { tmp = "result" + (++tempsMade); }
+              var callNow = {};
+              for (var key in call) { callNow[key] = key === "cls" || key === "line" ? call[key] : applyTemps(call[key]); }
+              out.push({ k: "assign", target: nameNode(tmp, line), value: callNow, line: line });
+              out.push(check(ctx, line));
+              temps.push({ from: call, to: tmp });
+            });
+            heads.forEach(function (k) { if (copy[k]) { copy[k] = applyTemps(copy[k]); } });
+            // a call made for what it does, all of it worked out above already
+            if (copy.k === "expr" && stripParens(copy.e).k === "name") { return; }
+            out.push(copy);
+          });
+          return out;
+        }
+        order.forEach(function (fn) {
+          var own = localsOf(fn).set;
+          var before = JSON.stringify(fn.body);
+          fn.body = rewrite(fn.body, { inFn: true, inTry: false }, own);
+          if (py && JSON.stringify(fn.body) !== before) { fn.body = [{ k: "global", names: [err], line: fn.line }].concat(fn.body); }
+        });
+        main = rewrite(main, { inFn: false, inTry: false }, localsOf({ params: [], body: main }).set);
+      })();
+
       // ================================================ lowering ==
       // main first, then each function, each a chart of its own.
       kindChart = mainChart;
@@ -7644,7 +11237,8 @@
       function hasYield(body) {
         var found = false;
         eachNode(body, function (x) {
-          if (x.k === "fn" || x.k === "func") { return false; }
+          // a Java switch's yield is what the switch comes to, not a generator's
+          if (x.k === "fn" || x.k === "func" || x.k === "switchx") { return false; }
           if (x.k === "yield") { found = true; }
         });
         return found;
@@ -7668,6 +11262,7 @@
         fn.chart = ch;
         kindChart = ch;
         var body = fn.body;
+        if (cpp || cs) { body = ownCopies(fn.params, body); }
         // a destructured parameter, taken apart where the function starts
         fn.params.forEach(function (p) {
           var orig = null;
@@ -7750,7 +11345,8 @@
               return !ch.names[one.name] && usesName(ch.body, one.name);
             }
             var own = ch.names[one.name];
-            return own ? !own.declared : usesName(ch.body, one.name);
+            // for (let i ...) in a function: that function's own i
+            return own ? !(own.declared || own.ownLoop) : usesName(ch.body, one.name);
           });
           if (shared) {
             var g = globalChart.meet(one.name, {});
@@ -8043,7 +11639,7 @@
           if (rnd) { return px(rnd, ch); }
         }
         switch (s.k) {
-          case "fn": return px(liftLambda(s, ch, "lambda"), ch);
+          case "fn": return px(asValue(liftLambda(s, ch, "lambda")), ch);
           case "comp": note(s.line, "for … in"); return { t: "[]", r: 9 };
           case "obj": return { t: "{}", r: 9 };
           case "dict": {
@@ -8073,20 +11669,30 @@
             if (s.v === "this" || s.v === "self" || s.v === "super") { return { t: s.v === "super" ? selfWord : s.v, r: 9 }; }
             return { t: nameOf(s.v), r: 9 };
           case "fstr": {
-            var parts = piecesOf(s).map(function (p) {
+            var pieces0 = piecesOf(s);
+            // n + 1 inside: worked out first; and two numbers first are words, not a sum
+            var parts = pieces0.map(function (p) {
               var t = px(p, ch);
-              return t.r < 5 ? "(" + t.t + ")" : t.t;
+              return t.r <= 5 ? "(" + t.t + ")" : t.t;
             });
+            if (pieces0.length > 1 && pieces0[0].k !== "str" && kindOf(pieces0[0], ch) !== "text" &&
+                pieces0[1].k !== "str" && kindOf(pieces0[1], ch) !== "text") { parts.unshift('""'); }
             return { t: parts.join(" + ") || '""', r: parts.length > 1 ? 5 : 9 };
           }
           case "places":
             // shown to so many places after the point, as the words it prints
             return { t: "fixed(" + px(s.e, ch).t + ", " + s.n + ")", r: 9 };
-          case "compare":
-            return { t: "(" + px(s.a, ch).t + " - " + px(s.b, ch).t + ")", r: 9 };
+          case "compare": {
+            var ca = kindOf(s.a, ch), cb = kindOf(s.b, ch);
+            // a.CompareTo(b) is -1, 0 or 1, numbers and words alike
+            return { t: "compare(" + px(s.a, ch).t + ", " + px(s.b, ch).t + ")", r: 9 };
+          }
           case "un": {
             if (s.op === "!") {
               var inside = stripParens(s.a);
+              // !(a == b) where a's class says what == is: NOT equals(a, b), not a != b
+              var ownInside = inside.k === "bin" && FLIP[inside.op] ? operatorCall(inside.op, inside.a, inside.b, ch, inside.line) : null;
+              if (ownInside) { var ownT = px(ownInside, ch); return { t: "NOT " + (ownT.r >= 9 ? ownT.t : "(" + ownT.t + ")"), r: 9 }; }
               if (inside.k === "bin" && FLIP[inside.op]) {
                 return px({ k: "bin", op: FLIP[inside.op], a: inside.a, b: inside.b, line: inside.line }, ch);
               }
@@ -8095,10 +11701,18 @@
               return { t: "NOT " + (t.r >= 9 ? t.t : "(" + t.t + ")"), r: 9 };
             }
             if (s.op === "-") {
+              var ownNeg = operatorCall("-", s.a, undefined, ch, s.line);      // -v, where v's class says what that is
+              if (ownNeg) { return px(ownNeg, ch); }
               var neg = px(s.a, ch);
               return { t: "-" + (neg.r >= 9 ? neg.t : "(" + neg.t + ")"), r: 8 };
             }
             if (s.op === "+") { return px(s.a, ch); }
+            // ~~x: x without what is after the point; ~x: -x - 1, as whole numbers have it
+            if (s.op === "~") {
+              var tilde = stripParens(s.a);
+              if (tilde.k === "un" && tilde.op === "~") { return px(builtinCall("int", [tilde.a], s.line), ch); }
+              return px({ k: "bin", op: "-", a: { k: "un", op: "-", a: s.a, line: s.line }, b: num(1), line: s.line }, ch);
+            }
             if (s.op === "typeof ") { return px(builtinCall("classOf", [s.a], s.line), ch); }
             note(s.line, s.op.trim());
             return { t: s.op.trim() + (s.op.length > 1 ? " " : "") + px(s.a, ch).t, r: 8 };
@@ -8107,8 +11721,16 @@
             if (s.blank) { return px(blankFor(s.type, s.line), ch); }
             var k = kindOfType(s.type);
             var from = kindOf(s.e, ch);
+            if (cs) {
+              var toEnum = csEnumOf({ k: "cast", type: s.type }, ch), fromEnum = csEnumOf(s.e, ch);
+              if (toEnum && !fromEnum && from !== "text") { return px(enumFromNumber(toEnum, s.e, s.line), ch); }
+              if (toEnum) { return px(s.e, ch); }
+              if (fromEnum && /^(int|long|short|byte|Int32)$/.test(String(s.type && s.type.name || s.type))) {
+                return px(enumNumber(fromEnum, s.e, s.line), ch);
+              }
+            }
             if (k === "int" && from !== "int") {
-              if (/char/.test(String(s.type)) || from === "text" && /^int$/.test(String(s.type)) && cpp) {
+              if (/char/.test(String(s.type)) || (from === "text" && !py && !js && /^(int|long|short|byte|Int32)$/.test(String(s.type)))) {
                 return px(builtinCall("ord", [s.e], s.line), ch);
               }
               return { t: "int(" + px(s.e, ch).t + ")", r: 9 };
@@ -8142,24 +11764,37 @@
             if (step && step.k === "un" && step.op === "-" && stripParens(step.a).v === "1" && !s.from && !s.to) {
               return px(builtinCall("reversed", [s.obj], s.line), ch);
             }
-            if (step && !(step.k === "num" && step.v === "1")) { note(s.line, "[::]"); }
+            if (step && !(step.k === "num" && step.v === "1")) {
+              // xs[a:b:c]: every c-th, from the end where c is below nought
+              var down = isNegative(step), whole = builtinCall("length", [s.obj], s.line);
+              var fromS = s.from || (down ? { k: "bin", op: "-", a: whole, b: num(1), line: s.line } : num(0));
+              var toS = s.to || (down ? { k: "un", op: "-", a: { k: "paren", e: { k: "bin", op: "+", a: whole, b: num(1) } }, line: s.line } : whole);
+              return px(builtinCall("slice", [s.obj, fromS, toS, s.step], s.line), ch);
+            }
             var args = [s.obj, s.from || num(0)].concat(s.to ? [s.to] : []);
             return px(builtinCall(sk === "text" ? "substring" : "slice", args, s.line), ch);
           }
           case "list": case "tuple": case "set": {
+            // (3, 4) where Python or C# made one: a tuple, printed as one
+            if (s.k === "tuple" && (py || cs) && s.items && s.items.length &&
+                !s.items.some(function (x) { return !x || x.k === "star"; })) {
+              return { t: "(" + s.items.map(function (x) { return px(x, ch).t; }).join(", ") +
+                          (s.items.length === 1 ? ",)" : ")"), r: 9 };
+            }
             // [*a, 1, *b]: the lists joined
             var groups = [], cur = [];
             (s.items || []).forEach(function (x) {
               if (x && x.k === "star") {
                 if (cur.length) { groups.push({ t: "[" + cur.join(", ") + "]" }); cur = []; }
-                groups.push({ t: wrapAt(x.e, 6, ch) });
+                // [...word]: its letters, a list of them
+                groups.push({ t: wrapAt(kindOf(x.e, ch) === "text" ? builtinCall("toList", [x.e], s.line) : x.e, 6, ch) });
               } else if (x) {
                 cur.push(px(x, ch).t);
               }
             });
             if (cur.length || !groups.length) { groups.push({ t: "[" + cur.join(", ") + "]" }); }
             if (groups.length === 1 && (s.items || []).length === 1 && s.items[0].k === "star") {
-              return px(builtinCall("copy", [s.items[0].e], s.line), ch);
+              return px(builtinCall(kindOf(s.items[0].e, ch) === "text" ? "toList" : "copy", [s.items[0].e], s.line), ch);
             }
             return { t: groups.map(function (g) { return g.t; }).join(" + "), r: groups.length > 1 ? 5 : 9 };
           }
@@ -8195,6 +11830,33 @@
         if (e.k === "cast" && /^char$/.test(e.type)) { return true; }
         return false;
       }
+      // a is a subset of b: nothing in a that b lacks -- and, strictly, b has more
+      function subsetTest(a, b, strict, line) {
+        var none = { k: "bin", op: "==", a: builtinCall("length", [builtinCall("difference", [a, b], line)], line), b: num(0), line: line };
+        return strict ? { k: "bin", op: "&&", a: none, line: line,
+                          b: { k: "bin", op: "<", a: builtinCall("length", [copyOf(a)], line), b: builtinCall("length", [copyOf(b)], line), line: line } } : none;
+      }
+      // One letter, whatever the language calls it: 'a', s[i], s.charAt(i),
+      // or a name that only ever holds one -- each letter of a word walked
+      // through, or one taken out of a word.
+      function oneLetter(e, ch, seen) {
+        e = stripParens(e);
+        if (!e) { return false; }
+        if (isChar(e, ch)) { return true; }
+        if (e.k === "str") { return String(e.v).length === 1; }
+        if (e.k === "index") { return kindOf(e.obj, ch) === "text"; }
+        if (e.k === "call" && e.fn.k === "member" && e.fn.name === "charAt") { return true; }
+        if (e.k !== "name") { return false; }
+        var one = ch && (ch.names[e.v] || ch.params[e.v]) || globalChart.names[e.v];
+        seen = seen || {};
+        if (!one || seen[e.v]) { return false; }
+        seen[e.v] = true;
+        var from = (one.elems || []).filter(function (el) { return el.item && el.of; });
+        var vals = one.values || [];
+        if (!from.length && !vals.length) { return false; }
+        return from.every(function (el) { return kindOf(el.of, ch) === "text"; }) &&
+               vals.every(function (v) { return oneLetter(v, ch, seen); });
+      }
       // c + 1, 'z' - n: a letter counted on, which comes out a number
       function charMath(e, ch) {
         e = stripParens(e);
@@ -8209,6 +11871,29 @@
       }
       function pxBin(s, ch) {
         var op = s.op;
+        if (cpp && (op === "-" || op === "==" || op === "!=")) {
+          var rb = stripParens(s.b), la0 = stripParens(s.a);
+          var isEnd = rb && rb.k === "call" && rb.fn.k === "member" && /^(c?end)$/.test(rb.fn.name) && !rb.args.length;
+          var isBegin = rb && rb.k === "call" && rb.fn.k === "member" && /^(c?begin)$/.test(rb.fn.name) && !rb.args.length;
+          // max_element(...) - v.begin(): where the biggest is
+          if (op === "-" && isBegin && la0 && la0.k === "call" && /^(max_element|min_element)$/.test(bare(pathOf(la0.fn) || "")) && la0.args.length === 2) {
+            return px(builtinCall("indexOf", [rb.fn.obj, libCall(la0, ch)], s.line), ch);
+          }
+          // it - v.begin(): it is the place already
+          if (op === "-" && isBegin) { return px(s.a, ch); }
+          // found != m.end(): whether the key found was there
+          var heldIt = la0 && la0.k === "name" ? (ch && (ch.names[la0.v] || ch.params[la0.v]) || globalChart.names[la0.v]) : null;
+          if (isEnd && heldIt && heldIt.iterOf) {
+            var there = builtinCall("contains", [rb.fn.obj, s.a], s.line);
+            return px(op === "!=" ? there : { k: "un", op: "!", a: there, line: s.line }, ch);
+          }
+          // it != v.end(), where it is a place found: whether it is -1
+          if (isEnd && kindOf(s.a, ch) === "int") {
+            return px({ k: "bin", op: op === "!=" ? ">=" : "<", a: s.a, b: num(0), line: s.line }, ch);
+          }
+        }
+        var ownOp = operatorCall(op, s.a, s.b, ch, s.line);
+        if (ownOp) { return px(ownOp, ch); }
         // a.compareTo(b) < 0, string.Compare(a, b) >= 0: a < b, a >= b
         if (FLIP[op]) {
           var la = stripParens(s.a), lr = stripParens(s.b);
@@ -8232,12 +11917,26 @@
           return px(typeTest(s.a, stripParens(s.b).v || pathOf(s.b) || "", s.line), ch);
         }
         if (op === "as") { return px(s.a, ch); }
+        if (op === "%" && py && stripParens(s.a).k === "str") {
+          var fparts = piecesOf(s).map(function (p) {
+            var t = px(p, ch);
+            return t.r < 5 ? "(" + t.t + ")" : t.t;
+          });
+          return { t: fparts.join(" + ") || '""', r: fparts.length > 1 ? 5 : 9 };
+        }
+        // Python's -7 % 2 is 1: the remainder counted from below, which
+        // MOD (like every other language here) does not do for a minus
+        if (op === "%" && py && !s.pyMod && (mayBeNegative(s.a) || mayBeNegative(s.b))) {
+          var inner = { k: "bin", op: "%", a: s.a, b: s.b, pyMod: true, line: s.line };
+          return px({ k: "bin", op: "%", pyMod: true, line: s.line,
+                      a: { k: "paren", e: { k: "bin", op: "+", a: inner, b: s.b, line: s.line } }, b: s.b }, ch);
+        }
         var ka = kindOf(s.a, ch), kb = kindOf(s.b, ch);
         // integer division, said the way each language means it
         if (op === "//") {
           return { t: "floor(" + wrapAt(s.a, 6, ch) + " / " + wrapAt(s.b, 7, ch) + ")", r: 9 };
         }
-        if (op === "/" && !py && !js && ka === "int" && kb === "int") {
+        if (op === "/" && !py && !js && !s.real && ka === "int" && kb === "int") {
           return { t: "int(" + wrapAt(s.a, 6, ch) + " / " + wrapAt(s.b, 7, ch) + ")", r: 9 };
         }
         if (op === "*" && py && (ka === "text" || kb === "text")) {
@@ -8249,11 +11948,20 @@
           if (da !== s.a || db !== s.b) { s = { k: "bin", op: "+", a: da, b: db, line: s.line }; }
         }
         if (/^(<<|>>|>>>|&|\||\^|~)$/.test(op) && !(op === "^" && false)) {
+          // JavaScript's x | 0, x >> 0: x without what is after the point
+          var noughtB = stripParens(s.b);
+          if (js && /^(\||>>|<<)$/.test(op) && noughtB.k === "num" && noughtB.v === "0" && ka !== "bool") {
+            return px(builtinCall("int", [s.a], s.line), ch);
+          }
           if (op === "&" && ka === "bool") { op = "&&"; }
           else if (op === "|" && ka === "bool") { op = "||"; }
           else if (op === "^" && ka === "bool") { op = "!="; }
           else if (py && op === "|" && (isListKind(ka) || ka === "map")) { return px(builtinCall("union", [s.a, s.b]), ch); }
           else if (py && op === "&" && isListKind(ka)) { return px(builtinCall("intersection", [s.a, s.b]), ch); }
+          // a ^ b: in one of them but not both
+          else if (py && op === "^" && isListKind(ka)) {
+            return px(builtinCall("union", [builtinCall("difference", [s.a, s.b]), builtinCall("difference", [copyOf(s.b), copyOf(s.a)])], s.line), ch);
+          }
           // shifts are doubling and halving; the rest, one bit at a time
           else if (op === "<<") {
             return px({ k: "bin", op: "*", a: s.a, b: { k: "bin", op: "**", a: num(2), b: s.b }, line: s.line }, ch);
@@ -8264,16 +11972,41 @@
           }
         }
         if (op === "-" && py && /^set/.test(ka || "")) { return px(builtinCall("difference", [s.a, s.b]), ch); }
-        // letters as the numbers they are: 'c' - 'a', c + 1, ch >= 'a'
-        if (/^(\+|-|<|<=|>|>=)$/.test(op) && (isChar(s.a, ch) || isChar(s.b, ch)) &&
-            !(op === "+" && (ka === "text" && !isChar(s.a, ch) || kb === "text" && !isChar(s.b, ch)))) {
-          var ordered = function (x) { return isChar(x, ch) ? builtinCall("ord", [x], s.line) : x; };
-          if (/^[<>]/.test(op) || !py) {
-            return pxBin({ k: "bin", op: op, a: ordered(s.a), b: ordered(s.b), line: s.line }, ch);
+        // a <= b between sets: nothing in a that is not in b
+        if (py && /^(<|<=|>|>=)$/.test(op) && /^set/.test(ka || "") && /^set/.test(kb || "")) {
+          return px(subsetTest(/^</.test(op) ? s.a : s.b, /^</.test(op) ? s.b : s.a, op.length === 1, s.line), ch);
+        }
+        // Put in order the way code does it, capitals and all -- which <
+        // between words in a chart does not do, letting capitals go: a
+        // letter against a letter or a number by the numbers they are
+        // (ch >= 'a', c <= 122), and anything longer by compare().
+        if (cs && /^(<|<=|>|>=)$/.test(op) && (csEnumOf(s.a, ch) || csEnumOf(s.b, ch))) {
+          var enA = csEnumOf(s.a, ch), enB = csEnumOf(s.b, ch);
+          return pxBin({ k: "bin", op: op, line: s.line, a: enA ? enumNumber(enA, s.a, s.line) : s.a,
+                         b: enB ? enumNumber(enB, s.b, s.line) : s.b }, ch);
+        }
+        if (/^(<|<=|>|>=)$/.test(op)) {
+          var numA = /^(int|real)$/.test(ka || ""), numB = /^(int|real)$/.test(kb || "");
+          var letA = oneLetter(s.a, ch), letB = oneLetter(s.b, ch);
+          if ((letA && (letB || numB)) || (letB && numA)) {
+            return pxBin({ k: "bin", op: op, line: s.line,
+                           a: letA ? builtinCall("ord", [s.a], s.line) : s.a,
+                           b: letB ? builtinCall("ord", [s.b], s.line) : s.b }, ch);
+          }
+          var wordA = ka === "text" || stripParens(s.a).k === "str", wordB = kb === "text" || stripParens(s.b).k === "str";
+          if (wordA && wordB) {
+            return pxBin({ k: "bin", op: op, line: s.line, a: builtinCall("compare", [s.a, s.b], s.line), b: num(0) }, ch);
           }
         }
-        // words compared from code are compared exactly, capitals and all
-        if ((op === "==" || op === "!=") && (ka === "text" || kb === "text")) {
+        // letters as the numbers they are: 'c' - 'a', c + 1
+        if (/^(\+|-)$/.test(op) && (isChar(s.a, ch) || isChar(s.b, ch)) && !py &&
+            !(op === "+" && (ka === "text" && !isChar(s.a, ch) || kb === "text" && !isChar(s.b, ch)))) {
+          var ordered = function (x) { return isChar(x, ch) ? builtinCall("ord", [x], s.line) : x; };
+          return pxBin({ k: "bin", op: op, a: ordered(s.a), b: ordered(s.b), line: s.line }, ch);
+        }
+        // words compared from code are compared exactly, capitals and all --
+        // and lists of them
+        if ((op === "==" || op === "!=") && (ka === "text" || kb === "text" || isListKind(ka) || isListKind(kb))) {
           var lt0 = px(s.a, ch), rt0 = px(s.b, ch);
           return { t: (lt0.r < 4 ? "(" + lt0.t + ")" : lt0.t) + " " + op + " " +
                       (rt0.r < 4 ? "(" + rt0.t + ")" : rt0.t), r: 3 };
@@ -8300,7 +12033,7 @@
         var asked = inputOf(s);
         if (asked) { note(s.line, "input"); return { t: '""', r: 9 }; }
         var p = bare(pathOf(s.fn) || "");
-        if (s.fn.k === "name" && !(ch && (ch.names[s.fn.v] || ch.params[s.fn.v])) && !globalChart.names[s.fn.v]) {
+        if (s.fn.k === "name" && !(ch && (ch.names[s.fn.v] || ch.params[s.fn.v])) && !globalChart.names[s.fn.v] && !s.dispatched) {
           note(s.line, (p || "…") + "()");
         } else if (s.fn.k !== "name") {
           note(s.line, (s.fn.k === "member" ? s.fn.name : p || "…") + "()");
@@ -8341,7 +12074,9 @@
                   isMoney(ch.names[inner.v] || globalChart.names[inner.v])) {
                 return px(inner, ch).t;
               }
-              return px(p, ch).t;
+              // a record whose kind was only known once every function's was:
+              // printed as its describe() says
+              return px(p.k === "str" ? p : described(p), ch).t;
             }).join(", ") : '""'));
             return;
           case "call": {
@@ -8501,7 +12236,7 @@
           var type = isMoney(one) ? "Currency" : parts.word;
           // total = 0, then total + cost where nothing says what cost is:
           // not certainly a whole number, so not declared as one
-          if (one.kind === "int" && (one.values || []).some(function (v) { return !kindOf(v, ch); })) { type = ""; }
+          if (one.kind === "int" && !isMoney(one) && (one.values || []).some(function (v) { return !kindOf(v, ch); })) { type = ""; }
           if (!type && !first) { return; }         // nothing to say about it
           if (first) { first.folded = true; }
           out.push(declText(one, konst, first ? first.value : null, ch, type ? undefined : ""));
@@ -8542,7 +12277,8 @@
       function paramText(ch, p) {
         var have = ch.params[p.name] || {};
         var type = TYPE_WORD[have.kind] || "";
-        return (type ? type + " " : "") + (p.ref ? "Ref " : "") + nameOf(p.name);
+        var given = p.dflt && !p.rest && !p.captured ? " = " + px(p.dflt, ch).t : "";
+        return (type ? type + " " : "") + (p.ref ? "Ref " : "") + nameOf(p.name) + given;
       }
       var shared = globalChart.list.length > 0;
       var leadNotes = (top.head || []).slice();

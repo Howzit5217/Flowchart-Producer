@@ -1250,7 +1250,12 @@ def java_all_at_once(cases, results, folder, have):
             paths.append(os.path.join(where, made["file"] + ".java"))
             with io.open(paths[-1], "w", encoding="utf-8") as f:
                 f.write(made["text"])
-    built = subprocess.run([have["javac"], "-nowarn", "-d", where] + paths,
+    # the files named in a list javac reads, not on the line itself: two
+    # hundred paths are past what one Windows command line holds
+    listed = os.path.join(where, "files.txt")
+    with io.open(listed, "w", encoding="utf-8") as f:
+        f.write("\n".join('"%s"' % p.replace("\\", "/") for p in paths))
+    built = subprocess.run([have["javac"], "-nowarn", "-d", where, "@" + listed],
                            capture_output=True, text=True, cwd=where)
     return where if paths and not built.returncode else ""
 
@@ -1258,6 +1263,15 @@ def java_all_at_once(cases, results, folder, have):
 def first_error(said):
     lines = [l.strip() for l in said.splitlines() if "error" in l.lower()]
     return (lines or [said.strip()[:200]])[0][:200]
+
+
+def as_listed(said, case, lang):
+    """What the runner printed, the way a language with no tuples prints it:
+    a program read in from Python prints (3, 4), and written out in Java it
+    prints the list it has become, [3, 4]."""
+    if not case.get("tuples") or lang == "python":
+        return said
+    return [re.sub(r"\(([^()]*,[^()]*)\)", r"[\1]", line) for line in said]
 
 
 def marked(cases, results, folder):
@@ -1288,7 +1302,7 @@ def marked(cases, results, folder):
                 count["right"] += 1
         elif lines is None:
             wrong.append("%s, as %s: %s" % (name, lang, trouble))
-        elif [said_alike(l) for l in lines] != [said_alike(l) for l in result["said"]]:
+        elif [said_alike(l) for l in lines] != [said_alike(l) for l in as_listed(result["said"], case, lang)]:
             wrong.append("%s, as %s:\n      the runner %r\n      the code   %r"
                          % (name, lang, result["said"], lines))
         else:

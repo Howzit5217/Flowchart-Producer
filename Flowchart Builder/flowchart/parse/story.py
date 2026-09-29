@@ -88,8 +88,8 @@ def sum_reads(text):
         if want:
             if tok in ("(", "[", "{") or tok in ("-", "+") or low == "not":
                 deep += tok in ("(", "[", "{")
-            elif tok in (")", "]", "}") and prev in ("(", "[", "{"):
-                deep -= 1
+            elif tok in (")", "]", "}") and prev in ("(", "[", "{", ","):
+                deep -= 1                   # (), and (5,) or [1, 2,]: closed after a comma
                 want = False
             elif low == "new" and prev.lower() != "new":
                 pass                        # New Point: the kind comes next
@@ -105,7 +105,8 @@ def sum_reads(text):
             elif tok[0] == "." and len(tok) > 1:
                 pass                        # rows[k].cells: a part of it
             elif tok in ("(", "[") and (prev[:1].isalpha() or prev[:1] == "_" or
-                                        prev[:1] == "." or prev in (")", "]")):
+                                        prev[:1] == "." or prev in (")", "]") or
+                                        (tok == "[" and prev[:1] in "\"'")):   # "abc"[1]
                 deep += 1
                 want = True
             else:

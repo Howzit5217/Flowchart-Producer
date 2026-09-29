@@ -2289,7 +2289,7 @@ int main() {
 }
 ''',
      [],
-     ['81.666667']),
+     ['81.6667']),
 
     ('reading numbers until zero, with a while and cin', 'cpp', '''
 #include <iostream>

@@ -609,21 +609,23 @@
   // into with those, rather than started afresh with arguments.
   async function runModule(mod, args, outer, given, kept) {
     var names = [], refs = [];
-    String(mod.params || "").split(",").forEach(function (p) {
-      var bits = p.trim().split(/\s+/).filter(Boolean);
-      if (!bits.length) { return; }
-      var name = bits[bits.length - 1];
+    var list = paramBits(mod.params);
+    list.forEach(function (p) {
       // a parameter says what it is the same way a Declare does
-      if (bits.length > 1) { noteCash(name, bits[0]); }
-      names.push(name);
-      refs.push(bits.some(function (b) { return R_REF.test(b); }));
+      if (p.type) { noteCash(p.name, p.type); }
+      names.push(p.name);
+      refs.push(p.ref);
     });
     // Counted, rather than quietly filled in.  A module handed one thing
     // when it asks for two used to run with the second one empty, and the
-    // blame landed on whichever line inside it used that name first.
-    if (!kept && args.length !== names.length) {
+    // blame landed on whichever line inside it used that name first.  One
+    // that says what a parameter is when it is not handed one -- Integer
+    // step = 1 -- may be handed fewer.
+    var need = list.filter(function (p) { return !p.dflt; }).length;
+    if (!kept && (args.length < need || args.length > names.length)) {
       throw new Error(say("r_args", { name: mod.name + "()",
-                                      want: names.length, got: args.length }));
+                                      want: need === names.length ? need : need + "-" + names.length,
+                                      got: args.length }));
     }
     var from = doingNow;                 // the statement that called it
     // How it was called, for a save made while the run is inside it.  A
@@ -634,7 +636,10 @@
     var where = { vars: kept || {}, name: mod.name,
                   call: { mod: mod.name, given: (given || []).slice(),
                           plain: plainCall(from, mod) } };
-    if (!kept) { names.forEach(function (name, i) { where.vars[name] = args[i]; }); }
+    if (!kept) {
+      names.forEach(function (name, i) { if (i < args.length) { where.vars[name] = args[i]; } });
+      for (var d = args.length; d < names.length; d++) { where.vars[names[d]] = await value(list[d].dflt, where); }
+    }
     if (++callsDeep > DEEP_CAP) {
       callsDeep--;
       throw new Error(say("r_too_deep", { name: mod.name + "()" }));
@@ -663,6 +668,21 @@
         }
       });
     }
+  }
+
+  // A module's parameters, each as it is written: "Integer step = 1" is
+  // step, a whole number, 1 when nothing is handed over for it; "Ref total"
+  // is handed back when the module is done.
+  function paramBits(params) {
+    return pieces(String(params || "")).map(function (p) {
+      var text = p.trim(), dflt = "";
+      var eq = /^([^=]*[^=<>!])=(?!=)(.*)$/.exec(text);
+      if (eq) { text = eq[1].trim(); dflt = eq[2].trim(); }
+      var bits = text.split(/\s+/).filter(Boolean);
+      if (!bits.length) { return null; }
+      return { name: bits[bits.length - 1], type: bits.length > 1 ? bits[0] : "", dflt: dflt,
+               ref: bits.some(function (b) { return R_REF.test(b); }), words: bits };
+    }).filter(Boolean);
   }
 
   // A line that is nothing but a call to this module -- Call greet(name) --
@@ -758,7 +778,10 @@
     if (typeof v === "boolean") { return v ? TXT.yes : TXT.no; }
     // A list prints the way Python prints one, words in quotes: ['a', 1].
     // A table the same, {'tea': 2}, and a record by its kind: Point(x=1, y=2).
-    if (Array.isArray(v)) { return "[" + v.map(shownIn).join(", ") + "]"; }
+    if (Array.isArray(v)) {
+      if (v.tuple) { return "(" + v.map(shownIn).join(", ") + (v.length === 1 ? ",)" : ")"); }
+      return "[" + v.map(shownIn).join(", ") + "]";
+    }
     if (isTable(v)) {
       var bits = [];
       v.map.forEach(function (e) {
@@ -1009,10 +1032,22 @@
     if (i < text.length) {
       throw wrong(say("r_left_over", { bit: text.slice(i) }), { from: i, to: text.length });
     }
+    var outer = [];
     for (var k = 0; k < steps.length - 1; k++) {
+      outer.push(holder);
       holder = "field" in steps[k] ? fieldOf(holder, steps[k].field) : itemOf(holder, steps[k].at);
     }
     var last = steps[steps.length - 1];
+    // word[2] = "x": the word made again with that letter in it
+    if (typeof holder === "string" && !("field" in last)) {
+      var letters = Array.from(holder), place = whereIn(letters, last.at, false);
+      letters[place] = String(v);
+      var made = letters.join("");
+      if (steps.length === 1) { putIn(where, head[0], made, global); return; }
+      var before = steps[steps.length - 2];
+      putItem(outer[outer.length - 1], "field" in before ? before.field : before.at, made);
+      return;
+    }
     putItem(holder, "field" in last ? last.field : last.at, v);
   }
 

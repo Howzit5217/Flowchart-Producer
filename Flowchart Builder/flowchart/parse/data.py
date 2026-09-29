@@ -75,6 +75,11 @@ def statement_json(text, node_id, line, shape="", scope=""):
     if m and not R_NOT_A_WAIT.match(m.group(1).strip()):
         out.update(**how_long(m.group(1)))
         return out
+    # Return (lo, hi) hands back a pair; it is not a call of anything
+    # called Return, which is what the bare call below would take it for.
+    if R_RETURN.match(text):
+        out.update(op="return", expr=R_RETURN_VAL.match(text).group(1).strip())
+        return out
     m = R_CALL_NAME.match(text)
     if m:
         out.update(op="call", name=m.group(1), args=m.group(2))
@@ -86,9 +91,6 @@ def statement_json(text, node_id, line, shape="", scope=""):
     m = R_CALL_ANY.match(text)
     if m:                               # Call names.append(x): a call all the same
         out.update(op="call", name=m.group(1), args="")
-        return out
-    if R_RETURN.match(text):
-        out.update(op="return", expr=R_RETURN_VAL.match(text).group(1).strip())
         return out
     if R_END.match(text) or text.strip() in (word("end"), word("ret")):
         out.update(op="end")
