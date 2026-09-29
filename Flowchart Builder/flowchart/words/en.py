@@ -37,6 +37,12 @@ EN = {
     "files": "Files", "f_work_head": "Your work",
     "dl_svg": "Download SVG", "dl_png": "Download PNG", "panel": "Panel",
     "print_it": "Print the chart",
+    "dl_pdf": "Download PDF",
+    "mm_open": "Mermaid text",
+    "mm_tip": "The chart as Mermaid, to paste into GitHub, Notion or Markdown",
+    "mm_head": "Mermaid",
+    "mm_bad": "This couldn't be read as a Mermaid flowchart.",
+    "mm_opened": "Opened as a drawing.",
     "print_head": "Print",
     "print_go": "Print…",
     "print_paper": "Paper",
@@ -130,6 +136,7 @@ EN = {
     "w_open_select": "Line {line}: this Select is never closed. Add an End Select where it should stop.",
     "w_no_if": "Line {line}: End If, but no If is open.",
     "w_no_loop": "Line {line}: this ends a loop, but no loop is open.",
+    "w_exit_alone": "Line {line}: Exit leaves a loop, but no loop is open here.",
     "w_no_select": "Line {line}: End Select, but no Select is open.",
     "w_do_no_test": "Line {line}: this Do has no test, so it never stops. End it with Until ... or Loop While ...",
     "w_until_alone": "Line {line}: Until, but no Do or Repeat above it.",
@@ -216,6 +223,38 @@ EN = {
     "held_none": "nothing yet",
     # said over the tick box on its heading, which folds it away
     "held_switch": "Show what it is holding",
+    "tests_open": "Test it",
+    "tests_tip": "Tests of its own: what is typed in, and what it should print",
+    "tests_head": "Tests",
+    "tests_one": "Test {n}",
+    "tests_typed": "Typed in, one to a line",
+    "tests_want": "Should print, a line each",
+    "tests_add": "Add a test",
+    "tests_run": "Run the tests",
+    "tests_drop": "Remove",
+    "tests_pass": "Passed",
+    "tests_fail": "Failed",
+    "tests_all": "{pass} of {n} passed",
+    "tests_none": "Write a test first.",
+    "tests_diff": "Line {n}: it printed “{got}”, not “{want}”.",
+    "tests_short": "It printed {n} lines, not {m}.",
+    "tests_long": "It printed {n} lines, not {m}.",
+    "tests_broke": "It stopped with an error.",
+    "graphs_on": "Chart what it prints",
+    "graphs_tip": "Draw a chart under a list of numbers, or a run of them, when the program prints one",
+    "trace_open": "Trace table",
+    "trace_tip": "Every change the run made, step by step, as a table",
+    "trace_head": "Trace table",
+    "trace_line": "Line",
+    "trace_out": "Output",
+    "trace_none": "Run the program, and the table fills in as it goes.",
+    "trace_rows": "{n} steps",
+    "trace_cut": "only the first {n} kept",
+    "bp_add": "Pause here",
+    "bp_drop": "Don't pause here",
+    "bp_clear": "Clear all pauses",
+    "r_paused": "Paused at line {n}.",
+    "r_paused_hand": "Paused.",
     "h_tidy": "Tidy up",
     "h_tidy_tip": "Lay out every shape and arrow the way a pseudocode chart is drawn",
     "h_tidied": "Tidied up: {n} shapes moved.",
@@ -338,10 +377,10 @@ EN = {
     "p_no_end": "There's no End ({shape}) for the flow to stop at.",
     "p_unreached": "Nothing leads to this shape.",
     "p_dead_end": "Nothing leaves this shape, and it isn't an End.",
-    "p_decision_out": "A decision needs two ways out. This one has {n}.",
+    "p_decision_out": "A decision needs at least two ways out. This one has {n}.",
     "p_one_out": "This shape has {n} ways out. Only a decision can have two.",
-    "p_same_labels": "Both ways out say the same thing.",
-    "p_no_label": "Both ways out of a decision need a label.",
+    "p_same_labels": "Two ways out say the same thing.",
+    "p_no_label": "Every way out of a decision needs a label.",
     "p_trapped": "From here the flow can never reach an End.",
     "p_empty": "This shape has nothing written in it.",
     "p_overlap": "This shape is on top of another one.",
@@ -488,7 +527,6 @@ EN = {
     "e_vowel": "Vowel or not",
     "e_leap": "Leap year",
     "e_keepasking": "Keep asking",
-    "e_backwards": "Count backwards",
     "e_sumevens": "Add up the evens",
     "e_countdown": "Countdown",
     "e_guess": "Guess the number",
@@ -496,15 +534,12 @@ EN = {
     "e_fizz": "Fizz and Buzz",
     "e_prime": "Is it prime?",
     "e_gcd": "Greatest common factor",
-    "e_digits": "How many digits",
-    "e_reverse": "The number backwards",
     "e_fib": "The Fibonacci numbers",
     "e_factorial": "A factorial",
     "e_minmax": "Lowest and highest",
     "e_grid": "A times table grid",
     "e_stars": "A triangle of stars",
     "eg_l4": "Everyday programs",
-    "e_area": "Area of a rectangle",
     "e_change": "Dollars, dimes and pennies",
     "e_temps": "Celsius, Fahrenheit and Kelvin",
     "e_shop": "A checkout with a discount",
@@ -518,13 +553,22 @@ EN = {
     "e_bank": "A bank account",
     "e_gradebook": "A gradebook",
     "e_paycheck": "Weekly paychecks",
-    "e_convert": "A unit converter",
-    "e_splitcheck": "Splitting the check",
     "e_vending": "A vending machine",
     "e_primelist": "Every prime up to a limit",
     "e_weekday": "What day of the week?",
     "e_loan": "Paying off a loan",
     "e_rps": "Rock, paper, scissors",
+    "e_bands": "Grades with Select Case",
+    "e_hailstone": "Hailstone numbers",
+    "e_doubling": "Doubling on a chessboard",
+    "e_rainfall": "Rainfall month by month",
+    "e_savings": "Savings year by year",
+    "e_classlist": "A class list of records",
+    "eg_l6": "Exam board styles",
+    "e_aqa": "AQA style: a times table quiz",
+    "e_ocr": "OCR style: a shopping list",
+    "e_cie": "Cambridge style: marks and grades",
+    "e_cietype": "Cambridge style: books as records",
     # ---- a name for a program nobody named, from what it does (09-names.js)
     "d_rps": "Rock, Paper, Scissors",
     "d_weekday": "Day of the Week",
@@ -968,17 +1012,6 @@ EN = {
         Display "Thank you"
         Stop
     """),
-    "e_backwards_p": program("""
-        Start
-        Declare Integer n
-        Display "Count back from?"
-        Input n
-        For i = n To 1 Step -1
-            Display i
-        End For
-        Display "Done"
-        Stop
-    """),
     "e_sumevens_p": program("""
         Start
         Declare Integer total
@@ -1077,36 +1110,6 @@ EN = {
         Display a
         Stop
     """),
-    "e_digits_p": program("""
-        Start
-        Declare Integer n
-        Declare Integer many
-        Display "Enter a whole number"
-        Input n
-        many = 0
-        While n > 0
-            n = n div 10
-            many = many + 1
-        End While
-        Display "That many digits:"
-        Display many
-        Stop
-    """),
-    "e_reverse_p": program("""
-        Start
-        Declare Integer n
-        Declare Integer back
-        Display "Enter a whole number"
-        Input n
-        back = 0
-        While n > 0
-            back = back * 10 + n mod 10
-            n = n div 10
-        End While
-        Display "Backwards that is"
-        Display back
-        Stop
-    """),
     "e_fib_p": program("""
         Start
         Declare Integer a
@@ -1185,18 +1188,6 @@ EN = {
         Stop
     """),
     # ---- the examples: everyday programs
-    "e_area_p": program("""
-        Start
-        Declare Integer width
-        Declare Integer height
-        Display "How wide?"
-        Input width
-        Display "How tall?"
-        Input height
-        Display "The area is"
-        Display width * height
-        Stop
-    """),
     "e_change_p": program("""
         Start
         Declare Integer cents
@@ -1569,82 +1560,6 @@ EN = {
             End If
         End Function
     """),
-    "e_convert_p": program("""
-        Start
-        Declare Integer choice
-        Declare Real amount
-        Do
-            Display "1 miles to kilometers"
-            Display "2 pounds to kilograms"
-            Display "3 Fahrenheit to Celsius"
-            Display "4 inches to centimeters"
-            Display "5 quit"
-            Input choice
-            If choice >= 1 And choice <= 4 Then
-                Display "How many?"
-                Input amount
-                Call convert(choice, amount)
-            Else If choice <> 5 Then
-                Display "Pick a number from 1 to 5"
-            End If
-        Until choice = 5
-        Display "Goodbye"
-        Stop
-
-        Module convert(Integer which, Real amount)
-            Select Case which
-                Case 1
-                    Display amount, " miles is ", amount * 1.609, " kilometers"
-                Case 2
-                    Display amount, " pounds is ", amount * 0.4536, " kilograms"
-                Case 3
-                    Display amount, " F is ", (amount - 32) * 5 / 9, " C"
-                Case Else
-                    Display amount, " inches is ", amount * 2.54, " centimeters"
-            End Select
-        End Module
-    """),
-    "e_splitcheck_p": program("""
-        Start
-        Declare Real bill
-        Declare Real percent
-        Declare Integer people
-        Declare Real tip
-        Display "How much is the check?"
-        Input bill
-        While bill <= 0
-            Display "The check has to be more than zero"
-            Input bill
-        End While
-        Display "What percent tip? 15, 18 or 20 is usual"
-        Input percent
-        While percent < 0 Or percent > 100
-            Display "Pick a percent from 0 to 100"
-            Input percent
-        End While
-        Display "How many people are splitting it?"
-        Input people
-        While people < 1
-            Display "At least one person has to pay"
-            Input people
-        End While
-        tip = bill * percent / 100
-        Call receipt(bill, tip, people)
-        Stop
-
-        Module receipt(Real food, Real extra, Integer many)
-            Declare Real total
-            total = food + extra
-            Display "Food and drinks: $", food
-            Display "Tip: $", extra
-            Display "Total: $", total
-            If many = 1 Then
-                Display "You pay it all: $", total
-            Else
-                Display "Each of the ", many, " people pays $", total / many
-            End If
-        End Module
-    """),
     "e_vending_p": program("""
         Start
         Declare Integer price
@@ -1894,6 +1809,247 @@ EN = {
                 Return 2
             End If
         End Function
+    """),
+    "e_bands_p": program("""
+        Start
+        Declare Integer score
+        Display "Your score out of 100?"
+        Input score
+        Select Case score
+            Case 90 To 100
+                Display "A: excellent"
+            Case 80 To 89
+                Display "B: very good"
+            Case 70 To 79
+                Display "C: good"
+            Case 60 To 69
+                Display "D: a pass"
+            Case Else
+                Display "F: not a pass yet"
+        End Select
+        Stop
+    """),
+    "e_hailstone_p": program("""
+        Start
+        Declare Integer n
+        Declare Integer steps
+        Display "Start from which number?"
+        Input n
+        steps = 0
+        While n <> 1
+            If n mod 2 = 0 Then
+                n = n div 2
+            Else
+                n = 3 * n + 1
+            End If
+            steps = steps + 1
+            Display n
+        End While
+        Display "Steps to reach 1: ", steps
+        Stop
+    """),
+    "e_doubling_p": program("""
+        Start
+        Declare Integer grains
+        Declare Integer total
+        grains = 1
+        total = 0
+        For square = 1 To 16
+            Display grains
+            total = total + grains
+            grains = grains * 2
+        End For
+        Display "Grains on the first 16 squares: ", total
+        Stop
+    """),
+    "e_rainfall_p": program("""
+        Start
+        Declare Real total
+        Declare String wettest
+        rain = {"Jan": 78, "Feb": 52, "Mar": 61, "Apr": 45, "May": 30, "Jun": 12}
+        Display "Rainfall in mm: ", rain
+        total = 0
+        wettest = "Jan"
+        For Each month In rain
+            total = total + rain[month]
+            If rain[month] > rain[wettest] Then
+                wettest = month
+            End If
+        End For
+        Display "Average: ", round(total / length(rain), 1), " mm"
+        Display "Wettest month: ", wettest
+        Stop
+    """),
+    "e_savings_p": program("""
+        Start
+        Declare Real deposit
+        Declare Real rate
+        Declare Integer years
+        Declare Real balance
+        Display "How much to start with?"
+        Input deposit
+        Display "Interest rate, in percent?"
+        Input rate
+        Display "For how many years?"
+        Input years
+        balance = deposit
+        For year = 1 To years
+            balance = grow(balance, rate)
+            Display "Year ", year, ": ", round(balance, 2)
+        End For
+        Display "Money made: ", round(balance - deposit, 2)
+        Display "Years to double it: ", yearsToDouble(deposit, rate)
+        Stop
+
+        Function grow(amount, percent)
+            Return amount + amount * percent / 100
+        End Function
+
+        Function yearsToDouble(amount, percent)
+            Declare Integer count
+            Declare Real now
+            If percent <= 0 Then
+                Return 0
+            End If
+            count = 0
+            now = amount
+            While now < amount * 2
+                now = grow(now, percent)
+                count = count + 1
+            End While
+            Return count
+        End Function
+    """),
+    "e_classlist_p": program("""
+        Start
+        Declare Integer i
+        Declare Real total
+        names = ["Ana", "Ben", "Cy", "Dee", "Eli", "Fay"]
+        marks = [88, 72, 95, 64, 79, 91]
+        pupils = []
+        For i = 0 To length(names) - 1
+            Call append(pupils, makePupil(names[i], marks[i]))
+        End For
+        total = 0
+        best = pupils[0]
+        For Each p In pupils
+            Display p.name, ": ", p.mark
+            total = total + p.mark
+            If p.mark > best.mark Then
+                best = p
+            End If
+        End For
+        Display "Class average: ", round(total / length(pupils), 1)
+        Display "Top of the class: ", best.name
+        Stop
+
+        Function makePupil(name, mark)
+            one = New Pupil
+            one.name = name
+            one.mark = mark
+            Return one
+        End Function
+    """),
+    "e_aqa_p": program("""
+        SUBROUTINE ask(a, b)
+            OUTPUT "What is " + INT_TO_STRING(a) + " x " + INT_TO_STRING(b) + "?"
+            answer ← STRING_TO_INT(USERINPUT)
+            RETURN answer = a * b
+        ENDSUBROUTINE
+
+        score ← 0
+        table ← 7
+        FOR i ← 1 TO 5
+            IF ask(table, i) THEN
+                score ← score + 1
+                OUTPUT "Right"
+            ELSE
+                OUTPUT "It is " + INT_TO_STRING(table * i)
+            ENDIF
+        ENDFOR
+        OUTPUT "You got " + INT_TO_STRING(score) + " out of 5"
+    """),
+    "e_ocr_p": program("""
+        array items[4]
+        array prices[4]
+        items[0] = "bread"
+        prices[0] = 1.20
+        items[1] = "milk"
+        prices[1] = 0.95
+        items[2] = "apples"
+        prices[2] = 2.40
+        items[3] = "cheese"
+        prices[3] = 3.10
+        total = 0
+        for i = 0 to 3
+            print(items[i] + ": " + str(prices[i]))
+            total = total + prices[i]
+        next i
+        budget = float(input("Your budget?"))
+        if total <= budget then
+            print("That fits your budget")
+        else
+            print("Over by " + str(total - budget))
+        endif
+    """),
+    "e_cie_p": program("""
+        DECLARE Marks : ARRAY[1:5] OF INTEGER
+        DECLARE Index : INTEGER
+        DECLARE Total : INTEGER
+        Marks[1] ← 67
+        Marks[2] ← 84
+        Marks[3] ← 45
+        Marks[4] ← 92
+        Marks[5] ← 73
+        Total ← 0
+        FOR Index ← 1 TO 5
+            Total ← Total + Marks[Index]
+            OUTPUT "Student ", Index, ": ", Marks[Index]
+        NEXT Index
+        OUTPUT "Average: ", Total / 5
+        FOR Index ← 1 TO 5
+            CASE OF Marks[Index]
+                90 TO 100 : OUTPUT "Student ", Index, " gets A"
+                70 TO 89 : OUTPUT "Student ", Index, " gets B"
+                50 TO 69 : OUTPUT "Student ", Index, " gets C"
+                OTHERWISE : OUTPUT "Student ", Index, " gets U"
+            ENDCASE
+        NEXT Index
+    """),
+    "e_cietype_p": program("""
+        TYPE Book
+            DECLARE Title : STRING
+            DECLARE Pages : INTEGER
+        ENDTYPE
+        DECLARE Shelf : ARRAY[1:3] OF Book
+        DECLARE Index : INTEGER
+        Shelf[1].Title ← "Dune"
+        Shelf[1].Pages ← 412
+        Shelf[2].Title ← "Emma"
+        Shelf[2].Pages ← 474
+        Shelf[3].Title ← "Holes"
+        Shelf[3].Pages ← 233
+        FOR Index ← 1 TO 3
+            CALL ShowBook(Shelf[Index])
+        NEXT Index
+        OUTPUT "Longest: ", Longest(Shelf)
+
+        PROCEDURE ShowBook(B : Book)
+            OUTPUT B.Title, ": ", B.Pages
+        ENDPROCEDURE
+
+        FUNCTION Longest(Books : ARRAY OF Book) RETURNS STRING
+            DECLARE Best : INTEGER
+            DECLARE Index : INTEGER
+            Best ← 1
+            FOR Index ← 2 TO 3
+                IF Books[Index].Pages > Books[Best].Pages
+                    THEN
+                        Best ← Index
+                ENDIF
+            NEXT Index
+            RETURN Books[Best].Title
+        ENDFUNCTION
     """),
     # ---- the puzzles: find the fault
     "z_else_p": program("""

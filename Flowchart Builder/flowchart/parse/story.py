@@ -28,7 +28,7 @@ import re
 from ..parse.clean import split_indent, tidy
 from ..parse.keywords import (
     R_CALL, R_CASE, R_DECL, R_DO, R_ELSE, R_ELSEIF, R_END, R_ENDANY,
-    R_ENDIF, R_ENDLOOP, R_ENDMOD, R_ENDSEL, R_FOR, R_FOR_C, R_FOR_TO, R_IF,
+    R_ENDIF, R_ENDLOOP, R_ENDMOD, R_ENDSEL, R_EXIT, R_EXIT_MOD, R_FOR, R_FOR_C, R_FOR_TO, R_IF,
     R_IN, R_LOOPCOND, R_MODULE, R_OUT, R_REPEAT, R_RETURN, R_SELECT,
     R_START, R_THEN, R_UNTIL, R_WAIT, R_WAIT_UNIT, R_WHILE)
 from ..parse.data import R_SET
@@ -124,6 +124,7 @@ def reads_as_pseudocode(line):
     if (R_ENDIF.match(s) or R_ENDLOOP.match(s) or R_ENDSEL.match(s) or
             R_ENDMOD.match(s) or R_ELSE.match(s) or R_REPEAT.match(s) or
             R_START.match(s) or R_END.match(s) or R_ENDANY.match(s) or
+            R_EXIT.match(s) or R_EXIT_MOD.match(s) or
             low in ("do", "default", "case else", "otherwise")):
         return True
     m = R_ELSEIF.match(s)
@@ -151,7 +152,11 @@ def reads_as_pseudocode(line):
         return sum_reads(m.group(2))
     m = R_CASE.match(s)
     if m:
-        return not m.group(2) or sum_reads(m.group(2))
+        # Case 2, 3 and Case 90 To 100: each value on its own, and the two
+        # ends of a run, are sums (choice_pieces, data.py)
+        return not m.group(2) or all(
+            sum_reads(end) for one in split_top(m.group(2))
+            for end in re.split(r"\s+to\s+", one.strip(), flags=re.I))
     m = R_FOR.match(s)
     if m:
         rest = m.group(1)
@@ -226,7 +231,14 @@ def split_top(text, sep=","):
 
 
 def is_story(text):
-    """Does any line of this read as words rather than pseudocode?"""
+    """Does any line of this read as words rather than pseudocode?
+
+    Not a program written the way an exam board writes it (boards.py) --
+    total <- total + 1, DECLARE Total : INTEGER -- which is pseudocode
+    however few of its lines this page's own pseudocode would say."""
+    from ..parse.boards import which_board
+    if which_board(text):
+        return False
     for raw in text.splitlines():
         _, s = split_indent(raw)
         if s and not reads_as_pseudocode(clean_bullet(s)):

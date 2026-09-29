@@ -30,18 +30,18 @@ def strip_comment(s):
 
 
 def split_indent(raw):
-    """Return (indent, text): leading '#' markers removed, comments stripped."""
+    """Return (indent, text), comments stripped.
+
+    A line starting with # is a comment, the way AQA's pseudocode and
+    Python write one.  It used to be read as a marker of how deep the line
+    was, the # taken off and the words after it kept -- so "# work out the
+    total" came out as a step called "work out the total"."""
     for smart, plain in (("\u201c", '"'), ("\u201d", '"'), ("\u201e", '"'),
                          ("\u2018", "'"), ("\u2019", "'"), ("\u00a0", " ")):
         raw = raw.replace(smart, plain)             # Word's curly quotes, etc.
     s = raw.expandtabs(4).rstrip()
     body = s.lstrip()
     indent = len(s) - len(body)
-    while body.startswith("#"):
-        body = body[1:]
-        stripped = body.lstrip()
-        indent += 1 + len(body) - len(stripped)
-        body = stripped
     body = re.sub(r"^\d{1,3}[.):]\s+", "", body)   # "12. Display ..." line numbers
     return indent, strip_comment(body).strip()
 

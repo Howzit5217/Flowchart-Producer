@@ -51,6 +51,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 HOME = os.path.dirname(HERE)
 sys.path.insert(0, HERE)
 
+import boards                                       # noqa: E402
 import charts                                       # noqa: E402
 import written                                      # noqa: E402
 
@@ -498,7 +499,6 @@ CALLED = {
     "e_votes": "Vote Count",
     "e_bank": "Bank Account",
     "e_rps": "Rock, Paper, Scissors",
-    "e_area": "Rectangle Area",
     "e_keepasking": "Input Validation",
 }
 
@@ -1769,6 +1769,8 @@ Display "done"
 End
 """, ["12"], ["big", "done", {"key": "r_done"}], None),
 ]
+# The exam boards' own pseudocode, AQA's, OCR's and Cambridge's (boards.py)
+RUNS += boards.BOARDS + boards.HOUSE
 
 
 # The same, for the code it writes out.  A name shared by every chart has
@@ -2750,7 +2752,8 @@ def _():
             if not text:
                 bad.append("%s/%s: not written out" % (code, key))
                 continue
-            odd = re.findall(r"[^\x00-\x7f]", re.sub(r'"[^"]*"', "", text))
+            # (the boards' arrow and signs are not names: see parse/boards.py)
+            odd = re.findall(r"[^\x00-\x7f\u2190\u2260\u2264\u2265]", re.sub(r'"[^"]*"', "", text))
             if odd:
                 bad.append("%s/%s: %s in a name" % (code, key, "".join(odd[:3])))
             if code == "en":

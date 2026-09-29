@@ -221,7 +221,14 @@
       if (TXT[e.dataset.w]) { e.textContent = TXT[e.dataset.w]; }
     });
     all("[data-w-title]").forEach(function (e) {
-      if (TXT[e.dataset.wTitle]) { e.title = TXT[e.dataset.wTitle]; }
+      if (!TXT[e.dataset.wTitle]) { return; }
+      e.title = TXT[e.dataset.wTitle];
+      // what a screen reader says for it, in the same language: it used to
+      // keep the words the page first opened in
+      if (e.hasAttribute("aria-label") && !e.dataset.wAria) { e.setAttribute("aria-label", TXT[e.dataset.wTitle]); }
+    });
+    all("[data-w-aria]").forEach(function (e) {
+      if (TXT[e.dataset.wAria]) { e.setAttribute("aria-label", TXT[e.dataset.wAria]); }
     });
     all("[data-w-ph]").forEach(function (e) {
       if (TXT[e.dataset.wPh]) { e.placeholder = TXT[e.dataset.wPh]; }

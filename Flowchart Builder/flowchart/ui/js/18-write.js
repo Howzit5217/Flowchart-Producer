@@ -13,6 +13,44 @@
     return '"' + String(text).replace(/\\/g, "\\\\").replace(/"/g, '\\"') + '"';
   }
 
+  // What a Case asks of what was picked: that it is the Case's one value --
+  // or, where it names several (2, 3) or a run of them (1 TO 5: see
+  // choice_pieces, parse/data.py), any one of those.
+  function caseTest(subject, one) {
+    if (!one.any) { return { op: "=", left: subject, right: tree(one.match) }; }
+    var test = null;
+    one.any.forEach(function (piece) {
+      var t = piece.is !== undefined
+        ? { op: "=", left: subject, right: tree(piece.is) }
+        : { op: "and", left: { op: "<=", left: tree(piece.from), right: subject },
+            right: { op: "<=", left: subject, right: tree(piece.to) } };
+      test = test ? { op: "or", left: test, right: t } : t;
+    });
+    return test;
+  }
+
+  // A record the program laid out field by field (TYPE, RECORD: see
+  // 18-ahead.js), by its name, or null.
+  function laidRecord(prog, kind) {
+    var rec = prog && prog.records && prog.records[kind];
+    if (!rec && prog && prog.records) {
+      var low = lowered(kind);
+      Object.keys(prog.records).forEach(function (k) { if (lowered(k) === low) { rec = prog.records[k]; } });
+    }
+    return rec && rec.laid ? rec : null;
+  }
+
+  // The values handed to one -- New Car("Ford", 1.8) -- each fitted to the
+  // field it goes into, in the order the fields were written.
+  function recordArgs(node, w) {
+    if (!node.args || !node.args.length) { return null; }
+    var rec = laidRecord(w.prog, node.record);
+    return node.args.map(function (a, i) {
+      var f = rec && rec.fields[rec.laid[i]];
+      return f && f.kind ? w.fitIn(a, f.kind) : asCode(a, w);
+    });
+  }
+
   // An expression, written out.  The kinds are what make it more than a
   // change of spelling: 7 / 2 is three and a half in the chart, so where
   // both sides are whole numbers a language that would make it three is
@@ -67,7 +105,7 @@
       w.nest--;
       return L.tableOf(pairs, kk, w);
     }
-    if (node.record) { return L.newRecord(node.record, w); }
+    if (node.record) { return L.newRecord(node.record, w, recordArgs(node, w)); }
     if (node.index) {
       var holder = w.kind(node.index), at = asCode(node.at, w);
       var negative = node.at.unary === "-" && node.at.of.lit !== undefined;
@@ -966,6 +1004,10 @@
         if (entry && entry.elemNullable && L.nullableList && isListKind(kind) && L.boxedKind && L.boxedKind[elemOf(kind)]) {
           return "new " + L.nullableList(elemOf(kind)) + "()";
         }
+        // a record laid out field by field: declared, it is one, ready to fill in
+        if (isRecKind(kind) && laidRecord(w.prog, kind.slice(4))) {
+          return L.newRecord(laidRecord(w.prog, kind.slice(4)).name, w);
+        }
         if (isListKind(kind) || isTableKind(kind) || isRecKind(kind)) { return L.emptyOf(kind, w); }
         if (kind === "any" && L.anyZero) { return L.anyZero; }
         if (kind === "fn" || kind === "any") { return L.nullValue || (L.yes === "True" ? "None" : "null"); }
@@ -1145,7 +1187,7 @@
         }
         for (var i = tests.length - 1; i >= 0; i--) {
           rest = { op: "if", chained: i > 0,
-                   test: { op: "=", left: subject, right: tree(tests[i].match) },
+                   test: caseTest(subject, tests[i]),
                    then: tests[i].body,
                    "else": rest ? [rest] : (other ? other.body : []) };
         }
@@ -1319,6 +1361,9 @@
         case "for": L.count(w, item, deep); break;
         case "select": L.pick(w, item, deep); break;
         case "start": break;
+        // Exit While, Exit For, Break: out of the loop it is in, the one
+        // word every language here has for it
+        case "exit": w.line(deep, "break" + L.semi); break;
         default:
           w.line(deep, L.note + item.text);
       }

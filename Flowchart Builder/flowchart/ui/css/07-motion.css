@@ -653,11 +653,11 @@
 
   /* ------------------------------------------- the settings, over the page -- */
   #more-over:not([hidden]), #tidy-over:not([hidden]), #eg-over:not([hidden]),
-  #pz-over:not([hidden]), #keys-over:not([hidden]) {
+  #pz-over:not([hidden]), #keys-over:not([hidden]), #tests-over:not([hidden]) {
     animation: dim-in var(--move) var(--ease-soft) backwards;
   }
   #more-over:not([hidden]) .code-sheet, #tidy-over:not([hidden]) .code-sheet,
-  #eg-over:not([hidden]) .code-sheet,
+  #eg-over:not([hidden]) .code-sheet, #tests-over:not([hidden]) .code-sheet,
   #pz-over:not([hidden]) .code-sheet, #keys-over:not([hidden]) .code-sheet {
     animation: sheet-rise var(--sheet-t) var(--ease) backwards;
   }

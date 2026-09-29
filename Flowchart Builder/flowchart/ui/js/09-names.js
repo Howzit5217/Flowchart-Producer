@@ -880,6 +880,8 @@
         text = block.replace(/\*\/[\s\S]*$/, "").replace(/^[\s*]+/, "");
       } else if (/^\/\//.test(line)) {
         text = line.replace(/^\/+\s*/, "");
+      } else if (/^#/.test(line)) {      // # a comment, AQA's and Python's way
+        text = line.replace(/^#+\s*/, "");
       }
       if (text !== null) {
         if (got.said || !text) { continue; }

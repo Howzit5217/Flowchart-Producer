@@ -34,10 +34,14 @@
     function intoOf(id) { return insBy[typeof id + ":" + id] || []; }
 
     var heads = hand.nodes.filter(function (n) { return !intoOf(n.id).length; });
+    // A flow opened by an oval that names it is a module (modHead), and
+    // one program can have as many of those as it likes -- but only the
+    // one place where the program itself starts.
+    var mains = heads.filter(function (n) { return !(modHead(n) && outOf(n.id).length); });
     if (!heads.length) { fault("p_no_start", null); }
-    else if (heads.length > 1) { fault("p_many_starts", null, { n: heads.length }); }
-    else if (!endsKind(heads[0].kind)) {
-      fault("p_start_kind", heads[0], endShape, startAbove(heads[0]));
+    else if (mains.length > 1) { fault("p_many_starts", null, { n: mains.length }); }
+    else if (mains.length === 1 && !endsKind(mains[0].kind)) {
+      fault("p_start_kind", mains[0], endShape, startAbove(mains[0]));
     }
 
     var ends = hand.nodes.filter(function (n) {
@@ -58,8 +62,18 @@
       else if (!outs.length && !endsKind(n.kind)) {
         fault("p_dead_end", n, null, ends.length ? toEnd(n) : endFix);
       }
-      if (asks && outs.length !== 2) {
+      if (asks && outs.length < 2) {
         fault("p_decision_out", n, { n: outs.length });
+      }
+      // three ways out and more: a Case, each way the value it answers to
+      if (asks && outs.length > 2) {
+        var said = {};
+        outs.forEach(function (l) {
+          var word = String(l.label || "").trim().toLowerCase();
+          if (!word) { fault("p_no_label", n); }
+          else if (said[word]) { fault("p_same_labels", n); }
+          said[word] = true;
+        });
       }
       if (!asks && outs.length > 1) {
         fault("p_one_out", n, { n: outs.length });
@@ -106,8 +120,8 @@
     });
 
     // everything has to be reachable from the start...
-    if (heads.length === 1) {
-      var seen = {}, stack = [heads[0].id];
+    if (mains.length <= 1 && heads.length) {
+      var seen = {}, stack = heads.map(function (n) { return n.id; });
       while (stack.length) {
         var id = stack.pop();
         if (seen[id]) { continue; }
@@ -581,6 +595,71 @@
     return null;
   }
 
+  // Where every one of several ways meets again -- the nearest shape all of
+  // them reach -- for a decision with more than two ways out (a Select
+  // Case).  Breadth first from the first way, as meetAgain is.
+  function meetAll(ids, past) {
+    if (ids.length === 2) { return meetAgain(ids[0], ids[1], past); }
+    function stops(id) { return past && past.indexOf(id) >= 0; }
+    function reach(from) {
+      var ahead = {}, stack = [from];
+      while (stack.length) {
+        var id = stack.pop();
+        if (ahead[id]) { continue; }
+        ahead[id] = true;
+        if (!stops(id)) { outOf(id).forEach(function (l) { stack.push(l.to); }); }
+      }
+      return ahead;
+    }
+    var others = ids.slice(1).map(reach);
+    var seen = {}, queue = [ids[0]];
+    while (queue.length) {
+      var at = queue.shift();
+      if (seen[at]) { continue; }
+      seen[at] = true;
+      if (others.every(function (one) { return one[at]; })) { return at; }
+      if (!stops(at)) { outOf(at).forEach(function (l) { queue.push(l.to); }); }
+    }
+    return null;
+  }
+
+  // What a way out of a Select Case is labelled with, as the Case says it:
+  // a number as it is, and a word in quotes -- an arrow marked A means the
+  // letter A, not something called A.  A run of them, 1 To 5, and several,
+  // 2, 3, as written; Other, Else and the like are the Case Else (null).
+  var R_OTHER_WAY = /^(else|other|others|otherwise|default|anything else|case else)$/i;
+  function caseLabel(label) {
+    var t = String(label || "").trim();
+    if (R_OTHER_WAY.test(t)) { return null; }
+    if (/^[-+]?\d+(\.\d+)?$/.test(t) || /^(["']).*\1$/.test(t)) { return t; }
+    if (/\s+to\s+/i.test(t) || /,/.test(t)) { return t; }
+    return '"' + t.replace(/"/g, "'") + '"';
+  }
+
+  // A flow of its own that the program calls on: an oval nothing leads
+  // into whose words name it -- double(x), Function double(x), Module
+  // greet.  A second "Start" is not one of these: that is two programs
+  // drawn in one place, and the check says so.
+  var R_MOD_HEAD = /^(?:(?:module|function|sub|procedure|subroutine|def|method)\s+[A-Za-z_]\w*.*|[A-Za-z_]\w*\s*\(.*\)\s*(?:(?:as|returns?|->|:)\s*\w+)?)$/i;
+  var R_MAIN_HEAD = /^(start|begin|main)(\s+program)?\s*(\(\s*\))?$/i;
+  function modHead(n) {
+    var said = saidIn(n);
+    return R_MOD_HEAD.test(said) && !R_MAIN_HEAD.test(said);
+  }
+  // Whether a flow hands anything back: an oval in it says Return and what.
+  function flowGives(id) {
+    var seen = {}, stack = [id];
+    while (stack.length) {
+      var at = stack.pop();
+      if (seen[at]) { continue; }
+      seen[at] = true;
+      var n = nodeById(at), outs = outOf(at);
+      if (n && !outs.length && /^return\s+\S/i.test(saidIn(n))) { return true; }
+      outs.forEach(function (l) { stack.push(l.to); });
+    }
+    return false;
+  }
+
   function saidIn(node) {                // the words in a shape, tidied
     return String(node.text || "").replace(/\s+/g, " ").trim();
   }
@@ -649,20 +728,26 @@
   // What it writes is never run.
   function handWriting(once) {
     var heads = hand.nodes.filter(function (n) { return !intoOf(n.id).length; });
-    // The flow starts where nothing leads in: at a shape that leads on to
-    // something, where one does -- a note standing on its own is not the
+    // A flow whose first oval names it is a module the program calls
+    // (modHead), written out after the program under its own name.
+    var mods = heads.filter(function (n) { return modHead(n) && outOf(n.id).length; });
+    var starts = heads.filter(function (n) { return mods.indexOf(n) < 0; });
+    // The program starts where nothing leads in: at a shape that leads on
+    // to something, where one does -- a note standing on its own is not the
     // start of anything -- and at an oval before any other shape.
-    var head = heads.filter(function (n) { return outOf(n.id).length && endsKind(n.kind); })[0] ||
-               heads.filter(function (n) { return outOf(n.id).length; })[0] || heads[0];
-    if (!head) { throw new Error(TXT.h_no_start); }
+    var head = starts.filter(function (n) { return outOf(n.id).length && endsKind(n.kind); })[0] ||
+               starts.filter(function (n) { return outOf(n.id).length; })[0] || starts[0] || null;
+    if (!head && !mods.length) { throw new Error(TXT.h_no_start); }
     var out = [], been = {}, lines = {};
+    var inModule = false;                // writing a module's flow, not the program's
+    var isHead = {};                     // the ovals that open a flow: said by its first line
+    if (head) { isHead[head.id] = true; }
+    mods.forEach(function (m) { isHead[m.id] = true; });
 
     function put(words, id) {
       out.push(words);
       if (id) { lines[out.length] = id; }
     }
-
-    put("Start", head.id);
 
     function step(deep) { return new Array(deep + 1).join("    "); }
 
@@ -675,8 +760,9 @@
         var node = nodeById(id);
         if (!node) { return; }
         var outs = outOf(id), asks = asksKind(node.kind);
+        var picks = asks && outs.length > 2;
         var ways = null, yesBack = false, noBack = false;
-        if (asks && outs.length) {
+        if (asks && outs.length && !picks) {
           ways = bothWays(id);
           yesBack = !!ways[1] && canReach(ways[0].to, id, loops);
           noBack = !!ways[1] && canReach(ways[1].to, id, loops);
@@ -696,15 +782,34 @@
         if (been[id] > 3) { throw new Error(TXT.h_tangled); }
         var words = saidIn(node) || (once && asks ? HAND_STAND_IN : "");
         if (!outs.length) {              // an End, and the flow stops here
+          // In a module the way out is a Return -- Return and what it hands
+          // back, where the oval says so.  An End there would end the
+          // whole program.
+          var last = inModule ? "Return" : "End";
           // A shape that is not an End, with no way on out of it, still
           // says what it says -- written as End, its words were lost.
-          if (!asks && !endsKind(node.kind) && words && id !== head.id) {
+          if (!asks && !endsKind(node.kind) && words && !isHead[id]) {
             put(step(deep) + words, node.id);
-            put(step(deep) + "End");
+            put(step(deep) + last);
+          } else if (inModule && /^return\b/i.test(words)) {
+            put(step(deep) + words, node.id);
           } else {
-            put(step(deep) + "End", node.id);
+            put(step(deep) + last, node.id);
           }
           return;
+        }
+        if (picks) {                     // three ways out and more: a Select Case
+          var meet = meetAll(outs.map(function (l) { return l.to; }), loops);
+          put(step(deep) + "Select Case " + words, node.id);
+          outs.forEach(function (l) {
+            var label = caseLabel(l.label);
+            put(step(deep + 1) + (label === null ? "Case Else" : "Case " + label));
+            write(l.to, meet, deep + 2, loops);
+          });
+          put(step(deep) + "End Select");
+          if (!meet) { return; }
+          id = meet;
+          continue;
         }
         if (asks && ways[1]) {
           var yes = ways[0], no = ways[1];
@@ -731,7 +836,7 @@
           id = join;
           continue;
         }
-        if (id !== head.id) {            // the first oval is the Start above
+        if (!isHead[id]) {               // the first oval is the Start above
           if (words) { put(step(deep) + words, node.id); }
           else if (once) { put(step(deep) + HAND_STAND_IN, node.id); }
         }
@@ -739,8 +844,27 @@
       }
     }
 
-    write(head.id, null, 0);
-    if (out[out.length - 1] !== "End") { put("End"); }
+    if (head) {
+      put("Start", head.id);
+      write(head.id, null, 0);
+      if (out[out.length - 1] !== "End") { put("End"); }
+    }
+    // Every module after the program, under its own name: Function where
+    // it hands something back, Module where it does not, unless it said
+    // which itself.
+    mods.forEach(function (m) {
+      var said = saidIn(m);
+      var kind = /^(module|function|sub|procedure|subroutine|def|method)\b/i.exec(said);
+      var word = kind ? kind[1].charAt(0).toUpperCase() + kind[1].slice(1).toLowerCase()
+                      : flowGives(m.id) ? "Function" : "Module";
+      if (word === "Def" || word === "Method") { word = "Function"; }
+      if (out.length) { out.push(""); }
+      put(kind ? said : word + " " + said, m.id);
+      inModule = true;
+      write(m.id, null, 1);
+      inModule = false;
+      put("End " + word);
+    });
     return { text: out.join("\n"), lines: lines };
   }
 

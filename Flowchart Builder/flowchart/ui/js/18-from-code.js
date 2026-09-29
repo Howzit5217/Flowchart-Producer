@@ -53,6 +53,7 @@
               sizeOf: /instanceof/, orderOf: /instanceof/, sortIn: /sort/, reverseIn: /reverse/,
               reversedList: /reverse/, shuffledList: /shuffle/, itemsOf: /entrySet/,
               filled: /filledFrom/, filledFrom: /filledFrom/, isNumber: /parseDouble/,
+              filledEach: /filledEachFrom/, filledEachFrom: /filledEachFrom/,
               transpose: /MAX_VALUE/, listPlus: /addAll/, bind: /arraycopy/, setWork: /contains/,
               zipped: /MAX_VALUE/, enumerated: /asList|enumerated/, chars: /toCharArray/,
               classOf: /getSimpleName/, itemOf: /instanceof/, padded: /"pad"/, significant: /MathContext/,
@@ -6876,6 +6877,13 @@
           case "reversedList": case "reversedCopy": return B("reversed", [a[0]]);
           case "itemsOf": return B("items", [a[0]]);
           case "filled": return { k: "sized", dims: a.slice(1), fill: a[0], kind: kindOf(a[0], ch), line: line };
+          // a list of records, each place one made by () -> new Student()
+          case "filledEach": {
+            var maker = stripParens(a[0]);
+            var each = maker && maker.k === "fn" && maker.body && maker.body[0] && maker.body[0].k === "return"
+                       ? maker.body[0].value : a[0];
+            return { k: "sized", dims: a.slice(1), fill: each, kind: kindOf(each, ch), line: line };
+          }
           case "transpose": return B("transpose", [a[0]]);
           case "listPlus": return { k: "bin", op: "+", a: a[0], b: a[1], line: line };
           case "bind": return B("bind", [fnValue(a[0], ch, "fn")].concat(a.slice(1)));
@@ -10911,6 +10919,14 @@
           if (st.k === "break" || st.k === "continue") {
             var t = target(stack, st.label, st.k === "continue");
             if (!t) { return { list: [], exits: {}, always: true }; }
+            // A plain break out of the loop it stands straight inside is what
+            // the pseudocode's Exit says now -- Exit While, Exit For -- and no
+            // flag is needed.  Not out of a Select or a try on the way, nor to
+            // a loop further out by its label, nor out of a loop whose Else
+            // (Python's for ... else) has to know whether it was broken.
+            if (st.k === "break" && t.loop && t === stack[stack.length - 1] && !t.keepsFlag) {
+              return { list: [{ k: "leave", line: st.line }], exits: {}, always: true };
+            }
             // a break out of the Select it is in, at its foot, is no break
             var flag = st.k === "break" ? (t.flag = t.flag || fresh(ch, t.base || (t.loop ? "done" : "leave")))
                                         : (t.skip = t.skip || fresh(ch, "skip"));
@@ -10957,7 +10973,8 @@
             return { list: list, exits: ex };
           }
           if (/^(while|do|for|foreach)$/.test(st.k)) {
-            var loop = { label: st.label, loop: true, flag: null, skip: null };
+            var loop = { label: st.label, loop: true, flag: null, skip: null,
+                         keepsFlag: !!(st.orelse && st.orelse.length) };
             var r2 = fixList(st.body, stack.concat([loop]));
             var outer = Object.assign({}, r2.exits);
             if (loop.flag) { delete outer[loop.flag]; }
@@ -12046,6 +12063,7 @@
       function cond(e, ch) { return px(e, ch).t; }
 
       // Statements.
+      var exitWords = [];                  // the loops being written, innermost last: what an Exit says
       function write(list, deep, ch) {
         list.forEach(function (st) { writeOne(st, deep, ch); });
       }
@@ -12111,27 +12129,37 @@
           }
           case "while":
             row(deep, "While " + cond(st.cond, ch));
+            exitWords.push("While");
             write(st.body, deep + 1, ch);
+            exitWords.pop();
             row(deep, "End While");
             return;
           case "do":
             row(deep, "Do");
+            exitWords.push("Do");
             write(st.body, deep + 1, ch);
+            exitWords.pop();
             row(deep, (st.until ? "Until " : "Loop While ") + cond(st.cond, ch));
             return;
           case "for": {
             var by = st.by ? px(st.by, ch).t : "";
             row(deep, "For " + nameOf(st.v) + " = " + px(st.from, ch).t + " To " +
                       px(st.to, ch).t + (by && by !== "1" ? " Step " + by : ""));
+            exitWords.push("For");
             write(st.body, deep + 1, ch);
+            exitWords.pop();
             row(deep, "End For");
             return;
           }
           case "foreach":
             row(deep, "For Each " + nameOf(st.v) + " In " + px(st.over, ch).t);
+            exitWords.push("For");
             write(st.body, deep + 1, ch);
+            exitWords.pop();
             row(deep, "End For");
             return;
+          // a break out of the loop it is in: Exit While, Exit For, Exit Do
+          case "leave": row(deep, "Exit " + (exitWords[exitWords.length - 1] || "While")); return;
           case "select":
             row(deep, "Select Case " + px(st.subject, ch).t);
             st.cases.forEach(function (c) {

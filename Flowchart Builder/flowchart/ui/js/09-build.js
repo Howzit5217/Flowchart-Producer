@@ -979,16 +979,17 @@
   var STARTS = [
     ["eg_l1", ["e_ask", "e_add", "e_swap", "e_decide", "e_oddeven",
                "e_count", "e_while", "e_total", "e_module", "e_answers"]],
-    ["eg_l2", ["e_grades", "e_biggest", "e_menu", "e_vowel", "e_leap",
-               "e_keepasking", "e_backwards", "e_sumevens", "e_countdown",
-               "e_guess"]],
-    ["eg_l3", ["e_fizz", "e_prime", "e_gcd", "e_digits", "e_reverse",
+    ["eg_l2", ["e_grades", "e_bands", "e_biggest", "e_menu", "e_vowel", "e_leap",
+               "e_keepasking", "e_sumevens", "e_countdown", "e_guess"]],
+    ["eg_l3", ["e_fizz", "e_prime", "e_gcd", "e_hailstone", "e_doubling",
                "e_fib", "e_factorial", "e_minmax", "e_grid", "e_stars"]],
-    ["eg_l4", ["e_area", "e_change", "e_temps", "e_shop", "e_report",
+    ["eg_l4", ["e_rainfall", "e_change", "e_temps", "e_shop", "e_report",
                "e_votes", "e_quiz", "e_login", "e_sentinel", "e_picktable"]],
-    ["eg_l5", ["e_bank", "e_gradebook", "e_paycheck", "e_convert",
-               "e_splitcheck", "e_vending", "e_primelist", "e_weekday",
-               "e_loan", "e_rps"]]
+    ["eg_l5", ["e_bank", "e_gradebook", "e_paycheck", "e_savings",
+               "e_classlist", "e_vending", "e_primelist", "e_weekday",
+               "e_loan", "e_rps"]],
+    // written the way an exam board writes pseudocode (parse/boards.py)
+    ["eg_l6", ["e_aqa", "e_ocr", "e_cie", "e_cietype"]]
   ];
 
   // One of them, in the language the page is in.
@@ -1428,6 +1429,15 @@
   // picked is still picked.
   function drawItNow(again) {
       var says = el("#build-note");
+      // Mermaid pasted into the box is a drawing, not pseudocode: it is
+      // drawn on the Flowchart tab, where it can be moved about and run,
+      // and the box keeps what was pasted (19-mermaid.js).
+      if (!again && isMermaid(el("#code").value)) {
+        if (openMermaid("", el("#code").value)) {
+          handSays(TXT.mm_opened);
+          return Promise.resolve();
+        }
+      }
       // The button says what it is doing by what color it is: red while it
       // is drawing, green the moment it is done, then back to blue a second
       // later, ready for the next one.
@@ -1497,6 +1507,7 @@
         el("#sub").textContent = TXT.flowchart + " · " + data.w + " x " +
                                  data.h + " px";
         AST = data.ast || null;
+        if (builtText !== asked) { clearPauses(false); }
         builtText = asked;
         showTold(AST && AST.retold);     // a story, and what it was read as (33-told.js)
         dressRunner();                   // there is something to run now

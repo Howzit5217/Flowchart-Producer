@@ -70,7 +70,7 @@
   // The innermost frame wins: an error raised deep inside a module keeps
   // pointing at the line inside the module, not at the call that led there.
   function spotIn(err, src, tok) {
-    if (!err || err instanceof Stop || err instanceof Returned) { return err; }
+    if (!err || err instanceof Stop || err instanceof Returned || err instanceof LeftLoop) { return err; }
     if (err.bit === undefined) {
       err.bit = src;
       if (tok && err.from === undefined) { err.from = tok.from; err.to = tok.to; }
@@ -304,8 +304,12 @@
             if (made2.args.length && moduleNamed(kind)) {
               return await callOut(kind, made2.args, where, made2.given);
             }
+            // a record laid out field by field (TYPE, RECORD): its values
+            // handed over in the order its fields were written
+            var laid = recordLaid(kind);
+            if (laid) { return recordMade(laid, made2.args); }
           }
-          return new Table(kind);
+          return recordLaid(kind) ? recordMade(recordLaid(kind)) : new Table(kind);
         }
         if (isOp("(")) {    // a call, ours or a built-in
           var opened = take();
@@ -409,6 +413,28 @@
     return Array.from(this.map.values()).map(function (e) { return e[1]; });
   };
   function isTable(v) { return v instanceof Table; }
+
+  // A record the program laid out field by field -- Cambridge's TYPE ...
+  // ENDTYPE, AQA's RECORD ... ENDRECORD (parse/boards.py) -- by its name:
+  // { name, fields: [[field, type], ...] }, or null.
+  function recordLaid(kind) {
+    var all = AST && AST.records;
+    if (!all || !kind) { return null; }
+    var low = String(kind).toLowerCase();
+    for (var name in all) {
+      if (name.toLowerCase() === low) { return { name: name, fields: all[name] }; }
+    }
+    return null;
+  }
+  // ... and one of them, every field holding what its type starts out as,
+  // or what was handed over for it.
+  function recordMade(laid, given) {
+    var made = new Table(laid.name);
+    laid.fields.forEach(function (f, k) {
+      made.put(f[0], given && k < given.length ? given[k] : blankOf(f[1]));
+    });
+    return made;
+  }
   function keyOf(k) {
     if (typeof k === "number" || typeof k === "boolean") { return "n" + Number(k); }
     if (Array.isArray(k)) { return "l" + k.map(keyOf).join("\u0001"); }
@@ -644,10 +670,14 @@
     return v;
   }
   // sizes [3, 4] and a fill: three lists of four, each list its own, and a
-  // list given as the fill copied into every place rather than shared
+  // list given as the fill copied into every place rather than shared.  A
+  // fill that is a way of making one -- a record, for a list of records --
+  // makes each place one of its own.
   function filledList(sizes, fill) {
     function made(level) {
-      if (level >= sizes.length) { return Array.isArray(fill) ? fill.slice() : fill; }
+      if (level >= sizes.length) {
+        return typeof fill === "function" ? fill() : Array.isArray(fill) ? fill.slice() : fill;
+      }
       var out = [];
       for (var k = 0; k < sizes[level]; k++) { out.push(made(level + 1)); }
       return out;

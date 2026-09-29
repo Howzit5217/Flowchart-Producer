@@ -104,11 +104,18 @@ __OPTIONS__
          thing anybody actually wants -- the chart, in the document they
          are writing -- is one. -->
     <button class="btn wide file-btn" id="png-copy" data-w="dl_copy">__W(dl_copy)__</button>
-    <p class="hint" id="note"></p>
+    <!-- The same picture as a PDF, on a page its own shape: the kind of
+         file a class hands in (08-save.js). -->
+    <button class="btn wide file-btn" id="pdf" data-w="dl_pdf">__W(dl_pdf)__</button>
+    <!-- The chart as Mermaid, the text GitHub, GitLab and Notion draw a
+         flowchart from (19-mermaid.js). -->
+    <button class="btn wide file-btn" id="mm-open" data-w="mm_open"
+            data-w-title="mm_tip" title="__W(mm_tip)__">__W(mm_open)__</button>
+    <p class="hint" id="note" role="status" aria-live="polite"></p>
     <h3 data-w="f_work_head">__W(f_work_head)__</h3>
     <button class="btn wide file-btn" id="save-file" data-w="f_save">__W(f_save)__</button>
     <button class="btn wide file-btn" id="open-file" data-w="f_open">__W(f_open)__</button>
-    <p class="hint" id="file-note"></p>
+    <p class="hint" id="file-note" role="status" aria-live="polite"></p>
     <!-- The whole program in a link.  There is no server here to keep
          anything on, so the link carries the work itself: send it and
          whoever opens it is looking at the same chart. -->
@@ -116,7 +123,7 @@ __OPTIONS__
     <p class="hint" id="link-note"></p>
     <button class="btn wide file-btn" id="print-open" data-w="print_it">__W(print_it)__</button>
     <input type="file" id="file-in" hidden multiple
-           accept=".json,.txt,.text,.md,.pseudo,.flowchart,.py,.java,.cs,.cpp,.cc,.cxx,.h,.hpp,.js,application/json,text/plain">
+           accept=".json,.txt,.text,.md,.pseudo,.flowchart,.mmd,.mermaid,.py,.java,.cs,.cpp,.cc,.cxx,.h,.hpp,.js,application/json,text/plain">
     <!-- Where all of the above goes: the browser's downloads, or a folder
          picked here.  A setting rather than something to do, so it sits
          apart at the foot.  19-folder.js says which, and says so instead
@@ -546,6 +553,29 @@ __SVG__
      by hand stay, what its decisions are labelled.  What was chosen last
      time is what it offers next time (13-hand-tidy.js), so a second tidy
      is one press more. -->
+<!-- Tests of the program's own: what is typed in, and what it should
+     print (34-tests.js).  Each one is run the way a puzzle is marked. -->
+<div id="tests-over" hidden>
+  <div class="code-sheet more-sheet" role="dialog" aria-labelledby="tests-head">
+    <div class="code-bar">
+      <span class="mark small" aria-hidden="true">
+        <svg viewBox="0 0 24 24">
+          <rect x="7.5" y="1.8" width="9" height="5.4" rx="1.4"/>
+          <path d="M12 7.2v3.1"/>
+          <path d="M12 10.3l4 3.3-4 3.3-4-3.3z"/>
+          <path d="M12 16.9v2.1H4.6v3.2M12 19h7.4v3.2"/>
+        </svg>
+      </span>
+      <strong id="tests-head" data-w="tests_head">__W(tests_head)__</strong>
+      <span class="code-count" id="tests-count" role="status" aria-live="polite"></span>
+      <button class="btn small" id="tests-add" data-w="tests_add">__W(tests_add)__</button>
+      <button class="btn small primary" id="tests-go" data-w="tests_run">__W(tests_run)__</button>
+      <button class="btn small" id="tests-done" data-w="done">__W(done)__</button>
+    </div>
+    <div class="more-body" id="tests-body"></div>
+  </div>
+</div>
+
 <div id="tidy-over" hidden>
   <div class="code-sheet more-sheet" role="dialog" aria-labelledby="tidy-head">
     <div class="code-bar">

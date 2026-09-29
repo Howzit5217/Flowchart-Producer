@@ -62,6 +62,7 @@
   // (BAR_ICONS, 11-hand-many.js) where the row does what that button does,
   // so the two say it the same way, and these for the rest.
   var MENU_ICONS = {
+    pause: '<circle cx="10" cy="10" r="7.2"/><path d="M8 7v6M12 7v6"/>',
     next: '<rect x="5.5" y="2.5" width="9" height="5.5" rx="1.2"/><path d="M10 8v3"/>' +
           '<circle cx="10" cy="14.5" r="3.3"/><path d="M10 13v3M8.5 14.5h3"/>',
     into: '<path d="M10 2.5v3.5M10 14v3.5"/><rect x="5" y="6" width="10" height="8" rx="1.5"/>',
@@ -682,8 +683,9 @@
       { icon: "another", name: TXT.m_copy, go: function () { duplicateShapes([node.id]); } },
       "-",
       plainRow(which, mine),
-      { icon: "format", name: TXT.m_format, go: formatPicked }   // 07-sides.js
-    ], "word");
+      { icon: "format", name: TXT.m_format, go: formatPicked },  // 07-sides.js
+      "-"
+    ].concat(pauseRows(el('.node[data-i="h' + node.id + '"]', chart))), "word");
     openMiniBar(el(".menu.word:not(.out)"), function (bar) {
       shapeBar(bar, node, which, mine);
     });

@@ -31,12 +31,15 @@ def parse_for(rest, raw):
         var, start, direction, end, step = m.groups()
         down = direction.lower() == "downto" or (step or "").strip().startswith("-")
         test = "%s %s %s" % (var, ">=" if down else "<=", end)
+        # Written with the boards' arrow, FOR i <- 1 TO 5 is drawn with it:
+        # i <- 1 and i <- i + 1, the way the rest of the program sets things.
+        put = ("%s ← %s" if "←" in rest else "Set %s = %s")
         if step:
-            bump = "Set %s = %s + %s" % (var, var, step) if not down or not step.strip().startswith("-") \
-                else "Set %s = %s - %s" % (var, var, step.strip()[1:].strip())
+            bump = put % (var, "%s + %s" % (var, step)) if not down or not step.strip().startswith("-") \
+                else put % (var, "%s - %s" % (var, step.strip()[1:].strip()))
         else:
-            bump = "Set %s = %s %s 1" % (var, var, "-" if down else "+")
-        return For(raw, "Set %s = %s" % (var, start), test, bump)
+            bump = put % (var, "%s %s 1" % (var, "-" if down else "+"))
+        return For(raw, put % (var, start), test, bump)
     m = R_FOR_C.match(rest)
     if m:
         init, test, bump = (g.strip() for g in m.groups())

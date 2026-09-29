@@ -400,6 +400,10 @@ def node_block(node):
     own = settings.SIZES.get(getattr(node, "line", 0)) if settings.SIZES else None
     if own:
         w, h = float(own[0]), float(own[1])
+    # A connector -- where an Exit leaves a loop, and where it lands -- is
+    # a small circle round its letter, two grid steps across.
+    if getattr(node, "connector", False):
+        w = h = 2.0 * (settings.GRID_STEP if settings.GRID_STEP > 0 else 20)
     return Block(w, h, w / 2.0,
                  [("shape", node.shape, w / 2.0, h / 2.0, w, h, lines,
                    getattr(node, "node_id", 0))],

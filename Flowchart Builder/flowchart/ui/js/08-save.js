@@ -31,7 +31,7 @@
     // Nor what is only there to draw with: a picked shape's dots, corners,
     // +s and the handle it turns by, and the marks where the shape rules
     // would say otherwise.
-    all(".knob, .spot, .grip, .plus, .spin, .spin-says, .rule-dot, .read-dot, .guide", copy).forEach(function (bit) {
+    all(".knob, .spot, .grip, .plus, .spin, .spin-says, .rule-dot, .read-dot, .guide, .bp-dot", copy).forEach(function (bit) {
       bit.remove();
     });
     copy.classList.remove("culled");
@@ -183,7 +183,7 @@
   // The chart, drawn onto a canvas at whatever size is chosen, as a PNG.
   // Both buttons below want exactly this and differ only in what they do
   // with what comes out of it, so it is asked for once.
-  function asPng(p) {
+  function asPng(p, type) {
     return new Promise(function (ready, sorry) {
       var url = URL.createObjectURL(
           new Blob([plain(p.scale)], { type: "image/svg+xml;charset=utf-8" }));
@@ -199,7 +199,7 @@
         URL.revokeObjectURL(url);
         canvas.toBlob(function (blob) {
           if (blob) { ready(blob); } else { sorry(new Error(TXT.png_big)); }
-        }, "image/png");
+        }, type || "image/png", 0.92);
       };
       img.onerror = function () {
         URL.revokeObjectURL(url);
@@ -223,6 +223,67 @@
       sizeBad(why.message);
     });
   };
+
+  // ------------------------------------------------------------------ a PDF --
+  // A document to hand in, attach to an email or keep with the rest of a
+  // project: the chart drawn at the size chosen for the PNG, on a page of
+  // its own shape, the way the SVG is.  The page is written here -- a few
+  // lines of PDF around a JPEG of the chart -- because a page that loads
+  // nothing from anywhere has no library to borrow one from.
+  function pdfOf(jpeg, wide, tall, ptW, ptH, title) {
+    var enc = new TextEncoder(), parts = [], at = 0, offs = [];
+    function put(x) {
+      var b = typeof x === "string" ? enc.encode(x) : x;
+      parts.push(b);
+      at += b.length;
+    }
+    function obj(n) { offs[n] = at; put(n + " 0 obj\n"); }
+    function said(s) {                   // words as a PDF string: plain letters only
+      return "(" + String(s).replace(/[^\x20-\x7e]/g, "?").replace(/[\\()]/g, "\\$&") + ")";
+    }
+    put("%PDF-1.4\n%âãÏÓ\n");
+    obj(1); put("<< /Type /Catalog /Pages 2 0 R >>\nendobj\n");
+    obj(2); put("<< /Type /Pages /Kids [3 0 R] /Count 1 >>\nendobj\n");
+    obj(3); put("<< /Type /Page /Parent 2 0 R /MediaBox [0 0 " + ptW + " " + ptH + "]" +
+                " /Resources << /XObject << /Im0 4 0 R >> /ProcSet [/PDF /ImageC] >>" +
+                " /Contents 5 0 R >>\nendobj\n");
+    obj(4); put("<< /Type /XObject /Subtype /Image /Width " + wide + " /Height " + tall +
+                " /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length " +
+                jpeg.length + " >>\nstream\n");
+    put(jpeg);
+    put("\nendstream\nendobj\n");
+    var draw = "q " + ptW + " 0 0 " + ptH + " 0 0 cm /Im0 Do Q\n";
+    obj(5); put("<< /Length " + draw.length + " >>\nstream\n" + draw + "endstream\nendobj\n");
+    obj(6); put("<< /Title " + said(title) + " /Producer (Flowchart Builder) >>\nendobj\n");
+    var table = at, rows = "xref\n0 7\n0000000000 65535 f \n";
+    for (var n = 1; n <= 6; n++) { rows += ("000000000" + offs[n]).slice(-10) + " 00000 n \n"; }
+    put(rows + "trailer\n<< /Size 7 /Root 1 0 R /Info 6 0 R >>\nstartxref\n" + table + "\n%%EOF\n");
+    return new Blob(parts, { type: "application/pdf" });
+  }
+
+  var pdfButton = el("#pdf");
+  if (pdfButton) {
+    pdfButton.onclick = function () {
+      var p = plan();
+      pdfButton.disabled = true;
+      pdfButton.textContent = TXT.rendering;
+      function done() { pdfButton.disabled = false; pdfButton.textContent = TXT.dl_pdf; }
+      // the page the size of the chart itself, in points: three of them
+      // to every four pixels, whatever size the picture on it was drawn at
+      var ptW = Math.max(1, Math.round(p.cw / (p.scale || 1) * 0.75));
+      var ptH = Math.max(1, Math.round(p.ch / (p.scale || 1) * 0.75));
+      asPng(p, "image/jpeg").then(function (blob) {
+        return blob.arrayBuffer();
+      }).then(function (bytes) {
+        done();
+        save(pdfOf(new Uint8Array(bytes), p.cw, p.ch, ptW, ptH, document.title || FILE),
+             FILE + ".pdf");
+      }, function (why) {
+        done();
+        sizeBad(why.message);
+      });
+    };
+  }
 
   // ------------------------------------------ the chart, on the clipboard --
   // Downloading a picture and then going and inserting the file is three

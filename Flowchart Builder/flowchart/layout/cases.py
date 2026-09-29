@@ -5,14 +5,16 @@ from .. import settings
 from ..layout import blocks
 from ..layout.blocks import (
     Block, label_beside, label_clear, label_run, layout_seq, node_block,
-    shift)
+    part_of, shift)
 from ..measure import text_w
-from ..parse.nodes import Node
 
 
 def layout_select(item):
     """Case structure: one diamond, one branch per Case, all merging below."""
-    dia = node_block(Node("diamond", item.expr))
+    # Carrying the Select's own number, as an If's diamond carries its If's:
+    # drawn as a new Node with none, the run could not light it, a click on
+    # it found no line, and Tidy up had no shape to put there.
+    dia = node_block(part_of(item, "diamond", item.expr))
     if not item.branches:
         return dia
     branches = []

@@ -3,12 +3,13 @@ import re
 import sys
 
 from .. import progress, settings
+from ..parse import boards
 from ..parse.clean import join_lines, tidy, unwrap
 from ..parse.nodes import For, If, Loop, Module, Node, Select
 from ..parse.keywords import (
     R_CASE, R_CLOSER, R_DECL, R_DO, R_ELSE, R_ELSEIF, R_ELSE_INLINE, R_END,
-    R_ENDANY, R_ENDIF, R_ENDLOOP, R_ENDMOD, R_ENDSEL, R_FOR, R_IF, R_LOOPCOND,
-    R_IN, R_MODULE, R_OUT, R_REPEAT, R_SELECT, R_THEN, R_UNTIL, R_WHILE)
+    R_ENDANY, R_ENDIF, R_ENDLOOP, R_ENDMOD, R_ENDSEL, R_EXIT, R_EXIT_MOD, R_FOR, R_IF,
+    R_LOOPCOND, R_IN, R_MODULE, R_OUT, R_REPEAT, R_SELECT, R_THEN, R_UNTIL, R_WHILE)
 from ..parse.data import R_SET
 from ..parse.statements import (
     Chart, Frame, ends_flow, make_module, parse_for, simple_node,
@@ -46,6 +47,26 @@ STRUCTURE = {"module", "function", "sub", "procedure", "def", "method",
              "wend", "done", "od"}
 
 
+def lettered(items, letters=None):
+    """Each loop an Exit leaves given a letter of its own, A, B and on, in
+    the order they are written in the chart, and every Exit from it the same
+    letter: the connector it is drawn as, and the one on the loop's way out
+    (loops.landed), say where it goes."""
+    if letters is None:
+        letters = iter("ABCDEFGHIJKLMNOPQRSTUVWXYZ")
+    for item in items:
+        exits = getattr(item, "exits", None)
+        if exits:
+            letter = next(letters, "?")
+            item.landing = letter
+            for one in exits:
+                one.text = letter
+        for key in ("then", "orelse", "body"):
+            lettered(getattr(item, key, None) or [], letters)
+        for branch in getattr(item, "branches", None) or []:
+            lettered(branch[1], letters)
+
+
 def plain_set(s):
     """An assignment and nothing else: x = 5, Set total = total + n."""
     m = R_SET.match(s)
@@ -62,10 +83,14 @@ def parse_program(text, story=True):
     room_to_nest()
     del PROBLEMS[:]
     lines = join_lines(text.splitlines())
+    # Written for an exam board (boards.py): AQA's arrows, OCR's print(),
+    # Cambridge's DECLARE ... : INTEGER.  That is pseudocode, never a story.
+    boards.BOARD[0] = boards.which_board(text)
+    boards.RECORDS.clear()
     # Told as a story rather than written as pseudocode: read what it was
     # retold as, each line still numbered by the sentence it came from, so
     # the chart, the run and every warning point back into the story.
-    told = retell(lines) if story else None
+    told = retell(lines) if story and not boards.BOARD[0] else None
     TOLD[0] = told[1] if told else ""
     if told:
         lines = told[0]
@@ -73,6 +98,7 @@ def parse_program(text, story=True):
     at_declares, at_outs = [], []       # and the line each of them came from
     counted, here = [0], [0]            # statement numbers, and where we are
     run_at = [0]                        # where the run being gathered began
+    record = [None, []]                 # a record being laid out: its name, its fields
     stack = [Frame(None, top, -1)]
     # No "End If" / "End While" anywhere but the lines are indented?  Then
     # indentation closes the blocks, Python style.
@@ -276,6 +302,43 @@ def parse_program(text, story=True):
             while len(stack) > 1 and indent <= cur().indent:
                 stack.pop()
 
+        # A record laid out field by field -- Cambridge's TYPE ... ENDTYPE,
+        # AQA's RECORD ... ENDRECORD.  It says what a record holds, not
+        # anything the program does, so it is no shape on the chart; the
+        # fields are kept for the runner (boards.RECORDS).
+        if record[0] is not None:
+            if boards.R_END_RECORD.match(s):
+                boards.RECORDS[record[0]] = record[1]
+                record[0] = None
+                continue
+            m = boards.R_FIELD.match(s)
+            if m:
+                record[1].append([m.group(1), (m.group(2) or "").strip()])
+            continue
+        m = boards.R_RECORD.match(s)
+        if m and any(boards.R_END_RECORD.match(tidy(t)) for _, t, _ in lines[idx + 1:]):
+            flush()
+            record[0], record[1] = m.group(2), []
+            continue
+        # Cambridge's IF puts its THEN on a line of its own, under the test
+        if s.lower() == "then" and isinstance(cur().owner, If):
+            continue
+        # Cambridge's CASE OF: each choice is its value and a colon, and
+        # what it does after the colon or on the lines under it --
+        # 1 : OUTPUT "One", 2 TO 5 : ..., OTHERWISE : OUTPUT "Other".
+        inner = find(lambda o: isinstance(o, (If, Select)))
+        if inner >= 0 and isinstance(stack[inner].owner, Select):
+            choice = boards.case_choice(raw)
+            if choice is not None:
+                flush()
+                del stack[find(is_sel) + 1:]
+                fr = cur()
+                fr.owner.branches.append([choice[0], []])
+                fr.items = fr.owner.branches[-1][1]
+                if not choice[1]:
+                    continue
+                s = tidy(choice[1])
+
         if R_DECL.match(s):                        # declarations: one shared box
             if outs:
                 flush()
@@ -331,6 +394,25 @@ def parse_program(text, story=True):
             continue
         if R_END.match(s):
             add(Node("oval", word("end"), terminal=True))
+            continue
+        # Out of the loop part way round: drawn as a connector with a letter,
+        # and the same letter on the loop's way out, where it lands (see
+        # lettered, below, and loops.landed).  Written outside every loop,
+        # it has nowhere to go.
+        if R_EXIT.match(s):
+            i = find(is_loop)
+            if i < 0:
+                trouble("w_exit_alone", at_line, s, {"how": "drop", "at": at_line})
+                continue
+            node = Node("circle", "", terminal=True)
+            node.said = s
+            node.connector = True
+            owner = stack[i].owner
+            owner.exits = getattr(owner, "exits", []) + [node]
+            add(node)
+            continue
+        if R_EXIT_MOD.match(s):                    # Exit Function: a Return
+            add(Node("oval", s, terminal=True))
             continue
         if R_ENDMOD.match(s):
             del stack[1:]
@@ -468,9 +550,14 @@ def parse_program(text, story=True):
 
     # ----- one chart per module; globals and main() share the first chart
     main = next((mod for mod in modules if mod.name.lower() == "main"), None)
-    names = set(mod.name.lower() for mod in modules)
-    top = [it for it in top if not (isinstance(it, Node) and             # "main()"
-           re.match(r"^\w+\(.*\)$", it.text) and it.text.split("(")[0].lower() in names)]
+    # The main() at the foot that starts a program off, where main is the
+    # chart the top of the page already shares.  Only that one: a call to
+    # any other module written outside them all -- greet("Ann"), the OCR
+    # way, with no Call in front -- is the program doing something, and
+    # was being thrown away with it.
+    if main is not None:
+        top = [it for it in top if not (isinstance(it, Node) and             # "main()"
+               re.match(r"^\w+\(\s*\)$", it.text) and it.text.split("(")[0].lower() == "main")]
     # What is written outside every module is the program's own.  A Constant
     # at the top of the page is put there to be read from inside the modules
     # under it -- that is the whole reason for putting it there -- so the
@@ -491,6 +578,7 @@ def parse_program(text, story=True):
             charts.append(Chart(heading, mod.items, False, mod))
 
     for chart in charts:
+        lettered(chart.items)
         items = chart.items
         first = items[0] if items else None
         opens = (isinstance(first, Node) and first.shape == "oval"

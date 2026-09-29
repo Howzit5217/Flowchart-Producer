@@ -408,6 +408,8 @@
     el("#tape").innerHTML = "";
     watchClear();
     putTape(snap.tape);
+    // and its charts, which are drawn from what it said (17-graphs.js)
+    if (typeof graphRun === "function") { graphsClear(); graphRun(); }
     var made = {};
     runWhere = { vars: unpackVars(snap.main, made), name: "main" };
     GLOBALS = unpackVars(snap.globals, made);

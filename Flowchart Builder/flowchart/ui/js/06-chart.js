@@ -71,7 +71,13 @@
     };
     if (byHand) { joinDrag(chart); dragging(chart); lasso(chart); pressHold(chart); }
     chart.oncontextmenu = function (ev) {
-      if (!byHand) { return; }
+      if (!byHand) {
+        var shape = ev.target.closest ? ev.target.closest(".node") : null;
+        if (!shape) { return; }
+        ev.preventDefault();
+        openMenu(ev.clientX, ev.clientY, pauseRows(shape));
+        return;
+      }
       // A finger held still: timed already (11-hand-many.js), and the menu
       // open, or this is that same press and the timing stops here.
       if (Date.now() - pressMenuAt < 1500) { ev.preventDefault(); return; }
@@ -79,7 +85,8 @@
       var g = ev.target.closest ? ev.target.closest(".node") : null;
       var arrow = ev.target.closest ? ev.target.closest(".link") : null;
       ev.preventDefault();
-      if (g) { shapeMenu(nodeById(+g.dataset.i.slice(1)), ev.clientX, ev.clientY); }
+      var shaped = g ? nodeById(+String(g.dataset.i || "").slice(1)) : null;
+      if (shaped) { shapeMenu(shaped, ev.clientX, ev.clientY); }
       else if (arrow) { arrowMenu(linkById(+arrow.dataset.link), ev.clientX, ev.clientY); }
       else {
         var spot = onPaper(ev);
@@ -116,6 +123,7 @@
     // left to that.
     if (heavy) { linkLater(); } else { linkSvg(); }
     sizeNote();
+    markPauses();                        // the shapes a run will stop at
   }
 
   // Every shape on the paper by its number, found once per drawing rather

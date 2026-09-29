@@ -137,9 +137,11 @@
         var low = String(tok.v).toLowerCase();
         if (low === "true" || low === "false") { return { bool: low === "true" }; }
         if (low === "new" && peek() && peek().t === "name") {
-          var kind = String(take().v);
-          if (isOp("(")) { take(); listed(")"); }
-          return { record: kind };
+          var kind = String(take().v), given = null;
+          if (isOp("(")) { take(); given = listed(")"); }
+          // the values handed over, for a record laid out field by field
+          // (TYPE, RECORD): AQA's Car("Ford", 1.8)
+          return given && given.length ? { record: kind, args: given } : { record: kind };
         }
         if (isOp("(")) {
           take();
@@ -350,9 +352,17 @@
         return [statementOf(item.init || "").expr, item.cond,
                 statementOf(item.step || "").expr].filter(Boolean);
       case "select":
-        return [item.expr].concat(item.cases.map(function (one) {
-          return String(one.match || "");
-        }).filter(function (label) { return !OTHERWISE.test(label.trim()); }));
+        var said = [item.expr];
+        item.cases.forEach(function (one) {
+          var label = String(one.match || "");
+          if (OTHERWISE.test(label.trim())) { return; }
+          // 2, 3 and 1 TO 5: each of its values, not the words between them
+          if (!one.any) { said.push(label); return; }
+          one.any.forEach(function (piece) {
+            if (piece.is !== undefined) { said.push(piece.is); } else { said.push(piece.from, piece.to); }
+          });
+        });
+        return said;
       default: return [];
     }
   }
@@ -532,6 +542,20 @@
 
     var prog = { mods: [], byName: Object.create(null), scopes: [], records: Object.create(null) };
     studiedProg = prog;
+    // Records the program laid out field by field -- Cambridge's TYPE,
+    // AQA's RECORD (parse/boards.py) -- with their fields in order and the
+    // kind each one said it holds.  One declared starts as one of these,
+    // every field in place; one made with values hands them over in order.
+    Object.keys(ast.records || {}).forEach(function (name) {
+      var rec = { name: name, fields: Object.create(null), laid: [] };
+      (ast.records[name] || []).forEach(function (f) {
+        var said = String(f[1] || ""), kind = kindOfWord(said);
+        if (!kind && /^[A-Za-z_]\w*$/.test(said) && (ast.records || {})[said]) { kind = "rec:" + said; }
+        rec.fields[lowered(f[0])] = { name: f[0], kind: kind, fixed: !!kind };
+        rec.laid.push(lowered(f[0]));
+      });
+      prog.records[name] = rec;
+    });
     prog.shared = scopeFor([], null);
     (ast.modules || []).forEach(function (mod) {
       var said = kindOfWord(mod.returns);
@@ -765,7 +789,7 @@
                       { name: holder.slice(4), fields: Object.create(null) };
             var f = rec.fields[lowered(node.name)] = rec.fields[lowered(node.name)] ||
                     { name: node.name, kind: "" };
-            var now = joinKinds(f.kind, kind);
+            var now = f.fixed ? f.kind : joinKinds(f.kind, kind);   // laid out with its kind: kept
             if (now !== f.kind) { f.kind = now; moved = true; }
           }
           return;

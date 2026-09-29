@@ -259,8 +259,16 @@
       var L = this, subject = tree(item.expr);
       var plain = item.cases.every(function (one) {
         var label = String(one.match || "").trim();
-        return OTHERWISE.test(label) || isLiteral(tree(label));
+        return OTHERWISE.test(label) || (!one.any && isLiteral(tree(label)));
       });
+      // A Case of several values or a run of them (1 TO 5) is a test no
+      // language's switch writes the same way: a chain of ifs says it.  So
+      // is a Case with an Exit in it: in a switch, break leaves the switch
+      // and not the loop the Exit was leaving.
+      if (item.cases.some(function (one) { return one.any || exitsIn(one.body); })) {
+        w.chain(item, deep);
+        return;
+      }
       // Not everything can be switched on.  Java will not switch on a
       // double, C++ will not switch on a string, and none of them take a
       // case that has to be worked out.  A chain of ifs says the same thing
@@ -281,6 +289,17 @@
   };
 
   var OTHERWISE = /^(default|case else|else)$/i;
+
+  // An Exit among these statements, or in an If or a Select among them --
+  // not in a loop of their own, whose Exit is that loop's.
+  function exitsIn(items) {
+    return (items || []).some(function (st) {
+      if (st.op === "exit") { return true; }
+      if (st.op === "if") { return exitsIn(st.then) || exitsIn(st["else"]); }
+      if (st.op === "select") { return (st.cases || []).some(function (c) { return exitsIn(c.body); }); }
+      return false;
+    });
+  }
 
   // A For that counts by a fixed amount is a Python `for ... in range(...)`.
   // Written as a while with the counter moved by hand it does the same
@@ -426,7 +445,7 @@
         abs: function (a) { return "abs(" + a[0] + ")"; },
         // Python's own round() goes to the nearest even number: round(2.5)
         // is 2.  The runner, and everybody's arithmetic teacher, say 3.
-        round: function (a, k, w) { w.need("math"); return "math.floor(" + a[0] + " + 0.5)"; },
+        round: function (a, k, w) { w.need("math"); return "math.floor(" + held(a[0]) + " + 0.5)"; },
         floor: function (a, k, w) { w.need("math"); return "math.floor(" + a[0] + ")"; },
         ceiling: function (a, k, w) { w.need("math"); return "math.ceil(" + a[0] + ")"; },
         int: function (a) { return "int(" + a[0] + ")"; },
@@ -879,7 +898,7 @@
         abs: function (a) { return "Math.Abs(" + a[0] + ")"; },
         // A half goes up, the way the runner rounds: Math.Round would take
         // it to the even one, and AwayFromZero takes -2.5 down to -3.
-        round: function (a) { return "(int)Math.Floor(" + a[0] + " + 0.5)"; },
+        round: function (a) { return "(int)Math.Floor(" + held(a[0]) + " + 0.5)"; },
         floor: function (a) { return "(int)Math.Floor(" + a[0] + ")"; },
         ceiling: function (a) { return "(int)Math.Ceiling(" + a[0] + ")"; },
         int: function (a, k) { return k[0] === "bool" ? "(" + a[0] + " ? 1 : 0)" : "(int)" + held(a[0]); },
@@ -1111,7 +1130,7 @@
           w.need("cmath"); w.need("cstdlib");      // one header each, for Real and whole
           return "std::abs(" + a[0] + ")";
         },
-        round: function (a, k, w) { w.need("cmath"); return "(int)std::floor(" + a[0] + " + 0.5)"; },
+        round: function (a, k, w) { w.need("cmath"); return "(int)std::floor(" + held(a[0]) + " + 0.5)"; },
         floor: function (a, k, w) { w.need("cmath"); return "(int)std::floor(" + a[0] + ")"; },
         ceiling: function (a, k, w) { w.need("cmath"); return "(int)std::ceil(" + a[0] + ")"; },
         int: function (a) { return "(int)" + held(a[0]); },
@@ -1661,6 +1680,34 @@
     return out;
   }
 
+  // A record laid out field by field (TYPE, RECORD: 18-ahead.js): its
+  // fields in the order they were written, or none for any other record.
+  function laidFields(rec) {
+    return rec && rec.laid ? rec.laid.map(function (low) { return rec.fields[low]; }) : [];
+  }
+  // What a field starts out holding.  A record inside one starts as nothing
+  // yet: made there and then, a record that holds another of its own kind
+  // would go on making them for ever.
+  function fieldZero(w, kind) {
+    if (isRecKind(kind)) { return w.L.nullValue || (w.L.yes === "True" ? "None" : "null"); }
+    return w.zero(kind);
+  }
+  // ... said in the class's own constructor, where the language would start
+  // it as something else (a Java String starts as null, not as words).
+  function laidStarts(w, laid, reach, cpp) {
+    if (cpp) { return ""; }                     // std::string{} and 0 already
+    return laid.filter(function (f) {
+      return f.kind === "text" || isListKind(f.kind) || isTableKind(f.kind);
+    }).map(function (f) { return " " + reach + w.fieldName(f.name) + " = " + fieldZero(w, f.kind) + ";"; }).join("");
+  }
+  // The fields handed over in order, each as the kind the class keeps it as.
+  function laidParams(w, laid, fields) {
+    return laid.map(function (f) {
+      var kept = fields[lowered(f.name)] || f;
+      return w.typeOf(kept.kind || "real") + " " + w.fieldName(f.name);
+    }).join(", ");
+  }
+
   // Every field any record has, for the one class the typed languages keep
   // them all in: a Square handed to what a Rect is handed has to have what a
   // Rect has.
@@ -1719,7 +1766,7 @@
       tableOf: function (pairs) {
         return "{" + pairs.map(function (p) { return p[0] + ": " + p[1]; }).join(", ") + "}";
       },
-      newRecord: function (kind, w) { return w.recName(kind) + "()"; },
+      newRecord: function (kind, w, args) { return w.recName(kind) + "(" + (args || []).join(", ") + ")"; },
       itemAt: function (o, i) { return held(o) + "[" + i + "]"; },
       charAt: function (o, i) { return held(o) + "[" + i + "]"; },
       lookUp: function (o, k) { return held(o) + "[" + k + "]"; },
@@ -1737,6 +1784,20 @@
         Object.keys(recs).forEach(function (kind) {
           w.line(0, "");
           w.line(0, "class " + w.recName(kind) + ":");
+          // laid out field by field (TYPE, RECORD): every field there from
+          // the start, and handed over in order -- Car("Ford", 1.8)
+          var laid = laidFields(recs[kind]);
+          if (laid.length) {
+            w.line(1, "def __init__(self, " + laid.map(function (f) {
+              return w.fieldName(f.name) + "=" + (compoundKind(f.kind) ? "None" : w.zero(f.kind));
+            }).join(", ") + "):");
+            laid.forEach(function (f) {
+              var n = w.fieldName(f.name);
+              w.line(2, "self." + n + " = " + (compoundKind(f.kind)
+                ? n + " if " + n + " is not None else " + fieldZero(w, f.kind) : n));
+            });
+            w.line(0, "");
+          }
           w.line(1, "def __repr__(self):");
           w.line(2, 'return "' + kind + '(" + ", ".join(k + "=" + repr(v) for k, v in vars(self).items()) + ")"');
         });
@@ -1874,7 +1935,7 @@
       tableOf: function (pairs) {
         return "new Map([" + pairs.map(function (p) { return "[" + p[0] + ", " + p[1] + "]"; }).join(", ") + "])";
       },
-      newRecord: function (kind, w) { return "new " + w.recName(kind) + "()"; },
+      newRecord: function (kind, w, args) { return "new " + w.recName(kind) + "(" + (args || []).join(", ") + ")"; },
       itemAt: function (o, i) { return held(o) + "[" + i + "]"; },
       charAt: function (o, i) { return held(o) + "[" + i + "]"; },
       lookUp: function (o, k) { return held(o) + ".get(" + k + ")"; },
@@ -1898,7 +1959,17 @@
       records: function (w, recs) {
         Object.keys(recs).forEach(function (kind) {
           w.line(0, "");
-          w.line(0, "class " + w.recName(kind) + " {}");
+          var laid = laidFields(recs[kind]);
+          if (!laid.length) { w.line(0, "class " + w.recName(kind) + " {}"); return; }
+          w.line(0, "class " + w.recName(kind) + " {");
+          w.line(1, "constructor(" + laid.map(function (f) {
+            return w.fieldName(f.name) + " = " + fieldZero(w, f.kind);
+          }).join(", ") + ") {");
+          laid.forEach(function (f) {
+            w.line(2, "this." + w.fieldName(f.name) + " = " + w.fieldName(f.name) + ";");
+          });
+          w.line(1, "}");
+          w.line(0, "}");
         });
       },
       lists: {
@@ -2158,7 +2229,7 @@
       w.need("tableOf");
       return "tableOf(" + pairs.map(function (p) { return p[0] + ", " + p[1]; }).join(", ") + ")";
     },
-    newRecord: function (kind, w) { return "new " + w.recName(kind) + "()"; },
+    newRecord: function (kind, w, args) { return "new " + w.recName(kind) + "(" + (args || []).join(", ") + ")"; },
     itemAt: function (o, i, kind) {
       if (kind === "any") { return "((List<?>) " + o + ").get(" + i + ")"; }
       return javaUnbox(held(o) + ".get(" + i + ")", elemOf(kind));
@@ -2237,7 +2308,16 @@
       Object.keys(recs).forEach(function (kind) {
         w.line(0, "");
         w.line(deep, "static class " + w.recName(kind) + " extends Record {");
-        w.line(deep + 1, w.recName(kind) + '() { kindName = "' + kind + '"; }');
+        var laid = laidFields(recs[kind]);
+        w.line(deep + 1, w.recName(kind) + '() { kindName = "' + kind + '";' + laidStarts(w, laid, "") + " }");
+        if (laid.length) {                              // Car("Ford", 1.8)
+          w.line(deep + 1, w.recName(kind) + "(" + laidParams(w, laid, fields) + ") {");
+          w.line(deep + 2, "this();");
+          laid.forEach(function (f) {
+            w.line(deep + 2, "this." + w.fieldName(f.name) + " = " + w.fieldName(f.name) + ";");
+          });
+          w.line(deep + 1, "}");
+        }
         w.line(deep, "}");
       });
     },
@@ -2357,8 +2437,15 @@
       any: function (a) { return held(a[0]) + ".contains(true)"; },
       all: function (a) { return "!" + held(a[0]) + ".contains(false)"; },
       newlist: function (a, k, w) {
-        w.need("filled");
         var fill = a[a.length - 1], sizes = a.slice(0, -1);
+        // a list of records: every place a record of its own, not one shared
+        if (isRecKind(k[k.length - 1])) {
+          w.need("filledEach");
+          return "filledEach(() -> " + fill + ", " + sizes.map(function (n, i) {
+            return k[i] === "real" ? "(int) " + held(n) : n;
+          }).join(", ") + ")";
+        }
+        w.need("filled");
         if (k[k.length - 1] === "int" && elemOf(builtKind("newlist", k)) === "real") { fill = this.widen(fill); }
         return "filled(" + fill + ", " + sizes.map(function (n, i) {
           return k[i] === "real" ? "(int) " + held(n) : n;
@@ -2532,6 +2619,15 @@
                "        for (int i = 0; i < sizes[at]; i++) { out.add(filledFrom(fill, sizes, at + 1)); }",
                "        return out;",
                "    }"],
+      filledEach: ["    // Lists of lists, every place a new one made by `make`: a list of records.",
+                   "    @SuppressWarnings(\"unchecked\")",
+                   "    static <T> T filledEach(java.util.function.Supplier<Object> make, int... sizes) { return (T) filledEachFrom(make, sizes, 0); }",
+                   "    static Object filledEachFrom(java.util.function.Supplier<Object> make, int[] sizes, int at) {",
+                   "        if (at == sizes.length) { return make.get(); }",
+                   "        ArrayList<Object> out = new ArrayList<>();",
+                   "        for (int i = 0; i < sizes[at]; i++) { out.add(filledEachFrom(make, sizes, at + 1)); }",
+                   "        return out;",
+                   "    }"],
       isNumber: ["    static boolean isNumber(String s) {",
                  "        try { Double.parseDouble(s.trim()); return true; }",
                  "        catch (NumberFormatException e) { return false; }",
@@ -2572,7 +2668,7 @@
     tableOf: function (pairs, kind, w) {
       return "new " + w.typeOf(kind) + " { " + pairs.map(function (p) { return "{ " + p[0] + ", " + p[1] + " }"; }).join(", ") + " }";
     },
-    newRecord: function (kind, w) { return "new " + w.recName(kind) + "()"; },
+    newRecord: function (kind, w, args) { return "new " + w.recName(kind) + "(" + (args || []).join(", ") + ")"; },
     itemAt: function (o, i) { return held(o) + "[" + i + "]"; },
     charAt: function (o, i) { return held(o) + "[" + i + "].ToString()"; },
     lookUp: function (o, k) { return held(o) + "[" + k + "]"; },
@@ -2636,7 +2732,15 @@
       Object.keys(recs).forEach(function (kind) {
         w.line(0, "");
         w.line(deep, "class " + w.recName(kind) + " : Record {");
-        w.line(deep + 1, "public " + w.recName(kind) + '() { KindName = "' + kind + '"; }');
+        var laid = laidFields(recs[kind]);
+        w.line(deep + 1, "public " + w.recName(kind) + '() { KindName = "' + kind + '";' + laidStarts(w, laid, "") + " }");
+        if (laid.length) {                              // new Car("Ford", 1.8)
+          w.line(deep + 1, "public " + w.recName(kind) + "(" + laidParams(w, laid, fields) + ") : this() {");
+          laid.forEach(function (f) {
+            w.line(deep + 2, "this." + w.fieldName(f.name) + " = " + w.fieldName(f.name) + ";");
+          });
+          w.line(deep + 1, "}");
+        }
         w.line(deep, "}");
       });
     },
@@ -2750,6 +2854,9 @@
       all: function (a) { return held(a[0]) + ".All(v_ => v_)"; },
       newlist: function (a, k, w) {
         var fill = a[a.length - 1], sizes = a.slice(0, -1);
+        // a list of Reals started at nought starts at 0.0: Repeat(0, n) is a
+        // List<int>, which a List<double> will not take
+        if (k[k.length - 1] === "real" && /^-?\d+$/.test(String(fill).trim())) { fill = String(fill).trim() + ".0"; }
         var made = compoundKind(k[k.length - 1]) ? "Enumerable.Range(0, " + sizes[sizes.length - 1] + ").Select(n_ => " + fill + ").ToList()"
                                                   : "Enumerable.Repeat(" + fill + ", " + sizes[sizes.length - 1] + ").ToList()";
         for (var d = sizes.length - 2; d >= 0; d--) { made = "Enumerable.Range(0, " + sizes[d] + ").Select(n_ => " + made + ").ToList()"; }
@@ -2903,7 +3010,7 @@
       w.need("map");
       return w.typeOf(kind) + "{" + pairs.map(function (p) { return "{" + p[0] + ", " + p[1] + "}"; }).join(", ") + "}";
     },
-    newRecord: function (kind, w) { return "new " + w.recName(kind) + "()"; },
+    newRecord: function (kind, w, args) { return "new " + w.recName(kind) + "(" + (args || []).join(", ") + ")"; },
     itemAt: function (o, i) { return held(o) + "[" + i + "]"; },
     charAt: function (o, i) { return "std::string(1, " + held(o) + "[" + i + "])"; },
     lookUp: function (o, k) { return held(o) + "[" + k + "]"; },
@@ -2946,7 +3053,15 @@
       Object.keys(recs).forEach(function (kind) {
         w.line(0, "");
         w.line(0, "struct " + w.recName(kind) + " : Record {");
-        w.line(1, w.recName(kind) + '() { kindName = "' + kind + '"; }');
+        var laid = laidFields(recs[kind]);
+        w.line(1, w.recName(kind) + '() { kindName = "' + kind + '";' + laidStarts(w, laid, "this->", true) + " }");
+        if (laid.length) {                              // new Car("Ford", 1.8)
+          w.line(1, w.recName(kind) + "(" + laidParams(w, laid, fields) + ") : " + w.recName(kind) + "() {");
+          laid.forEach(function (f) {
+            w.line(2, "this->" + w.fieldName(f.name) + " = " + w.fieldName(f.name) + ";");
+          });
+          w.line(1, "}");
+        }
         w.line(0, "};");
       });
       w.line(0, "");
@@ -3067,7 +3182,14 @@
         var inner = kind;
         var types = [];
         for (var d = 0; d < sizes.length; d++) { types.push(w.typeOf(inner)); inner = elemOf(inner); }
-        for (var e = sizes.length - 1; e >= 0; e--) { made = types[e] + "(" + sizes[e] + ", " + made + ")"; }
+        // a list of records: a new one made for every place -- the vector's
+        // own filling copies the one pointer it is given into all of them
+        var own = isRecKind(k[k.length - 1]);
+        for (var e = sizes.length - 1; e >= 0; e--) {
+          made = own ? "[&]{ " + types[e] + " v_; for (int i_ = 0; i_ < " + sizes[e] +
+                       "; i_++) { v_.push_back(" + made + "); } return v_; }()"
+                     : types[e] + "(" + sizes[e] + ", " + made + ")";
+        }
         return made;
       },
       get: function (a, k, w) {
@@ -3249,7 +3371,7 @@
       "  return (Math.abs(n % 1) === 0.5 ? 2 * Math.round(n / 2) : near) / by;",
       "}"];
     LIST_WORK.java.lists.roundeven = function (a) {
-      return scaled(a) ? "Math.rint(" + a[0] + " * Math.pow(10, " + a[1] + ")) / Math.pow(10, " + a[1] + ")"
+      return scaled(a) ? "Math.rint(" + held(a[0]) + " * Math.pow(10, " + a[1] + ")) / Math.pow(10, " + a[1] + ")"
                        : "(int) Math.rint(" + a[0] + ")";
     };
     LIST_WORK.csharp.lists.roundeven = function (a) {
@@ -3260,29 +3382,29 @@
     };
     LIST_WORK.cpp.lists.roundeven = function (a, k, w) {
       w.need("cmath");
-      return scaled(a) ? "std::nearbyint(" + a[0] + " * std::pow(10, " + a[1] + ")) / std::pow(10, " + a[1] + ")"
+      return scaled(a) ? "std::nearbyint(" + held(a[0]) + " * std::pow(10, " + a[1] + ")) / std::pow(10, " + a[1] + ")"
                        : "(int)std::nearbyint(" + a[0] + ")";
     };
     // round(x, 2): half up, to two places
     LIST_WORK.python.lists.round = function (a, k, w) {
       w.need("math");
-      return scaled(a) ? "math.floor(" + a[0] + " * 10 ** " + a[1] + " + 0.5) / 10 ** " + a[1] : "math.floor(" + a[0] + " + 0.5)";
+      return scaled(a) ? "math.floor(" + held(a[0]) + " * 10 ** " + held(a[1]) + " + 0.5) / 10 ** " + held(a[1]) : "math.floor(" + held(a[0]) + " + 0.5)";
     };
     LIST_WORK.javascript.lists.round = function (a) {
-      return scaled(a) ? "Math.round(" + a[0] + " * 10 ** " + a[1] + ") / 10 ** " + a[1] : "Math.round(" + a[0] + ")";
+      return scaled(a) ? "Math.round(" + held(a[0]) + " * 10 ** " + held(a[1]) + ") / 10 ** " + held(a[1]) : "Math.round(" + a[0] + ")";
     };
     LIST_WORK.java.lists.round = function (a) {
-      return scaled(a) ? "Math.round(" + a[0] + " * Math.pow(10, " + a[1] + ")) / Math.pow(10, " + a[1] + ")"
+      return scaled(a) ? "Math.round(" + held(a[0]) + " * Math.pow(10, " + a[1] + ")) / Math.pow(10, " + a[1] + ")"
                        : "(int) Math.round(" + a[0] + ")";
     };
     LIST_WORK.csharp.lists.round = function (a) {
-      return scaled(a) ? "Math.Floor(" + a[0] + " * Math.Pow(10, " + a[1] + ") + 0.5) / Math.Pow(10, " + a[1] + ")"
-                       : "(int)Math.Floor(" + a[0] + " + 0.5)";
+      return scaled(a) ? "Math.Floor(" + held(a[0]) + " * Math.Pow(10, " + a[1] + ") + 0.5) / Math.Pow(10, " + a[1] + ")"
+                       : "(int)Math.Floor(" + held(a[0]) + " + 0.5)";
     };
     LIST_WORK.cpp.lists.round = function (a, k, w) {
       w.need("cmath");
-      return scaled(a) ? "std::floor(" + a[0] + " * std::pow(10, " + a[1] + ") + 0.5) / std::pow(10, " + a[1] + ")"
-                       : "(int)std::floor(" + a[0] + " + 0.5)";
+      return scaled(a) ? "std::floor(" + held(a[0]) + " * std::pow(10, " + a[1] + ") + 0.5) / std::pow(10, " + a[1] + ")"
+                       : "(int)std::floor(" + held(a[0]) + " + 0.5)";
     };
   })();
 

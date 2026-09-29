@@ -71,7 +71,7 @@
       <div class="check-row">
         <button class="btn primary wide" id="check" data-w="check">__W(check)__</button>
       </div>
-      <div id="report"></div>
+      <div id="report" role="status" aria-live="polite"></div>
     </section>
 
     <!-- The program as written in a language.  Build reads it into the
@@ -148,7 +148,7 @@
         </button>
         <button class="btn primary wide" id="build" data-w="build">__W(build)__</button>
       </div>
-      <div id="build-note"></div>
+      <div id="build-note" role="status" aria-live="polite"></div>
       <div id="build-faults"></div>
     </section>
 
@@ -183,6 +183,13 @@
            dropdowns that say how it will go.  It matches Build the chart
            above it, which is the same kind of thing: the button the whole
            card is for. -->
+      <!-- A chart under what it prints, where that is a list of numbers or
+           a run of them (17-graphs.js).  A switch, remembered, for the
+           lesson where the drawing is the class's to do. -->
+      <label class="switch graphs-switch" data-w-title="graphs_tip" title="__W(graphs_tip)__">
+        <span data-w="graphs_on">__W(graphs_on)__</span>
+        <input type="checkbox" id="graphs-on" checked>
+      </label>
       <div class="go-wide">
         <button class="btn primary wide" id="run" data-w="r_run">__W(r_run)__</button>
       </div>
@@ -199,7 +206,12 @@
       <p class="hint" id="pz-mark"></p>
       <button class="btn primary wide" id="pz-next"
               data-w="pz_next" hidden>__W(pz_next)__</button>
-      <p class="hint" id="run-note"></p>
+      <p class="hint" id="run-note" aria-live="polite"></p>
+      <!-- Tests of its own: typed in, and what it should print (34-tests.js) -->
+      <div class="tests-row">
+        <button class="btn small" id="tests-open" data-w="tests_open"
+                data-w-title="tests_tip" title="__W(tests_tip)__">__W(tests_open)__</button>
+      </div>
       <!-- What the program is holding, while it is holding it.  The tape
            says what a program printed; it never said what it had in its
            hands, and what it has in its hands is the thing a class spends
@@ -219,12 +231,17 @@
             <input type="checkbox" id="held-on" checked>
           </label>
           <span class="watch-where" id="watch-where"></span>
+          <!-- Every change the run made, step by step, as the table a
+               class is asked to fill in by hand (14-run.js). -->
+          <button class="btn small trace-open" id="trace-open" data-w="trace_open"
+                  data-w-title="trace_tip" title="__W(trace_tip)__"
+                  hidden>__W(trace_open)__</button>
         </div>
         <div class="watch-body"><div class="watch-in">
           <div class="watch-rows" id="watch-rows"></div>
         </div></div>
       </div>
-      <div id="tape" class="tape"></div>
+      <div id="tape" class="tape" role="log" aria-live="polite" data-w-aria="r_head" aria-label="__W(r_head)__"></div>
     </section>
 
     <!-- Getting the code out, which is a different errand from running it

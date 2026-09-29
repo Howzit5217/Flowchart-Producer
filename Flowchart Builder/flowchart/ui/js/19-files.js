@@ -27,7 +27,8 @@
         options: chartOptions()
       } : null,
       style: style, geom: geom,
-      moves: movesNow()                  // blocks moved on the built chart (30-blocks.js)
+      moves: movesNow(),                 // blocks moved on the built chart (30-blocks.js)
+      tests: testsData()                 // its tests, typed in and printed (34-tests.js)
     };
   }
 
@@ -78,6 +79,12 @@
   function openWritten(name, text) {
     if (!el("#code")) { fileSays(TXT.f_not_ours, true); return; }
     if (!String(text).trim()) { fileSays(TXT.f_empty, true); return; }
+    // A flowchart written in Mermaid is a drawing, not a program: it opens
+    // on the Flowchart tab, laid out as Tidy up lays one out (19-mermaid.js).
+    if (/\.(mmd|mermaid)$/i.test(name) || isMermaid(text)) {
+      if (!openMermaid(name, text)) { fileSays(TXT.mm_bad, true); }
+      return;
+    }
     // A program in a language -- a .py, a .java -- goes into the Code box
     // and is read from there, not into the pseudocode as if it were some.
     var lang = langOfFile(name);
@@ -130,6 +137,7 @@
       wearOptions(was.source.options || { decide: was.source.decide });
     }
     if (was.hand && was.hand.nodes) { hand = was.hand; }
+    if (was.tests) { wearTests(was.tests); }
     wearLang(was.written);               // the Code box: what it held, or nothing
     picked = chosen = null;
     many = [];                           // numbers that mean other shapes now

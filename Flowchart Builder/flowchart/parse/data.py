@@ -3,8 +3,9 @@ and for writing it as code."""
 import re
 
 from ..parse.keywords import (
-    R_DECL, R_END, R_IN, R_NOT_A_WAIT, R_OUT, R_RETURN, R_START, R_WAIT,
+    R_DECL, R_END, R_EXIT, R_EXIT_MOD, R_IN, R_NOT_A_WAIT, R_OUT, R_RETURN, R_START, R_WAIT,
     R_WAIT_UNIT)
+from ..parse import boards
 from ..parse.trouble import PROBLEMS
 from ..words.lookup import word
 
@@ -19,7 +20,7 @@ from ..words.lookup import word
 # allowed inside a bracket once, as in marks[order[i]].
 R_SET = re.compile(r"^(?:set\s+|let\s+)?([A-Za-z_]\w*"
                    r"(?:\s*\[(?:[^\[\]]|\[[^\[\]]*\])*\]|\s*\.\s*[A-Za-z_]\w*)*)\s*"
-                   r"(?:=|:=|<-)\s*(.+)$", re.I)
+                   r"(?:=|:=|<-|←)\s*(.+)$", re.I)
 # Currency and Money are types of their own, not spellings of Real: a
 # program that says a number is money is telling the runner and the code
 # writer to show it as money -- two places after the point, always -- and
@@ -34,11 +35,11 @@ R_DECL_ONE = re.compile(
     r"float|double|int|number|currency|money|decimal|var|let|[A-Za-z_]\w*)\s+"
     r"(?=[A-Za-z_]))?"
     r"([A-Za-z_]\w*)((?:\s*\[[^\]]*\])*)\s*"
-    r"(?:(?:=|:=|<-)\s*(.+))?$", re.I)
+    r"(?:(?:=|:=|<-|←)\s*(.+))?$", re.I)
 R_DIMS = re.compile(r"\[([^\]]*)\]")
 R_CALL_ANY = re.compile(r"^call\s+([A-Za-z_]\w*)", re.I)
 # For Each item In list -- and Of, and Every, which say the same
-R_EACH = re.compile(r"^for\s+(?:each|every)\s+([A-Za-z_]\w*)\s+(?:in|of)\s+(.+)$", re.I)
+R_EACH = re.compile(r"^for\s+(?:(?:each|every)\s+)?([A-Za-z_]\w*)\s+(?:in|of)\s+(.+)$", re.I)
 R_CALL_NAME = re.compile(r"^call\s+([A-Za-z_]\w*)\s*\((.*)\)\s*$", re.I)
 R_BARE_CALL = re.compile(r"^([A-Za-z_]\w*)\s*\((.*)\)$")
 R_RETURN_VAL = re.compile(r"^return\b\s*(.*)$", re.I)
@@ -56,8 +57,18 @@ def statement_json(text, node_id, line, shape="", scope=""):
     if shape == "oval" and not R_END.match(text) and not R_RETURN.match(text):
         out.update(op="start")
         return out
-    m = R_DECL_ONE.match(text)
-    if m and R_DECL.match(text):
+    # The boards' own ways of saying it (boards.py): Cambridge's DECLARE
+    # Total : INTEGER and OCR's array names[5] are read as the Declare they
+    # are, and asking with USERINPUT or input(...) is an Input.
+    said = boards.as_declare(text) or text
+    m = boards.R_ASKED.match(text)
+    if m:
+        out.update(op="input", var=m.group(1).strip())
+        if (m.group(2) or "").strip():
+            out["prompt"] = m.group(2).strip()
+        return out
+    m = R_DECL_ONE.match(said)
+    if m and R_DECL.match(said):
         out.update(op="declare", const=m.group(1).lower() != "declare",
                    type=(m.group(2) or "").title(), var=m.group(3),
                    expr=(m.group(5) or "").strip())
@@ -65,7 +76,7 @@ def statement_json(text, node_id, line, shape="", scope=""):
             out["dims"] = [d.strip() for d in R_DIMS.findall(m.group(4))]
         return out
     if R_OUT.match(text):
-        out.update(op="display", parts=text.split(None, 1)[1] if " " in text else "")
+        out.update(op="display", parts=said_out(text))
         return out
     if R_IN.match(text):
         rest = text.split(None, 1)[1] if " " in text else ""
@@ -74,6 +85,14 @@ def statement_json(text, node_id, line, shape="", scope=""):
     m = R_WAIT.match(text)
     if m and not R_NOT_A_WAIT.match(m.group(1).strip()):
         out.update(**how_long(m.group(1)))
+        return out
+    # Out of the loop it is in (Exit While, Break), and out of the module
+    # (Exit Function, which is a Return with nothing handed back).
+    if R_EXIT.match(text):
+        out.update(op="exit")
+        return out
+    if R_EXIT_MOD.match(text):
+        out.update(op="return", expr="")
         return out
     # Return (lo, hi) hands back a pair; it is not a call of anything
     # called Return, which is what the bare call below would take it for.
@@ -104,6 +123,23 @@ def statement_json(text, node_id, line, shape="", scope=""):
         return out
     out.update(op="other")
     return out
+
+
+def said_out(text):
+    """What a Display line shows: everything after its first word.
+
+    print(total), the way OCR and Python write it, has no space after the
+    word -- and read by the space alone it showed nothing at all.  Brackets
+    round the whole of what is shown are only the call's own."""
+    rest = R_OUT.sub("", text, count=1).strip()
+    if rest.startswith("(") and rest.endswith(")") and not text[len(text) - len(rest) - 1:][:1].isspace():
+        deep = 0
+        for i, c in enumerate(rest):
+            deep += (c == "(") - (c == ")")
+            if deep == 0 and i < len(rest) - 1:
+                return rest             # "(a) + (b)": not one pair
+        return rest[1:-1].strip()       # the call's own brackets, one pair
+    return rest
 
 
 def unbracket(text):
@@ -149,10 +185,12 @@ def items_json(items):
             # five Displays when it was the fourth that failed is a worse
             # answer than it looks: it is a wrong one, confidently given.
             at = list(getattr(item, "lines", None) or [])
-            for no, line in enumerate((item.text or "").split("\n")):
-                if line.strip():
+            # (an Exit is drawn as its letter, and says what it does)
+            for no, line in enumerate((getattr(item, "said", None) or item.text or "").split("\n")):
+                # Declare a, b: a statement a name (boards.split_declare)
+                for one in (boards.split_declare(line.strip()) if line.strip() else []):
                     out.append(statement_json(
-                        line.strip(), item.node_id,
+                        one, item.node_id,
                         at[no] if no < len(at) else item.line, item.shape,
                         getattr(item, 'scope', '')))
         elif kind == "if":
@@ -210,9 +248,109 @@ def program_json(charts):
             mod = chart.module
             out["modules"].append({
                 "name": mod.name if mod else chart.heading,
-                "params": mod.params if mod else "",
+                "params": boards.plain_params(mod.params) if mod else "",
                 "returns": (mod.rtype if mod else ""),
                 "body": body})
+    own = set(m["name"].lower() for m in out["modules"])
+    out["main"] = plained(out["main"], own)
+    for mod in out["modules"]:
+        mod["body"] = plained(mod["body"], own)
+    if boards.RECORDS:                  # TYPE ... ENDTYPE: what each record holds
+        out["records"] = dict(boards.RECORDS)
+    if boards.BOARD[0]:
+        out["board"] = boards.BOARD[0]
+    return out
+
+
+# ------------------------------------------------- the boards' words, plain --
+# What only needs to be looked at twice: a board's function, sign or way of
+# picking out an item.  Everything else goes through untouched and unread.
+R_WORTH = re.compile(r"[≠≤≥×÷−&]|"
+                     r"\b(?:len|left|right|mid|substring|position|ucase|lcase|to_upper|"
+                     r"to_lower|string_to_int|string_to_real|str_to_num|float|int_to_string|"
+                     r"real_to_string|num_to_str|str|char_to_code|asc|code_to_char|"
+                     r"random_int|randint|randombetween|rand|div|mod|is_num)\s*\(|"
+                     r"\.(?:length|upper|lower|left|right|substring)\b|\w\s*\[[^\]]*,", re.I)
+R_ARROW_SET = re.compile(r"^(?:set\s+)?(.+?)\s*←\s*(.+)$", re.I)
+
+
+def plained(steps, own):
+    """A run of statements with every expression in the runner's words
+    (boards.plain), and an OCR input("Name?") asking in its own words
+    first.  The words each line was written in stay as they were."""
+    def p(e):
+        if not isinstance(e, str) or not e or not (boards.RECORDS or R_WORTH.search(e)):
+            return e
+        return boards.plain(e, own)
+
+    def arrow(e):                       # a For's i <- 1, said the runner's way
+        m = R_ARROW_SET.match(e or "")
+        return "Set %s = %s" % (m.group(1), p(m.group(2))) if m else p(e)
+
+    out = []
+    for st in steps:
+        op = st.get("op")
+        if op in ("set", "input"):
+            st["var"] = p(st.get("var"))
+        if op in ("set", "declare", "wait", "return"):
+            st["expr"] = p(st.get("expr"))
+        if op == "declare" and st.get("dims"):
+            st["dims"] = [p(d) for d in st["dims"]]
+        if op == "display":
+            st["parts"] = p(st.get("parts"))
+        if op == "call":
+            st["args"] = p(st.get("args"))
+            st["text"] = p(st.get("text"))
+        if op in ("if", "while", "dowhile"):
+            st["cond"] = p(st.get("cond"))
+        if op == "foreach":
+            st["over"] = p(st.get("over"))
+        if op == "for":
+            st["init"], st["step"] = arrow(st.get("init")), arrow(st.get("step"))
+            st["cond"] = p(st.get("cond"))
+        if op == "select":
+            st["expr"] = p(st.get("expr"))
+            for one in st.get("cases", []):
+                one["match"] = p(one.get("match"))
+                pieces = choice_pieces(one["match"])
+                if pieces:
+                    one["any"] = pieces
+        for key in ("then", "else", "body"):
+            if st.get(key):
+                st[key] = plained(st[key], own)
+        for one in st.get("cases", []) or []:
+            one["body"] = plained(one.get("body", []), own)
+        if op == "input" and st.get("prompt"):
+            # OCR's input("Name?") says Name? and then waits, the way the
+            # Python it is modelled on does
+            out.append({"op": "display", "id": st["id"], "line": st["line"],
+                        "text": st["text"], "parts": p(st.pop("prompt"))})
+        st.pop("prompt", None)
+        out.append(st)
+    return out
+
+
+R_OTHERWISE = re.compile(r"^(default|case else|else)$", re.I)
+
+
+def choice_pieces(label):
+    """A Case that answers to more than one value -- 2, 3 -- or to a run of
+    them -- 1 TO 5, Cambridge's way; 'A' To 'Z' -- as the pieces a run or a
+    translation tests one at a time: {"is": value} or {"from", "to"}.
+    None for a Case of one plain value, which is tested the way it always was."""
+    label = (label or "").strip()
+    if not label or R_OTHERWISE.match(label):
+        return None
+    parts = boards.split_top(label)
+    ranged = [re.split(r"\s+to\s+", one.strip(), flags=re.I) for one in parts]
+    if len(parts) == 1 and len(ranged[0]) == 1:
+        return None
+    out = []
+    for ends in ranged:
+        if len(ends) == 2:
+            out.append({"from": ends[0].strip(), "to": ends[1].strip()})
+        else:
+            out.append({"is": ends[0].strip()})
     return out
 
 

@@ -171,17 +171,19 @@
      but they are switches rather than something written in, so the sheet
      is only as tall as what is in it and never the whole screen.  Past
      that it scrolls, which on a short phone is the only thing it can do. */
-  #more-over, #tidy-over, #eg-over, #pz-over, #keys-over {
+  #more-over, #tidy-over, #eg-over, #pz-over, #keys-over, #tests-over {
     position: fixed; inset: 0; z-index: 60; display: flex;
     align-items: center; justify-content: center; padding: 26px;
     background: var(--dim);
     -webkit-backdrop-filter: blur(3px); backdrop-filter: blur(3px);
   }
   #more-over[hidden], #tidy-over[hidden], #eg-over[hidden], #pz-over[hidden],
-  #keys-over[hidden] {
+  #keys-over[hidden], #tests-over[hidden] {
     display: none !important;
   }
   .more-sheet { width: min(460px, 100%); height: auto; max-height: 100%; }
+  /* the tests want room for two boxes side by side */
+  #tests-over .more-sheet { width: min(640px, 100%); }
   /* ------------------------------------------------------- asking first -- */
   /* Above the screens that fill the page, because it is asked about what is
      on one of them.  Narrower than they are and no taller than what is in
@@ -902,4 +904,37 @@
   @media screen {
     #chart.culled .stretch:not(.seen),
     #chart.culled .stretch:not(.seen) * { display: none; }
+  }
+
+  /* A trace table (14-run.js): a column for every name the run changed, a
+     row for every step that changed one, and what it printed.  It scrolls
+     with the screen it is on, its heading held at the top. */
+  .trace-page { flex: none; min-width: 0; padding-bottom: 12px; }
+  table.trace {
+    border-collapse: collapse; color: var(--ink);
+    font-family: Consolas, "Courier New", monospace; font-size: 12.5px;
+    font-variant-numeric: tabular-nums;
+  }
+  table.trace th, table.trace td {
+    border: 1px solid var(--line); padding: 4px 10px; text-align: left;
+    vertical-align: top; white-space: pre-wrap; max-width: 260px;
+    overflow-wrap: anywhere;
+  }
+  table.trace thead th {
+    position: sticky; top: -14px; z-index: 1;
+    background: var(--field); color: var(--muted); font-weight: 650;
+  }
+  table.trace .trace-at { color: var(--muted); text-align: right; }
+  table.trace .trace-said { color: var(--accent); }
+  table.trace tbody tr:nth-child(even) td { background: var(--line-soft); }
+  /* its button sits in the heading of what the run is holding, in the
+     heading's line but not its small capitals */
+  .watch-top .trace-open {
+    margin-left: auto; text-transform: none; letter-spacing: 0;
+  }
+  /* A shape the run will pause at: a red dot on its corner.  Colored here
+     and not by paint(), which colors everything else in the shape. */
+  .bp-dot {
+    fill: #d93025 !important; stroke: #ffffff !important;
+    stroke-width: 1.5px !important; pointer-events: none;
   }

@@ -35,6 +35,12 @@ FR = {
     "files": "Fichiers", "f_work_head": "Ton travail",
     "dl_svg": "Télécharger le SVG", "dl_png": "Télécharger le PNG",
     "print_it": "Imprimer le schéma",
+    "dl_pdf": "Télécharger le PDF",
+    "mm_open": "Texte Mermaid",
+    "mm_tip": "Le schéma en Mermaid, à coller dans GitHub, Notion ou Markdown",
+    "mm_head": "Mermaid",
+    "mm_bad": "Impossible de lire ceci comme un organigramme Mermaid.",
+    "mm_opened": "Ouvert comme dessin.",
     "print_head": "Imprimer",
     "print_go": "Imprimer…",
     "print_paper": "Papier",
@@ -129,6 +135,7 @@ FR = {
     "w_open_select": "Ligne {line} : ce Select n'est jamais refermé. Ajoutez un End Select là où il doit s'arrêter.",
     "w_no_if": "Ligne {line} : End If, mais aucun If n’est ouvert.",
     "w_no_loop": "Ligne {line} : ceci referme une boucle, mais aucune boucle n'est ouverte.",
+    "w_exit_alone": "Ligne {line} : Exit sort d'une boucle, mais aucune boucle n'est ouverte ici.",
     "w_no_select": "Ligne {line} : End Select, mais aucun Select n’est ouvert.",
     "w_do_no_test": "Ligne {line} : ce Do n’a pas de test et ne s’arrête jamais. Terminez-le par Until ... ou Loop While ...",
     "w_until_alone": "Ligne {line} : Until, mais ni Do ni Repeat au-dessus.",
@@ -216,6 +223,38 @@ FR = {
     "held_shared": "Déclaré hors de tout module, donc visible par chaque schéma",
     "held_none": "rien encore",
     "held_switch": "Montrer ce qu’il retient",
+    "tests_open": "Le tester",
+    "tests_tip": "Des tests à lui : ce qu’on tape et ce qu’il doit afficher",
+    "tests_head": "Tests",
+    "tests_one": "Test {n}",
+    "tests_typed": "Ce qu’on tape, une par ligne",
+    "tests_want": "Doit afficher, une ligne chacune",
+    "tests_add": "Ajouter un test",
+    "tests_run": "Lancer les tests",
+    "tests_drop": "Retirer",
+    "tests_pass": "Réussi",
+    "tests_fail": "Échoué",
+    "tests_all": "{pass} sur {n} réussis",
+    "tests_none": "Écris d’abord un test.",
+    "tests_diff": "Ligne {n} : il a affiché « {got} », pas « {want} ».",
+    "tests_short": "Il a affiché {n} lignes, pas {m}.",
+    "tests_long": "Il a affiché {n} lignes, pas {m}.",
+    "tests_broke": "Il s’est arrêté sur une erreur.",
+    "graphs_on": "Graphique de ce qu’il affiche",
+    "graphs_tip": "Tracer un graphique sous une liste ou une suite de nombres que le programme affiche",
+    "trace_open": "Table de trace",
+    "trace_tip": "Chaque changement fait par l’exécution, pas à pas, en tableau",
+    "trace_head": "Table de trace",
+    "trace_line": "Ligne",
+    "trace_out": "Sortie",
+    "trace_none": "Lance le programme : la table se remplit au fur et à mesure.",
+    "trace_rows": "{n} étapes",
+    "trace_cut": "seules les {n} premières gardées",
+    "bp_add": "Faire une pause ici",
+    "bp_drop": "Ne plus faire de pause ici",
+    "bp_clear": "Retirer toutes les pauses",
+    "r_paused": "En pause à la ligne {n}.",
+    "r_paused_hand": "En pause.",
     "h_tidy": "Ranger",
     "h_tidy_tip": "Disposer formes et flèches comme un schéma tiré du pseudocode",
     "h_tidied": "Rangé : {n} formes déplacées.",
@@ -338,10 +377,10 @@ FR = {
     "p_no_end": "Il n’y a pas de Fin ({shape}) où le flux s’arrête.",
     "p_unreached": "Rien ne mène à cette forme.",
     "p_dead_end": "Rien ne sort de cette forme, et ce n'est pas une Fin.",
-    "p_decision_out": "Une décision a deux sorties. Celle-ci en a {n}.",
+    "p_decision_out": "Une décision a au moins deux sorties. Celle-ci en a {n}.",
     "p_one_out": "Cette forme a {n} sorties. Seule une décision peut en avoir deux.",
-    "p_same_labels": "Les deux sorties disent la même chose.",
-    "p_no_label": "Les deux sorties d’une décision ont besoin d’une étiquette.",
+    "p_same_labels": "Deux sorties disent la même chose.",
+    "p_no_label": "Chaque sortie d’une décision a besoin d’une étiquette.",
     "p_trapped": "D’ici, le flux ne peut jamais atteindre une Fin.",
     "p_empty": "Rien n'est écrit dans cette forme.",
     "p_overlap": "Cette forme est posée sur une autre.",
@@ -472,23 +511,30 @@ FR = {
     "e_factorial": "Une factorielle",
     "try_short": "Vous débutez ?",
     "try_go": "Essayer un exemple",
-    "e_area": "Aire d’un rectangle",
     "e_sumevens": "Additionner les pairs",
     "e_vowel": "Voyelle ou non",
     "e_leap": "Année bissextile",
-    "e_backwards": "Compter à rebours",
     "eg_l4": "Programmes du quotidien",
     "eg_l5": "Projets plus grands",
     "e_bank": "Un compte bancaire",
     "e_gradebook": "Un carnet de notes",
     "e_paycheck": "Les paies de la semaine",
-    "e_convert": "Un convertisseur d’unités",
-    "e_splitcheck": "Partager l’addition",
     "e_vending": "Un distributeur automatique",
     "e_primelist": "Nombres premiers jusqu’à une limite",
     "e_weekday": "Quel jour de la semaine ?",
     "e_loan": "Rembourser un prêt",
     "e_rps": "Pierre, feuille, ciseaux",
+    "e_bands": "Des notes avec Select Case",
+    "e_hailstone": "Les nombres grêlons",
+    "e_doubling": "Doubler sur un échiquier",
+    "e_rainfall": "La pluie mois par mois",
+    "e_savings": "L’épargne année après année",
+    "e_classlist": "Une liste de classe en fiches",
+    "eg_l6": "Dans le style des examens",
+    "e_aqa": "Style AQA : un quiz de tables",
+    "e_ocr": "Style OCR : une liste de courses",
+    "e_cie": "Style Cambridge : notes et mentions",
+    "e_cietype": "Style Cambridge : des livres en fiches",
     # ---- a name for a program nobody named, from what it does (09-names.js)
     "d_rps": "Pierre, feuille, ciseaux",
     "d_weekday": "Jour de la semaine",
@@ -572,8 +618,6 @@ FR = {
     "e_fizz": "Fizz et Buzz",
     "e_prime": "Est-ce un nombre premier ?",
     "e_gcd": "Plus grand diviseur commun",
-    "e_digits": "Combien de chiffres",
-    "e_reverse": "Le nombre à l’envers",
     "e_grid": "Une grille de tables",
     "e_minmax": "Le plus petit et le plus grand",
     "e_stars": "Un triangle d’étoiles",
@@ -960,17 +1004,6 @@ FR = {
         Display "Merci"
         Stop
     """),
-    "e_backwards_p": program("""
-        Start
-        Declare Integer n
-        Display "À rebours à partir de combien ?"
-        Input n
-        For i = n To 1 Step -1
-            Display i
-        End For
-        Display "Terminé"
-        Stop
-    """),
     "e_sumevens_p": program("""
         Start
         Declare Integer total
@@ -1069,36 +1102,6 @@ FR = {
         Display a
         Stop
     """),
-    "e_digits_p": program("""
-        Start
-        Declare Integer n
-        Declare Integer combien
-        Display "Tape un nombre entier"
-        Input n
-        combien = 0
-        While n > 0
-            n = n div 10
-            combien = combien + 1
-        End While
-        Display "Nombre de chiffres :"
-        Display combien
-        Stop
-    """),
-    "e_reverse_p": program("""
-        Start
-        Declare Integer n
-        Declare Integer inverse
-        Display "Tape un nombre entier"
-        Input n
-        inverse = 0
-        While n > 0
-            inverse = inverse * 10 + n mod 10
-            n = n div 10
-        End While
-        Display "À l'envers, ça donne"
-        Display inverse
-        Stop
-    """),
     "e_fib_p": program("""
         Start
         Declare Integer a
@@ -1177,18 +1180,6 @@ FR = {
         Stop
     """),
     # ---- the examples: everyday programs
-    "e_area_p": program("""
-        Start
-        Declare Integer largeur
-        Declare Integer hauteur
-        Display "Quelle largeur ?"
-        Input largeur
-        Display "Quelle hauteur ?"
-        Input hauteur
-        Display "L'aire est"
-        Display largeur * hauteur
-        Stop
-    """),
     "e_change_p": program("""
         Start
         Declare Integer cents
@@ -1561,82 +1552,6 @@ FR = {
             End If
         End Function
     """),
-    "e_convert_p": program("""
-        Start
-        Declare Integer choix
-        Declare Real quantite
-        Do
-            Display "1 miles en kilomètres"
-            Display "2 livres en kilogrammes"
-            Display "3 Fahrenheit en Celsius"
-            Display "4 pouces en centimètres"
-            Display "5 quitter"
-            Input choix
-            If choix >= 1 And choix <= 4 Then
-                Display "Combien ?"
-                Input quantite
-                Call convertir(choix, quantite)
-            Else If choix <> 5 Then
-                Display "Choisis un nombre de 1 à 5"
-            End If
-        Until choix = 5
-        Display "Au revoir"
-        Stop
-
-        Module convertir(Integer laquelle, Real quantite)
-            Select Case laquelle
-                Case 1
-                    Display quantite, " miles font ", quantite * 1.609, " kilomètres"
-                Case 2
-                    Display quantite, " livres font ", quantite * 0.4536, " kilogrammes"
-                Case 3
-                    Display quantite, " F font ", (quantite - 32) * 5 / 9, " C"
-                Case Else
-                    Display quantite, " pouces font ", quantite * 2.54, " centimètres"
-            End Select
-        End Module
-    """),
-    "e_splitcheck_p": program("""
-        Start
-        Declare Real addition
-        Declare Real pourcentage
-        Declare Integer personnes
-        Declare Real pourboire
-        Display "Combien fait l'addition ?"
-        Input addition
-        While addition <= 0
-            Display "L'addition doit être plus grande que zéro"
-            Input addition
-        End While
-        Display "Quel pourcentage de pourboire ? 15, 18 ou 20 sont courants"
-        Input pourcentage
-        While pourcentage < 0 Or pourcentage > 100
-            Display "Choisis un pourcentage de 0 à 100"
-            Input pourcentage
-        End While
-        Display "Combien de personnes se la partagent ?"
-        Input personnes
-        While personnes < 1
-            Display "Au moins une personne doit payer"
-            Input personnes
-        End While
-        pourboire = addition * pourcentage / 100
-        Call recu(addition, pourboire, personnes)
-        Stop
-
-        Module recu(Real repas, Real extra, Integer combien)
-            Declare Real total
-            total = repas + extra
-            Display "Repas et boissons : $", repas
-            Display "Pourboire : $", extra
-            Display "Total : $", total
-            If combien = 1 Then
-                Display "Tu paies tout : $", total
-            Else
-                Display "Chacune des ", combien, " personnes paie $", total / combien
-            End If
-        End Module
-    """),
     "e_vending_p": program("""
         Start
         Declare Integer prix
@@ -1886,6 +1801,247 @@ FR = {
                 Return 2
             End If
         End Function
+    """),
+    "e_bands_p": program("""
+        Start
+        Declare Integer score
+        Display "Ton score sur 100 ?"
+        Input score
+        Select Case score
+            Case 90 To 100
+                Display "A : excellent"
+            Case 80 To 89
+                Display "B : très bien"
+            Case 70 To 79
+                Display "C : bien"
+            Case 60 To 69
+                Display "D : réussi"
+            Case Else
+                Display "F : pas encore réussi"
+        End Select
+        Stop
+    """),
+    "e_hailstone_p": program("""
+        Start
+        Declare Integer n
+        Declare Integer etapes
+        Display "Partir de quel nombre ?"
+        Input n
+        etapes = 0
+        While n <> 1
+            If n mod 2 = 0 Then
+                n = n div 2
+            Else
+                n = 3 * n + 1
+            End If
+            etapes = etapes + 1
+            Display n
+        End While
+        Display "Étapes pour arriver à 1 : ", etapes
+        Stop
+    """),
+    "e_doubling_p": program("""
+        Start
+        Declare Integer grains
+        Declare Integer total
+        grains = 1
+        total = 0
+        For numero = 1 To 16
+            Display grains
+            total = total + grains
+            grains = grains * 2
+        End For
+        Display "Grains sur les 16 premières cases : ", total
+        Stop
+    """),
+    "e_rainfall_p": program("""
+        Start
+        Declare Real total
+        Declare String plusPluvieux
+        pluie = {"Janv": 78, "Févr": 52, "Mars": 61, "Avr": 45, "Mai": 30, "Juin": 12}
+        Display "Pluie en mm : ", pluie
+        total = 0
+        plusPluvieux = "Janv"
+        For Each mois In pluie
+            total = total + pluie[mois]
+            If pluie[mois] > pluie[plusPluvieux] Then
+                plusPluvieux = mois
+            End If
+        End For
+        Display "Moyenne : ", round(total / length(pluie), 1), " mm"
+        Display "Le mois le plus pluvieux : ", plusPluvieux
+        Stop
+    """),
+    "e_savings_p": program("""
+        Start
+        Declare Real depart
+        Declare Real taux
+        Declare Integer annees
+        Declare Real solde
+        Display "Combien pour commencer ?"
+        Input depart
+        Display "Taux d’intérêt, en pourcentage ?"
+        Input taux
+        Display "Pendant combien d’années ?"
+        Input annees
+        solde = depart
+        For annee = 1 To annees
+            solde = grandir(solde, taux)
+            Display "Année ", annee, " : ", round(solde, 2)
+        End For
+        Display "Gain : ", round(solde - depart, 2)
+        Display "Années pour doubler : ", anneesPourDoubler(depart, taux)
+        Stop
+
+        Function grandir(somme, pourcentage)
+            Return somme + somme * pourcentage / 100
+        End Function
+
+        Function anneesPourDoubler(somme, pourcentage)
+            Declare Integer compte
+            Declare Real maintenant
+            If pourcentage <= 0 Then
+                Return 0
+            End If
+            compte = 0
+            maintenant = somme
+            While maintenant < somme * 2
+                maintenant = grandir(maintenant, pourcentage)
+                compte = compte + 1
+            End While
+            Return compte
+        End Function
+    """),
+    "e_classlist_p": program("""
+        Start
+        Declare Integer i
+        Declare Real total
+        noms = ["Ana", "Ben", "Cy", "Dee", "Eli", "Fay"]
+        notes = [88, 72, 95, 64, 79, 91]
+        eleves = []
+        For i = 0 To length(noms) - 1
+            Call append(eleves, nouvelEleve(noms[i], notes[i]))
+        End For
+        total = 0
+        meilleur = eleves[0]
+        For Each e In eleves
+            Display e.nom, " : ", e.note
+            total = total + e.note
+            If e.note > meilleur.note Then
+                meilleur = e
+            End If
+        End For
+        Display "Moyenne de la classe : ", round(total / length(eleves), 1)
+        Display "Premier de la classe : ", meilleur.nom
+        Stop
+
+        Function nouvelEleve(nom, note)
+            un = New Eleve
+            un.nom = nom
+            un.note = note
+            Return un
+        End Function
+    """),
+    "e_aqa_p": program("""
+        SUBROUTINE question(a, b)
+            OUTPUT "Combien font " + INT_TO_STRING(a) + " x " + INT_TO_STRING(b) + " ?"
+            reponse ← STRING_TO_INT(USERINPUT)
+            RETURN reponse = a * b
+        ENDSUBROUTINE
+
+        score ← 0
+        table ← 7
+        FOR i ← 1 TO 5
+            IF question(table, i) THEN
+                score ← score + 1
+                OUTPUT "Juste"
+            ELSE
+                OUTPUT "C’est " + INT_TO_STRING(table * i)
+            ENDIF
+        ENDFOR
+        OUTPUT "Tu as " + INT_TO_STRING(score) + " sur 5"
+    """),
+    "e_ocr_p": program("""
+        array articles[4]
+        array prix[4]
+        articles[0] = "pain"
+        prix[0] = 1.20
+        articles[1] = "lait"
+        prix[1] = 0.95
+        articles[2] = "pommes"
+        prix[2] = 2.40
+        articles[3] = "fromage"
+        prix[3] = 3.10
+        total = 0
+        for i = 0 to 3
+            print(articles[i] + " : " + str(prix[i]))
+            total = total + prix[i]
+        next i
+        budget = float(input("Ton budget ?"))
+        if total <= budget then
+            print("Ça rentre dans ton budget")
+        else
+            print("Trop cher de " + str(total - budget))
+        endif
+    """),
+    "e_cie_p": program("""
+        DECLARE Notes : ARRAY[1:5] OF INTEGER
+        DECLARE Indice : INTEGER
+        DECLARE Total : INTEGER
+        Notes[1] ← 67
+        Notes[2] ← 84
+        Notes[3] ← 45
+        Notes[4] ← 92
+        Notes[5] ← 73
+        Total ← 0
+        FOR Indice ← 1 TO 5
+            Total ← Total + Notes[Indice]
+            OUTPUT "Élève ", Indice, " : ", Notes[Indice]
+        NEXT Indice
+        OUTPUT "Moyenne : ", Total / 5
+        FOR Indice ← 1 TO 5
+            CASE OF Notes[Indice]
+                90 TO 100 : OUTPUT "Élève ", Indice, " obtient A"
+                70 TO 89 : OUTPUT "Élève ", Indice, " obtient B"
+                50 TO 69 : OUTPUT "Élève ", Indice, " obtient C"
+                OTHERWISE : OUTPUT "Élève ", Indice, " obtient U"
+            ENDCASE
+        NEXT Indice
+    """),
+    "e_cietype_p": program("""
+        TYPE Livre
+            DECLARE Titre : STRING
+            DECLARE Pages : INTEGER
+        ENDTYPE
+        DECLARE Etagere : ARRAY[1:3] OF Livre
+        DECLARE Indice : INTEGER
+        Etagere[1].Titre ← "Dune"
+        Etagere[1].Pages ← 412
+        Etagere[2].Titre ← "Emma"
+        Etagere[2].Pages ← 474
+        Etagere[3].Titre ← "Holes"
+        Etagere[3].Pages ← 233
+        FOR Indice ← 1 TO 3
+            CALL MontrerLivre(Etagere[Indice])
+        NEXT Indice
+        OUTPUT "Le plus long : ", PlusLong(Etagere)
+
+        PROCEDURE MontrerLivre(L : Livre)
+            OUTPUT L.Titre, " : ", L.Pages
+        ENDPROCEDURE
+
+        FUNCTION PlusLong(Livres : ARRAY OF Livre) RETURNS STRING
+            DECLARE Meilleur : INTEGER
+            DECLARE Indice : INTEGER
+            Meilleur ← 1
+            FOR Indice ← 2 TO 3
+                IF Livres[Indice].Pages > Livres[Meilleur].Pages
+                    THEN
+                        Meilleur ← Indice
+                ENDIF
+            NEXT Indice
+            RETURN Livres[Meilleur].Titre
+        ENDFUNCTION
     """),
     # ---- the puzzles: find the fault
     "z_else_p": program("""

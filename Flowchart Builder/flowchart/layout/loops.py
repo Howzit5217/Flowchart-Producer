@@ -5,7 +5,7 @@ from ..layout.blocks import (
     Block, clear_foot, join_room, label_above, label_beside, label_run,
     layout_seq, node_block, part_of, shift, tail_shape)
 from ..measure import text_w
-from ..parse.nodes import Loop
+from ..parse.nodes import Loop, Node
 from ..words.lookup import word
 
 
@@ -132,17 +132,38 @@ def layout_for(item):
         step = [part_of(item, "rect", item.step)] if item.step else []
         start = [part_of(item, "rect", item.init)] if item.init else []
         loop.body = list(item.body) + step
-        return layout_seq(start + [loop])
+        return landed(item, layout_seq(start + [loop]))
     loop = Loop("pre", item.raw)             # one hexagon holding the whole For
     loop.hex = True
     loop.node_id, loop.line = item.node_id, item.line
     loop.body = item.body
-    return layout_pre(loop)
+    return landed(item, layout_pre(loop))
 
 
 def layout_loop(item):
     """A While or a Repeat: which one decides where the test is drawn."""
-    return layout_post(item) if item.style == "post" else layout_pre(item)
+    return landed(item, layout_post(item) if item.style == "post" else layout_pre(item))
+
+
+def landed(item, block):
+    """A loop an Exit leaves, with the connector the Exit names on its way
+    out: the flow out of the loop runs through the circle with the same
+    letter in it as the circle the Exit is drawn as, which is where the
+    Exit goes on from.  A connector rather than a line: a line from deep
+    inside the loop out to its foot would cross whatever stood between."""
+    letter = getattr(item, "landing", "")
+    if not letter or block.terminal:
+        return block
+    mark = Node("circle", letter)
+    mark.connector = True
+    dot = node_block(mark)
+    axis = max(block.axis, dot.axis)
+    right = max(block.w - block.axis, dot.w - dot.axis)
+    y = block.h + settings.VGAP
+    elems = shift(block.elems, axis - block.axis, 0)
+    elems.append(("line", axis, block.h, axis, y, True))
+    elems += shift(dot.elems, axis - dot.axis, y)
+    return Block(axis + right, y + dot.h, axis, elems)
 
 
 blocks.LAYOUTS["loop"] = layout_loop

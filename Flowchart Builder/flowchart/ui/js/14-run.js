@@ -314,6 +314,7 @@
     if (el("#watch")) { el("#watch").hidden = true; }
     if (el("#watch-rows")) { el("#watch-rows").textContent = ""; }
     if (el("#watch-where")) { el("#watch-where").textContent = ""; }
+    traceClear();                        // and nothing traced yet either
   }
 
   // A value written down the way the pseudocode writes it, so that 12 and
@@ -326,6 +327,224 @@
     if (typeof v === "boolean") { return v ? TXT.yes : TXT.no; }
     if (Array.isArray(v) || isTable(v) || v instanceof FnRef) { return readable(v); }
     return String(v);
+  }
+
+  // ---- a trace table --------------------------------------------------------
+  // What a class is asked to fill in by hand, and marked on: a column for
+  // every name, a row for every step that changed one -- the new value in
+  // its column, the rest left empty -- and what was printed beside it.  The
+  // run writes one as it goes (traceStep, after every step that can change
+  // anything), and it is shown where the code is shown, to be checked
+  // against the one done by hand, copied into a document or saved for a
+  // spreadsheet.
+  //
+  // Only what changed is kept, and a list or a table is written out only
+  // as far as its first TRACE_ITEMS: a run at full speed through a big list
+  // should not spend its time writing the whole list out at every step.
+  // After TRACE_ROWS rows it stops keeping them, and says so.
+  var TRACE_ROWS = 2000, TRACE_ITEMS = 20;
+  var TRACED_OPS = { declare: 1, set: 1, input: 1, display: 1, call: 1, wait: 1 };
+  var traced = null;
+
+  function traceClear() {
+    traced = { rows: [], cols: [], seen: {}, last: {}, cut: false, out: [] };
+    traceButton();
+  }
+
+  function traceSays(v) {
+    if (Array.isArray(v) && v.length > TRACE_ITEMS) {
+      return "[" + v.slice(0, TRACE_ITEMS).map(shownIn).join(", ") + ", \u2026]";
+    }
+    if (isTable(v) && v.map.size > TRACE_ITEMS) { return (v.kind || "") + "{\u2026}"; }
+    return watchSays(v);
+  }
+
+  // One step done: whatever it changed, and whatever it printed, as a row.
+  // A name inside a module is kept apart from the same name in the main
+  // flow -- n in factorial is not the n the program started with.
+  function traceStep(item, where) {
+    if (quiet || !traced || traced.cut) { return; }
+    var got = {}, any = false;
+    function look(key, v) {
+      var said = traceSays(v);
+      if (traced.last[key] === said) { return; }
+      traced.last[key] = said;
+      if (!traced.seen[key]) { traced.seen[key] = true; traced.cols.push(key); }
+      got[key] = said;
+      any = true;
+    }
+    var own = (where && where.vars) || {};
+    var chart = where && where.name && where.name !== "main" ? where.name : "";
+    Object.keys(GLOBALS).forEach(function (name) {
+      if (!Object.prototype.hasOwnProperty.call(own, name)) { look(name, GLOBALS[name]); }
+    });
+    Object.keys(own).forEach(function (name) {
+      look(chart ? name + " (" + chart + ")" : name, own[name]);
+    });
+    if (!any && !traced.out.length) { return; }
+    traced.rows.push({ line: (item && item.line) || "", cells: got, out: traced.out.join("\n") });
+    traced.out = [];
+    if (traced.rows.length >= TRACE_ROWS) { traced.cut = true; }
+    if (traced.rows.length === 1) { traceButton(); }
+  }
+
+  function traceButton() {
+    var b = el("#trace-open");
+    if (b) { b.hidden = !traced || !traced.rows.length; }
+  }
+
+  // The table as text: between tabs to paste into a document or a sheet,
+  // or as a spreadsheet's commas, every cell that needs it in quotes.
+  function traceText(sep) {
+    function cell(v) {
+      v = String(v === undefined ? "" : v);
+      if (sep === "\t") { return v.replace(/[\t\n\r]+/g, " "); }
+      return /[",\n\r]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v;
+    }
+    var rows = [[TXT.trace_line].concat(traced.cols, [TXT.trace_out])];
+    traced.rows.forEach(function (r) {
+      rows.push([r.line].concat(traced.cols.map(function (c) { return r.cells[c]; }), [r.out]));
+    });
+    return rows.map(function (r) { return r.map(cell).join(sep); }).join("\n") + "\n";
+  }
+
+  function showTrace() {
+    var out = el("#code-out");
+    if (!out || !traced) { return; }
+    stopWriting();
+    out.innerHTML = "";
+    var strip = el("#code-files");
+    if (strip) { strip.innerHTML = ""; strip.hidden = true; }
+    var page = document.createElement("div");
+    page.className = "trace-page";
+    if (!traced.rows.length) {
+      var none = document.createElement("p");
+      none.className = "hint";
+      none.textContent = TXT.trace_none;
+      page.appendChild(none);
+    } else {
+      if (typeof traceGraph === "function") { traceGraph(page, traced.rows, traced.cols); }   // its numbers, drawn (17-graphs.js)
+      var table = document.createElement("table");
+      table.className = "trace";
+      var head = table.createTHead().insertRow();
+      [TXT.trace_line].concat(traced.cols, [TXT.trace_out]).forEach(function (name, k) {
+        var th = document.createElement("th");
+        th.textContent = name;
+        if (k === 0) { th.className = "trace-at"; }
+        head.appendChild(th);
+      });
+      var body = table.createTBody();
+      traced.rows.forEach(function (r) {
+        var tr = body.insertRow();
+        var at = tr.insertCell();
+        at.className = "trace-at";
+        at.textContent = r.line;
+        traced.cols.forEach(function (c) {
+          var td = tr.insertCell();
+          if (r.cells[c] !== undefined) { td.textContent = r.cells[c]; }
+        });
+        var said = tr.insertCell();
+        said.className = "trace-said";
+        said.textContent = r.out;
+      });
+      page.appendChild(table);
+    }
+    out.appendChild(page);
+    var row = document.createElement("div");
+    row.className = "go";
+    if (traced.rows.length) {
+      row.appendChild(copyButton(traceText("\t")));
+      row.appendChild(saveButton(traceText(","), chartFileName() + "-trace", "csv"));
+    }
+    out.appendChild(row);
+    watchGoRow(row);
+    tapeFull(true);
+    tapeShow("code");
+    if (el("#tape-lang")) { el("#tape-lang").hidden = true; }
+    tapeSays("", TXT.trace_head, say("trace_rows", { n: traced.rows.length }) +
+             (traced.cut ? " \u00b7 " + say("trace_cut", { n: TRACE_ROWS }) : ""));
+  }
+
+  if (el("#trace-open")) { el("#trace-open").onclick = showTrace; }
+
+  // ---- pausing where asked --------------------------------------------------
+  // A shape the run is to stop at when it gets there, whatever pace it is
+  // going at -- the way to get through the first ninety rounds of a loop at
+  // full speed and watch the ninety-first one step at a time.  Asked for on
+  // the shape's own menu (the right mouse button), and marked on the shape
+  // with a dot.  They are kept by the shape's number, which is the
+  // statement's on a chart built from pseudocode -- a new program drops
+  // them -- and the shape's own on a drawing by hand.
+  var pauses = {};
+
+  function pauseKey(g) { return g && g.dataset ? String(g.dataset.i || "") : ""; }
+
+  function pausedAt(item) {
+    if (quiet || !item || !item.id) { return false; }
+    for (var any in pauses) {            // nothing asked for: nothing to look up
+      return runShapes(item.id, item.line).some(function (g) { return pauses[pauseKey(g)]; });
+    }
+    return false;
+  }
+
+  function pauseHere(item) {
+    if (flatOut()) { caughtUp(); }        // the view, up to where it has got
+    talk(byHand ? TXT.r_paused_hand : say("r_paused", { n: item.line }), "note");
+    return new Promise(function (go) {
+      stepOn = function () { stepOn = null; showNext(false); go(); };
+      showNext(true);
+    });
+  }
+
+  function togglePause(key) {
+    if (!key) { return; }
+    if (pauses[key]) { delete pauses[key]; } else { pauses[key] = true; }
+    markPauses();
+  }
+
+  function clearPauses(handToo) {
+    Object.keys(pauses).forEach(function (key) {
+      if (handToo || key.charAt(0) !== "h") { delete pauses[key]; }
+    });
+    markPauses();
+  }
+
+  // The dot on each shape the run will pause at.
+  function markPauses() {
+    if (!chart) { return; }
+    all(".bp-dot", chart).forEach(function (d) { d.remove(); });
+    Object.keys(pauses).forEach(function (key) {
+      all('.node[data-i="' + key + '"]', chart).forEach(function (g) {
+        var box;
+        try { box = g.getBBox(); } catch (e) { return; }
+        if (!box || !box.width) { return; }
+        var dot = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+        dot.setAttribute("class", "bp-dot");
+        dot.setAttribute("cx", (box.x + 3).toFixed(1));
+        dot.setAttribute("cy", (box.y + 3).toFixed(1));
+        dot.setAttribute("r", "5.5");
+        g.appendChild(dot);
+      });
+    });
+  }
+
+  // F9, the key every code editor pauses with, on the shape picked.
+  if (typeof window !== "undefined") window.addEventListener("keydown", function (ev) {
+    if (ev.key !== "F9" || ev.ctrlKey || ev.altKey || ev.metaKey || !chart) { return; }
+    var g = byHand ? (picked ? el('.node[data-i="h' + picked + '"]', chart) : null) : sel;
+    if (!g) { return; }
+    ev.preventDefault();
+    togglePause(pauseKey(g));
+  });
+
+  // The rows a shape's menu offers for it.
+  function pauseRows(g) {
+    var key = pauseKey(g), any = Object.keys(pauses).length > 0;
+    return [
+      { icon: "pause", name: pauses[key] ? TXT.bp_drop : TXT.bp_add, keys: "F9",
+        go: function () { togglePause(key); } },
+      { icon: "drop", name: TXT.bp_clear, off: !any, go: function () { clearPauses(true); } }
+    ];
   }
 
   // Once a frame, however many steps go by.  A program at full speed does
@@ -502,6 +721,16 @@
 
   function Stop() { this.kind = "stop"; }
   function Returned(v) { this.kind = "return"; this.value = v; }
+  // An Exit, on its way out of the loop it is in (leaving, below).
+  function LeftLoop() { this.kind = "exit"; }
+  // A loop going round, which an Exit anywhere inside it -- in an If in it,
+  // a Case of a Select in it -- ends, and the run goes on after it.
+  var LOOP_OPS = { "while": 1, dowhile: 1, "for": 1, foreach: 1 };
+  async function leaving(going) {
+    try { await going; } catch (thrown) {
+      if (!(thrown instanceof LeftLoop)) { throw thrown; }
+    }
+  }
 
   // ---- what went wrong, and where -----------------------------------------
   // The statement the runner has in hand.  Kept because the thing that
@@ -515,7 +744,7 @@
   // alone, so a fault inside a module points into the module rather than at
   // the line that called it -- and the trail says how it got there.
   function blame(err, item) {
-    if (!err || err instanceof Stop || err instanceof Returned) { return err; }
+    if (!err || err instanceof Stop || err instanceof Returned || err instanceof LeftLoop) { return err; }
     if (!err.at && item) { err.at = item; }
     return err;
   }
@@ -756,14 +985,19 @@
   // whether one of them is money can depend on the piece before it: the
   // sign in "Total: $" is what says the next piece is a price.
   async function displayed(item, where) {     // what a Display puts on the tape
-    var said = "", bits = pieces(item.parts);
+    var said = "", bits = pieces(item.parts), vals = [];
     for (var i = 0; i < bits.length; i++) {
-      said += readable(await value(bits[i], where),
-                       cashy(bits[i]) || R_CASH_SIGN.test(said));
+      var got = await value(bits[i], where);
+      vals.push(got);
+      said += readable(got, cashy(bits[i]) || R_CASH_SIGN.test(said));
     }
     // Words with a line break in them -- join(rows, NewLine) -- are that
     // many lines on the tape, as they are on any screen.
-    said.split("\n").forEach(function (one) { talk(one); });
+    var lastLine = null;
+    said.split("\n").forEach(function (one) { lastLine = talk(one); });
+    // a list or a table of numbers, drawn under it (17-graphs.js)
+    if (!quiet && typeof graphShown === "function") { graphShown(vals, lastLine); }
+    if (traced && !quiet && !traced.cut) { traced.out.push(said); }
   }
 
   function readable(v, money) {
@@ -854,7 +1088,8 @@
         // shape is what is being followed, so the shape is what is waited on.
         var inside = i > 0 && item.id && item.id === items[i - 1].id;
         if (item.id && !inside) { lightUp(item); }
-        if (following() && !inside) { await hold(); }
+        if (!inside && pausedAt(item)) { await pauseHere(item); }
+        else if (following() && !inside) { await hold(); }
         if (stopping) { throw new Stop(); }
         await doStep(item, where);
         watchNow(where);                 // and what it is holding now
@@ -874,7 +1109,10 @@
     var was = doingNow;
     doingNow = item;
     try {
-      if (back) { await goBackInto(item, where, back); }
+      if (back) {
+        if (LOOP_OPS[item.op]) { await leaving(goBackInto(item, where, back)); }
+        else { await goBackInto(item, where, back); }
+      }
       else switch (item.op) {
         case "declare":
           noteCash(item.var, item.type);
@@ -885,7 +1123,7 @@
                          item.scope === "global");
           break;
         case "foreach":
-          await roundEach(item, where, 0, itemsOf(await value(item.over, where)));
+          await leaving(roundEach(item, where, 0, itemsOf(await value(item.over, where))));
           break;
         case "display":
           await displayed(item, where);
@@ -919,21 +1157,22 @@
           else { await runSteps(item["else"] || [], where); }
           break;
         case "while":
-          await roundWhile(item, where);
+          await leaving(roundWhile(item, where));
           break;
         case "dowhile":
-          await roundDo(item, where, false);
+          await leaving(roundDo(item, where, false));
           break;
+        case "exit": throw new LeftLoop();
         case "for":
           if (item.init) { await doStep(statementOf(item.init, item), where); }
-          await roundFor(item, where);
+          await leaving(roundFor(item, where));
           break;
         case "select":
           var pick = await value(item.expr, where), went = false;
           for (var c = 0; c < item.cases.length; c++) {
             var label = String(item.cases[c].match || "");
             if (/^(default|case else|else)$/i.test(label.trim())) { continue; }
-            if (same(pick, await value(label, where))) {
+            if (await caseHolds(item.cases[c], pick, where)) {
               await runSteps(item.cases[c].body, where);
               went = true;
               break;
@@ -951,6 +1190,7 @@
           break;
         default: cannotDo(item); break;
       }
+      if (!back && TRACED_OPS[item.op]) { traceStep(item, where); }
     } catch (thrown) {
       throw blame(thrown, item);
     } finally {
@@ -958,8 +1198,28 @@
     }
   }
 
+  // Whether a Case answers to what was picked: its one value, or -- where
+  // it names several, 2, 3, or a run of them, 1 TO 5 (choice_pieces,
+  // parse/data.py) -- any one of those.
+  async function caseHolds(one, pick, where) {
+    if (!one.any) { return same(pick, await value(String(one.match || ""), where)); }
+    for (var i = 0; i < one.any.length; i++) {
+      var piece = one.any[i];
+      if (piece.is !== undefined) {
+        if (same(pick, await value(piece.is, where))) { return true; }
+        continue;
+      }
+      var lo = await value(piece.from, where), hi = await value(piece.to, where);
+      if (truthy(apply("<=", lo, pick)) && truthy(apply("<=", pick, hi))) { return true; }
+    }
+    return false;
+  }
+
   // What a name declared with nothing in it starts out holding.
   function blankOf(type) {
+    // one of the program's own records, every field ready to be filled in
+    var laid = recordLaid(type);
+    if (laid) { return recordMade(laid); }
     if (/int|real|num|float|double|currency|money|decimal/i.test(type || "")) { return 0; }
     if (/^bool/i.test(type || "")) { return false; }
     return "";
@@ -988,7 +1248,9 @@
       if (!String(dims[i]).trim()) { break; }
       sizes.push(Math.max(0, Math.floor(num(await value(dims[i], where)))));
     }
-    return sizes.length ? filledList(sizes, fill === undefined ? blankOf(type) : fill) : [];
+    // a list of records: each place a record of its own, not one shared
+    var each = fill === undefined && recordLaid(type) ? function () { return blankOf(type); } : null;
+    return sizes.length ? filledList(sizes, each || (fill === undefined ? blankOf(type) : fill)) : [];
   }
 
   // Where a Set or an Input puts what it has: a name, or a place inside
@@ -1330,6 +1592,7 @@
       runSays(TXT.r_stop);
       el("#tape").innerHTML = "";
       watchClear();                      // nothing held yet, this time round
+      if (typeof graphsClear === "function") { graphsClear(); }   // and no charts of it yet
     }
     var where = { vars: back ? back.main : {}, name: "main" };
     if (!quiet) { runWhere = where; }    // a puzzle being marked is not the run
@@ -1368,6 +1631,7 @@
     if (!quiet) {
       caughtUp();
       lightUp(null);
+      if (typeof graphRun === "function") { graphRun(); }   // what it printed, charted where it wants it
     }
     if (broke) { sayFault(broke, "bad"); }
     var over = false;

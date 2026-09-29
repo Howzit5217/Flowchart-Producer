@@ -104,7 +104,31 @@ var CASES = [
   ["a shape the flow stops at", [
     ["oval", "Start"], ["io", "Input x"], ["io", "Display x"]],
    [[1, 2], [2, 3]],
-   ["Start", "Input x", "Display x", "End"]]
+   ["Start", "Input x", "Display x", "End"]],
+  // A flow of its own whose first oval names it is a function the program
+  // calls: written after the program, its Ends as Returns.
+  ["a function drawn as a flow of its own", [
+    ["oval", "Start"], ["io", "Input n"], ["io", "Display double(n)"], ["oval", "End"],
+    ["oval", "double(x)"], ["rect", "Set y = x * 2"], ["oval", "Return y"]],
+   [[1, 2], [2, 3], [3, 4], [5, 6], [6, 7]],
+   ["Start", "Input n", "Display double(n)", "End", "", "Function double(x)",
+    "    Set y = x * 2", "    Return y", "End Function"]],
+  ["a module that hands nothing back", [
+    ["oval", "Start"], ["sub", 'Call greet("Ann")'], ["oval", "End"],
+    ["oval", "greet(name)"], ["io", 'Display "Hi ", name'], ["oval", "End"]],
+   [[1, 2], [2, 3], [4, 5], [5, 6]],
+   ["Start", 'Call greet("Ann")', "End", "", "Module greet(name)",
+    '    Display "Hi ", name', "    Return", "End Module"]],
+  // Three ways out of a decision and more: a Select Case, the words on
+  // the arrows the values -- a word in quotes, Other the Case Else.
+  ["a decision with four ways out", [
+    ["oval", "Start"], ["io", "Input choice"], ["diamond", "choice"], ["io", 'Display "one"'],
+    ["io", 'Display "two"'], ["io", 'Display "A"'], ["io", 'Display "other"'], ["oval", "End"]],
+   [[1, 2], [2, 3], [3, 4, "1"], [3, 5, "2"], [3, 6, "A"], [3, 7, "Other"],
+    [4, 8], [5, 8], [6, 8], [7, 8]],
+   ["Start", "Input choice", "Select Case choice", "    Case 1", '        Display "one"',
+    "    Case 2", '        Display "two"', '    Case "A"', '        Display "A"',
+    "    Case Else", '        Display "other"', "End Select", "End"]]
 ];
 
 // Tidy up's writing (handWriting(true)): every shape once, where the flow
