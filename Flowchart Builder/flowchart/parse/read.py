@@ -52,15 +52,20 @@ def plain_set(s):
     return bool(m) and re.split(r"\W", s, 1)[0].lower() not in STRUCTURE
 
 
-def parse_program(text):
-    """Pseudocode text -> [Chart, ...] with the main chart first."""
+def parse_program(text, story=True):
+    """Pseudocode text -> [Chart, ...] with the main chart first.
+
+    `story` False reads every line as the statement it is, never as a
+    story to be retold: a drawing by hand being tidied up (the studio's
+    Tidy up) is laid out one line to a shape, and a retelling adds lines
+    no shape was drawn for."""
     room_to_nest()
     del PROBLEMS[:]
     lines = join_lines(text.splitlines())
     # Told as a story rather than written as pseudocode: read what it was
     # retold as, each line still numbered by the sentence it came from, so
     # the chart, the run and every warning point back into the story.
-    told = retell(lines)
+    told = retell(lines) if story else None
     TOLD[0] = told[1] if told else ""
     if told:
         lines = told[0]

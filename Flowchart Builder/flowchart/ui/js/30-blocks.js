@@ -29,7 +29,8 @@
   var pendingMoves = null;               // moves waiting for their chart to land
   var freshAsked = false;                // Build pressed, and laying out afresh agreed to
   var layingFresh = false;               // ... and this drawing is that one
-  var blockCarry = null;                 // the block being carried, if one is
+  var seedHanded = "";                   // the next drawing's seed, handed over (18-write.js)
+  var blockCarry = null;                // the block being carried, if one is
   var MOVE_STEP = 5;                     // where a block settles, like the paper by hand
   var MOVE_NUDGE = 4;                    // pixels before a press is a drag, not a click
 
@@ -403,12 +404,19 @@
   // same, so the moves still fit it; the one a save was drawn from, when
   // its moves are waiting to go back on; otherwise none, and it is shaken
   // afresh.  Laid out afresh on purpose, the same words keep their seed, so
-  // the chart comes back as it was before anything was moved.
+  // the chart comes back as it was before anything was moved.  A drawing by
+  // hand put into the box as its pseudocode is drawn from the seed Tidy up
+  // lays drawings out from (seedHanded), so the two come out alike.
   function seedFor(again) {
     if (again) { return lastLaid.seed; }
     var fresh = freshAsked, same = el("#code") && el("#code").value === lastLaid.text;
     freshAsked = false;
     layingFresh = fresh;
+    if (seedHanded) {
+      var handed = seedHanded;
+      seedHanded = "";
+      return handed;
+    }
     if (!byHand && same && (fresh || movesHeld())) { return lastLaid.seed; }
     if (pendingMoves && pendingMoves.seed) { return pendingMoves.seed; }
     return "";

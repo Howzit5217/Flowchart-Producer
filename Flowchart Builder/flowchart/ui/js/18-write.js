@@ -2032,6 +2032,9 @@
         showStarts();
         tapeFull(false);
         setMode(false);
+        // laid out from the seed Tidy up uses, so its True and False go
+        // out the sides they go out of the drawing tidied up
+        seedHanded = TIDY_SEED;
         el("#build").click();
       };
       more.unshift(into);

@@ -599,19 +599,67 @@
   // Which shape each line of the writing came from.  Filled in as the
   // writing is made, because it cannot be worked out afterwards: several
   // shapes can say the same words, and half the lines -- End If, Else, End
-  // While -- came from no shape at all.  Tidy up reads it to find its way
-  // back from a laid-out chart to the shapes on the paper.
+  // While -- came from no shape at all.  A run reads it to light the shape
+  // each statement came from (runShapes, 14-run.js); Tidy up has a writing
+  // of its own, and its own lines (handWriting).
   var handLine = {};                     // line of pseudocode -> shape number
 
   function handAsPseudocode() {
-    var head = hand.nodes.filter(function (n) { return !intoOf(n.id).length; })[0];
+    var made = handWriting(false);
+    handLine = made.lines;
+    return made.text;
+  }
+
+  // A loop with its test at the foot: the flow comes back round to this
+  // shape from a decision further on, whose other way leads on out.  It
+  // used to be written as a While at that decision, which could only say
+  // what came before the test by writing it all out a second time -- the
+  // pseudocode said Input guess twice for the one shape, and Tidy up had
+  // two places for it and a gap where the second one stood.  A Do with
+  // its test at the foot is the loop that was drawn.
+  function testAtFoot(id, loops) {
+    var found = null;
+    intoOf(id).forEach(function (back) {
+      var test = nodeById(back.from);
+      if (found || !test || test.id === id || !asksKind(test.kind) ||
+          loops.indexOf(test.id) >= 0 || outOf(test.id).length !== 2) { return; }
+      var ways = bothWays(test.id);
+      var on = ways[0] === back ? ways[1] : ways[1] === back ? ways[0] : null;
+      if (!on || on.to === id) { return; }
+      if (!canReach(id, test.id, loops)) { return; }                 // not further on
+      if (canReach(on.to, id, loops.concat([test.id]))) { return; }  // both ways come back
+      found = { test: test, on: on, again: ways[0] === back };
+    });
+    return found;
+  }
+
+  // Where Tidy up gives a shape with nothing written in it -- a small
+  // circle where two ways meet, a connector -- its place in the flow.
+  var HAND_STAND_IN = "…";
+
+  // The drawing written out, and which shape each line came from.
+  //
+  // `once` is for Tidy up, which lays the drawing out as this writing is
+  // laid out on the pseudocode side and puts each shape where its line
+  // stands.  A shape can only stand in one place, so the flow is written
+  // as far as a shape already written and no further -- a loop tested
+  // part way down, written out, says what comes before its test twice --
+  // and a shape with nothing in it, which the writing has no line for, is
+  // given one (HAND_STAND_IN), so the layout makes room for it where it is.
+  // What it writes is never run.
+  function handWriting(once) {
+    var heads = hand.nodes.filter(function (n) { return !intoOf(n.id).length; });
+    // The flow starts where nothing leads in: at a shape that leads on to
+    // something, where one does -- a note standing on its own is not the
+    // start of anything -- and at an oval before any other shape.
+    var head = heads.filter(function (n) { return outOf(n.id).length && endsKind(n.kind); })[0] ||
+               heads.filter(function (n) { return outOf(n.id).length; })[0] || heads[0];
     if (!head) { throw new Error(TXT.h_no_start); }
-    var out = [], been = {};
-    handLine = {};
+    var out = [], been = {}, lines = {};
 
     function put(words, id) {
       out.push(words);
-      if (id) { handLine[out.length] = id; }
+      if (id) { lines[out.length] = id; }
     }
 
     put("Start", head.id);
@@ -623,32 +671,56 @@
       loops = loops || [];
       while (id && id !== stopId) {
         if (loops.indexOf(id) >= 0) { return; }   // round the loop again: its body is done
-        been[id] = (been[id] || 0) + 1;
-        if (been[id] > 3) { throw new Error(TXT.h_tangled); }
+        if (once && been[id]) { return; }         // written already, where it stands
         var node = nodeById(id);
         if (!node) { return; }
-        var outs = outOf(id);
+        var outs = outOf(id), asks = asksKind(node.kind);
+        var ways = null, yesBack = false, noBack = false;
+        if (asks && outs.length) {
+          ways = bothWays(id);
+          yesBack = !!ways[1] && canReach(ways[0].to, id, loops);
+          noBack = !!ways[1] && canReach(ways[1].to, id, loops);
+        }
+        // Not a While: perhaps the top of a loop tested at its foot.
+        var foot = yesBack !== noBack ? null : testAtFoot(id, loops);
+        if (foot) {
+          var said = saidIn(foot.test);
+          been[foot.test.id] = (been[foot.test.id] || 0) + 1;
+          put(step(deep) + "Do", foot.test.id);
+          write(id, foot.test.id, deep + 1, loops.concat([foot.test.id]));
+          put(step(deep) + (foot.again ? "Loop While " + said : "Until " + said));
+          id = foot.on.to;
+          continue;
+        }
+        been[id] = (been[id] || 0) + 1;
+        if (been[id] > 3) { throw new Error(TXT.h_tangled); }
+        var words = saidIn(node) || (once && asks ? HAND_STAND_IN : "");
         if (!outs.length) {              // an End, and the flow stops here
-          put(step(deep) + "End", node.id);
+          // A shape that is not an End, with no way on out of it, still
+          // says what it says -- written as End, its words were lost.
+          if (!asks && !endsKind(node.kind) && words && id !== head.id) {
+            put(step(deep) + words, node.id);
+            put(step(deep) + "End");
+          } else {
+            put(step(deep) + "End", node.id);
+          }
           return;
         }
-        if (asksKind(node.kind)) {
-          var ways = bothWays(id), yes = ways[0], no = ways[1];
-          var asked = saidIn(node);
-          var yesBack = canReach(yes.to, id, loops), noBack = canReach(no.to, id, loops);
-          if (yesBack && noBack) { throw new Error(TXT.h_tangled); }
-          if (yesBack || noBack) {       // a question you come back to: a loop
+        if (asks && ways[1]) {
+          var yes = ways[0], no = ways[1];
+          if (yesBack && noBack && !once) { throw new Error(TXT.h_tangled); }
+          if (yesBack !== noBack) {      // a question you come back to: a loop
             var body = yesBack ? yes : no, on = yesBack ? no : yes;
             put(step(deep) +
-                (yesBack ? "While " + asked
-                         : "While NOT (" + asked + ")"), node.id);
+                (yesBack ? "While " + words
+                         : "While NOT (" + words + ")"), node.id);
             write(body.to, id, deep + 1, loops.concat([id]));
             put(step(deep) + "End While");
             id = on.to;
             continue;
           }
           var join = meetAgain(yes.to, no.to, loops);
-          put(step(deep) + "If " + asked + " Then", node.id);
+          put(step(deep) + "If " + words + " Then", node.id);
           write(yes.to, join, deep + 1, loops);
           if (no.to !== join) {
             put(step(deep) + "Else");
@@ -660,8 +732,8 @@
           continue;
         }
         if (id !== head.id) {            // the first oval is the Start above
-          var words = saidIn(node);
           if (words) { put(step(deep) + words, node.id); }
+          else if (once) { put(step(deep) + HAND_STAND_IN, node.id); }
         }
         id = outs[0].to;
       }
@@ -669,7 +741,7 @@
 
     write(head.id, null, 0);
     if (out[out.length - 1] !== "End") { put("End"); }
-    return out.join("\n");
+    return { text: out.join("\n"), lines: lines };
   }
 
   // Reading the design as a program, and holding on to it.  A design that

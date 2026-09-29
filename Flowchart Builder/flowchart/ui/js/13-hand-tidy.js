@@ -9,7 +9,7 @@
   // overlapping, no arrow doubling back on itself, every shape on the
   // ruling, branches given columns of their own.  A chart drawn by hand can
   // have all of it, because the drawing can be written out as pseudocode
-  // (handAsPseudocode, 12-check.js).  The writing goes to the very code the
+  // (handWriting, 12-check.js).  The writing goes to the very code the
   // pseudocode side draws with, and the chart that comes back says where
   // each shape stands and which way each arrow goes.  The shapes are carried
   // there, and every arrow is laid along the line that chart drew for it:
@@ -78,7 +78,7 @@
       seed: TIDY_SEED,
       lang: el("#f-lang") ? el("#f-lang").value : "",
       legend: false, grid: true, shapes: geom, letters: letters,
-      everyout: true, apart: true, sizes: sizes, plan: true,
+      everyout: true, apart: true, sizes: sizes, plan: true, asis: true,
       roomy: how.space === "roomy", tight: how.space === "tight",
       chains: !!how.chains, columns: how.columns ? 1400 : 0,
       decide: tidyDecide(how),
@@ -943,13 +943,17 @@
     how = how || tidyHowKept();
     tidyDone();
     if (!hand.nodes.length) { handSays(TXT.h_tidy_none, true); return; }
-    var text;
-    try { text = handAsPseudocode(); }
+    // Written out once over, each shape where the flow first comes to it
+    // (handWriting, 12-check.js): the lines the runner lights shapes by
+    // (handLine) are the writing's that is run, and stay as they are.
+    var made;
+    try { made = handWriting(true); }
     catch (thrown) { handSays(thrown.message || String(thrown), true); return; }
+    var text = made.text;
     var plan = tidyShapes(how);
     var fromLine = {}, sizes = {};       // line -> shape, as it was written
-    Object.keys(handLine).forEach(function (line) {
-      var n = nodeById(+handLine[line]);
+    Object.keys(made.lines).forEach(function (line) {
+      var n = nodeById(+made.lines[line]);
       if (!n) { return; }
       fromLine[line] = n.id;
       var t = turned(plan[n.id]);        // at the size and turn it will have

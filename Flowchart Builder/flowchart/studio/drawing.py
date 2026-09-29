@@ -136,7 +136,9 @@ def draw_for_studio(ask):
     # bar for a drawing that takes long enough to want one.
     progress.expect(text.count("\n") + 1)          # for reports by line
     progress.say("read")
-    charts = parse_program(text)
+    # Tidy up's writing of a drawing is read as it is written: one line to
+    # a shape, whatever the words in the shapes say (see parse_program).
+    charts = parse_program(text, story=not ask.get("asis"))
     progress.say("lay")
     # Where everything went, as numbers, when asked (see draw/svg.py PLAN).
     svg_out.PLAN = {"yes": settings.YES, "no": settings.NO} if ask.get("plan") else None

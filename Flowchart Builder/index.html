@@ -11910,14 +11910,39 @@
   var handLine = {};                     // line of pseudocode -> shape number
 
   function handAsPseudocode() {
-    var head = hand.nodes.filter(function (n) { return !intoOf(n.id).length; })[0];
+    var made = handWriting(false);
+    handLine = made.lines;
+    return made.text;
+  }
+
+  function testAtFoot(id, loops) {
+    var found = null;
+    intoOf(id).forEach(function (back) {
+      var test = nodeById(back.from);
+      if (found || !test || test.id === id || !asksKind(test.kind) ||
+          loops.indexOf(test.id) >= 0 || outOf(test.id).length !== 2) { return; }
+      var ways = bothWays(test.id);
+      var on = ways[0] === back ? ways[1] : ways[1] === back ? ways[0] : null;
+      if (!on || on.to === id) { return; }
+      if (!canReach(id, test.id, loops)) { return; }                 // not further on
+      if (canReach(on.to, id, loops.concat([test.id]))) { return; }  // both ways come back
+      found = { test: test, on: on, again: ways[0] === back };
+    });
+    return found;
+  }
+
+  var HAND_STAND_IN = "…";
+
+  function handWriting(once) {
+    var heads = hand.nodes.filter(function (n) { return !intoOf(n.id).length; });
+    var head = heads.filter(function (n) { return outOf(n.id).length && endsKind(n.kind); })[0] ||
+               heads.filter(function (n) { return outOf(n.id).length; })[0] || heads[0];
     if (!head) { throw new Error(TXT.h_no_start); }
-    var out = [], been = {};
-    handLine = {};
+    var out = [], been = {}, lines = {};
 
     function put(words, id) {
       out.push(words);
-      if (id) { handLine[out.length] = id; }
+      if (id) { lines[out.length] = id; }
     }
 
     put("Start", head.id);
@@ -11928,32 +11953,53 @@
       loops = loops || [];
       while (id && id !== stopId) {
         if (loops.indexOf(id) >= 0) { return; }   // round the loop again: its body is done
-        been[id] = (been[id] || 0) + 1;
-        if (been[id] > 3) { throw new Error(TXT.h_tangled); }
+        if (once && been[id]) { return; }         // written already, where it stands
         var node = nodeById(id);
         if (!node) { return; }
-        var outs = outOf(id);
+        var outs = outOf(id), asks = asksKind(node.kind);
+        var ways = null, yesBack = false, noBack = false;
+        if (asks && outs.length) {
+          ways = bothWays(id);
+          yesBack = !!ways[1] && canReach(ways[0].to, id, loops);
+          noBack = !!ways[1] && canReach(ways[1].to, id, loops);
+        }
+        var foot = yesBack !== noBack ? null : testAtFoot(id, loops);
+        if (foot) {
+          var said = saidIn(foot.test);
+          been[foot.test.id] = (been[foot.test.id] || 0) + 1;
+          put(step(deep) + "Do", foot.test.id);
+          write(id, foot.test.id, deep + 1, loops.concat([foot.test.id]));
+          put(step(deep) + (foot.again ? "Loop While " + said : "Until " + said));
+          id = foot.on.to;
+          continue;
+        }
+        been[id] = (been[id] || 0) + 1;
+        if (been[id] > 3) { throw new Error(TXT.h_tangled); }
+        var words = saidIn(node) || (once && asks ? HAND_STAND_IN : "");
         if (!outs.length) {              // an End, and the flow stops here
-          put(step(deep) + "End", node.id);
+          if (!asks && !endsKind(node.kind) && words && id !== head.id) {
+            put(step(deep) + words, node.id);
+            put(step(deep) + "End");
+          } else {
+            put(step(deep) + "End", node.id);
+          }
           return;
         }
-        if (asksKind(node.kind)) {
-          var ways = bothWays(id), yes = ways[0], no = ways[1];
-          var asked = saidIn(node);
-          var yesBack = canReach(yes.to, id, loops), noBack = canReach(no.to, id, loops);
-          if (yesBack && noBack) { throw new Error(TXT.h_tangled); }
-          if (yesBack || noBack) {       // a question you come back to: a loop
+        if (asks && ways[1]) {
+          var yes = ways[0], no = ways[1];
+          if (yesBack && noBack && !once) { throw new Error(TXT.h_tangled); }
+          if (yesBack !== noBack) {      // a question you come back to: a loop
             var body = yesBack ? yes : no, on = yesBack ? no : yes;
             put(step(deep) +
-                (yesBack ? "While " + asked
-                         : "While NOT (" + asked + ")"), node.id);
+                (yesBack ? "While " + words
+                         : "While NOT (" + words + ")"), node.id);
             write(body.to, id, deep + 1, loops.concat([id]));
             put(step(deep) + "End While");
             id = on.to;
             continue;
           }
           var join = meetAgain(yes.to, no.to, loops);
-          put(step(deep) + "If " + asked + " Then", node.id);
+          put(step(deep) + "If " + words + " Then", node.id);
           write(yes.to, join, deep + 1, loops);
           if (no.to !== join) {
             put(step(deep) + "Else");
@@ -11965,8 +12011,8 @@
           continue;
         }
         if (id !== head.id) {            // the first oval is the Start above
-          var words = saidIn(node);
           if (words) { put(step(deep) + words, node.id); }
+          else if (once) { put(step(deep) + HAND_STAND_IN, node.id); }
         }
         id = outs[0].to;
       }
@@ -11974,7 +12020,7 @@
 
     write(head.id, null, 0);
     if (out[out.length - 1] !== "End") { put("End"); }
-    return out.join("\n");
+    return { text: out.join("\n"), lines: lines };
   }
 
   var handWas = null;                    // the design the program was read from
@@ -12843,7 +12889,7 @@
       seed: TIDY_SEED,
       lang: el("#f-lang") ? el("#f-lang").value : "",
       legend: false, grid: true, shapes: geom, letters: letters,
-      everyout: true, apart: true, sizes: sizes, plan: true,
+      everyout: true, apart: true, sizes: sizes, plan: true, asis: true,
       roomy: how.space === "roomy", tight: how.space === "tight",
       chains: !!how.chains, columns: how.columns ? 1400 : 0,
       decide: tidyDecide(how),
@@ -13564,13 +13610,14 @@
     how = how || tidyHowKept();
     tidyDone();
     if (!hand.nodes.length) { handSays(TXT.h_tidy_none, true); return; }
-    var text;
-    try { text = handAsPseudocode(); }
+    var made;
+    try { made = handWriting(true); }
     catch (thrown) { handSays(thrown.message || String(thrown), true); return; }
+    var text = made.text;
     var plan = tidyShapes(how);
     var fromLine = {}, sizes = {};       // line -> shape, as it was written
-    Object.keys(handLine).forEach(function (line) {
-      var n = nodeById(+handLine[line]);
+    Object.keys(made.lines).forEach(function (line) {
+      var n = nodeById(+made.lines[line]);
       if (!n) { return; }
       fromLine[line] = n.id;
       var t = turned(plan[n.id]);        // at the size and turn it will have
@@ -22784,6 +22831,7 @@
         showStarts();
         tapeFull(false);
         setMode(false);
+        seedHanded = TIDY_SEED;
         el("#build").click();
       };
       more.unshift(into);
@@ -40331,7 +40379,8 @@
   var pendingMoves = null;               // moves waiting for their chart to land
   var freshAsked = false;                // Build pressed, and laying out afresh agreed to
   var layingFresh = false;               // ... and this drawing is that one
-  var blockCarry = null;                 // the block being carried, if one is
+  var seedHanded = "";                   // the next drawing's seed, handed over (18-write.js)
+  var blockCarry = null;                // the block being carried, if one is
   var MOVE_STEP = 5;                     // where a block settles, like the paper by hand
   var MOVE_NUDGE = 4;                    // pixels before a press is a drag, not a click
 
@@ -40655,6 +40704,11 @@
     var fresh = freshAsked, same = el("#code") && el("#code").value === lastLaid.text;
     freshAsked = false;
     layingFresh = fresh;
+    if (seedHanded) {
+      var handed = seedHanded;
+      seedHanded = "";
+      return handed;
+    }
     if (!byHand && same && (fresh || movesHeld())) { return lastLaid.seed; }
     if (pendingMoves && pendingMoves.seed) { return pendingMoves.seed; }
     return "";
