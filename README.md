@@ -4,4 +4,4 @@ Paste pseudocode, get a flowchart — style it (colors, fonts, sizes, bold, high
 Three ways in, one tab each:
 - **Pseudocode** — write it, or just describe the program in plain English ("Ask the user for their age. If they are 18 or older, tell them they can vote."). A description is read into proper pseudocode, shown beside what you wrote (side by side in full screen), and drawn — your own words are never replaced.
 - **Flowchart** — draw the chart yourself, shape by shape, and read it back as pseudocode.
-- **Code** — write or paste the program in Python, Java, C#, C++ or JavaScript (the language is recognized by itself), in one file or several; it is read into pseudocode and drawn, and you can run it, open it full screen, or translate it into any of the other four languages.
+- **Code** — write or paste the program in Python, Java, C#, C++ or JavaScript (the language is recognized by itself), in one file or several; it is read into pseudocode and drawn — lists, dictionaries and classes included — and you can run it, open it full screen, or translate it into any of the other four languages.

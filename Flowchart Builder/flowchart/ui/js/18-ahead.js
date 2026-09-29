@@ -50,7 +50,54 @@
     var ts = tokens(text), at = 0;
     function peek() { return ts[at]; }
     function take() { return ts[at++]; }
+    function listed(close) {             // a, b, c ) -- up to the closing mark
+      var out = [];
+      if (peek() && peek().v !== close) {
+        out.push(expr(0));
+        while (peek() && peek().v === ",") {
+          take();
+          if (peek() && peek().v === close) { break; }
+          out.push(expr(0));
+        }
+      }
+      if (peek() && peek().v === close) { take(); }
+      return out;
+    }
+    // After a value: an item of it, a part of it, a call made on it --
+    // scores[i], grid[y][x], p.x, names.append(x) (which is append(names, x)).
+    function after(node) {
+      while (peek() && peek().t === "op" && (peek().v === "[" || peek().v === ".")) {
+        var op = take();
+        if (op.v === "[") {
+          var pick = expr(0);
+          if (peek() && peek().v === "]") { take(); }
+          node = { index: node, at: pick };
+          continue;
+        }
+        var nm = take();
+        if (!nm || nm.t !== "name") { break; }
+        if (peek() && peek().v === "(") {
+          take();
+          node = { call: String(nm.v), args: [node].concat(listed(")")), dotted: true };
+          continue;
+        }
+        node = { field: node, name: String(nm.v) };
+      }
+      return node;
+    }
     function primary() {
+      var tok = peek();
+      if (tok && tok.t === "op" && (tok.v === "-" || tok.v === "+")) {
+        take();
+        return { unary: tok.v, of: primary() };
+      }
+      if (tok && tok.t === "name" && String(tok.v).toLowerCase() === "not") {
+        take();
+        return { unary: "not", of: primary() };
+      }
+      return after(atom());
+    }
+    function atom() {
       var tok = take();
       if (!tok) { return { lit: '""' }; }
       // The figure as it was typed, not as it was read: 2.0 is a Real and
@@ -62,22 +109,30 @@
         if (peek() && peek().v === ")") { take(); }
         return { group: inside };
       }
-      if (tok.t === "op" && (tok.v === "-" || tok.v === "+")) {
-        return { unary: tok.v, of: primary() };
+      if (tok.t === "op" && tok.v === "[") { return { list: listed("]") }; }
+      if (tok.t === "op" && tok.v === "{") {
+        var pairs = [];
+        while (peek() && peek().v !== "}") {
+          var key = expr(0);
+          if (peek() && peek().v === ":") { take(); }
+          pairs.push([key, expr(0)]);
+          if (!peek() || peek().v !== ",") { break; }
+          take();
+        }
+        if (peek() && peek().v === "}") { take(); }
+        return { table: pairs };
       }
       if (tok.t === "name") {
         var low = String(tok.v).toLowerCase();
-        if (low === "not") { return { unary: "not", of: primary() }; }
         if (low === "true" || low === "false") { return { bool: low === "true" }; }
+        if (low === "new" && peek() && peek().t === "name") {
+          var kind = String(take().v);
+          if (peek() && peek().v === "(") { take(); listed(")"); }
+          return { record: kind };
+        }
         if (peek() && peek().v === "(") {
           take();
-          var args = [];
-          if (peek() && peek().v !== ")") {
-            args.push(expr(0));
-            while (peek() && peek().v === ",") { take(); args.push(expr(0)); }
-          }
-          if (peek() && peek().v === ")") { take(); }
-          return { call: String(tok.v), args: args };
+          return { call: String(tok.v), args: listed(")") };
         }
         return { name: String(tok.v) };
       }
@@ -139,6 +194,109 @@
     return (a === "int" && b === "int") ? "int" : "";
   }
 
+  // ---- and what holds them ------------------------------------------------
+  // A list is "list:" and what is in it (list:int, list:list:bool); a table
+  // is "table:" its keys ":" its values; a record is "rec:" its kind (rec:
+  // alone for a record of no one kind).  What is in a list nobody has put
+  // anything into yet is "", and is worked out as the program is read.
+  function isListKind(k) { return /^list:/.test(k || ""); }
+  function isTableKind(k) { return /^table:/.test(k || ""); }
+  function isRecKind(k) { return /^rec:/.test(k || ""); }
+  function tableKey(k) { var m = /^table:([^:]*)/.exec(k || ""); return m ? m[1] : ""; }
+  function tableValue(k) { var m = /^table:[^:]*:(.*)$/.exec(k || ""); return m ? m[1] : ""; }
+  function elemOf(k) {                   // what taking one out of it gives
+    if (isListKind(k)) { return k.slice(5); }
+    if (isTableKind(k)) { return tableValue(k); }
+    return k === "text" || k === "any" ? k : "";
+  }
+  // What a name holds when it is given both of these, one time and another.
+  // "none" is the empty "" a program writes for nothing-yet -- Python's
+  // None, JavaScript's null, a node with no next -- and gives way to
+  // whatever else the name is given.  Two things of no one kind are "any":
+  // a list holding 1 and "one", a Function handing back either.
+  function joinKinds(a, b) {
+    if (!a || a === "none") { return b || a || ""; }
+    if (!b || b === "none" || a === b) { return a; }
+    if (a === "any" || b === "any") { return "any"; }
+    if ((a === "int" || a === "real") && (b === "int" || b === "real")) { return bothKinds(a, b); }
+    if (isListKind(a) && isListKind(b)) { return "list:" + joinKinds(elemOf(a), elemOf(b)); }
+    if (isTableKind(a) && isTableKind(b)) {
+      return "table:" + joinKinds(tableKey(a), tableKey(b)) + ":" + joinKinds(tableValue(a), tableValue(b));
+    }
+    if (isRecKind(a) && isRecKind(b)) { return "rec:"; }
+    return "any";
+  }
+  // Whatever inside it nobody ever said, a number.
+  function settled(k) {
+    if (isListKind(k)) { return "list:" + settled(elemOf(k)); }
+    if (isTableKind(k)) { return "table:" + settled(tableKey(k) || "text") + ":" + settled(tableValue(k)); }
+    if (k === "none") { return "text"; }
+    return k || "real";
+  }
+  // What a kind of record holds by this name -- or, where the record is of
+  // no one kind, whatever any of them holds by it.
+  function fieldKind(prog, holder, low) {
+    var recs = prog.records || {}, own = holder.length > 4 ? recs[holder.slice(4)] : null;
+    if (own && own.fields[low]) { return own.fields[low].kind; }
+    if (recs[""] && recs[""].fields[low]) { return recs[""].fields[low].kind; }
+    var found = "";
+    Object.keys(recs).forEach(function (kind) {
+      if (recs[kind].fields[low]) { found = joinKinds(found, recs[kind].fields[low].kind); }
+    });
+    return found;
+  }
+  // What each of the list built-ins hands back, from what it was handed.
+  function builtKind(low, kinds) {
+    var a = kinds[0] || "";
+    switch (low) {
+      case "length": case "indexof": case "count": case "ord": case "bitand": case "bitor":
+      case "bitxor": case "trunc": case "sign": return "int";
+      case "contains": case "startswith": case "endswith": case "isdigit": case "isalpha":
+      case "isupper": case "islower": case "isspace": case "any": case "all": case "isnumber":
+        return "bool";
+      case "join": case "tostring": case "replace": case "trim": case "chr": case "classof":
+      case "padleft": case "padright": case "fixed": case "substring": return "text";
+      case "split": return "list:text";
+      case "range": return "list:int";
+      case "keys": return isTableKind(a) ? "list:" + tableKey(a) : "list:int";
+      case "values": return "list:" + elemOf(a);
+      case "items":
+        return isTableKind(a) ? "list:list:" + (tableKey(a) === tableValue(a) ? tableKey(a) : "any")
+                              : "list:list:" + (elemOf(a) === "int" ? "int" : "any");
+      case "reversed": case "copy":
+        return a === "text" ? "text" : isTableKind(a) && low === "reversed" ? "list:" + tableKey(a) : a;
+      case "sorted": case "unique": case "tolist": case "shuffled":
+        return a === "text" ? "list:text" : isTableKind(a) ? "list:" + tableKey(a) : a;
+      case "union": case "intersection":
+        return a === "text" ? "list:text" : isTableKind(a) ? "list:" + tableKey(a) : a;
+      case "slice": case "reverse": case "sort": case "repeat": case "difference": return a;
+      case "sum": return elemOf(a) === "int" ? "int" : "real";
+      case "min": case "max":
+        if (kinds.length === 1 && isListKind(a)) { return elemOf(a); }
+        return kinds.reduce(function (x, y) { return x === y ? x : bothKinds(x, y); });
+      case "pop": case "choice": return elemOf(a);
+      case "get": return isTableKind(a) ? tableValue(a) || kinds[2] || "" : elemOf(a) || kinds[2] || "";
+      case "newlist": {
+        var made = kinds[kinds.length - 1] || "";
+        for (var d = 0; d < kinds.length - 1; d++) { made = "list:" + made; }
+        return made;
+      }
+      case "real": case "log": case "exp": case "sin": case "cos": case "tan": case "atan":
+      case "atan2": case "hypot": case "log10": case "asin": case "acos": return "real";
+      case "enumerate": return "list:list:" + (elemOf(a) === "int" ? "int" : "any");
+      case "zip":
+        var both = elemOf(a);
+        kinds.slice(1).forEach(function (k) { both = both === elemOf(k) ? both : "any"; });
+        return "list:list:" + (both || "any");
+      case "append": case "insert": case "remove": case "extend": case "clear": case "shuffle":
+        return "";
+    }
+    return null;
+  }
+  // The list built-ins that change the list they are handed, and which of
+  // their arguments goes into it: append(xs, x), insert(xs, i, x).
+  var PUTS_IN = { append: 1, insert: 2 };
+
   // ---- one statement, taken apart ---------------------------------------
   var R_JUST_A_NAME = /^\s*[A-Za-z_]\w*\s*$/;
 
@@ -148,6 +306,10 @@
   }
 
   function callOf(item) {                // Call show(n, "x"), as the tree of it
+    // what follows the word Call, read as the call it is -- which is how
+    // Call names.append(x) comes out append(names, x)
+    var said = tree(String(item.text || "").replace(/^\s*call\s+/i, ""));
+    if (said && said.call) { return said; }
     return { call: item.name, args: pieces(item.args || "").map(tree) };
   }
 
@@ -155,10 +317,13 @@
     switch (item.op) {
       case "declare": case "return": case "wait":
         return item.expr ? [item.expr] : [];
-      case "set": return [item.expr];
+      // grid[y][x] = v reads grid, y and x on the way to where v goes
+      case "set": return [item.expr].concat(R_JUST_A_NAME.test(item["var"] || "") ? [] : [item["var"]]);
       case "display": return pieces(item.parts || "");
       case "call": return pieces(item.args || "");
       case "if": case "while": case "dowhile": return item.cond ? [item.cond] : [];
+      case "foreach": return [item.over];
+      case "input": return R_JUST_A_NAME.test(item["var"] || "") ? [] : [item["var"]];
       case "for":
         return [statementOf(item.init || "").expr, item.cond,
                 statementOf(item.step || "").expr].filter(Boolean);
@@ -176,6 +341,7 @@
     switch (item.op) {
       case "set": case "input":
         return R_JUST_A_NAME.test(bareName(item.var)) ? [bareName(item.var)] : [];
+      case "foreach": return [item["var"]];
       case "for":
         return [statementOf(item.init || "").var,
                 statementOf(item.step || "").var].filter(Boolean);
@@ -193,7 +359,7 @@
   function blocksOf(item) {              // the statements inside this one
     switch (item.op) {
       case "if": return [item.then || [], item["else"] || []];
-      case "while": case "dowhile": case "for": return [item.body || []];
+      case "while": case "dowhile": case "for": case "foreach": return [item.body || []];
       case "select": return item.cases.map(function (one) { return one.body || []; });
       default: return [];
     }
@@ -238,6 +404,7 @@
 
   function kindIn(node, scope, prog) {
     if (!node) { return ""; }
+    if (node.kindIs !== undefined) { return node.kindIs; }
     if (node.lit !== undefined) {
       return node.lit === '""' ? "text" : (/\./.test(node.lit) ? "real" : "int");
     }
@@ -247,13 +414,39 @@
     if (node.unary) {
       return node.unary === "not" ? "bool" : kindIn(node.of, scope, prog);
     }
+    if (node.list) {
+      var inList = "";
+      node.list.forEach(function (one) { inList = joinKinds(inList, kindIn(one, scope, prog)); });
+      return "list:" + inList;
+    }
+    if (node.table) {
+      var keyKind = "", valueKind = "";
+      node.table.forEach(function (pair) {
+        keyKind = joinKinds(keyKind, kindIn(pair[0], scope, prog));
+        valueKind = joinKinds(valueKind, kindIn(pair[1], scope, prog));
+      });
+      return "table:" + keyKind + ":" + valueKind;
+    }
+    if (node.record) { return "rec:" + node.record; }
+    if (node.index) { return elemOf(kindIn(node.index, scope, prog)); }
+    if (node.field) {
+      var holder = kindIn(node.field, scope, prog);
+      if (/^(length|size|count)$/i.test(node.name) && (isListKind(holder) || holder === "text")) { return "int"; }
+      if (isTableKind(holder)) { return tableValue(holder); }
+      return isRecKind(holder) ? fieldKind(prog, holder, lowered(node.name)) : "";
+    }
     if (node.name) {
       var entry = lookUp(scope, node.name);
+      if (!entry && /^(newline|tab)$/i.test(node.name)) { return "text"; }
+      if (!entry && /^infinity$/i.test(node.name)) { return "real"; }
+      if (!entry && prog.byName[lowered(node.name)]) { return "fn"; }
       return entry ? entry.kind : "";
     }
     if (node.call) {
       var low = lowered(node.call);
       if (prog.byName[low]) { return prog.byName[low].gives; }
+      var listy = builtKind(low, node.args.map(function (arg) { return kindIn(arg, scope, prog); }));
+      if (listy !== null && (!holds(BUILT_KIND, low) || /^(length|min|max)$/.test(low))) { return listy; }
       if (!holds(BUILT_KIND, low)) { return ""; }
       if (low === "random" && !node.args.length) { return "real"; }
       if (BUILT_KIND[low] !== "same") { return BUILT_KIND[low]; }
@@ -263,8 +456,17 @@
     }
     var a = kindIn(node.left, scope, prog), b = kindIn(node.right, scope, prog);
     switch (node.op) {
-      case "+": return (a === "text" || b === "text") ? "text" : bothKinds(a, b);
-      case "-": case "*": case "mod": case "%": case "^": return bothKinds(a, b);
+      case "+":
+        if (isListKind(a) && isListKind(b)) { return joinKinds(a, b); }
+        if (a === "text" || b === "text") { return "text"; }
+        return (a === "any" || b === "any") ? "real" : bothKinds(a, b);
+      case "*":
+        if (isListKind(a)) { return a; }
+        if (isListKind(b)) { return b; }
+        if (a === "text" || b === "text") { return "text"; }
+        return (a === "any" || b === "any") ? "real" : bothKinds(a, b);
+      case "-": case "mod": case "%": case "^":
+        return (a === "any" || b === "any") ? "real" : bothKinds(a, b);
       case "/": return "real";
       case "div": return "int";
       default: return "bool";            // every test, and And and Or
@@ -302,7 +504,7 @@
       return scope.names[low];
     }
 
-    var prog = { mods: [], byName: Object.create(null), scopes: [] };
+    var prog = { mods: [], byName: Object.create(null), scopes: [], records: Object.create(null) };
     prog.shared = scopeFor([], null);
     (ast.modules || []).forEach(function (mod) {
       var said = kindOfWord(mod.returns);
@@ -347,8 +549,8 @@
         var home = item.scope === "global" ? prog.shared : scope;
         if (item.op === "declare") {
           var entry = named(home, item.var);
-          var kind = kindOfWord(item.type);
-          if (kind && !entry.fixed) { entry.kind = kind; entry.fixed = true; }
+          var kind = declaredKind(item);
+          if (kind && !entry.fixed) { entry.kind = kind; entry.fixed = !openKind(kind); }
           if (R_CASH_TYPE.test(item.type || "")) { entry.cash = true; }
           entry.spots.push({ item: item, deep: deep, block: block, inCase: inCase });
           return;
@@ -380,22 +582,92 @@
             if (!entry.kind) {
               entry.kind = (entry.asked || entry.param) ? "text" : "real";
             }
+            entry.kind = settled(entry.kind);
           });
         });
         Object.keys(prog.shared.names).forEach(function (low) {
           if (!prog.shared.names[low].kind) {
             prog.shared.names[low].kind = "real";
           }
+          prog.shared.names[low].kind = settled(prog.shared.names[low].kind);
+        });
+        Object.keys(prog.records).forEach(function (kind) {
+          var rec = prog.records[kind];
+          Object.keys(rec.fields).forEach(function (low) { rec.fields[low].kind = settled(rec.fields[low].kind); });
         });
       },
       function () {
         learnKinds(prog);
         prog.mods.forEach(function (one) {
           if (one.answers && !one.gives) { one.gives = "real"; }
+          if (one.gives) { one.gives = settled(one.gives); }
         });
       },
-      function () { placeNames(prog); }
+      function () { placeNames(prog); markChanged(prog); }
     ] };
+  }
+
+  // What a Declare says a name holds: Integer, Integer scores[], Boolean
+  // seen[h][w], Point p (a record of that kind).
+  function declaredKind(item) {
+    var kind = kindOfWord(item.type);
+    if (!kind && item.type && !/^(var|let)$/i.test(item.type)) { kind = "rec:" + item.type; }
+    (item.dims || []).forEach(function () { kind = "list:" + kind; });
+    return kind;
+  }
+
+  // A list of lists of nobody-said-what: Declare people[][].
+  function openKind(k) {
+    while (isListKind(k)) { k = elemOf(k); }
+    return !k;
+  }
+
+  // Which of a module's parameters it changes what is inside of --
+  // grid[y][x] = v, append(names, x), or handing it on to a module that
+  // does.  Python, Java, C# and JavaScript hand a list over as the list
+  // itself; C++ copies it unless told not to, and a maze carved into a
+  // copy is a maze nobody sees.
+  var CHANGES_ITS_FIRST = { append: 1, insert: 1, remove: 1, pop: 1, extend: 1, clear: 1,
+                            sort: 1, reverse: 1, shuffle: 1 };
+  function markChanged(prog) {
+    var passes = [];                     // [module, parameter entry, the module it goes to, which]
+    prog.mods.forEach(function (one) {
+      function mine(said) {
+        var entry = lookUp(one.scope, bareName(said));
+        return entry && entry.param && one.scope.names[lowered(entry.name)] === entry ? entry : null;
+      }
+      function calls(node) {
+        eachCall(node, function (call) {
+          var low = lowered(call.call), first = call.args[0];
+          if (CHANGES_ITS_FIRST[low] && !prog.byName[low] && first && first.name && !first.field) {
+            var hit = mine(first.name);
+            if (hit) { hit.changed = true; }
+          }
+          var to = prog.byName[low];
+          if (to) {
+            call.args.forEach(function (arg, i) {
+              var hit2 = arg && arg.name && !arg.field && !arg.index ? mine(arg.name) : null;
+              if (hit2 && to.params[i]) { passes.push([hit2, to.params[i].entry]); }
+            });
+          }
+        });
+      }
+      eachStep(one.body, function (item) {
+        if ((item.op === "set" || item.op === "input") && item["var"] && !R_JUST_A_NAME.test(item["var"])) {
+          var hit = mine(item["var"]);
+          if (hit) { hit.changed = true; }
+        }
+        sumsOf(item).forEach(function (src) { calls(tree(src)); });
+        if (item.op === "call") { calls(callOf(item)); }
+      });
+    });
+    for (var round = 0; round < passes.length + 1; round++) {
+      var more = false;
+      passes.forEach(function (pass) {
+        if (pass[1].changed && !pass[0].changed) { pass[0].changed = true; more = true; }
+      });
+      if (!more) { break; }
+    }
   }
 
   // The whole reading, in one go.
@@ -412,39 +684,107 @@
   function learnKinds(prog) {
     var moved = true;
     function learn(entry, kind) {
-      if (!entry || entry.fixed || !kind || entry.kind === kind) { return; }
-      var now = !entry.kind ? kind
-              : bothKinds(entry.kind, kind) || "text";
+      if (!entry || !kind || entry.kind === kind) { return; }
+      // a list declared Integer scores[] is still a list of whole numbers,
+      // but one declared with nothing said of what is in it can be told
+      if (entry.fixed && !openKind(entry.kind)) { return; }
+      var now = joinKinds(entry.kind, kind);
       if (now !== entry.kind) { entry.kind = now; moved = true; }
+    }
+    // grid[y][x] = v: grid is a list of lists of what v is -- or, where the
+    // place is a key, a table; p.x = v: p's kind of record has an x
+    function learnPlace(scope, said, kind) {
+      var node = tree(said), depth = [];
+      while (node && (node.index || node.field)) {
+        if (node.field) {
+          var holder = kindIn(node.field, scope, prog);
+          if (isTableKind(holder) && !depth.length && node.field.name) {
+            learn(lookUp(scope, node.field.name), "table:text:" + kind);
+          }
+          if (isRecKind(holder) && !depth.length) {
+            var rec = prog.records[holder.slice(4)] = prog.records[holder.slice(4)] ||
+                      { name: holder.slice(4), fields: Object.create(null) };
+            var f = rec.fields[lowered(node.name)] = rec.fields[lowered(node.name)] ||
+                    { name: node.name, kind: "" };
+            var now = joinKinds(f.kind, kind);
+            if (now !== f.kind) { f.kind = now; moved = true; }
+          }
+          return;
+        }
+        depth.unshift(node.at);
+        node = node.index;
+      }
+      if (!node || !node.name || !depth.length) { return; }
+      var entry = lookUp(scope, node.name);
+      if (!entry) { return; }
+      var made = kind;
+      for (var d = depth.length - 1; d >= 0; d--) {
+        var inner = d === 0 ? entry.kind : "";
+        var keyKind = kindIn(depth[d], scope, prog);
+        made = (d === 0 && isTableKind(inner)) || (keyKind === "text" && !isListKind(inner))
+             ? "table:" + keyKind + ":" + made : "list:" + made;
+      }
+      learn(entry, made);
     }
     for (var pass = 0; pass < 8 && moved; pass++) {
       moved = false;
       prog.scopes.forEach(function (scope) {
-        function kind(src) { return kindIn(tree(src), scope, prog); }
+        function kind(src) {
+          var node = tree(src);
+          return node.str === "" ? "none" : kindIn(node, scope, prog);
+        }
         function calls(node) {
           eachCall(node, function (call) {
             var mod = prog.byName[lowered(call.call)];
             if (!mod) { return; }
             call.args.forEach(function (arg, i) {
-              if (mod.params[i]) { learn(mod.params[i].entry, kindIn(arg, scope, prog)); }
+              if (mod.params[i]) { learn(mod.params[i].entry, arg.str === "" ? "none" : kindIn(arg, scope, prog)); }
             });
+          });
+          // sort(people, byAge): byAge is handed two people, or one
+          eachCall(node, function (call) {
+            var low = lowered(call.call), by = call.args[1];
+            if (!/^(sort|sorted|min|max)$/.test(low) || !by || !by.name || by.field) { return; }
+            var mod = prog.byName[lowered(by.name)];
+            if (!mod || lookUp(scope, by.name)) { return; }
+            var items = kindIn(call.args[0], scope, prog);
+            var one = isTableKind(items) ? tableKey(items) : items === "text" ? "text" : elemOf(items);
+            mod.params.slice(0, 2).forEach(function (p) { learn(p.entry, one); });
           });
         }
         eachStep(scope.items, function (item) {
           var home = item.scope === "global" ? prog.shared : scope;
           if (item.op === "declare" && item.expr) {
-            learn(home.names[lowered(item.var)], kind(item.expr));
+            var given = kind(item.expr);
+            // Declare Boolean seen[h][w] = True: a fill, not the whole of it
+            if ((item.dims || []).some(function (d) { return String(d).trim(); }) && !isListKind(given)) {
+              (item.dims || []).forEach(function () { given = "list:" + given; });
+            }
+            learn(home.names[lowered(item.var)], given);
           }
-          if (item.op === "set") { learn(lookUp(scope, bareName(item.var)), kind(item.expr)); }
+          if (item.op === "set") {
+            if (R_JUST_A_NAME.test(item["var"] || "")) { learn(lookUp(scope, bareName(item.var)), kind(item.expr)); }
+            else { learnPlace(scope, item["var"], kind(item.expr)); }
+          }
+          if (item.op === "foreach") {
+            learn(lookUp(scope, item["var"]), elemOf(kind(item.over)) || (kind(item.over) === "text" ? "text" : ""));
+          }
+          if (item.op === "call") {
+            // append(names, "Ada"): names is a list of words
+            var made = callOf(item), puts = PUTS_IN[lowered(made.call)];
+            if (puts && made.args[0] && made.args[0].name && made.args[puts]) {
+              learn(lookUp(scope, made.args[0].name), "list:" + kindIn(made.args[puts], scope, prog));
+            }
+            if (lowered(made.call) === "extend" && made.args[0] && made.args[0].name && made.args[1]) {
+              learn(lookUp(scope, made.args[0].name), kindIn(made.args[1], scope, prog));
+            }
+          }
           if (item.op === "for") {
             var set = statementOf(item.init || "");
             if (set.op === "set") { learn(lookUp(scope, set.var), kind(set.expr) || "int"); }
           }
           if (item.op === "return" && item.expr && scope.mod && !scope.mod.said) {
-            var gives = kind(item.expr);
-            var now = !scope.mod.gives ? gives
-                    : (gives && gives !== scope.mod.gives
-                       ? bothKinds(scope.mod.gives, gives) || "text" : scope.mod.gives);
+            var now = joinKinds(scope.mod.gives, kind(item.expr));
             if (now !== scope.mod.gives) { scope.mod.gives = now; moved = true; }
           }
           sumsOf(item).forEach(function (src) { calls(tree(src)); });
@@ -456,9 +796,17 @@
 
   function eachCall(node, fn) {          // every call in it, inner ones too
     if (!node) { return; }
-    if (node.call) { fn(node); node.args.forEach(function (a) { eachCall(a, fn); }); }
-    eachCall(node.group, fn); eachCall(node.of, fn);
-    eachCall(node.left, fn); eachCall(node.right, fn);
+    if (node.call) { fn(node); }
+    kidsOf(node).forEach(function (kid) { eachCall(kid, fn); });
+  }
+
+  // What an expression is made of, one level down: the sides of a sum,
+  // what a call is handed, what is in a list, the list a place is in.
+  function kidsOf(node) {
+    var out = [node.group, node.of, node.left, node.right, node.index, node.at, node.field]
+                .concat(node.args || [], node.list || []);
+    (node.table || []).forEach(function (pair) { out.push(pair[0], pair[1]); });
+    return out.filter(Boolean);
   }
 
   // What is left is what the program never says outright -- above all a
@@ -477,8 +825,8 @@
       }
       function unknown(node) {
         node = within(node);
-        var entry = node && node.name ? lookUp(scope, node.name) : null;
-        return (entry && !entry.kind) ? entry : null;
+        var entry = node && node.name && !node.field ? lookUp(scope, node.name) : null;
+        return (entry && (!entry.kind || entry.kind === "none")) ? entry : null;
       }
       function hint(node, kind) {
         var entry = unknown(node);
@@ -506,6 +854,13 @@
           });
           return;
         }
+        // this.r: whatever this is, it has an r
+        if (node.field) {
+          if (!/^(length|size|count)$/i.test(node.name)) { hint(node.field, "rec:"); }
+          look(node.field);
+          return;
+        }
+        if (node.index) { look(node.index); look(node.at); return; }
         if (!node.op) { return; }
         var a = kindIn(node.left, scope, prog), b = kindIn(node.right, scope, prog);
         if (R_NUMBER_OPS.test(node.op)) {
@@ -535,8 +890,12 @@
       });
       Object.keys(hints).forEach(function (low) {
         var got = hints[low].kinds;
+        // handed to what takes a record, or a list: that, where nothing
+        // says it is a number or words
+        var held = "";
+        Object.keys(got).forEach(function (k) { if (compoundKind(k)) { held = joinKinds(held, k); } });
         hints[low].entry.kind = got.text ? "text" : got.real ? "real"
-                              : got.int ? "int" : got.bool ? "bool" : "";
+                              : got.int ? "int" : got.bool ? "bool" : held;
       });
     });
   }
@@ -555,7 +914,8 @@
   function countedIn(items, low, prog) { // mentions inside Fors that count with it
     var n = 0;
     (items || []).forEach(function (item) {
-      if (item.op === "for" && lowered(statementOf(item.init || "").var) === low) {
+      if ((item.op === "for" && lowered(statementOf(item.init || "").var) === low) ||
+          (item.op === "foreach" && lowered(item["var"]) === low)) {
         n += mentionsIn([item], low, prog);
         return;
       }

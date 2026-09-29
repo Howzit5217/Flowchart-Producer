@@ -288,6 +288,21 @@ chart, and that way round is compiled and run as well — which is the half of
 a split nothing can check by reading: whether what the files say about one
 another is true.
 
+Lists, tables and records are written out as each language keeps them: a
+Python list and dict, a JavaScript array and `Map`, a Java `ArrayList` and
+`LinkedHashMap`, a C# `List<T>` and `Dictionary`, a C++ `std::vector` and
+`std::map`. `18-ahead.js` works out what each holds (`list:int`,
+`table:text:real`, `rec:Point`, and `any` for a list of `1` and `"one"`), and
+the built-ins — `append`, `sort`, `join`, `keys` and the rest — are in each
+language's block as `lists`, with the small helpers they lean on added to the
+file only when used. A list prints the way the runner prints one
+(`['a', 1]`). In the typed languages every kind of record is a class made
+from one `Record` class that holds every field, so a `Square` goes wherever a
+`Rect` goes. A `""` standing for nothing-yet (Python's `None`) is `null`
+there, and a list a C++ function changes is passed by reference.
+`tests/run.py` writes every program `tests/coded.py` and
+`tests/coded_more.py` read in back out in every language and runs it.
+
 ## Reading code and stories in
 
 The page reads in as well as writing out, two ways, and both come to the
@@ -303,11 +318,12 @@ code -- read as the one program: what the files call each other by
 (`Shared.sold`, `helpers.area(w, h)`) is dropped, the file that does the
 work at the top is main, and the others' set-up runs first.  It reads: Declares at
 the top, `Set` for every change, `For i = 1 To 10` for a counting loop,
-`Do ... Until` for Python's `while True` with a break at the foot.  What it
-can draw but the runner cannot run -- a list, a method of an object -- is
-written down anyway and noted; what no chart can say (a class, a lambda, a
-`break` from the middle of a loop that is not the ask-then-check shape) is
-refused with the line it is on.  `tests/run.py` writes every program on the
+`Do ... Until` for Python's `while True` with a break at the foot.  Lists,
+dictionaries and maps become the pseudocode's lists (`[1, 2]`, `grid[y][x]`)
+and tables (`{"tea": 2}`); a class becomes a record (`New Point`, `p.x`) with
+a Function that makes one and a Module for each method; a nested function,
+a lambda, a `break` or a `return` from the middle of a loop are lifted or
+unwound into charts that do the same.  `tests/run.py` writes every program on the
 shelf out in all five languages with the page's own writer, reads each one
 back, runs it, and compares -- as one file and as a file each -- and every
 one has to be taken for the language it is in; `tests/coded.py` does the

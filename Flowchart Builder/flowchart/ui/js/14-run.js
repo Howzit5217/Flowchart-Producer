@@ -324,7 +324,7 @@
     if (v === null || v === undefined) { return TXT.held_none; }
     if (typeof v === "string") { return '"' + v + '"'; }
     if (typeof v === "boolean") { return v ? TXT.yes : TXT.no; }
-    if (Array.isArray(v)) { return "[" + v.map(watchSays).join(", ") + "]"; }
+    if (Array.isArray(v) || isTable(v) || v instanceof FnRef) { return readable(v); }
     return String(v);
   }
 
@@ -684,8 +684,8 @@
       var c = parts[i];
       if (quote) { now += c; if (c === quote) { quote = null; } continue; }
       if (c === '"' || c === "'") { quote = c; now += c; continue; }
-      if (c === "(") { deep++; }
-      if (c === ")") { deep--; }
+      if (c === "(" || c === "[" || c === "{") { deep++; }
+      if (c === ")" || c === "]" || c === "}") { deep--; }
       if (c === "," && !deep) { out.push(now); now = ""; continue; }
       now += c;
     }
@@ -741,7 +741,9 @@
       said += readable(await value(bits[i], where),
                        cashy(bits[i]) || R_CASH_SIGN.test(said));
     }
-    talk(said);
+    // Words with a line break in them -- join(rows, NewLine) -- are that
+    // many lines on the tape, as they are on any screen.
+    said.split("\n").forEach(function (one) { talk(one); });
   }
 
   function readable(v, money) {
@@ -754,6 +756,19 @@
                                                 : String(Math.round(v * 1e6) / 1e6);
     }
     if (typeof v === "boolean") { return v ? TXT.yes : TXT.no; }
+    // A list prints the way Python prints one, words in quotes: ['a', 1].
+    // A table the same, {'tea': 2}, and a record by its kind: Point(x=1, y=2).
+    if (Array.isArray(v)) { return "[" + v.map(shownIn).join(", ") + "]"; }
+    if (isTable(v)) {
+      var bits = [];
+      v.map.forEach(function (e) {
+        bits.push(v.kind ? String(e[0]) + "=" + shownIn(e[1])
+                         : shownIn(e[0]) + ": " + shownIn(e[1]));
+      });
+      return v.kind ? v.kind + "(" + bits.join(", ") + ")" : "{" + bits.join(", ") + "}";
+    }
+    if (v instanceof FnRef) { return v.mod ? v.mod.name + "()" : v.built + "()"; }
+    if (v === undefined || v === null) { return ""; }
     return String(v);
   }
 
@@ -789,7 +804,9 @@
         var into = resumeTo.path[resumeTo.at];   // how items[i] is gone back into
         i = here.i = step.i;
         if (into || resumeTo.phase) {
-          var back = into || { phase: resumeTo.phase };
+          // `self` is what was kept about the statement itself: how far
+          // round a For Each it was (29-saves.js)
+          var back = Object.assign({}, into || { phase: resumeTo.phase }, { self: step });
           if (!into) { resumeTo = null; }        // standing at a Do's test: arrived
           await doStep(items[i], where, back);
           watchNow(where);
@@ -838,15 +855,14 @@
       else switch (item.op) {
         case "declare":
           noteCash(item.var, item.type);
-          declareIn(where, item.var,
-                    item.expr ? await value(item.expr, where)
-                              : (/int|real|num|float|double|currency|money|decimal/i
-                                 .test(item.type) ? 0 : ""),
-                    item.scope === "global");
+          declareIn(where, item.var, await declared(item, where), item.scope === "global");
           break;
         case "set":
-          putIn(where, item.var, await value(item.expr, where),
-                item.scope === "global");
+          await assignTo(where, item.var, await value(item.expr, where),
+                         item.scope === "global");
+          break;
+        case "foreach":
+          await roundEach(item, where, 0, itemsOf(await value(item.over, where)));
           break;
         case "display":
           await displayed(item, where);
@@ -861,8 +877,8 @@
           var isNum = said !== "" && !isNaN(asNum) &&
                       (NUMERIC[item.var] ? R_READS_NUM.test(said)
                                          : String(asNum) === said);
-          putIn(where, item.var, isNum ? asNum : typed,
-                item.scope === "global");
+          await assignTo(where, item.var, isNum ? asNum : typed,
+                         item.scope === "global");
           break;
         case "wait":
           await naps(await value(item.expr || "0", where), item.unit);
@@ -916,6 +932,103 @@
       throw blame(thrown, item);
     } finally {
       doingNow = was;
+    }
+  }
+
+  // What a name declared with nothing in it starts out holding.
+  function blankOf(type) {
+    if (/int|real|num|float|double|currency|money|decimal/i.test(type || "")) { return 0; }
+    if (/^bool/i.test(type || "")) { return false; }
+    return "";
+  }
+
+  // What a Declare starts a name out holding: its value, a list of the
+  // sizes it gives -- filled with the value, where one is given that is not
+  // itself a list -- or nothing yet.
+  async function declared(item, where) {
+    var dims = item.dims || [];
+    var sizedTo = dims.some(function (d) { return String(d).trim(); });
+    if (item.expr) {
+      var v = await value(item.expr, where);
+      if (!sizedTo || Array.isArray(v)) { return v; }
+      return await sized(dims, item.type, where, v);
+    }
+    if (dims.length) { return await sized(dims, item.type, where); }
+    return blankOf(item.type);
+  }
+
+  // Declare Boolean seen[rows][cols]: a list of rows lists of cols Falses.
+  // Declare Integer scores[]: a list with nothing in it yet.
+  async function sized(dims, type, where, fill) {
+    var sizes = [];
+    for (var i = 0; i < dims.length; i++) {
+      if (!String(dims[i]).trim()) { break; }
+      sizes.push(Math.max(0, Math.floor(num(await value(dims[i], where)))));
+    }
+    return sizes.length ? filledList(sizes, fill === undefined ? blankOf(type) : fill) : [];
+  }
+
+  // Where a Set or an Input puts what it has: a name, or a place inside
+  // what a name holds -- grid[y][x], p.x, prices["tea"].  The places on
+  // the way are worked out first, left to right, and the last one is put
+  // into rather than taken out of.
+  async function assignTo(where, target, v, global) {
+    var text = String(target).trim();
+    var head = /^[A-Za-z_]\w*/.exec(text);
+    if (!head || head[0].length === text.length) {
+      putIn(where, text, v, global);
+      return;
+    }
+    var box = holderOf(where, head[0]);
+    if (!box) { throw wrong(say("r_unknown", { name: head[0] }), { from: 0, to: head[0].length }); }
+    var holder = box[sameName(box, head[0])];
+    var i = head[0].length, steps = [];
+    while (i < text.length) {
+      var c = text[i];
+      if (/\s/.test(c)) { i++; continue; }
+      if (c === ".") {
+        var nm = /^\.\s*([A-Za-z_]\w*)/.exec(text.slice(i));
+        if (!nm) { break; }
+        steps.push({ field: nm[1] });
+        i += nm[0].length;
+        continue;
+      }
+      if (c !== "[") { break; }
+      var deep = 0, quote = null, j = i;
+      for (; j < text.length; j++) {
+        var d = text[j];
+        if (quote) { if (d === quote) { quote = null; } continue; }
+        if (d === '"' || d === "'") { quote = d; continue; }
+        if (d === "[" || d === "(" || d === "{") { deep++; }
+        if (d === "]" || d === ")" || d === "}") { deep--; if (!deep) { break; } }
+      }
+      if (j >= text.length) { throw wrong(TXT.r_open_square, { from: i, to: i + 1 }); }
+      steps.push({ at: await value(text.slice(i + 1, j), where) });
+      i = j + 1;
+    }
+    if (i < text.length) {
+      throw wrong(say("r_left_over", { bit: text.slice(i) }), { from: i, to: text.length });
+    }
+    for (var k = 0; k < steps.length - 1; k++) {
+      holder = "field" in steps[k] ? fieldOf(holder, steps[k].field) : itemOf(holder, steps[k].at);
+    }
+    var last = steps[steps.length - 1];
+    putItem(holder, "field" in last ? last.field : last.at, v);
+  }
+
+  // For Each item In list, going round: the name is given each item in
+  // turn, the list as it stands each time round -- one added to it inside
+  // the loop is gone round as well, the way Python goes round a list.
+  // `from` and `over` are for going on from where a kept run stopped.
+  async function roundEach(item, where, from, over) {
+    var here = trail[trail.length - 1];
+    for (var k = from; k < over.length; k++) {
+      if (here) { here.each = { k: k, over: over }; }
+      putIn(where, item["var"], over[k], item.scope === "global");
+      await tick();
+      lightUp(item);
+      if (following()) { await standing("eachtop", hold); }
+      await runSteps(item.body, where);
     }
   }
 
@@ -992,6 +1105,19 @@
         await doStep(statementOf(item.step, item), where);
         await roundFor(item, where);
         return;
+      case "foreach": {
+        // how far round it was, and the very list it was going round
+        var kept = back.self || {};
+        var over = Array.isArray(kept.over) ? kept.over
+                 : itemsOf(await value(item.over, where));
+        var k = kept.k || 0;
+        if (back.phase === "eachtop") { await roundEach(item, where, k, over); return; }
+        var here = trail[trail.length - 1];
+        if (here) { here.each = { k: k, over: over }; }
+        await runSteps(item.body, where);
+        await roundEach(item, where, k + 1, over);
+        return;
+      }
       case "call":
         var mod = (AST.modules || []).filter(function (m) {
           return m.name.toLowerCase() === String(back.mod).toLowerCase();

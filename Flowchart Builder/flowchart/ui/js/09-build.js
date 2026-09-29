@@ -1060,6 +1060,12 @@
     // what the words amount to says what the program does, where the words
     // themselves are sentences, not a program to be read.
     var named = titleFor(toldText || code);
+    // Read from code: its own name for itself, before what the chart does
+    var hint = langTitle();
+    if (hint) {
+      var notes = topNotes(code);
+      if (!notes.heading && !purposeTitle(notes.about)) { named = asTitle(titleWords(nameWords(hint))); }
+    }
     return named ? { text: named, guess: true } : null;
   }
 

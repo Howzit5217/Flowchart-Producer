@@ -2234,19 +2234,22 @@ def _():
 @check("code written by hand reads in, and runs the same")
 def _():
     """Code the way people write it, not the way the page writes it: see
-    tests/coded.py, where each program says what it prints."""
+    tests/coded.py and tests/coded_more.py, where each program says what it
+    prints."""
     if not node_there():
         return None, "node is not installed -- skipped"
     import coded
+    import coded_more
+    everything = coded.CODED + coded_more.CODED
     folder = tempfile.mkdtemp(prefix="_out-coded-", dir=HERE)
     wrong = []
     try:
         # no language given: the reader is to find it from the code
         back = read_code_in([{"files": [{"name": n, "text": t} for n, t in code]}
                              if isinstance(code, list) else {"code": code}
-                             for name, lang, code, typed, want in coded.CODED], folder)
+                             for name, lang, code, typed, want in everything], folder)
         cases, kept = [], []
-        for (name, lang, code, typed, want), got in zip(coded.CODED, back):
+        for (name, lang, code, typed, want), got in zip(everything, back):
             if got.get("detected") != lang:
                 wrong.append("%s: taken for %s, not %s" % (name, got.get("detected"), lang))
             if "error" in got:
@@ -2264,9 +2267,60 @@ def _():
     finally:
         shutil.rmtree(folder, ignore_errors=True)
     return not wrong, "%d programs in %d languages, %d in several files%s" % (
-        len(coded.CODED), len(set(c[1] for c in coded.CODED)),
-        len([c for c in coded.CODED if isinstance(c[2], list)]),
+        len(everything), len(set(c[1] for c in everything)),
+        len([c for c in everything if isinstance(c[2], list)]),
         "" if not wrong else "\n       " + "\n       ".join(wrong[:6]))
+
+
+# Where the runner and a real language part company over the same line of
+# pseudocode, and the code is right to follow the language: int("x") is
+# nought to the runner, and an error in Python and Java -- which is what a
+# JavaScript parseInt read in comes to when it is written out again.
+WRITTEN_DIFFERS = {("a switch with a fall through and a break inside", "python"),
+                   ("a switch with a fall through and a break inside", "java")}
+
+
+@check("code read in is written back out in every language, and runs the same")
+def _():
+    """The other half of the Code tab: what tests/coded.py and
+    tests/coded_more.py read in -- lists, tables, classes and all -- written
+    out again in every language by Translate, really run, and compared with
+    what the runner printed."""
+    if not node_there():
+        return None, "node is not installed -- skipped"
+    import coded
+    import coded_more
+    everything = coded.CODED + coded_more.CODED
+    folder = tempfile.mkdtemp(prefix="_out-translated-", dir=HERE)
+    try:
+        back = read_code_in([{"files": [{"name": n, "text": t} for n, t in code]}
+                             if isinstance(code, list) else {"code": code}
+                             for name, lang, code, typed, want in everything], folder)
+        cases = []
+        for (name, lang, code, typed, want), got in zip(everything, back):
+            if "error" not in got:
+                cases.append({"name": name + ", from " + lang, "typed": typed,
+                              "title": "Translated %02d" % len(cases),
+                              "ast": read_as_data(got["text"]), "from": name})
+        results = shelf_run(cases, folder, "translated")
+        wrong, tally = written.marked(cases, results, folder)
+    except RuntimeError as e:
+        return False, str(e)
+    finally:
+        shutil.rmtree(folder, ignore_errors=True)
+    wrong = [line for line in wrong
+             if not any(line.startswith("%s, from " % name) and ", as %s" % lang in line.split("\n")[0]
+                        for name, lang in WRITTEN_DIFFERS)]
+    said = []
+    for lang in sorted(tally):
+        count = tally[lang]
+        said.append("%s %s" % (lang, "not here" if count["skip"] and not count["right"]
+                               else "%d" % count["right"] if not count["built"]
+                               else "%d (and %d only built)" % (count["right"], count["built"])))
+    note = "%d programs: %s" % (len(cases), ", ".join(said))
+    if wrong:
+        note += "\n       " + "\n       ".join(wrong[:6])
+    return not wrong, note
 
 
 @check("a program told in plain words runs as the program it tells")

@@ -182,22 +182,62 @@
   // What a run holds is numbers, words and Trues and Falses, which write
   // down as they are -- all but the numbers that are not numbers, 0/0 and
   // the like, which JSON has no way to hold and so are kept as their names.
-  function packVars(box) {
+  //
+  // A list or a table is written down as what is in it, once: two names
+  // holding the same list -- a module handed it, a list inside another --
+  // still hold the one list when the run is picked up again, so `seen`
+  // (and `made`, going back) is shared by everything one save writes.
+  function packVars(box, seen) {
     var out = {};
+    seen = seen || new Map();
     Object.keys(box || {}).forEach(function (name) {
-      var v = box[name];
-      out[name] = typeof v === "number" && !isFinite(v) ? { odd: String(v) } : v;
+      out[name] = packOne(box[name], seen);
     });
     return out;
   }
+  function packOne(v, seen) {
+    if (typeof v === "number" && !isFinite(v)) { return { odd: String(v) }; }
+    if (Array.isArray(v) || isTable(v)) {
+      if (seen.has(v)) { return { ref: seen.get(v) }; }
+      var id = seen.size;
+      seen.set(v, id);
+      if (Array.isArray(v)) {
+        return { id: id, list: v.map(function (x) { return packOne(x, seen); }) };
+      }
+      return { id: id, kind: v.kind,
+               keys: v.keys().map(function (x) { return packOne(x, seen); }),
+               vals: v.values().map(function (x) { return packOne(x, seen); }) };
+    }
+    if (v instanceof FnRef) { return { fn: v.mod ? v.mod.name : "", built: v.built || "" }; }
+    return v;
+  }
 
-  function unpackVars(box) {
+  function unpackVars(box, made) {
     var out = {};
+    made = made || {};
     Object.keys(box || {}).forEach(function (name) {
-      var v = box[name];
-      out[name] = v && typeof v === "object" ? Number(v.odd) : v;
+      out[name] = unpackOne(box[name], made);
     });
     return out;
+  }
+  function unpackOne(v, made) {
+    if (!v || typeof v !== "object") { return v; }
+    if ("odd" in v) { return Number(v.odd); }
+    if ("ref" in v) { return made[v.ref]; }
+    if ("fn" in v) { return new FnRef(v.fn ? moduleNamed(v.fn) : null, v.built || null); }
+    if (Array.isArray(v.list)) {
+      var list = made[v.id] = [];
+      v.list.forEach(function (x) { list.push(unpackOne(x, made)); });
+      return list;
+    }
+    if (Array.isArray(v.keys)) {
+      var table = made[v.id] = new Table(v.kind);
+      v.keys.forEach(function (k, i) {
+        table.put(unpackOne(k, made), unpackOne((v.vals || [])[i], made));
+      });
+      return table;
+    }
+    return v;
   }
 
   // The last of what the run said, so that picking it up again shows what
@@ -243,15 +283,20 @@
   // from the middle of a sum (see plainCall in 14-run.js).
   function snapNow() {
     if (!running || stopping || !trail.length || !AST) { return null; }
-    var path = [];
+    var path = [], seen = new Map();
     for (var f = 0; f < trail.length; f++) {
       var fr = trail[f], item = fr.list[fr.i];
       if (!item) { return null; }
       var step = { i: fr.i, op: item.op, line: item.line || 0 };
+      // how far round a For Each it is, and the list it is going round
+      if (item.op === "foreach" && fr.each) {
+        step.k = fr.each.k;
+        step.over = packOne(fr.each.over, seen);
+      }
       if (f === 0) {
         if (fr.list !== AST.main) {      // no main flow: the first module is it
           if (!(AST.modules || [])[0] || fr.list !== AST.modules[0].body) { return null; }
-          step.vars = packVars(fr.where.vars);
+          step.vars = packVars(fr.where.vars, seen);
         }
       } else {
         var up = trail[f - 1], from = up.list[up.i];
@@ -261,7 +306,7 @@
           step["in"] = "call";
           step.mod = call.mod;
           step.given = call.given;
-          step.vars = packVars(fr.where.vars);
+          step.vars = packVars(fr.where.vars, seen);
         } else if (from.then === fr.list) { step["in"] = "then"; }
         else if (from["else"] === fr.list) { step["in"] = "else"; }
         else if (from.body === fr.list) { step["in"] = "body"; }
@@ -275,8 +320,8 @@
       path.push(step);
     }
     return { path: path, phase: trail[trail.length - 1].phase || "",
-             main: packVars(runWhere ? runWhere.vars : {}),
-             globals: packVars(GLOBALS),
+             main: packVars(runWhere ? runWhere.vars : {}, seen),
+             globals: packVars(GLOBALS, seen),
              cash: Object.keys(CASH), numeric: Object.keys(NUMERIC),
              tape: tapeNow() };
   }
@@ -300,7 +345,7 @@
       } else if (/^(then|else)$/.test(step["in"])) {
         list = item.op === "if" ? (item[step["in"]] || []) : null;
       } else if (step["in"] === "body") {
-        list = /^(while|dowhile|for)$/.test(item.op) ? item.body : null;
+        list = /^(while|dowhile|for|foreach)$/.test(item.op) ? item.body : null;
       }
       if (!Array.isArray(list)) { return false; }
       item = list[step.i];
@@ -308,6 +353,7 @@
     }
     if (snap.phase === "dotest") { return item.op === "dowhile"; }
     if (snap.phase === "forbody") { return item.op === "for"; }
+    if (snap.phase === "eachtop") { return item.op === "foreach"; }
     return !snap.phase;
   }
 
@@ -322,12 +368,19 @@
   // on the tape the moment the run begins.  `noted` says so on the tape as
   // well; a run still to be caught up with says so when it has been.
   function backFrom(snap, noted) {
+    var made = {};
+    // in the order they were written down, so a list is made before
+    // anything that refers back to it
+    var path = snap.path.map(function (step) {
+      var out = Object.assign({}, step);
+      if (step.over !== undefined) { out.over = unpackOne(step.over, made); }
+      if (step.vars) { out.vars = unpackVars(step.vars, made); }
+      return out;
+    });
     return {
-      path: snap.path.map(function (step) {
-        return step.vars ? Object.assign({}, step, { vars: unpackVars(step.vars) }) : step;
-      }),
+      path: path,
       at: 0, phase: snap.phase || "",
-      main: unpackVars(snap.main), globals: unpackVars(snap.globals),
+      main: unpackVars(snap.main, made), globals: unpackVars(snap.globals, made),
       cash: nameSet(snap.cash), numeric: nameSet(snap.numeric),
       start: function (where) {
         putTape(snap.tape);
@@ -344,8 +397,9 @@
     el("#tape").innerHTML = "";
     watchClear();
     putTape(snap.tape);
-    GLOBALS = unpackVars(snap.globals);
-    runWhere = { vars: unpackVars(snap.main), name: "main" };
+    var made = {};
+    runWhere = { vars: unpackVars(snap.main, made), name: "main" };
+    GLOBALS = unpackVars(snap.globals, made);
     watchNow(runWhere);
   }
 
@@ -373,9 +427,10 @@
       };
     }
     if (!runWhere) { return null; }      // not run since this chart was drawn
+    var kept = new Map();
     return { live: false, waits: "",
-             snap: { done: true, main: packVars(runWhere.vars),
-                     globals: packVars(GLOBALS), tape: tapeNow() } };
+             snap: { done: true, main: packVars(runWhere.vars, kept),
+                     globals: packVars(GLOBALS, kept), tape: tapeNow() } };
   }
 
   async function resumeRun(record) {

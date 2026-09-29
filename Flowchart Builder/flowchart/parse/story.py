@@ -48,15 +48,21 @@ TOLD = [""]
 # line is enough: then the whole text is read as a story, and the lines
 # that were pseudocode already come through it untouched.
 R_TOKEN = re.compile(r'\s*(?:"[^"]*"|\'[^\']*\'|\d+(?:\.\d+)?|[A-Za-z_][\w.]*|'
-                     r'<=|>=|<>|!=|==|&&|\|\||[-+*/^%&=<>(),\[\]])')
+                     r'\.[A-Za-z_][\w.]*|'
+                     r'<=|>=|<>|!=|==|&&|\|\||[-+*/^%&=<>(),\[\]{}:])')
 WORD_OPS = {"and", "or", "mod", "div"}
 BIN_OPS = {"+", "-", "*", "/", "^", "%", "&", "=", "==", "!=", "<>", "<", ">",
            "<=", ">=", "&&", "||"}
 TYPES = r"(?:integer|int|real|float|double|string|str|char|boolean|bool|number|" \
         r"currency|money|decimal)"
-R_DECL_LINE = re.compile(r"^(?:declare|constant|const)\s+(?:" + TYPES + r"\s+)?(.+)$", re.I)
-R_NAME_LIST = re.compile(r'^(?:"[^"]*"\s*,\s*)?[A-Za-z_]\w*(?:\[[^\]]*\])?'
-                         r'(?:\s*,\s*[A-Za-z_]\w*(?:\[[^\]]*\])?)*$')
+# The type can be the name of a kind of record, Declare Point corner, so
+# a first word is a type whenever another name follows it.
+R_DECL_LINE = re.compile(r"^(?:declare|constant|const)\s+(?:" + TYPES +
+                         r"\s+|[A-Za-z_]\w*\s+(?=[A-Za-z_]))?(.+)$", re.I)
+# A name, or a place in what a name holds: scores[i], grid[y][x], p.x.
+PLACE = r'[A-Za-z_]\w*(?:\[[^\]]*\]|\.[A-Za-z_]\w*)*'
+R_NAME_LIST = re.compile(r'^(?:"[^"]*"\s*,\s*)?' + PLACE +
+                         r'(?:\s*,\s*' + PLACE + r')*$')
 R_SIGNATURE = re.compile(r"^(?:[\w\[\]]+\s+)?\w+\s*(?:\(.*\))?"
                          r"(?:\s*(?:as|returns?|->|:)\s*[\w\[\]]+)?$", re.I)
 R_BARE_CALL = re.compile(r"^[A-Za-z_]\w*\s*\(.*\)$")
@@ -80,21 +86,26 @@ def sum_reads(text):
         is_name = bool(re.match(r"[A-Za-z_]", tok)) and low not in WORD_OPS and low != "not"
         operand = is_name or tok[0] in "\"'" or tok[0].isdigit()
         if want:
-            if tok in ("(", "[") or tok in ("-", "+") or low == "not":
-                deep += tok in ("(", "[")
-            elif tok in (")", "]") and prev in ("(", "["):
+            if tok in ("(", "[", "{") or tok in ("-", "+") or low == "not":
+                deep += tok in ("(", "[", "{")
+            elif tok in (")", "]", "}") and prev in ("(", "[", "{"):
                 deep -= 1
                 want = False
+            elif low == "new" and prev.lower() != "new":
+                pass                        # New Point: the kind comes next
             elif operand:
                 want = False
             else:
                 return False
         else:
-            if tok in BIN_OPS or low in WORD_OPS or tok == ",":
+            if tok in BIN_OPS or low in WORD_OPS or tok == "," or (tok == ":" and deep):
                 want = True
-            elif tok in (")", "]"):
+            elif tok in (")", "]", "}"):
                 deep -= 1
-            elif tok in ("(", "[") and (prev[:1].isalpha() or prev[:1] == "_" or prev in (")", "]")):
+            elif tok[0] == "." and len(tok) > 1:
+                pass                        # rows[k].cells: a part of it
+            elif tok in ("(", "[") and (prev[:1].isalpha() or prev[:1] == "_" or
+                                        prev[:1] == "." or prev in (")", "]")):
                 deep += 1
                 want = True
             else:
@@ -159,7 +170,7 @@ def reads_as_pseudocode(line):
             return False
         for one in split_top(m.group(1)):
             name, _, value = one.partition("=")
-            if not re.match(r"^[A-Za-z_]\w*(?:\[[^\]]*\])?$", name.strip()):
+            if not re.match(r"^[A-Za-z_]\w*(?:\s*\[[^\]]*\])*$", name.strip()):
                 return False
             if value and not sum_reads(value):
                 return False
@@ -173,7 +184,8 @@ def reads_as_pseudocode(line):
         rest = s[len("return"):].strip()
         return not rest or sum_reads(rest)
     if R_CALL.match(s):
-        return bool(re.match(r"^call\s+[A-Za-z_]\w*\s*(?:\(.*\))?$", s, re.I))
+        return (bool(re.match(r"^call\s+[A-Za-z_][\w.]*\s*(?:\(.*\))?$", s, re.I)) and
+                sum_reads(s[4:]))
     if R_OUT.match(s):
         rest = s.split(None, 1)[1] if " " in s else ""
         return not rest or sum_reads(rest)
@@ -199,9 +211,9 @@ def split_top(text, sep=","):
             continue
         if c in "\"'":
             quote = c
-        elif c in "([":
+        elif c in "([{":
             deep += 1
-        elif c in ")]":
+        elif c in ")]}":
             deep -= 1
         elif c == sep and deep == 0:
             out.append(bit)

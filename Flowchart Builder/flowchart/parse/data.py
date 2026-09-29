@@ -14,18 +14,31 @@ from ..words.lookup import word
 # same parse, written out as plain data, one entry per statement, so a page
 # can walk it -- run it, ask for the inputs it asks for, print what it
 # prints, and turn it into Python or Java.  Nothing here draws anything.
-R_SET = re.compile(r"^(?:set\s+|let\s+)?([A-Za-z_]\w*(?:\s*\[[^\]]*\])?)\s*"
+# What a Set puts its value into: a name, or a place inside what a name
+# holds -- scores[i], grid[y][x], p.x, rows[k].cells[j] -- with a bracket
+# allowed inside a bracket once, as in marks[order[i]].
+R_SET = re.compile(r"^(?:set\s+|let\s+)?([A-Za-z_]\w*"
+                   r"(?:\s*\[(?:[^\[\]]|\[[^\[\]]*\])*\]|\s*\.\s*[A-Za-z_]\w*)*)\s*"
                    r"(?:=|:=|<-)\s*(.+)$", re.I)
 # Currency and Money are types of their own, not spellings of Real: a
 # program that says a number is money is telling the runner and the code
 # writer to show it as money -- two places after the point, always -- and
 # nothing else gets dressed up that way.  Decimal is here so it parses, but
 # it means a plain number: a decimal average is not a price.
+#
+# The type can also be the name of a kind of record -- Declare Point p --
+# and a name can be a list, sized or not: Declare Boolean seen[rows][cols],
+# Declare Integer scores[] = [90, 85].  The sizes are group 4, as written.
 R_DECL_ONE = re.compile(
-    r"^(constant|const|declare)\s+(integer|real|string|char|boolean|bool|"
-    r"float|double|int|number|currency|money|decimal|var|let)?"
-    r"\s*([A-Za-z_]\w*)\s*"
+    r"^(constant|const|declare)\s+(?:(integer|real|string|char|boolean|bool|"
+    r"float|double|int|number|currency|money|decimal|var|let|[A-Za-z_]\w*)\s+"
+    r"(?=[A-Za-z_]))?"
+    r"([A-Za-z_]\w*)((?:\s*\[[^\]]*\])*)\s*"
     r"(?:(?:=|:=|<-)\s*(.+))?$", re.I)
+R_DIMS = re.compile(r"\[([^\]]*)\]")
+R_CALL_ANY = re.compile(r"^call\s+([A-Za-z_]\w*)", re.I)
+# For Each item In list -- and Of, and Every, which say the same
+R_EACH = re.compile(r"^for\s+(?:each|every)\s+([A-Za-z_]\w*)\s+(?:in|of)\s+(.+)$", re.I)
 R_CALL_NAME = re.compile(r"^call\s+([A-Za-z_]\w*)\s*\((.*)\)\s*$", re.I)
 R_BARE_CALL = re.compile(r"^([A-Za-z_]\w*)\s*\((.*)\)$")
 R_RETURN_VAL = re.compile(r"^return\b\s*(.*)$", re.I)
@@ -47,7 +60,9 @@ def statement_json(text, node_id, line, shape="", scope=""):
     if m and R_DECL.match(text):
         out.update(op="declare", const=m.group(1).lower() != "declare",
                    type=(m.group(2) or "").title(), var=m.group(3),
-                   expr=(m.group(4) or "").strip())
+                   expr=(m.group(5) or "").strip())
+        if m.group(4):
+            out["dims"] = [d.strip() for d in R_DIMS.findall(m.group(4))]
         return out
     if R_OUT.match(text):
         out.update(op="display", parts=text.split(None, 1)[1] if " " in text else "")
@@ -67,6 +82,10 @@ def statement_json(text, node_id, line, shape="", scope=""):
     m = R_BARE_CALL.match(text)
     if m:                               # greet(name), without the word Call
         out.update(op="call", name=m.group(1), args=m.group(2))
+        return out
+    m = R_CALL_ANY.match(text)
+    if m:                               # Call names.append(x): a call all the same
+        out.update(op="call", name=m.group(1), args="")
         return out
     if R_RETURN.match(text):
         out.update(op="return", expr=R_RETURN_VAL.match(text).group(1).strip())
@@ -144,6 +163,14 @@ def items_json(items):
                         "chained": bool(item.chained),
                         "then": items_json(item.then),
                         "else": items_json(item.orelse)})
+        elif (kind == "loop" and getattr(item, "hex", False) and
+              R_EACH.match((item.text or item.cond or "").strip())):
+            # For Each: a loop the runner goes round once for every item
+            m = R_EACH.match((item.text or item.cond or "").strip())
+            out.append({"op": "foreach", "id": item.node_id, "line": item.line,
+                        "text": item.text or item.cond, "var": m.group(1),
+                        "over": m.group(2).strip(),
+                        "body": items_json(item.body)})
         elif kind == "loop":
             out.append({"op": "dowhile" if item.style == "post" else "while",
                         "id": item.node_id, "line": item.line,

@@ -311,6 +311,11 @@
   // The code, read into the pseudocode box.  True when it could be; when it
   // could not, the pseudocode and the chart are left as they were and the
   // box says why.
+  // What the code says the program is called (codeToPseudo's title): used
+  // for the title where the pseudocode has no name of its own to give.
+  var langHint = "";
+  function langTitle() { return byLang ? langHint : ""; }
+
   function readLangIn() {
     if (!langBox() || !el("#code")) { return false; }
     langDetect();
@@ -325,6 +330,7 @@
     }
     langFrom = langKey();
     langMade = said.text;
+    langHint = said.title || "";
     if (el("#code").value !== said.text) {
       el("#code").value = said.text;
       newProgram();                      // named afresh from what it now says

@@ -9,9 +9,10 @@ run by the runner with the same answers typed in, and has to print what
 the program itself prints.
 
 `want` is what the runner prints for the pseudocode: a question asked on a
-line of its own, as a Display does, and numbers the runner's way (212, not
-212.0).  Word for word and number for number it is what the program itself
-prints -- found by running it, in Python, JavaScript, Java and C#, with the
+line of its own, as a Display does, and numbers the runner's way (100, not
+100.0) -- except where the program says how many places to show, which the
+runner shows as it was told (212.0).  Word for word and number for number it
+is what the program itself prints -- found by running it, in Python, JavaScript, Java and C#, with the
 same answers typed in; C++ had no compiler to hand, and its lines were
 worked out from the same program in Java.
 
@@ -38,7 +39,7 @@ def main():
         print("Mild")
 
 main()
-''', ["100"], ["Degrees Celsius? ", "100 C is 212 F", "Hot!"]),
+''', ["100"], ["Degrees Celsius? ", "100 C is 212.0 F", "Hot!"]),
 
     ("asking again until the answer will do", "python", '''
 while True:
@@ -318,7 +319,7 @@ while (i < people) {
     console.log("second person");
   }
 }
-''', ["50", "4"], ["Bill?", "People?", "Tip: 10", "Each pays 15", "second person"]),
+''', ["50", "4"], ["Bill?", "People?", "Tip: 10.00", "Each pays 15", "second person"]),
 
     # ---- programs in several files: the code is a list of (name, text) ----
     ("a main file and a module it imports", "python", [
