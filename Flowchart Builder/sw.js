@@ -13,7 +13,7 @@
 // Python itself is ten megabytes that only change when PYODIDE points at a
 // new version, and is kept across every other change so nobody fetches it
 // twice.  The names are what tell an old store from the current one.
-var OURS = "flowchart-builder-site-23481007a1";
+var OURS = "flowchart-builder-site-35ece4cd11";
 var PYTHON = "flowchart-builder-python-0.27.7";
 var PYODIDE = "https://cdn.jsdelivr.net/pyodide/v0.27.7/full/";
 var HOME = [
@@ -66,6 +66,13 @@ var HOME = [
 ];                     // our files, beside this one
 var PY_PARTS = ["pyodide.js", "pyodide.asm.js", "pyodide.asm.wasm",
                 "python_stdlib.zip", "pyodide-lock.json"];
+// The reader of letters a picture of a flowchart is read with (19-picture.js):
+// fetched the first time a picture is opened, never before, and kept the
+// same way Python is -- its addresses carry their versions too.
+var READING = "flowchart-builder-reading-1";
+var READERS = ["https://cdn.jsdelivr.net/npm/tesseract.js@",
+               "https://cdn.jsdelivr.net/npm/tesseract.js-core@",
+               "https://cdn.jsdelivr.net/npm/@tesseract.js-data/"];
 // How long to wait on the network for the page before opening the copy
 // kept here.  A phone on one bar of signal will get there in the end, and
 // the copy it fetches is kept for next time, but it should not sit on a
@@ -104,7 +111,7 @@ self.addEventListener("activate", function (ev) {
   ev.waitUntil(caches.keys().then(function (names) {
     return Promise.all(names.filter(function (name) {
       return name.indexOf("flowchart-builder-") === 0 &&
-             name !== OURS && name !== PYTHON;
+             name !== OURS && name !== PYTHON && name !== READING;
     }).map(function (name) { return caches.delete(name); }));
   }).then(function () { return self.clients.claim(); }));
 });
@@ -113,6 +120,10 @@ self.addEventListener("fetch", function (ev) {
   var ask = ev.request;
   if (ask.method !== "GET") { return; }
   if (ask.url.indexOf(PYODIDE) === 0) { ev.respondWith(pythonPart(ask)); return; }
+  if (READERS.some(function (at) { return ask.url.indexOf(at) === 0; })) {
+    ev.respondWith(keptPart(READING, ask));
+    return;
+  }
   if (ask.url.indexOf(self.registration.scope) !== 0) { return; }   // not ours
   ev.respondWith(freshest(ask));
 });
@@ -166,8 +177,10 @@ function freshest(ask) {
 // the open way (cors) rather than the way a script tag asks, because what
 // comes back the closed way is a sealed box the browser counts as several
 // megabytes whatever is in it.
-function pythonPart(ask) {
-  return caches.open(PYTHON).then(function (box) {
+function pythonPart(ask) { return keptPart(PYTHON, ask); }
+
+function keptPart(store, ask) {
+  return caches.open(store).then(function (box) {
     return box.match(ask.url, { ignoreVary: true }).then(function (had) {
       if (had) { return had; }
       return fetch(ask.url, { mode: "cors", credentials: "omit" }).then(function (got) {

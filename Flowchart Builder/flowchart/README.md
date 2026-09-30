@@ -113,6 +113,9 @@ the `@@CSS@@` and `@@JS@@` marks in `studio.html` and hands back the page.
 | `ui/js/18-from-code.js` | The other way: Python, Java, C#, C++ or JavaScript read back into pseudocode |
 | `ui/js/19-files.js` | Saving a design to a file, and opening it again |
 | `ui/js/19-folder.js` | Saving into a folder picked in Files instead of the browser's downloads |
+| `ui/js/19-diagrams.js` | Flowcharts made in other programs -- draw.io, Excalidraw, Visio and Lucidchart, yEd, Graphviz, PlantUML, Flowgorithm -- opened as drawings, colors and all |
+| `ui/js/19-picture.js` | A picture of a flowchart read back into a drawing: its shapes, arrows and colors, and its words read by Tesseract |
+| `ui/js/19-import.js` | Work brought in: a file, a folder, a zip, a drop or a paste, sorted and opened on the tab it belongs on |
 | `ui/js/20-menu.js` | The right button, and the menus opened beside its rows |
 | `ui/js/20-slide.js` | A finger drawn along a menu or a row of buttons, lighting each in turn |
 | `ui/js/21-typing.js` | Double-click to type in a shape |

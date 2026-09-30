@@ -54,6 +54,10 @@
     if (!note) { talk(what, bad ? "bad" : "note"); return; }
     note.className = bad ? "hint bad" : "hint";
     note.textContent = what;
+    // And at the foot of the page when Files is not open: the work came in
+    // by being dropped or pasted, or Files was put away to show it.
+    var menu = el("#save-menu");
+    if (what && menu && menu.hidden) { savedSay(what, bad); }
   }
 
   // Whatever was picked.  Two things are worth opening: a design saved from
@@ -66,6 +70,13 @@
     if (was && was.what === "flowchart-builder") {
       openProject(was);
       fileSays(say("f_opened", { name: name }));
+      return;
+    }
+    // A flowchart made in another program -- draw.io, Excalidraw, yEd,
+    // Graphviz, PlantUML -- opens as a drawing (19-diagrams.js).
+    var drawn = drawnIn(name, text);
+    if (drawn && drawn !== "mermaid" && drawn !== "markdown") {
+      openDrawn(name, text, drawn, function (ok, said) { fileSays(said, !ok); });
       return;
     }
     if (was) {                           // JSON, but somebody else's
@@ -290,6 +301,29 @@
     var bytes = new Uint8Array(raw.length);
     for (var i = 0; i < raw.length; i++) { bytes[i] = raw.charCodeAt(i); }
     return new TextDecoder().decode(bytes);
+  }
+
+  // ------------------------------------------------- the work, in a PNG --
+  // A PNG can carry notes beside its picture, which every picture viewer
+  // passes over.  The chart's PNG carries the work in one, written the way
+  // a link carries it -- so the PNG opened here again, dropped or pasted, is
+  // the work again rather than a picture of it (openPicture, 19-picture.js).
+  // draw.io and Excalidraw do the same with theirs.
+  function withWork(blob) {
+    var note;
+    try { note = intoLink(JSON.stringify(projectData())); } catch (e) { return Promise.resolve(blob); }
+    if (note.length > 8e6) { return Promise.resolve(blob); }
+    return blob.arrayBuffer().then(function (buf) {
+      var bytes = new Uint8Array(buf);
+      if (!isPng(bytes)) { return blob; }
+      var said = "tEXtflowchart-builder\u0000" + note, size = said.length - 4;
+      var chunk = new Uint8Array(12 + size), view = new DataView(chunk.buffer);
+      view.setUint32(0, size);
+      for (var i = 0; i < said.length; i++) { chunk[4 + i] = said.charCodeAt(i) & 255; }
+      view.setUint32(8 + size, crcOf(chunk.subarray(4, 8 + size)));
+      var afterHead = 8 + 12 + new DataView(buf).getUint32(8);
+      return new Blob([bytes.subarray(0, afterHead), chunk, bytes.subarray(afterHead)], { type: "image/png" });
+    }, function () { return blob; });
   }
 
   function shareLink() {

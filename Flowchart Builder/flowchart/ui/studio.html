@@ -114,7 +114,14 @@ __OPTIONS__
     <p class="hint" id="note" role="status" aria-live="polite"></p>
     <h3 data-w="f_work_head">__W(f_work_head)__</h3>
     <button class="btn wide file-btn" id="save-file" data-w="f_save">__W(f_save)__</button>
-    <button class="btn wide file-btn" id="open-file" data-w="f_open">__W(f_open)__</button>
+    <!-- Opening: a file -- code, pseudocode, a design saved here, a
+         flowchart from another program or a picture of one -- or a whole
+         folder of them.  Each opens on the tab it belongs on (19-import.js). -->
+    <button class="btn wide file-btn" id="open-file" data-w="f_open"
+            data-w-title="f_open_tip" title="__W(f_open_tip)__">__W(f_open)__</button>
+    <button class="btn wide file-btn" id="open-folder" data-w="f_folder"
+            data-w-title="f_folder_tip" title="__W(f_folder_tip)__">__W(f_folder)__</button>
+    <button class="btn wide file-btn" id="in-again" hidden></button>
     <p class="hint" id="file-note" role="status" aria-live="polite"></p>
     <!-- The whole program in a link.  There is no server here to keep
          anything on, so the link carries the work itself: send it and
@@ -123,7 +130,8 @@ __OPTIONS__
     <p class="hint" id="link-note"></p>
     <button class="btn wide file-btn" id="print-open" data-w="print_it">__W(print_it)__</button>
     <input type="file" id="file-in" hidden multiple
-           accept=".json,.txt,.text,.md,.pseudo,.flowchart,.mmd,.mermaid,.py,.java,.cs,.cpp,.cc,.cxx,.h,.hpp,.js,application/json,text/plain">
+           accept=".json,.txt,.text,.md,.markdown,.pseudo,.pseudocode,.psc,.alg,.algo,.flowchart,.mmd,.mermaid,.py,.pyw,.java,.cs,.cpp,.cc,.cxx,.h,.hpp,.js,.mjs,.cjs,.zip,.drawio,.dio,.xml,.excalidraw,.vsdx,.graphml,.gv,.dot,.puml,.plantuml,.pu,.wsd,.csv,.fprg,.svg,.png,.jpg,.jpeg,.gif,.webp,.bmp,image/*,application/json,text/plain">
+    <input type="file" id="folder-in" hidden multiple webkitdirectory>
     <!-- Where all of the above goes: the browser's downloads, or a folder
          picked here.  A setting rather than something to do, so it sits
          apart at the foot.  19-folder.js says which, and says so instead
@@ -784,6 +792,44 @@ __SVG__
 <!-- A file just written into the folder picked in Files, said for a
      moment, since the browser's downloads are not there to say it. -->
 <div id="saved-to" role="status" aria-live="polite" hidden></div>
+
+<!-- A folder, a zip or several files that hold more than one thing to
+     open: which one (19-import.js).  Laid out like the examples. -->
+<div id="in-over" hidden>
+  <div class="code-sheet more-sheet" role="dialog" aria-labelledby="in-head">
+    <div class="code-bar">
+      <span class="mark small" aria-hidden="true">
+        <svg viewBox="0 0 24 24">
+          <path d="M3 7.2A1.8 1.8 0 0 1 4.8 5.4h4.4l2.2 2.2h7.8A1.8 1.8 0 0 1 21 9.4v8.8a1.8 1.8 0 0 1-1.8 1.8H4.8A1.8 1.8 0 0 1 3 18.2z"/>
+          <path d="M12 11.2v5.4M9.4 14l2.6 2.6 2.6-2.6"/>
+        </svg>
+      </span>
+      <strong id="in-head" data-w="in_head">__W(in_head)__</strong>
+      <button class="btn small" id="in-cancel" data-w="in_cancel">__W(in_cancel)__</button>
+    </div>
+    <div class="more-body" id="in-body"></div>
+  </div>
+</div>
+
+<!-- Files dragged over the page from outside: the whole page takes them. -->
+<div id="drop-over" hidden>
+  <div class="drop-frame">
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M12 3.5v11M7.5 10l4.5 4.5 4.5-4.5"/>
+      <path d="M4 15.5v2.7A2.3 2.3 0 0 0 6.3 20.5h11.4a2.3 2.3 0 0 0 2.3-2.3v-2.7"/>
+    </svg>
+    <strong data-w="in_drop">__W(in_drop)__</strong>
+    <span data-w="in_drop_more">__W(in_drop_more)__</span>
+  </div>
+</div>
+
+<!-- Reading a picture or going through a folder takes a moment: said at
+     the foot of the page, with a way to stop. -->
+<div id="in-busy" role="status" aria-live="polite" hidden>
+  <span class="in-spin" aria-hidden="true"></span>
+  <span id="in-busy-said"></span>
+  <button class="btn small" id="in-busy-stop" data-w="r_stop">__W(r_stop)__</button>
+</div>
 
 <script>
 @@JS@@</script>

@@ -215,7 +215,7 @@
     button.disabled = true;
     button.textContent = TXT.rendering;
     function done() { button.disabled = false; button.textContent = TXT.dl_png; }
-    asPng(p).then(function (blob) {
+    asPng(p).then(withWork).then(function (blob) {
       done();
       save(blob, FILE + ".png");
     }, function (why) {
@@ -351,34 +351,14 @@
   if (el("#save-file")) {
     el("#save-file").onclick = saveProject;
     el("#open-file").onclick = function () { el("#file-in").click(); };
+    // Whatever was picked is sorted by what it is and opened on its own tab
+    // (19-import.js): several files of code are one program, a tab each;
+    // a flowchart from another program or a picture of one is a drawing.
     el("#file-in").onchange = function () {
       var picked = [].slice.call(el("#file-in").files || []);
-      var one = picked[0];
-      if (!one) { return; }
-      // Several files of code at once are one program in several files:
-      // all of them go into the Code tab, a tab each (32-code-side.js).
-      // Anything else opens the first, as it always has.
-      if (picked.length > 1 && picked.every(function (f) { return langOfFile(f.name); })) {
-        Promise.all(picked.map(function (f) {
-          return new Promise(function (done) {
-            var each = new FileReader();
-            each.onload = function () { done({ name: f.name, text: String(each.result) }); };
-            each.onerror = function () { done({ name: f.name, text: "" }); };
-            each.readAsText(f);
-          });
-        })).then(function (files) {
-          openCodeFiles(files);
-          fileSays(say("f_opened", { name: files.map(function (f) { return f.name; }).join(", ") }));
-        });
-        el("#file-in").value = "";
-        return;
-      }
-      var reader = new FileReader();
-      reader.onload = function () {
-        openFile(one.name, String(reader.result));
-      };
-      reader.readAsText(one);
       el("#file-in").value = "";
+      if (!picked.length) { return; }
+      broughtIn(picked.map(function (f) { return fileEntry(f, f.name); }), "");
     };
   }
 

@@ -221,6 +221,48 @@
     overflow-wrap: anywhere; pointer-events: none;
   }
   #saved-to.bad { color: var(--bad); }
+  /* Opening a folder, and another thing from the folder that asked which. */
+  #open-folder { --icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20' fill='none' stroke='black' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M2.5 6A1.5 1.5 0 0 1 4 4.5h3.5l2 2H16A1.5 1.5 0 0 1 17.5 8v7a1.5 1.5 0 0 1-1.5 1.5H4A1.5 1.5 0 0 1 2.5 15z'/%3E%3Cpath d='M2.5 9h15'/%3E%3C/svg%3E"); }
+  #in-again { --icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20' fill='none' stroke='black' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M4 5h12M4 10h12M4 15h7'/%3E%3C/svg%3E"); }
+  /* Busy opening something -- a picture being read -- said where the word
+     about a save is said, with a way to stop, and a small turning ring. */
+  #in-busy {
+    position: fixed; z-index: 90; left: 16px; right: 16px; bottom: 58px;
+    width: fit-content; max-width: calc(100vw - 32px); margin: 0 auto;
+    display: flex; align-items: center; gap: 10px;
+    padding: 6px 6px 6px 12px; border-radius: 12px; font-size: 13px;
+    background: var(--panel); color: var(--ink);
+    border: 1px solid var(--line); box-shadow: var(--shadow);
+  }
+  #in-busy[hidden] { display: none; }
+  #in-busy-said { min-width: 0; overflow-wrap: anywhere; }
+  .in-spin {
+    flex: none; width: 14px; height: 14px; border-radius: 50%;
+    border: 2px solid var(--line); border-top-color: var(--accent);
+    animation: in-turn .8s linear infinite;
+  }
+  @keyframes in-turn { to { transform: rotate(360deg); } }
+  /* Files from outside, over the page: the whole page is the place to drop
+     them, said in the middle of it. */
+  #drop-over {
+    position: fixed; inset: 0; z-index: 95; padding: 18px;
+    display: flex; background: var(--dim);
+    -webkit-backdrop-filter: blur(2px); backdrop-filter: blur(2px);
+  }
+  #drop-over[hidden] { display: none; }
+  .drop-frame {
+    flex: 1; display: flex; flex-direction: column; align-items: center;
+    justify-content: center; gap: 6px; text-align: center;
+    border: 2px dashed var(--accent); border-radius: 18px;
+    background: color-mix(in srgb, var(--panel) 88%, transparent);
+    color: var(--ink); pointer-events: none;
+  }
+  .drop-frame svg {
+    width: 34px; height: 34px; fill: none; stroke: var(--accent); stroke-width: 1.7;
+    stroke-linecap: round; stroke-linejoin: round; margin-bottom: 4px;
+  }
+  .drop-frame strong { font-size: 17px; }
+  .drop-frame span { font-size: 13px; color: var(--muted); max-width: 32em; }
 
   /* ------------------------------------------ the two halves of Files -- */
   #files-tabs { margin-bottom: 14px; }

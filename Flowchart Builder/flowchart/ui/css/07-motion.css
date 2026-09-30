@@ -340,6 +340,13 @@
   #rail .icon:nth-child(2) { animation-delay: .07s; }
   /* the word that something was saved into the folder, up from the foot */
   #saved-to:not([hidden]) { animation: row-up var(--move) var(--ease) backwards; }
+  #in-busy:not([hidden]) { animation: row-up var(--move) var(--ease) backwards; }
+  /* the page taking a drop comes up quickly: it is under the mouse already */
+  #drop-over:not([hidden]) { animation: dim-in var(--quick) var(--ease-soft) backwards; }
+  /* what a folder holds fills in the way the examples do */
+  #in-over:not([hidden]) .more-part { animation: row-in .32s var(--ease) backwards; }
+  #in-over:not([hidden]) .more-part:nth-child(2) { animation-delay: .05s; }
+  #in-over:not([hidden]) .more-part:nth-child(3) { animation-delay: .1s; }
   @keyframes rail-in { from { opacity: 0; transform: translateX(-12px); } }
   @keyframes row-up { from { opacity: 0; transform: translateY(8px); } }
 
@@ -657,6 +664,7 @@
     animation: dim-in var(--move) var(--ease-soft) backwards;
   }
   #more-over:not([hidden]) .code-sheet, #tidy-over:not([hidden]) .code-sheet,
+  #in-over:not([hidden]) .code-sheet,
   #eg-over:not([hidden]) .code-sheet, #tests-over:not([hidden]) .code-sheet,
   #pz-over:not([hidden]) .code-sheet, #keys-over:not([hidden]) .code-sheet {
     animation: sheet-rise var(--sheet-t) var(--ease) backwards;

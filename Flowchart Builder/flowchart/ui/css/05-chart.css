@@ -171,14 +171,14 @@
      but they are switches rather than something written in, so the sheet
      is only as tall as what is in it and never the whole screen.  Past
      that it scrolls, which on a short phone is the only thing it can do. */
-  #more-over, #tidy-over, #eg-over, #pz-over, #keys-over, #tests-over {
+  #more-over, #tidy-over, #eg-over, #pz-over, #keys-over, #tests-over, #in-over {
     position: fixed; inset: 0; z-index: 60; display: flex;
     align-items: center; justify-content: center; padding: 26px;
     background: var(--dim);
     -webkit-backdrop-filter: blur(3px); backdrop-filter: blur(3px);
   }
   #more-over[hidden], #tidy-over[hidden], #eg-over[hidden], #pz-over[hidden],
-  #keys-over[hidden], #tests-over[hidden] {
+  #keys-over[hidden], #tests-over[hidden], #in-over[hidden] {
     display: none !important;
   }
   .more-sheet { width: min(460px, 100%); height: auto; max-height: 100%; }
@@ -223,6 +223,30 @@
     white-space: normal; min-width: 0; align-items: flex-start;
   }
   .eg-row .btn .tick { margin-top: 1px; }
+  /* What a folder holds: a column of files to press, each with the folder
+     it is in and, for a drawing, the program it came from.  The one that
+     opens them all together comes first, in the page's blue. */
+  #in-over .more-sheet { width: min(520px, 100%); }
+  .in-list { display: flex; flex-direction: column; gap: 4px; }
+  .in-pick {
+    display: flex; align-items: baseline; gap: 8px; width: 100%;
+    padding: 7px 10px; border: 1px solid var(--line); border-radius: 8px;
+    background: var(--panel); color: inherit; font: inherit; font-size: 13px;
+    text-align: left; cursor: pointer; min-width: 0;
+  }
+  .in-pick:hover { background: var(--accent-soft); border-color: var(--accent); }
+  .in-pick.all { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; }
+  .in-pick.all:hover { filter: brightness(1.12); }
+  .in-name { min-width: 0; overflow-wrap: anywhere; }
+  .in-where {
+    min-width: 0; flex: 1; color: var(--muted); font-size: 11.5px;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .in-tag {
+    flex: none; margin-left: auto; padding: 1px 7px; border-radius: 99px;
+    background: var(--line-soft); color: var(--muted); font-size: 11px;
+  }
+  #in-body > .hint { margin: 14px 2px 0; }
   /* The keys: what a key does on the left, and the keys that do it on
      the right, each drawn as a key.  Ruled off from each other like the
      settings are, because it is one list of one kind of thing. */
@@ -386,7 +410,7 @@
      before it, the count is what pushes it there; the sheets with no
      count -- Options, the examples, the keys -- push it themselves, or it
      sat in the middle of the bar, straight after the name of the sheet. */
-  #eg-done, #keys-done, #more-done, #tidy-no { margin-left: auto; }
+  #eg-done, #keys-done, #more-done, #tidy-no, #in-cancel { margin-left: auto; }
   #tidy-no + #tidy-go { margin-left: -4px; }   /* the pair, a pair */
 
   /* As tall as the program in it (fitSlot in 24-scroll.js sets the

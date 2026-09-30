@@ -2831,6 +2831,24 @@ def _():
     return True, got.stdout.strip().replace(chr(10), "; ")
 
 
+@check("flowcharts from other programs, and pictures of them, are read")
+def _():
+    """What Files > Open, Open a folder, a drop and a paste bring in that is
+    not the page's own: draw.io (written out, packed, and inside a PNG),
+    Excalidraw, Visio, yEd, Graphviz, PlantUML, a Lucidchart CSV and
+    Flowgorithm, each read into its shapes, arrows and colors; and pictures
+    of flowcharts, drawn here the way websites draw them -- plain, colored,
+    dark, borderless, Mermaid's words on the arrows -- looked at the way the
+    page looks at one.  Reading the words in a picture needs a browser, and
+    is not asked here."""
+    if not node_there():
+        return None, "node is not installed -- skipped"
+    got = subprocess.run(["node", os.path.join(HERE, "brought.js")],
+                         cwd=HOME, capture_output=True, text=True, encoding="utf-8")
+    said = (got.stdout.strip() or got.stderr.strip() or "failed").split(chr(10))
+    return not got.returncode, (said[-1] if not got.returncode else "; ".join(said[:3]))[:300]
+
+
 @check("a drawing by hand is written out as the program it draws")
 def _():
     """What Check, Run, As pseudocode and Tidy up all start from.  An If
