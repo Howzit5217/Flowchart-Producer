@@ -165,6 +165,10 @@
   .sheet-menu .hint:empty { display: none; }
   .sheet-menu .hint { margin-top: 10px; }
   #save-menu { width: 262px; }
+  /* Starting over, ruled off at the very foot of Settings, apart from
+     everything that only sets something (35-wipe.js) */
+  .wipe-row { margin-top: 16px; padding-top: 12px; border-top: 1px solid var(--line-soft); }
+  .sheet-menu .wipe-row .hint { margin: 0 0 2px; font-size: 12px; }
   /* which of the two it is, straight under its heading, then the buttons */
   .sheet-menu #fd-where { margin-top: 0; }
 

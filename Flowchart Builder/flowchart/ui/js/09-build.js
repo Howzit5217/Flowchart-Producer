@@ -1417,6 +1417,11 @@
   // fault it stopped at was put right (27-ask.js).  A minute old and it is
   // forgotten, rather than going off under some later build.
   var whenBuilt = [];
+  // A build that failed: anybody waiting on it is told (`fail`), and the
+  // rest let go of.
+  function builtFailed() {
+    whenBuilt.splice(0).forEach(function (w) { if (w.fail) { w.fail(); } });
+  }
   function builtNow() {
     var then = whenBuilt.splice(0);
     if (!then.length) { return; }
@@ -1501,7 +1506,7 @@
         });
         if (!data.ok) {
           barEnd(false);
-          whenBuilt.length = 0;
+          builtFailed();
           says.className = "bad";
           says.textContent = data.error === "MemoryError"
             ? say("py_gave_out", { err: data.error }) : data.error || TXT.failed;
@@ -1561,7 +1566,7 @@
         builtNow();
       }).catch(function (err) {
         barEnd(false);
-        whenBuilt.length = 0;
+        builtFailed();
         afterTheRed(function () {
           build.disabled = false;
           build.classList.remove("working");

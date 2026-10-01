@@ -1022,6 +1022,7 @@
   // than carried in it; its words went into the database when it was drawn
   // (see askFor above), and are read back from there.
   function keepForReload() {
+    if (typeof wipedOut !== "undefined" && wipedOut) { return; }   // all cleared (35-wipe.js)
     try {
       var one = puttingBack || (aughtToSave() ? progressNow() : null);
       if (!one) { sessionStorage.removeItem(RELOAD_KEY); return; }

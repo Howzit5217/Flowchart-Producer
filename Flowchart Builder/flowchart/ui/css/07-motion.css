@@ -779,8 +779,8 @@
   /* The question asked before something is thrown away is small and
      sudden, so it comes forward out of the page rather than up from below,
      and goes back into it. */
-  #sure-over:not([hidden]) { animation: dim-in .2s var(--ease-soft) backwards; }
-  #sure-over:not([hidden]) .code-sheet {
+  #sure-over:not([hidden]), #wipe-over:not([hidden]), #keep-over:not([hidden]) { animation: dim-in .2s var(--ease-soft) backwards; }
+  #sure-over:not([hidden]) .code-sheet, #wipe-over:not([hidden]) .code-sheet, #keep-over:not([hidden]) .code-sheet {
     animation: sure-in .26s var(--ease-back) backwards;
   }
   #sure-over.going { animation: dim-out .17s var(--ease-soft) forwards; }

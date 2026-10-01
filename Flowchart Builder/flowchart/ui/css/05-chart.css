@@ -189,13 +189,36 @@
      on one of them.  Narrower than they are and no taller than what is in
      it: a question the size of a settings sheet reads as a place to be
      rather than as a thing to answer and be done with. */
-  #sure-over {
+  #sure-over, #wipe-over, #keep-over {
     position: fixed; inset: 0; z-index: 70; display: flex;
     align-items: center; justify-content: center; padding: 26px;
     background: var(--dim);
     -webkit-backdrop-filter: blur(3px); backdrop-filter: blur(3px);
   }
-  #sure-over[hidden] { display: none !important; }
+  #sure-over[hidden], #wipe-over[hidden], #keep-over[hidden] { display: none !important; }
+  /* Asked before work is written over (36-sync.js): saving it first, the
+     width of the box, then the two answers. */
+  .keep-sheet { width: min(420px, 100%); }
+  #keep-save { margin-top: 14px; justify-content: center; }
+  #keep-saved { margin: 6px 0 0; }
+  #keep-saved:empty { display: none; }
+  /* a tab on its way: what it shows is still being made from another */
+  .seg-btn.busy { cursor: progress; opacity: .7; }
+  /* Clearing everything (35-wipe.js): what goes, as a short list; the two
+     switches for what else may go; then saving a copy offered first, and
+     the word to type before the red button will do anything. */
+  .wipe-sheet { width: min(440px, 100%); overflow: auto; }
+  .wipe-list { margin: 8px 0 12px; padding-left: 20px; color: var(--ink); font-size: 13px; line-height: 1.55; }
+  #wipe-one .switch { margin-top: 6px; }
+  .wipe-ask { font-weight: 600; }
+  #wipe-two .hint { margin: 6px 0 0; }
+  #wipe-save { margin-top: 12px; justify-content: center; }
+  .wipe-type { display: block; margin: 16px 0 6px; font-size: 12.5px; color: var(--ink); line-height: 1.45; }
+  .wipe-type b { color: var(--bad); letter-spacing: .08em; }
+  #wipe-word {
+    width: 100%; box-sizing: border-box; letter-spacing: .08em; text-transform: uppercase;
+    font-family: "Cascadia Mono", Consolas, "SF Mono", Menlo, monospace;
+  }
   .sure-sheet { width: min(400px, 100%); height: auto; max-height: 100%; }
   .sure-body { padding: 16px 18px 18px; }
   .sure-body p { margin: 0; color: var(--ink); }

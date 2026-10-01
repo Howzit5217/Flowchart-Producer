@@ -815,7 +815,7 @@
       var name = f.name || ("picture" + (k ? " " + (k + 1) : "") + ".png");
       return fileEntry(f, name);
     });
-    function go() { broughtIn(list, files.length > 1 ? " " : ""); }
-    if (workHere()) { areYouSure(TXT.in_paste_head, TXT.in_paste_said, TXT.in_paste_yes, go); }
-    else { go(); }
+    // asked about first where there is work here, with saving it offered
+    // (36-sync.js), the way every opening is
+    broughtIn(list, files.length > 1 ? " " : "");
   });

@@ -42,7 +42,7 @@ JS = ["js/01-start.js", "js/02-paint.js", "js/02-read.js", "js/03-shapes.js",
       "js/22-settings.js", "js/22-reset.js", "js/23-undo.js", "js/24-scroll.js",
       "js/25-keys.js", "js/26-motion.js", "js/27-mend.js", "js/27-ask.js",
       "js/28-puzzles.js", "js/29-saves.js", "js/30-blocks.js", "js/31-app.js",
-      "js/32-code-side.js", "js/33-told.js", "js/34-tests.js", "js/99-go.js"]
+      "js/32-code-side.js", "js/33-told.js", "js/34-tests.js", "js/35-wipe.js", "js/36-sync.js", "js/99-go.js"]
 
 # Each part of the page carries a header saying what it is and that it is
 # one part of something; the page itself wants the part, not the header.

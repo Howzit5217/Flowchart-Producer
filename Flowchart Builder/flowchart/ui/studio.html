@@ -185,6 +185,14 @@ __OPTIONS__
     <button class="btn wide" id="app-install" data-w="app_install" hidden
             data-w-title="app_tip" title="__W(app_tip)__">__W(app_install)__</button>
     <p class="hint" id="app-note"></p>
+    <!-- Starting over: everything this page keeps, gone, for a clean slate.
+         Down here, out of the way, and behind two questions -- the second
+         wanting a word typed before it does anything (35-wipe.js). -->
+    <div class="wipe-row">
+      <h3 data-w="wipe_head">__W(wipe_head)__</h3>
+      <p class="hint" data-w="wipe_hint">__W(wipe_hint)__</p>
+      <button class="btn wide danger-line" id="wipe-open" data-w="wipe_open">__W(wipe_open)__</button>
+    </div>
   </div>
 </header>
 
@@ -735,6 +743,85 @@ __SVG__
       <div class="sure-row">
         <button class="btn" id="sure-no"></button>
         <button class="btn primary" id="sure-yes"></button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Before work is written over -- a tab with changes of its own brought
+     up to date from another, or something opened in place of what is here
+     (36-sync.js): saving it offered first, then the two answers. -->
+<div id="keep-over" hidden>
+  <div class="code-sheet sure-sheet keep-sheet" role="alertdialog"
+       aria-labelledby="keep-head" aria-describedby="keep-said">
+    <div class="code-bar">
+      <span class="mark small" aria-hidden="true">
+        <svg viewBox="0 0 24 24">
+          <path d="M12 3.2 1.8 20.8h20.4z"/>
+          <path d="M12 9.4v5"/>
+          <path d="M12 17.6v.2"/>
+        </svg>
+      </span>
+      <strong id="keep-head"></strong>
+    </div>
+    <div class="sure-body">
+      <p id="keep-said"></p>
+      <button class="btn primary wide" id="keep-save" data-w="keep_save">__W(keep_save)__</button>
+      <p class="hint" id="keep-saved" role="status" aria-live="polite"></p>
+      <div class="sure-row">
+        <button class="btn" id="keep-no"></button>
+        <button class="btn danger-line" id="keep-yes"></button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Clearing everything (35-wipe.js): first what goes, then whether to
+     save a copy before it does, and a word to type before it will. -->
+<div id="wipe-over" hidden>
+  <div class="code-sheet sure-sheet wipe-sheet" role="alertdialog" aria-labelledby="wipe-title">
+    <div class="code-bar">
+      <span class="mark small" aria-hidden="true">
+        <svg viewBox="0 0 24 24">
+          <path d="M12 3.2 1.8 20.8h20.4z"/>
+          <path d="M12 9.4v5"/>
+          <path d="M12 17.6v.2"/>
+        </svg>
+      </span>
+      <strong id="wipe-title"></strong>
+    </div>
+    <div class="sure-body" id="wipe-one">
+      <p data-w="wipe_said">__W(wipe_said)__</p>
+      <ul class="wipe-list">
+        <li data-w="wipe_l_work">__W(wipe_l_work)__</li>
+        <li data-w="wipe_l_hand">__W(wipe_l_hand)__</li>
+        <li data-w="wipe_l_code">__W(wipe_l_code)__</li>
+        <li data-w="wipe_l_run">__W(wipe_l_run)__</li>
+      </ul>
+      <label class="switch wide">
+        <span data-w="wipe_saves">__W(wipe_saves)__</span>
+        <input type="checkbox" id="wipe-saves" checked>
+      </label>
+      <label class="switch wide">
+        <span data-w="wipe_settings">__W(wipe_settings)__</span>
+        <input type="checkbox" id="wipe-settings" checked>
+      </label>
+      <div class="sure-row">
+        <button class="btn" id="wipe-no1" data-w="wipe_keep">__W(wipe_keep)__</button>
+        <button class="btn danger-line" id="wipe-next" data-w="wipe_next">__W(wipe_next)__</button>
+      </div>
+    </div>
+    <div class="sure-body" id="wipe-two" hidden>
+      <p class="wipe-ask" data-w="wipe_save_q">__W(wipe_save_q)__</p>
+      <p class="hint" data-w="wipe_save_said">__W(wipe_save_said)__</p>
+      <button class="btn primary wide" id="wipe-save" data-w="wipe_save">__W(wipe_save)__</button>
+      <p class="hint" id="wipe-saved" role="status" aria-live="polite"></p>
+      <label class="wipe-type" id="wipe-type-label" for="wipe-word"></label>
+      <input class="field" id="wipe-word" type="text" autocomplete="off" spellcheck="false"
+             autocapitalize="characters">
+      <div class="sure-row">
+        <button class="btn" id="wipe-back" data-w="wipe_back">__W(wipe_back)__</button>
+        <button class="btn danger" id="wipe-go" disabled data-w="wipe_go">__W(wipe_go)__</button>
       </div>
     </div>
   </div>

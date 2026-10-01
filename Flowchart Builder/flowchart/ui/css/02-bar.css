@@ -58,6 +58,12 @@
      waiting cursor belongs to the one that is busy, not to every button
      that happens to be switched off. */
   .btn[disabled] { opacity: .5; cursor: default; }
+  /* What cannot be taken back: red, outlined while it only leads on to a
+     question, filled when it is the thing itself (35-wipe.js). */
+  .btn.danger-line { color: var(--bad); border-color: var(--bad); }
+  .btn.danger-line:hover, .btn.danger-line:focus-visible { background-color: var(--bad); color: var(--panel); }
+  .btn.danger { background-color: var(--bad); border-color: var(--bad); color: var(--panel); }
+  .btn.danger[disabled] { opacity: .4; }
   .btn.small { padding: 4px 9px; font-size: 12.5px; border-radius: 7px; }
   /* a button that is a dropdown: the same box, with the words starting
      where a button's words start and the arrow given its own room */
