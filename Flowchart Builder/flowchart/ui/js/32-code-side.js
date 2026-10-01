@@ -35,6 +35,11 @@
 
   function langBox() { return el("#lang-code"); }
 
+  // The languages the page reads but does not write -- Kotlin, Rust and the
+  // rest (codeToPseudo.dialects) -- beside the ones it does both for.
+  function readsOnly(code) { return !LANGS[code] && !!(codeToPseudo.dialects || {})[code]; }
+  function langKnown(code) { return !!LANGS[code] || readsOnly(code); }
+
   // ------------------------------------------------ which language --
   // Found from what is written (codeToPseudo.detect): the picker's first
   // choice, and the one it starts on.  Picking a language by name says
@@ -42,11 +47,11 @@
   // might have written -- and holds until it is set back.
   function langNow() {
     var pick = el("#lang-pick");
-    if (pick && LANGS[pick.value]) { return pick.value; }
+    if (pick && langKnown(pick.value)) { return pick.value; }
     if (langSeen) { return langSeen; }
     try {
       var last = localStorage.getItem("flowchart-code-seen");
-      if (last && LANGS[last]) { return last; }
+      if (last && langKnown(last)) { return last; }
     } catch (e) { /* nothing kept */ }
     return "python";
   }
@@ -59,7 +64,7 @@
       auto.value = "auto";
       auto.textContent = TXT.lang_auto || "";
       pick.appendChild(auto);
-      Object.keys(LANGS).forEach(function (code) {
+      Object.keys(LANGS).concat(Object.keys(codeToPseudo.dialects || {})).forEach(function (code) {
         var one = document.createElement("option");
         one.value = code;
         one.textContent = langName(code);
@@ -69,7 +74,7 @@
     pick.value = "auto";
     try {
       var was = localStorage.getItem("flowchart-code-pick");
-      if (was && LANGS[was]) { pick.value = was; }
+      if (was && langKnown(was)) { pick.value = was; }
     } catch (e) { /* storage turned off: found from the code, then */ }
   }
 
@@ -141,7 +146,7 @@
     var one = langFiles[k];
     if (!one) { return ""; }
     if (one.name) { return one.name; }
-    var lang = langNow(), ext = (LANGS[lang] || {}).ext || "txt";
+    var lang = langNow(), ext = (LANGS[lang] || (codeToPseudo.dialects || {})[lang] || {}).ext || "txt";
     var named = (lang === "java" || lang === "csharp") &&
                 /\bclass\s+([A-Za-z_]\w*)/.exec(one.text || "");
     if (named) { return named[1] + "." + ext; }
@@ -283,8 +288,61 @@
         if (full) { full.appendChild(p.cloneNode(true)); }
       } else if (part) {
         note.appendChild(part);
+        // a button over the full screen too, doing the same
+        if (full) {
+          var twin = part.cloneNode(true);
+          twin.onclick = part.onclick;
+          full.appendChild(twin);
+        }
       }
     });
+  }
+
+  // Why the code could not be read, on which line -- chosen in the box --
+  // and, where the reading found a piece left out (a ;, a closing bracket,
+  // the } a block never got) and putting it in gets the reading further
+  // (codeToPseudo.tryMend), a button that puts it in.  Typed in, so Ctrl+Z
+  // takes it back out, and read again the way it was just read: `again`.
+  function langTrouble(err, again) {
+    var text = err.line ? say("lang_line", { n: err.line, said: err.message }) : err.message;
+    var parts = [err.line ? inFile(err.file, text) : text], got = null;
+    try { got = err.fix ? codeToPseudo.tryMend(langAll(), langNow(), err) : null; }
+    catch (e) { got = null; }
+    if (got) { parts.push(langMend(err, got, again)); }
+    langSays("bad", parts);
+    if (err.line) { langPickLine(err.line, err.file || 0); }
+  }
+
+  function langMend(err, got, again) {
+    var edits = err.fix.edits, what = err.fix.what;
+    var first = edits[0].line;
+    var button = document.createElement("button");
+    button.type = "button";
+    button.className = "mend";
+    button.textContent = edits.length > 1 ? say("lang_fix_many", { n: edits.length, what: what })
+      : first && first !== err.line ? say("lang_fix_at", { what: what, line: first })
+      : say("lang_fix", { what: what });
+    button.title = TXT.lang_fix_tip || "";
+    var from = (langAll()[got.file] || {}).text;
+    button.onclick = function (ev) {
+      ev.stopPropagation();
+      if (!langFiles[got.file]) { return; }
+      if (got.file !== langAt) { showFile(got.file); }
+      var box = langBox(), was = box.value, now = got.text;
+      if (was !== from) { again(); return; }   // changed since: read it as it is
+      // only the part that changes is typed in
+      var a = 0, b = 0;
+      while (a < was.length && a < now.length && was[a] === now[a]) { a++; }
+      while (b < was.length - a && b < now.length - a &&
+             was[was.length - 1 - b] === now[now.length - 1 - b]) { b++; }
+      var put = now.slice(a, now.length - b);
+      typeOver(box, a, was.length - b, put);
+      // what went in, chosen, so it can be seen -- without the space around it
+      var lead = /^\s*/.exec(put)[0].length, tail = /\s*$/.exec(put)[0].length;
+      box.setSelectionRange(a + lead, Math.max(a + lead, a + put.length - tail));
+      again();
+    };
+    return button;
   }
 
   // The line a problem is on, chosen in the box -- in the file it is in,
@@ -323,9 +381,10 @@
     try {
       said = codeToPseudo(langAll(), langNow());
     } catch (err) {
-      var text = err.line ? say("lang_line", { n: err.line, said: err.message }) : err.message;
-      langSays("bad", [err.line ? inFile(err.file, text) : text]);
-      if (err.line) { langPickLine(err.line, err.file || 0); }
+      langTrouble(err, function () {
+        langAsked = true;
+        el("#build").click();
+      });
       return false;
     }
     langFrom = langKey();
@@ -386,7 +445,7 @@
   // A program kept in several files is written out as several files again.
   function langWriteOut(typed) {
     var box = langBox();
-    if (!box || !langCanWrite()) { return false; }
+    if (!box || !langCanWrite() || readsOnly(langNow())) { return false; }
     var lang = langNow(), made;
     try { made = langFiles.length > 1 ? filesFor(lang) : [codeFor(lang)]; }
     catch (e) { return false; }
@@ -431,7 +490,7 @@
       return;
     }
     var moved = langMade !== null && pseudo !== langMade && pseudo.trim();
-    if (!moved || !langCanWrite()) { return; }
+    if (!moved || !langCanWrite() || readsOnly(langNow())) { return; }
     var redo = document.createElement("button");
     redo.className = "btn small";
     redo.textContent = say("lang_rewrite", { lang: langName(langNow()) });
@@ -487,7 +546,7 @@
     if (!box) { return; }
     was = was || {};
     var pick = el("#lang-pick");
-    if (pick) { pick.value = was.lang && (LANGS[was.lang] || was.lang === "auto") ? was.lang : "auto"; }
+    if (pick) { pick.value = was.lang && (langKnown(was.lang) || was.lang === "auto") ? was.lang : "auto"; }
     // saved before a program could be in several files, it is one file
     langFiles = (was.files && was.files.length ? was.files : [{ name: "", text: was.text || "" }])
       .map(function (one) { return { name: String(one.name || ""), text: String(one.text || "") }; });
@@ -508,11 +567,13 @@
   // told by their names and what is in them, and drawn.
   var LANG_EXT = { py: "python", pyw: "python", java: "java", cs: "csharp",
                    cpp: "cpp", cc: "cpp", cxx: "cpp", hpp: "cpp", h: "cpp",
-                   js: "javascript", mjs: "javascript", cjs: "javascript" };
+                   js: "javascript", mjs: "javascript", cjs: "javascript",
+                   ts: "typescript", tsx: "typescript", mts: "typescript", c: "c",
+                   kt: "kotlin", kts: "kotlin", swift: "swift", go: "go", rs: "rust" };
   function langOfFile(name) {
     var m = /\.([A-Za-z0-9]+)$/.exec(String(name || ""));
     var lang = m ? LANG_EXT[m[1].toLowerCase()] : null;
-    return lang && LANGS[lang] ? lang : null;
+    return lang && langKnown(lang) ? lang : null;
   }
   function openCodeFile(name, text) {
     return openCodeFiles([{ name: name, text: text }]);
@@ -574,9 +635,10 @@
       }
     });
     langBox().addEventListener("input", function () {
-      // what was wrong is about code that is not there any more
+      // what was wrong -- or that nothing was -- is about code that is not
+      // there any more
       var note = el("#lang-note");
-      if (note && el(".bad", note)) { langSays("", []); }
+      if (note && el(".bad, .good", note)) { langSays("", []); }
       langKeep();
       translateReady();
       detectSoon();
@@ -712,9 +774,24 @@
     box.focus();
   }
 
+  // Check, over the code filling the screen, where Build is out of sight:
+  // the code read through the way Build reads it, and what is wrong with it
+  // said -- or that nothing is -- without drawing it or touching the
+  // pseudocode, which Build still does.
+  function langTest() {
+    if (!langBox()) { return; }
+    langDetect();
+    var said;
+    try { said = codeToPseudo(langAll(), langNow()); }
+    catch (err) { langTrouble(err, langTest); return; }
+    var notes = said.notes.map(function (n) { return inFile(n.file, n.text); });
+    langSays(notes.length ? "warn" : "good", notes.length ? notes : [TXT.checked_good]);
+  }
+
   if (el("#lang-over")) {
     el("#lang-big").onclick = function () { langFull(el("#lang-over").hidden); };
     el("#lang-done").onclick = function () { langFull(false); };
+    if (el("#lang-check")) { el("#lang-check").onclick = langTest; }
     copyButton(function () { return langBox().value; }, el("#lang-copy"));
     el("#lang-save").onclick = function () {
       save(new Blob([langBox().value], { type: "text/plain;charset=utf-8" }), fileLabel(langAt));

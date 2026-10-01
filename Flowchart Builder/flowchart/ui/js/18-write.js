@@ -1564,7 +1564,8 @@
   listLanguages();
 
   function langName(lang) {              // Python, C# -- as the table says it
-    return (LANGS[lang] || {}).name || lang;
+    // (and Rust, Kotlin -- the ones the page reads but does not write)
+    return (LANGS[lang] || (typeof codeToPseudo !== "undefined" && codeToPseudo.dialects || {})[lang] || {}).name || lang;
   }
 
   // Whether the program is being asked for as one file or as a file for

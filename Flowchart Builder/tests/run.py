@@ -2160,6 +2160,12 @@ def read_code_in(reads, folder):
 READ_REFUSED = {("handed over by reference", "java"),
                 ("handed over by reference", "python"),
                 ("handed over by reference", "javascript")}
+# Programs that run differently once written out, because the language does:
+# JavaScript leaves out what a function is handed beyond its names (and gives
+# undefined for what it is not), so the page's JavaScript for a module handed
+# the wrong number of things runs on where the pseudocode stops -- and read
+# back, it runs the way the JavaScript does.
+READ_DIFFERS = {("a module handed the wrong number of things says so", "javascript")}
 
 
 @check("code the page writes out reads back in, and runs the same")
@@ -2217,6 +2223,8 @@ def _():
         second = shelf_run(again, folder, "second")
         for (one, got), result in zip(sent, second):
             before = first[one["n"]]
+            if (shelf[one["n"]][0], one["lang"]) in READ_DIFFERS:
+                continue
             if result["said"] != before["said"] or bool(result["faults"]) != bool(before["faults"]):
                 wrong.append("%s, from %s:\n      it printed %r\n      read back  %r"
                              % (shelf[one["n"]][0], one["lang"], before["said"][:6],
@@ -2237,14 +2245,18 @@ def _():
 def _():
     """Code the way people write it, not the way the page writes it: see
     tests/coded.py, coded_more.py, coded_even_more.py and coded_fourth.py, where each program says what it
-    prints."""
+    prints -- and coded_full.py, whole programs, and coded_langs.py, in the languages
+    the page reads but does not write."""
     if not node_there():
         return None, "node is not installed -- skipped"
     import coded
     import coded_more
     import coded_even_more
     import coded_fourth
-    everything = coded.CODED + coded_more.CODED + coded_even_more.CODED + coded_fourth.CODED
+    import coded_full
+    import coded_langs
+    everything = (coded.CODED + coded_more.CODED + coded_even_more.CODED + coded_fourth.CODED +
+                  coded_full.CODED + coded_langs.CODED)
     folder = tempfile.mkdtemp(prefix="_out-coded-", dir=HERE)
     wrong = []
     try:
@@ -2259,6 +2271,9 @@ def _():
             if "error" in got:
                 wrong.append("%s (%s): %s, line %s" % (name, lang, got["error"], got.get("line")))
                 continue
+            # it runs right, so nothing it does is to be called something that can't be run
+            for n in got.get("notes") or []:
+                wrong.append("%s (%s): noted %r" % (name, lang, n.get("text") if isinstance(n, dict) else n))
             cases.append({"name": name, "typed": typed, "title": "x",
                           "ast": read_as_data(got["text"])})
             kept.append((name, lang, want))
@@ -2273,6 +2288,74 @@ def _():
     return not wrong, "%d programs in %d languages, %d in several files%s" % (
         len(everything), len(set(c[1] for c in everything)),
         len([c for c in everything if isinstance(c[2], list)]),
+        "" if not wrong else "\n       " + "\n       ".join(wrong[:6]))
+
+
+# Code with a piece left out, and what the Code tab's Fix button puts in:
+# the ; or bracket where the reading stopped, the } a block never got where
+# its indenting says it ends -- or no button at all, where what is wrong is
+# not a piece left out (print(a b) is "expected ) here" too).
+MENDED = [
+    ("a ; after a declaration", "java",
+     "class M {\n    static void main(String[] a) {\n        int t = 0\n        System.out.println(t);\n    }\n}",
+     "class M {\n    static void main(String[] a) {\n        int t = 0;\n        System.out.println(t);\n    }\n}"),
+    ("a } where the indenting ends a loop", "java",
+     "class M {\n    static void main(String[] a) {\n        for (int i = 0; i < 3; i++) {\n"
+     "            System.out.println(i);\n\n        System.out.println(9);\n    }\n}",
+     "class M {\n    static void main(String[] a) {\n        for (int i = 0; i < 3; i++) {\n"
+     "            System.out.println(i);\n        }\n\n        System.out.println(9);\n    }\n}"),
+    ("two } at the foot, tabs kept", "cpp",
+     "int main() {\n\tif (1) {\n\t\treturn 0;\n",
+     "int main() {\n\tif (1) {\n\t\treturn 0;\n\t}\n}\n"),
+    ("a ) left open across lines", "python",
+     "x = max(3, 4\ny = 2\nprint(x + y)",
+     "x = max(3, 4)\ny = 2\nprint(x + y)"),
+    ("a : after a for", "python",
+     "for i in range(3)\n    print(i)",
+     "for i in range(3):\n    print(i)"),
+    ("a ( in front of a test", "csharp",
+     "class P {\n    static void Main() {\n        int x = 3;\n        if x > 2) { System.Console.WriteLine(x); }\n    }\n}",
+     "class P {\n    static void Main() {\n        int x = 3;\n        if (x > 2) { System.Console.WriteLine(x); }\n    }\n}"),
+    ("Go's { where the line ended", "go",
+     "package main\nimport \"fmt\"\nfunc main() {\n    x := 3\n    if x > 2\n        fmt.Println(x)\n    }\n}",
+     "package main\nimport \"fmt\"\nfunc main() {\n    x := 3\n    if x > 2 {\n        fmt.Println(x)\n    }\n}"),
+    ("a word too many has no fix", "java",
+     "class M {\n    static void main(String[] a) {\n        System.out.println(a b);\n    }\n}",
+     None),
+]
+
+
+@check("code with a piece left out is put right by its Fix button")
+def _():
+    """Each broken program read: it fails, a fix is offered where one should
+    be and not where one should not, and the fixed code is exactly what was
+    wanted -- and reads."""
+    if not node_there():
+        return None, "node is not installed -- skipped"
+    folder = tempfile.mkdtemp(prefix="_out-mend-", dir=HERE)
+    wrong = []
+    try:
+        back = read_code_in([{"lang": lang, "code": code} for name, lang, code, want in MENDED], folder)
+        fixed = [(name, lang, got.get("mended")) for (name, lang, code, want), got in zip(MENDED, back)]
+        again = read_code_in([{"lang": lang, "code": text} for name, lang, text in fixed if text], folder)
+        again = iter(again)
+        for (name, lang, code, want), got in zip(MENDED, back):
+            if "error" not in got:
+                wrong.append("%s (%s): read without a fault" % (name, lang))
+                continue
+            if got.get("mended") != want:
+                wrong.append("%s (%s): %s\n      wanted %r\n      got    %r"
+                             % (name, lang, got["error"], want, got.get("mended")))
+            if got.get("mended"):
+                after = next(again)
+                if "error" in after:
+                    wrong.append("%s (%s): fixed, still %s" % (name, lang, after["error"]))
+    except RuntimeError as e:
+        return False, str(e)
+    finally:
+        shutil.rmtree(folder, ignore_errors=True)
+    return not wrong, "%d programs, %d offered a fix%s" % (
+        len(MENDED), len([m for m in MENDED if m[3]]),
         "" if not wrong else "\n       " + "\n       ".join(wrong[:6]))
 
 

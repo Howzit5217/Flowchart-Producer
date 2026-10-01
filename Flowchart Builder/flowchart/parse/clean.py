@@ -71,7 +71,10 @@ def needs_more(s):
             depth += 1
         elif c in ")]}":
             depth -= 1
-    if s.count('"') % 2 == 1:
+    # Words left open in double quotes go on to the next line.  A double
+    # quote inside single ones -- 'No copies of "' + title -- is only a
+    # letter; one after an apostrophe (the user's "name) is still open.
+    if quote == '"' or (quote == "'" and s.count('"') % 2 == 1):
         return True
     return depth > 0 or bool(CONT_END.search(s.rstrip()))
 

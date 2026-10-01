@@ -110,7 +110,7 @@ the `@@CSS@@` and `@@JS@@` marks in `studio.html` and hands back the page.
 | `ui/js/18-ahead.js` | Reading the program through before writing it: what kind of thing every name holds, and where it has to be declared |
 | `ui/js/18-code.js` | What Python, Java, C#, C++ and JavaScript each do differently — a block each |
 | `ui/js/18-write.js` | The writer, which knows no language by name, and the screen the code is written in on |
-| `ui/js/18-from-code.js` | The other way: Python, Java, C#, C++ or JavaScript read back into pseudocode |
+| `ui/js/18-from-code.js` | The other way: Python, Java, C#, C++ or JavaScript read back into pseudocode — and TypeScript, C, Kotlin, Swift, Go and Rust, read by way of one of those |
 | `ui/js/19-files.js` | Saving a design to a file, and opening it again |
 | `ui/js/19-folder.js` | Saving into a folder picked in Files instead of the browser's downloads |
 | `ui/js/19-diagrams.js` | Flowcharts made in other programs -- draw.io, Excalidraw, Visio and Lucidchart, yEd, Graphviz, PlantUML, Flowgorithm -- opened as drawings, colors and all |

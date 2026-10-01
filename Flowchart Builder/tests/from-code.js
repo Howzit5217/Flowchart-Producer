@@ -32,7 +32,7 @@ function reader(words) {
 }
 
 var EXT = { py: "python", java: "java", cs: "csharp", cpp: "cpp", cc: "cpp",
-            js: "javascript" };
+            js: "javascript", ts: "typescript", c: "c", kt: "kotlin", swift: "swift", go: "go", rs: "rust" };
 
 if (process.argv.length === 3) {
   var file = process.argv[2];
@@ -60,8 +60,12 @@ var out = asked.cases.map(function (one) {
     var got = read(src, lang);
     return { text: got.text, notes: got.notes, detected: read.detect(src) };
   } catch (e) {
+    // and what the Code tab's Fix button would make of it, if it offers one
+    var mended = null;
+    try { mended = read.tryMend(src, lang, e); } catch (e2) { mended = null; }
     return { error: e.message, line: e.line || 0, file: e.file || 0, said: e.said || "",
-             detected: read.detect(src), stack: e.said ? "" : String(e.stack || e) };
+             detected: read.detect(src), stack: e.said ? "" : String(e.stack || e),
+             mended: mended ? mended.text : null };
   }
 });
 fs.writeFileSync(process.argv[3], JSON.stringify(out));

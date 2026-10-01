@@ -130,7 +130,7 @@ __OPTIONS__
     <p class="hint" id="link-note"></p>
     <button class="btn wide file-btn" id="print-open" data-w="print_it">__W(print_it)__</button>
     <input type="file" id="file-in" hidden multiple
-           accept=".json,.txt,.text,.md,.markdown,.pseudo,.pseudocode,.psc,.alg,.algo,.flowchart,.mmd,.mermaid,.py,.pyw,.java,.cs,.cpp,.cc,.cxx,.h,.hpp,.js,.mjs,.cjs,.zip,.drawio,.dio,.xml,.excalidraw,.vsdx,.graphml,.gv,.dot,.puml,.plantuml,.pu,.wsd,.csv,.fprg,.svg,.png,.jpg,.jpeg,.gif,.webp,.bmp,image/*,application/json,text/plain">
+           accept=".json,.txt,.text,.md,.markdown,.pseudo,.pseudocode,.psc,.alg,.algo,.flowchart,.mmd,.mermaid,.py,.pyw,.java,.cs,.cpp,.cc,.cxx,.h,.hpp,.js,.mjs,.cjs,.ts,.tsx,.mts,.c,.kt,.kts,.swift,.go,.rs,.zip,.drawio,.dio,.xml,.excalidraw,.vsdx,.graphml,.gv,.dot,.puml,.plantuml,.pu,.wsd,.csv,.fprg,.svg,.png,.jpg,.jpeg,.gif,.webp,.bmp,image/*,application/json,text/plain">
     <input type="file" id="folder-in" hidden multiple webkitdirectory>
     <!-- Where all of the above goes: the browser's downloads, or a folder
          picked here.  A setting rather than something to do, so it sits
@@ -368,6 +368,8 @@ __SVG__
       </span>
       <strong data-w="lang_head">__W(lang_head)__</strong>
       <span class="code-count" id="lang-count"></span>
+      <button class="btn small" id="lang-check" data-w="lang_check" data-w-title="lang_check_tip"
+              title="__W(lang_check_tip)__">__W(lang_check)__</button>
       <button class="btn small primary" id="lang-done" data-w="done">__W(done)__</button>
     </div>
     <div id="lang-full-note"></div>

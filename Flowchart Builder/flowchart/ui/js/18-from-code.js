@@ -32,6 +32,21 @@
     // asking in C++ and JavaScript, money and naps in C++.  Code that came
     // from here and is read back has them, and they are the language's way
     // of doing what a pseudocode Input or Wait simply does.
+    // Languages read by way of one of the five.  Their words and the way
+    // they are set out are their own, and read by their own part of the
+    // parser; what a program in one means -- whole numbers divided, a list
+    // handed about -- is what it means in the language named as its base,
+    // which everything after the parser goes by.  The page reads them; it
+    // does not write them out.
+    var DIALECTS = {
+      typescript: { name: "TypeScript", ext: "ts", base: "javascript" },
+      c: { name: "C", ext: "c", base: "cpp" },
+      kotlin: { name: "Kotlin", ext: "kt", base: "java" },
+      swift: { name: "Swift", ext: "swift", base: "java" },
+      go: { name: "Go", ext: "go", base: "java" },
+      rust: { name: "Rust", ext: "rs", base: "java" }
+    };
+    function baseOf(lang) { return DIALECTS[lang] ? DIALECTS[lang].base : lang; }
     function helpersOf(lang) {
       return lang === "cpp" ? /^(askWhole|askReal|askText|askFlag|money|nap|toUpper|toLower)$/
            : lang === "javascript" ? /^(ask|wait|stop)$/ : /^$/;
@@ -44,6 +59,10 @@
     // one is the chart's own word for what it does (pageCall).
     // The classes a language keeps its own functions in: Convert.ToString(x)
     var LIBRARY_CLASSES = /^(Convert|Math|String|string|Console|Integer|Double|Object|Arrays|Collections|Character|char|int|double|Enumerable|System|JSON|Number|Array|Boolean|Objects|Float|Long|decimal|bool|Int32|Int64|Char|Decimal|Single|StringBuilder|Regex|Pattern|std|math|random|Random|os|sys|re|itertools|functools|collections)$/;
+    var C_MACROS = { M_PI: "3.141592653589793", M_E: "2.718281828459045", M_SQRT2: "1.4142135623730951",
+                     INT_MAX: "2147483647", INT_MIN: "-2147483648", UINT_MAX: "4294967295",
+                     LLONG_MAX: "9223372036854775807", LLONG_MIN: "-9223372036854775808", RAND_MAX: "2147483647",
+                     SHRT_MAX: "32767", CHAR_BIT: "8", EXIT_SUCCESS: "0", EXIT_FAILURE: "1" };
     var PAGE_HELPERS = {
       python: { class_of: /isinstance/, is_number: /float/, copied: /vars/, to_base: /digits/ },
       javascript: { classOf: /constructor/, shown: /constructor/, shuffle: /random/,
@@ -99,14 +118,22 @@
                "**", "//", "==", "!=", "<=", ">=", "+=", "-=", "*=", "/=", "%=",
                "&=", "|=", "^=", ":=", "<<", ">>", "->", "::", "++", "--", "&&",
                "||", "=>", "??", "?."];
+    // and the ones only some of the others have: Kotlin's x!! and a ?: b,
+    // ranges 1..10 and 0..<n, Rust's 1..=6, Go's &^
+    var MORE_OPS = { kotlin: ["!!", "?:", "..<", ".."], swift: ["..<"], rust: ["..=", ".."],
+                     go: ["&^=", "&^", "<-"] };
     var R_NUM = /^(?:0[xX][0-9a-fA-F_']+|0[bB][01_']+|\d[\d_']*(?:\.\d[\d_']*)?(?:[eE][+-]?\d+)?|\.\d[\d_']*(?:[eE][+-]?\d+)?|\d+\.(?![\w.]))[lLfFdDmMuU]*/;
 
     // `base` is how many lines of other files come before this one: a
     // program in several files is numbered straight through, so a line
     // number says which file as well as where in it (translate undoes it).
     function lexCode(src, lang, base) {
+      var dialect = lang;
+      lang = baseOf(lang);
       var py = lang === "python", js = lang === "javascript";
       var cs = lang === "csharp";
+      var kt = dialect === "kotlin", sw = dialect === "swift", go = dialect === "go", rs = dialect === "rust";
+      var ts = dialect === "typescript";
       var s = String(src || "").replace(/\r\n?/g, "\n").replace(/\t/g, "    ");
       var n = s.length, i = 0, line = 1 + (base || 0), col0 = 0;
       var toks = [], notes = [], defines = [];
@@ -120,8 +147,27 @@
       var depth = 0, indents = [0], atStart = true, codeOnLine = false;
 
       function colOf(at) { return at - col0; }
+      // Go puts in the ; that ends a line's statement itself: after a name,
+      // a number, words, return, break, ), ], }, ++ and --
+      function goSemi() {
+        var last = toks[toks.length - 1];
+        if (!last || (last.t === "op" && last.v === ";")) { return; }
+        var ends = last.t === "num" || last.t === "str" || last.t === "fstr" ||
+                   (last.t === "op" && /^([)\]}]|\+\+|--)$/.test(last.v)) ||
+                   (last.t === "name" && (/^(break|continue|fallthrough|return)$/.test(last.v) ||
+                    !/^(case|chan|const|default|defer|else|for|func|go|goto|if|import|interface|map|package|range|select|struct|switch|type|var)$/.test(last.v)));
+        if (ends) { toks.push({ t: "op", v: ";", line: last.line, auto: true, at: last.end, end: last.end }); }
+      }
+      // Where each token starts and ends in the text (`at`, `end`): where a
+      // piece found missing would go, for the Code tab to offer to put it in
+      var tokAt = 0;
+      function ended() {
+        for (var k = toks.length - 1; k >= 0 && toks[k].end === undefined; k--) { toks[k].end = i; }
+      }
       function push(t, v, extra) {
-        var tok = { t: t, v: v, line: line };
+        var tok = { t: t, v: v, line: line, at: tokAt };
+        // the first on its line: where Kotlin, Swift and Go end a statement
+        if (!codeOnLine) { tok.first = true; }
         if (extra) { for (var k in extra) { tok[k] = extra[k]; } }
         toks.push(tok);
         codeOnLine = true;
@@ -138,7 +184,9 @@
       // A string, from its opening quote: its words, and where it
       // interpolates, the expressions between them.  `braces` is how an
       // interpolation opens -- "{" for Python and C#, "${" for JavaScript.
-      function readString(quote, triple, raw, braces, verbatim) {
+      // `dollars`: Kotlin's "$name" as well as "${expr}"; braces "paren" is
+      // Swift's "\(expr)".
+      function readString(quote, triple, raw, braces, verbatim, dollars) {
         var parts = [], text = "", startLine = line;
         i += triple ? 3 : 1;
         for (;;) {
@@ -154,6 +202,32 @@
             text += "\n";
             i++;
             newline();
+            continue;
+          }
+          // Swift: "Total \(a + b)" -- the brackets hold an expression
+          if (braces === "paren" && c === "\\" && s[i + 1] === "(") {
+            i += 2;
+            var from1 = i, deep1 = 0, inQ1 = null;
+            while (i < n) {
+              var d1 = s[i];
+              if (inQ1) { if (d1 === "\\") { i++; } else if (d1 === inQ1) { inQ1 = null; } }
+              else if (d1 === '"') { inQ1 = d1; }
+              else if (d1 === "(") { deep1++; }
+              else if (d1 === ")") { if (!deep1) { break; } deep1--; }
+              i++;
+            }
+            if (i >= n) { throw oops("cm_open", startLine); }
+            if (text) { parts.push(text); text = ""; }
+            parts.push({ code: s.slice(from1, i).trim(), spec: "", conv: "", line: line });
+            i++;
+            continue;
+          }
+          // Kotlin: "Hello, $name" -- a name after a dollar is its value
+          if (dollars && c === "$" && /[A-Za-z_]/.test(s[i + 1] || "")) {
+            var dn = /^[A-Za-z_]\w*/.exec(s.slice(i + 1, i + 128))[0];
+            if (text) { parts.push(text); text = ""; }
+            parts.push({ code: dn, spec: "", conv: "", line: line });
+            i += 1 + dn.length;
             continue;
           }
           if (c === "\\" && !raw && !verbatim) {
@@ -173,7 +247,7 @@
             i += 2;
             continue;
           }
-          if (braces) {
+          if (braces && braces !== "paren") {
             var open = braces === "${" ? s.substr(i, 2) === "${" : c === "{";
             if (braces === "{" && c === "{" && s[i + 1] === "{") { text += "{"; i += 2; continue; }
             if (braces === "{" && c === "}" && s[i + 1] === "}") { text += "}"; i += 2; continue; }
@@ -236,6 +310,8 @@
       }
 
       while (i < n) {
+        ended();
+        tokAt = i;
         // ---- Python: the indent at the start of each line of code
         if (py && atStart && depth === 0) {
           var col = 0;
@@ -256,8 +332,10 @@
           if (col !== indents[indents.length - 1]) { throw oops("cm_indent", line); }
           atStart = false;
         }
+        tokAt = i;
         var c = s[i];
         if (c === "\n") {
+          if (go) { goSemi(); }
           if (py && depth === 0) {
             var last = toks[toks.length - 1];
             if (last && last.t !== "nl" && last.t !== "indent" && last.t !== "dedent") {
@@ -347,6 +425,40 @@
           continue;
         }
         if (!py && c === TICK && js) { readString(TICK, false, false, "${", false); continue; }
+        // Kotlin's and Swift's strings say what goes in them: "$name", "\(x)"
+        if ((kt || sw) && c === '"') {
+          var three3 = s.substr(i, 3) === '"""';
+          readString('"', three3, kt && three3, kt ? "${" : "paren", false, kt);
+          continue;
+        }
+        // Go's `raw strings`, which may go on over several lines
+        if (go && c === TICK) { readString(TICK, false, true, "", false); continue; }
+        // Kotlin and Swift: `in`, a name written in backquotes
+        if ((kt || sw) && c === TICK) {
+          var bq = s.indexOf(TICK, i + 1);
+          if (bq < 0) { throw oops("cm_open", line); }
+          push("name", s.slice(i + 1, bq));
+          i = bq + 1;
+          continue;
+        }
+        // Rust: r"C:\x", r#"say "hi""#, b"bytes"
+        var rawRs = rs ? /^b?r(#*)"/.exec(s.substr(i, 16)) : null;
+        if (rawRs) {
+          var shutRs = '"' + rawRs[1], fromRs = i + rawRs[0].length, endRs = s.indexOf(shutRs, fromRs);
+          if (endRs < 0) { throw oops("cm_open", line); }
+          push("str", s.slice(fromRs, endRs));
+          for (var rq = fromRs; rq < endRs; rq++) { if (s[rq] === "\n") { line++; } }
+          i = endRs + shutRs.length;
+          continue;
+        }
+        if (rs && c === "b" && s[i + 1] === '"') { i++; readString('"', false, false, "", false); continue; }
+        // and 'a' a letter, but 'a -- no closing quote -- a lifetime, or a loop's label ('outer:)
+        if (rs && c === "'" && !(s[i + 1] === "\\" || s[i + 2] === "'")) {
+          var life = /^'[A-Za-z_]\w*/.exec(s.slice(i, i + 64));
+          if (life) { push("name", life[0], { life: true }); i += life[0].length; continue; }
+        }
+        // b'a': the number of the letter
+        if (rs && c === "b" && s[i + 1] === "'" && s[i + 3] === "'") { push("num", String(s.charCodeAt(i + 2)), { real: false }); i += 4; continue; }
         if (!py && (c === '"' || c === "'")) {
           readString(c, false, false, "", false);
           if (c === "'" && !js) { toks[toks.length - 1].ch = true; }
@@ -362,6 +474,25 @@
         }
 
         // ---- numbers, names and the rest
+        // pair.0, pair.1: the parts of a Rust or Swift tuple, not numbers
+        var before = toks[toks.length - 1];
+        if ((rs || sw) && c === "." && /[0-9]/.test(s[i + 1] || "") && before &&
+            (before.t === "name" || (before.t === "op" && /^[)\]]$/.test(before.v)))) {
+          push("op", ".");
+          i++;
+          var partNo = /^\d+/.exec(s.slice(i, i + 16))[0];
+          push("num", partNo, { real: false });
+          i += partNo.length;
+          continue;
+        }
+        // Rust's 10u32, 2.5f64, 1_000i64: the number, its kind said after it
+        var rsNum = rs && /[0-9]/.test(c) ? /^(\d[\d_]*(?:\.\d[\d_]*)?(?:[eE][+-]?\d+)?)((?:i|u)(?:8|16|32|64|128|size)|f32|f64)?(?![\w])/.exec(s.slice(i, i + 64)) : null;
+        if (rsNum && !/^0[xXbBoO]/.test(rsNum[0])) {
+          var rsClean = rsNum[1].replace(/_/g, "");
+          push("num", rsClean, { real: /[.eE]/.test(rsClean) || /^f/.test(rsNum[2] || "") });
+          i += rsNum[0].length;
+          continue;
+        }
         var num = /[0-9.]/.test(c) ? R_NUM.exec(s.slice(i, i + 64)) : null;
         if (num && num[0] !== ".") {
           var raw = num[0], clean = raw.replace(/[_']/g, "").replace(/[lLfFdDmMuU]+$/, "");
@@ -380,8 +511,11 @@
           i += name[0].length;
           continue;
         }
-        var op = null;
-        for (var k = 0; k < OPS.length; k++) {
+        var op = null, ownOps = MORE_OPS[dialect] || [];
+        for (var k0 = 0; k0 < ownOps.length && !op; k0++) {
+          if (s.substr(i, ownOps[k0].length) === ownOps[k0]) { op = ownOps[k0]; }
+        }
+        for (var k = 0; k < OPS.length && !op; k++) {
           if (s.substr(i, OPS[k].length) === OPS[k]) { op = OPS[k]; break; }
         }
         op = op || c;
@@ -395,20 +529,24 @@
         // >> and >>> in Java, C# and C++ are as many >s, each its own, so
         // that List<List<Integer>> closes two lists; a shift is put back
         // together where it is read (cBinary)
-        if (!py && !js && (op === ">>" || op === ">>>")) {
+        if (!py && (!js || ts) && (op === ">>" || op === ">>>")) {
           push("op", ">");
           for (var g = 1; g < op.length; g++) { push("op", ">", { glued: true }); }
           continue;
         }
         push("op", op);
       }
+      ended();
+      tokAt = n;
       if (py) {
         var tail = toks[toks.length - 1];
         if (tail && tail.t !== "nl" && tail.t !== "dedent") { push("nl", ""); }
         while (indents.length > 1) { indents.pop(); push("dedent", 0); }
       }
+      if (go) { goSemi(); }
       push("eof", "");
-      return { toks: toks, notes: notes, defines: defines };
+      ended();
+      return { toks: toks, notes: notes, defines: defines, src: s, base: base || 0 };
     }
 
     // ================================================== into a tree ==
@@ -423,6 +561,14 @@
     //                func exit try note
     function parserFor(lexed, lang) {
       var toks = lexed.toks, notes = lexed.notes.slice(), pos = 0;
+      // Kotlin, Swift, Go and Rust have statements of their own (further
+      // down); TypeScript is JavaScript with its types written in, and C
+      // is read as the C++ it very nearly is
+      var dialect = lang;
+      var kt = lang === "kotlin", sw = lang === "swift", go = lang === "go", rs = lang === "rust";
+      var ts = lang === "typescript", cc = lang === "c";
+      var own = kt || sw || go || rs;
+      if (!own) { lang = baseOf(lang); }
       var py = lang === "python", js = lang === "javascript";
       var cpp = lang === "cpp", cs = lang === "csharp", java = lang === "java";
       // what this file names that another file might: the modules it
@@ -436,15 +582,110 @@
       function accept(v) { return (isOp(v) || isName(v)) ? next() : null; }
       function expect(v) {
         var t = accept(v);
-        if (!t) { throw oops("cm_expected", peek().line, { what: v }); }
+        if (!t) { throw wanted(v); }
         return t;
       }
       function odd(t) {
         t = t || peek();
-        if (t.t === "eof") { return oops("cm_ended", t.line); }
-        if (t.t === "indent" || t.t === "dedent") { return oops("cm_indent", t.line); }
-        var bit = t.t === "str" ? '"' + t.v + '"' : t.t === "nl" ? "↵" : String(t.v);
-        return oops("cm_odd", t.line, { bit: bit.slice(0, 24) });
+        var err;
+        if (t.t === "eof") { err = oops("cm_ended", t.line); }
+        else if (t.t === "indent" || t.t === "dedent") { err = oops("cm_indent", t.line); }
+        else {
+          var bit = t.t === "str" ? '"' + t.v + '"' : t.t === "nl" ? "↵" : String(t.v);
+          err = oops("cm_odd", t.line, { bit: bit.slice(0, 24) });
+        }
+        err.at = t.at;
+        return err;
+      }
+
+      // ---------------------------------------------- what is missing --
+      // "Line 12: expected ; here" -- said on the line of `said` (where the
+      // reading stopped, unless it names another) -- and with it, where the
+      // missing piece would go, for the Code tab to offer to put it in
+      // (32-code-side.js).  err.at is how far the reading got, so a fix can
+      // be tried first and offered only if the reading then gets further.
+      function wanted(what, said) {
+        var k = Math.min(pos, toks.length - 1), cur = toks[k];
+        var err = oops("cm_expected", (said || cur).line, { what: what });
+        err.at = cur.at;
+        var edits = wantedAt(what, k);
+        if (edits && edits.length) { err.fix = { what: what, edits: edits }; }
+        return err;
+      }
+      function solid(t) {
+        return t.t !== "nl" && t.t !== "indent" && t.t !== "dedent" && t.t !== "eof" && !t.auto;
+      }
+      // An offset in the file as a line (numbered along with the files
+      // before it) and a column, tabs counted as the four spaces they are read as.
+      function spotOf(off) {
+        var src = lexed.src, ln = 1 + (lexed.base || 0), from = 0;
+        for (var k = src.indexOf("\n"); k >= 0 && k < off; k = src.indexOf("\n", k + 1)) { ln++; from = k + 1; }
+        return { line: ln, col: off - from };
+      }
+      // Where `what` goes: a closing mark or a ; straight after the last
+      // thing read; ( and [ in front of what they open; a word, an arrow or
+      // a { after a space; and a } the code ended without, where the
+      // indenting says each block ends.
+      function wantedAt(what, k) {
+        var cur = toks[k], prev = null;
+        if (what === "}" && cur.t === "eof") { return unshut(); }
+        for (var b = k - 1; b >= 0 && !prev; b--) { if (solid(toks[b])) { prev = toks[b]; } }
+        if (!prev || prev.end === undefined || what === "↵") { return null; }
+        // Go ends the line an if or a for is written on itself, without its
+        // { -- if x > 2 (;) -- and the reading carries on into the next
+        // line as though that were the test: the { goes where the line ended
+        if (go && what === "{") {
+          var h = k;
+          while (h >= 0 && !(toks[h].t === "name" && /^(if|for|switch|select|func)$/.test(toks[h].v))) { h--; }
+          for (var g = Math.max(h, 0); h >= 0 && g <= k; g++) {
+            if (toks[g].auto) { prev = toks[g]; break; }
+          }
+        }
+        var at = spotOf(prev.end);
+        if (what === "(" || what === "[") {
+          if (!solid(cur) || spotOf(cur.at).line !== at.line) { return null; }
+          at = spotOf(cur.at);
+          return [{ line: at.line, col: at.col, text: what }];
+        }
+        var text = /^[;,)\]:.]$/.test(what) ? what
+                 : " " + what + (solid(cur) && cur.at === prev.end ? " " : "");
+        return [{ line: at.line, col: at.col, text: text }];
+      }
+      // The } each block never got.  A block ends before the first line after
+      // it that is no further in than the line that opened it -- if its lines
+      // were indented at all; those that were not, and any still open at the
+      // foot of the file, are shut there, the innermost first.  Each is a
+      // line of its own, indented like the line its block opened on (`like`);
+      // line 0 is after the last.
+      function unshut() {
+        var open = [], out = [], head = null, last = null;
+        function colOf(t) { return t.at - (lexed.src.lastIndexOf("\n", t.at - 1) + 1); }
+        for (var k = 0; k < toks.length; k++) {
+          var t = toks[k];
+          if (!solid(t) || t.at === undefined) { continue; }
+          if (t.first) {
+            head = t;
+            var ind = colOf(t), top = open[open.length - 1];
+            if (top && top.body === null && t.line > top.line) { top.body = ind; }
+            while (open.length) {
+              top = open[open.length - 1];
+              if (top.body === null || top.body <= top.ind || ind > top.ind) { break; }
+              if (t.t === "op" && t.v === "}" && ind === top.ind) { break; }
+              // under the block's last line, not after the blank ones below it
+              var under = last ? spotOf(last.end).line + 1 : t.line;
+              out.push({ line: Math.min(under, t.line), text: "}", like: top.like });
+              open.pop();
+            }
+          }
+          last = t;
+          if (t.t === "op" && t.v === "{" && head) {
+            open.push({ ind: colOf(head), body: null, line: t.line, like: head.line });
+          } else if (t.t === "op" && t.v === "}") {
+            open.pop();
+          }
+        }
+        for (var j = open.length - 1; j >= 0; j--) { out.push({ line: 0, text: "}", like: open[j].like }); }
+        return out;
       }
 
       // The comments written above a statement, put back in front of it.
@@ -783,12 +1024,12 @@
       }
       // An expression inside an f-string or a template: read on its own.
       function subExpr(code, line) {
-        var inner = lexCode(code, lang);
+        var inner = lexCode(code, dialect);
         inner.toks.forEach(function (tok) { tok.line = line; });
         inner.toks = inner.toks.filter(function (tok) {
           return tok.t !== "nl" && tok.t !== "indent" && tok.t !== "dedent";
         });
-        var sub = parserFor(inner, lang);
+        var sub = parserFor(inner, dialect);
         var e = sub.expression();
         return e;
       }
@@ -841,10 +1082,18 @@
       function cBinary(least) {
         var a = cUnary();
         for (;;) {
-          var t = peek(), got = binOpHere();
+          var t = peek(), got = own ? ownOpHere() : binOpHere();
           var op = got ? got.op : null;
-          var rank = op ? C_BIN[op] || (/^(is|as|in)$/.test(op) ? 7 : 0) : 0;
+          var rank = op ? (own ? BIN[op] || 0 : C_BIN[op] || (/^(is|as|in)$/.test(op) ? 7 : 0)) : 0;
           if (!rank || rank < least) { break; }
+          // Kotlin, Swift: a line starting with an operator starts a new statement,
+          // unless it carries on with && or || or ?:
+          if (lines && t.first && !/^(&&|\|\||\?:|\?\?)$/.test(op)) { break; }
+          if (own) {
+            for (var k1 = 0; k1 < got.n; k1++) { next(); }
+            a = ownBinary(op, a, t);
+            continue;
+          }
           for (var k = 0; k < got.n; k++) { next(); }
           var b;
           if (op === "is" && (isName("null") || isName("not"))) {
@@ -878,6 +1127,7 @@
       var CPP_MADE = /^(vector|map|unordered_map|set|unordered_set|multiset|multimap|pair|tuple|deque|list|stack|queue|priority_queue|array|optional)$/;
       function cUnary() {
         var t = peek();
+        if (own) { return ownUnary(); }
         if (t.t === "op" && (t.v === "!" || t.v === "-" || t.v === "+" || t.v === "~")) {
           next();
           return { k: "un", op: t.v, a: cUnary(), line: t.line };
@@ -907,6 +1157,18 @@
           if (isName()) { type += " " + next().v; }
           expect(")");
           return { k: "cast", type: type, e: cUnary(), line: t.line };
+        }
+        // C's (int *) p, (char **) argv, (struct Point *) q: the thing itself
+        if (cpp && isOp("(") && peek(1).t === "name" && (CAST_WORDS.test(peek(1).v) || isName("struct", 1))) {
+          var k0 = 1;
+          while (peek(k0).t === "name" && k0 < 4) { k0++; }
+          if (isOp("*", k0)) {
+            while (isOp("*", k0)) { k0++; }
+            if (isOp(")", k0)) {
+              while (k0-- >= 0) { next(); }
+              return cUnary();
+            }
+          }
         }
         // (Point) o, (List<String>) x: a cast to a type of the program's own
         if (!js && isOp("(") && peek(1).t === "name" && /^[A-Z]/.test(peek(1).v) && castAhead()) {
@@ -1131,7 +1393,17 @@
               typeName();
             }
             args.push({ k: "ref", e: cAssign(), line: t.line });
-          } else if (cs && t.t === "name" && isOp(":", 1) && !isOp("::", 1)) {
+          } else if (sw && t.t === "op" && /^(<|>|<=|>=|\+|-|\*|\/|==|!=)$/.test(t.v) && (isOp(")", 1) || isOp(",", 1))) {
+            // Swift's reduce(0, +), sorted(by: >): the operator, as a function of two
+            next();
+            args.push({ k: "fn", lambda: true, line: t.line,
+                        params: [{ name: "a", line: t.line }, { name: "b", line: t.line }],
+                        body: [{ k: "return", line: t.line, value: { k: "bin", op: t.v, a: { k: "name", v: "a", line: t.line },
+                                                                     b: { k: "name", v: "b", line: t.line }, line: t.line } }] });
+          } else if (kt && t.t === "name" && isOp("=", 1)) {
+            next(); next();                  // Kotlin's f(times = 2)
+            args.push({ k: "kw", name: t.v, value: cAssign(), line: t.line });
+          } else if ((cs || sw) && t.t === "name" && isOp(":", 1) && !isOp("::", 1)) {
             next(); next();                  // a named argument: said where it goes
             var namedArg = cAssign();
             namedArg.argName = t.v;
@@ -1153,6 +1425,20 @@
         var optNext = false;
         for (;;) {
           var t = peek();
+          if (own) {
+            var more = ownPostfix(a, t);
+            if (more === null) { break; }
+            if (more) { a = more; continue; }
+          }
+          // make_unique<Circle>(1), make_shared<Box>(2, 3): a new Circle, a new Box
+          if (isOp("<") && cpp && /^(make_unique|make_shared)$/.test(bare(pathOf(a) || "").replace(/^std::/, "")) && templateAhead()) {
+            var madeOf = typeArgs();
+            if (madeOf[0] && isOp("(")) {
+              next();
+              a = { k: "new", type: madeOf[0], args: cArgs(")"), line: t.line };
+              continue;
+            }
+          }
           if (isOp("<") && templateAhead()) { skipAngles(); continue; }
           if (isOp("(")) { next(); a = { k: "call", fn: a, args: cArgs(")"), line: t.line }; optNext = false; }
           else if (isOp(".") || (isOp("->") && cpp) || isOp("?.") || isOp("::")) {
@@ -1165,6 +1451,7 @@
             if (nm.v === "template" && peek().t === "name") { nm = next(); }
             a = { k: "member", obj: a, name: nm.v, line: t.line };
             if (t.v === "?." && js) { a.opt = true; }        // a?.b: nothing where a is nothing
+            if (t.v === "?." && own) { a.safe = true; }      // Kotlin's and Swift's the same
           } else if (isOp("[")) {
             next();
             var at = cAssign();
@@ -1179,7 +1466,10 @@
             if (peek().line !== toks[pos - 1].line && js) { break; }
             next();
             a = { k: "incdec", op: t.v, target: a, pre: false, line: t.line };
-          } else if (isOp("!") && cs && !isOp("=", 1) && !isOp("==", 1) &&
+          } else if (ts && (isName("as") || isName("satisfies")) && !peek().first) {
+            next();                          // x as number: x
+            if (!accept("const")) { tsType(); }
+          } else if (isOp("!") && (cs || ts) && !isOp("=", 1) && !isOp("==", 1) &&
                      (a.k === "name" || a.k === "member" || a.k === "call" || a.k === "index") &&
                      !startsValue(peek(1))) {
             next();                          // C#'s x! -- it is not null
@@ -1192,6 +1482,10 @@
                (t.t === "op" && (t.v === "(" || t.v === "!"));
       }
       function cPrimary() {
+        if (own) {
+          var mine0 = ownPrimary();
+          if (mine0) { return mine0; }
+        }
         var t = next();
         if (t.t === "num") { return { k: "num", v: t.v, real: t.real, line: t.line }; }
         if (t.t === "str") {
@@ -1214,7 +1508,9 @@
             if (t.v === "async") { next(); }
             accept("*");
             if (isName()) { next(); }
+            if (ts && isOp("<")) { skipAngles(); }
             var fparams = cParams();
+            tsAfterName();
             return { k: "fn", params: fparams, body: cBraces(), line: t.line };
           }
           if (t.v === "default" && cs && isOp("(")) {         // default(int)
@@ -1261,6 +1557,12 @@
             return chainQ;
           }
           if (t.v === "class" && js) { return jsClassExpr(t); }
+          // C's own numbers, which are names only to the preprocessor
+          if (cpp && Object.prototype.hasOwnProperty.call(C_MACROS, t.v.replace(/^std::/, ""))) {
+            var cm = C_MACROS[t.v.replace(/^std::/, "")];
+            if (cm.charAt(0) === "-") { return { k: "un", op: "-", a: { k: "num", v: cm.slice(1), line: t.line }, line: t.line }; }
+            return { k: "num", v: cm, real: /\./.test(cm), line: t.line };
+          }
           return { k: "name", v: t.v, line: t.line };
         }
         if (t.t === "op" && t.v === "(") {
@@ -1419,7 +1721,7 @@
       // Only names, :: and commas may come between, so a < b > (c) --
       // two comparisons -- is still read as the comparisons it is.
       function templateAhead() {
-        if (js || !isOp("<")) { return false; }
+        if ((js && !ts) || !isOp("<")) { return false; }
         var deep = 0;
         for (var k = pos; k < toks.length; k++) {
           var t = toks[k];
@@ -1459,6 +1761,13 @@
             deep--;
             if (!deep) {
               var after = toks[k + 1];
+              // (a: number, b: number): number => a + b
+              if (ts && after && after.t === "op" && after.v === ":") {
+                var back = pos;
+                try { pos = k + 2; tsType(); return isOp("=>"); }
+                catch (e) { return false; }
+                finally { pos = back; }
+              }
               return !!after && after.t === "op" && (after.v === "=>" || (java && after.v === "->"));
             }
           }
@@ -1474,7 +1783,8 @@
         } else {
           params = lambdaParams();
         }
-        if (!accept("=>") && !accept("->")) { throw oops("cm_expected", peek().line, { what: "=>" }); }
+        if (ts && accept(":")) { tsType(); }
+        if (!accept("=>") && !accept("->")) { throw wanted(java ? "->" : "=>"); }
         var body = isOp("{") ? cBraces() : doneOrGiven(cAssign(), t.line);
         return { k: "fn", params: params, body: body, line: t.line, lambda: true };
       }
@@ -1486,7 +1796,16 @@
           var p = peek();
           if (isOp("{") || isOp("[")) {
             var pat = cPrimary();
+            tsAfterName();
             params.push({ name: "arg" + (params.length + 1), pattern: pat, type: null, dims: 0, line: p.line });
+          } else if (ts) {
+            // (a: number, b?: string, ...rest: number[]): the name first, and its type after
+            var many = !!accept("...");
+            var pn = next();
+            if (pn.t !== "name") { throw odd(pn); }
+            tsAfterName();
+            params.push({ name: pn.v, type: null, dims: 0, ref: false, rest: many,
+                          dflt: accept("=") ? cAssign() : null, line: p.line });
           } else {
             var words = [], rest = false;
             // (...fns): everything handed over from here on, as one list
@@ -1513,7 +1832,7 @@
         var deep = 1;
         while (deep) {
           var t = next();
-          if (t.t === "eof") { throw oops("cm_expected", t.line, { what: "}" }); }
+          if (t.t === "eof") { throw wanted("}"); }
           if (t.t === "op" && t.v === "{") { deep++; }
           if (t.t === "op" && t.v === "}") { deep--; }
         }
@@ -1524,7 +1843,7 @@
         var deep = 1;
         while (deep) {
           var t = next();
-          if (t.t === "eof") { throw oops("cm_expected", t.line, { what: ")" }); }
+          if (t.t === "eof") { throw wanted(")"); }
           if (t.t === "op" && t.v === "(") { deep++; }
           if (t.t === "op" && t.v === ")") { deep--; }
         }
@@ -1587,7 +1906,7 @@
           if (name === "long" && isName("long")) { next(); }
           if (isName("int")) { next(); }
         }
-        if (name === "struct" || name === "enum" || name === "typename" || name === "class") {
+        if (name === "struct" || name === "enum" || name === "typename" || name === "class" || name === "union") {
           if (peek().t === "name") { name = next().v; }
         }
         while ((isOp("::") || isOp(".")) && peek(1).t === "name") { next(); name += "::" + next().v; }
@@ -1614,9 +1933,11 @@
         var varargs = false;
         if (isOp("...")) { next(); dims++; varargs = true; }   // Java: int... nums
         name = name.replace(/^std::/, "");
-        // a pointer to letters or numbers is an array of them
-        if (ptr && KIND_OF_TYPE[name.toLowerCase()]) { dims += ptr; ptr = 0; }
-        return { name: name, dims: dims, ref: ref, args: args, ptr: ptr, varargs: varargs, rect: rect };
+        // char *s: C's words; and a pointer to letters or numbers is an array of them
+        if (cpp && name === "char" && ptr) { ptr--; name = "string"; }
+        var ptrDims = 0;
+        if (ptr && KIND_OF_TYPE[name.toLowerCase()]) { dims += ptr; ptrDims = ptr; ptr = 0; }
+        return { name: name, dims: dims, ref: ref, args: args, ptr: ptr, varargs: varargs, rect: rect, ptrDims: ptrDims };
       }
       function typeArgs() {
         expect("<");
@@ -1647,6 +1968,158 @@
         expect(">");
         return out;
       }
+      // ---- TypeScript's types: read past, what the program does being the
+      // JavaScript under them.  number, string[], Map<string, number[]>,
+      // "a" | "b", (x: number) => void, { name: string; age?: number },
+      // [number, string], typeof x, keyof T.
+      function tsType() {
+        accept("|");
+        accept("&");
+        var got = tsTypeOne();
+        while (isOp("|") || isOp("&")) { next(); tsTypeOne(); got = { name: "any", dims: 0, args: [] }; }
+        // T extends U ? X : Y
+        if (isName("extends") && !peek().first) { next(); tsType(); expect("?"); tsType(); expect(":"); tsType(); }
+        return got;
+      }
+      function tsTypeOne() {
+        var t = peek(), got = { name: "any", dims: 0, args: [] };
+        if (isName("typeof") || isName("keyof") || isName("readonly") || isName("unique") || isName("infer") ||
+            isName("asserts")) {
+          next();
+          return tsTypeOne();
+        }
+        if (isName("new") && isOp("(", 1)) { next(); }
+        if (isOp("(")) {
+          // (a: number) => void -- or only a type in brackets
+          var save = pos;
+          skipParens();
+          if (isOp("=>")) { next(); tsType(); return { name: "Function", dims: 0, args: [] }; }
+          pos = save;
+          next();
+          got = tsType();
+          expect(")");
+        } else if (isOp("{")) {
+          skipBraces();
+          got = { name: "Object", dims: 0, args: [] };
+        } else if (isOp("[")) {
+          next();
+          var deep = 1;
+          while (deep) {
+            var x = next();
+            if (x.t === "eof") { throw odd(x); }
+            if (x.t === "op" && x.v === "[") { deep++; }
+            if (x.t === "op" && x.v === "]") { deep--; }
+          }
+          got = { name: "Array", dims: 0, args: [] };
+        } else if (t.t === "str" || t.t === "num" || t.t === "fstr") {
+          next();
+          got = { name: t.t === "num" ? "number" : "string", dims: 0, args: [] };
+        } else if (isOp("-") && peek(1).t === "num") {
+          next(); next();
+          got = { name: "number", dims: 0, args: [] };
+        } else if (t.t === "name") {
+          next();
+          var name = t.v;
+          while (isOp(".") && peek(1).t === "name") { next(); name += "." + next().v; }
+          var args = [];
+          if (isOp("<")) {
+            next();
+            while (!isOp(">")) { args.push(tsType()); if (!accept(",")) { break; } }
+            expect(">");
+          }
+          got = { name: name, dims: 0, args: args };
+          // (x): x is string -- a type that says what x is
+          if (isName("is") && !peek().first) { next(); tsType(); got = { name: "boolean", dims: 0, args: [] }; }
+        } else {
+          throw odd(t);
+        }
+        while (isOp("[") && !peek().first) {
+          next();
+          if (!isOp("]")) { tsType(); }                  // T["key"]
+          expect("]");
+          got = { name: got.name, dims: (got.dims || 0) + 1, args: got.args };
+        }
+        return got;
+      }
+      // After a name that can have a type: name?: T, name!: T, name: T
+      function tsAfterName() {
+        if (!ts) { return null; }
+        if (isOp("?") && (isOp(":", 1) || isOp(",", 1) || isOp(")", 1) || isOp("=", 1) || isOp(";", 1))) { next(); }
+        if (isOp("!") && isOp(":", 1)) { next(); }
+        return accept(":") ? tsType() : null;
+      }
+      // interface Shape { ... }, type Id = string | number, declare ...:
+      // nothing a run does, so nothing to read
+      function tsSkipsHere() {
+        if (!ts) { return false; }
+        if (isName("interface") && peek(1).t === "name") {
+          next(); next();
+          while (!isOp("{") && peek().t !== "eof") { if (isOp("<")) { skipAngles(); } else { next(); } }
+          skipBraces();
+          return true;
+        }
+        if (isName("type") && peek(1).t === "name" && (isOp("=", 2) || isOp("<", 2))) {
+          next(); next();
+          if (isOp("<")) { skipAngles(); }
+          expect("=");
+          tsType();
+          accept(";");
+          return true;
+        }
+        if (isName("declare") && peek(1).t === "name" && !peek(1).first) {
+          next();
+          if (isName("module") || isName("namespace") || isName("global")) {
+            while (!isOp("{") && peek().t !== "eof") { next(); }
+            skipBraces();
+            return true;
+          }
+          skipMember();
+          return true;
+        }
+        return false;
+      }
+      // enum Color { Red, Green = 5, Blue }: a table of the names, numbered
+      // on from 0 (or from the last number given) -- what TypeScript makes
+      function tsEnumAhead() {
+        return ts && (isName("enum") || (isName("const") && isName("enum", 1))) && peek(isName("const") ? 2 : 1).t === "name";
+      }
+      function tsEnum() {
+        var t = peek();
+        if (isName("const")) { next(); }
+        next();
+        var name = next().v;
+        expect("{");
+        var keys = [], values = [], at = 0;
+        while (!isOp("}")) {
+          var kt = next(), v;
+          if (accept("=")) {
+            v = cAssign();
+            if (stripParens(v).k === "num") { at = Number(stripParens(v).v) + 1; }
+          } else {
+            v = { k: "num", v: String(at), line: kt.line };
+            at++;
+          }
+          keys.push({ k: "str", v: String(kt.v), line: kt.line });
+          values.push(v);
+          if (!accept(",")) { break; }
+        }
+        expect("}");
+        return { k: "decl", type: null, typeInfo: null, dims: 0, konst: true, line: t.line,
+                 names: [{ name: name, value: { k: "dict", keys: keys, values: values, line: t.line, js: true }, line: t.line }] };
+      }
+      // import x from "y", import { a, b } from "./c" -- to the end of the line
+      // where there is no ; to end it
+      function skipImport() {
+        var start = next(), deep = 0;
+        while (peek().t !== "eof") {
+          var x = peek();
+          if (!deep && (x.first && x.line !== start.line)) { return; }
+          next();
+          if (x.t === "op" && (x.v === "{" || x.v === "(")) { deep++; }
+          if (x.t === "op" && (x.v === "}" || x.v === ")")) { deep--; }
+          if (!deep && x.t === "op" && x.v === ";") { return; }
+        }
+      }
       function skipAngles() {
         var deep = 0;
         do {
@@ -1667,7 +2140,10 @@
         try {
           modifiers();
           if (js) { return isName("let") || isName("const") || isName("var"); }
-          if (peek().t !== "name" || /^(return|new|delete|throw|else|case|goto|using|namespace|class|struct|yield|await|typeof|sizeof)$/.test(peek().v)) {
+          // (struct Point p; and enum Color c; are declarations all the same)
+          var tagged = cpp && /^(struct|enum|union)$/.test(peek().v) && peek(1).t === "name" &&
+                       (peek(2).t === "name" || isOp("*", 2));
+          if (peek().t !== "name" || (!tagged && /^(return|new|delete|throw|else|case|goto|using|namespace|class|struct|yield|await|typeof|sizeof)$/.test(peek().v))) {
             return false;
           }
           var declType = typeName();
@@ -1697,7 +2173,7 @@
       // ------------------------------------------------- statements --
       // Python --------------------------------------------------------
       function pyBlock(outerCol) {
-        if (accept(":") === null) { throw oops("cm_expected", peek().line, { what: ":" }); }
+        if (accept(":") === null) { throw wanted(":"); }
         if (peek().t !== "nl") { return pySimpleLine(); }
         next();
         var ind = peek();
@@ -1920,7 +2396,10 @@
               type = pyTernary();
               if (accept("as") || accept(",")) { name = next().v; }
             }
-            if (name) { CAUGHT[name] = true; }
+            if (name) {
+              CAUGHT[name] = true;
+              caughtAs(name, type && type.k !== "tuple" ? pathOf(type) : "");
+            }
             handlers.push({ type: type, name: name, body: pyBlock(), line: h.line });
             continue;
           }
@@ -1935,7 +2414,7 @@
         var t = next();
         var subject = exprList();
         expect(":");
-        if (peek().t !== "nl") { throw oops("cm_expected", peek().line, { what: "↵" }); }
+        if (peek().t !== "nl") { throw wanted("↵"); }
         next();
         if (peek().t !== "indent") { throw oops("cm_indent", peek().line); }
         var ind = next();
@@ -2155,7 +2634,7 @@
         expect("{");
         var body = [];
         while (!isOp("}")) {
-          if (peek().t === "eof") { throw oops("cm_expected", peek().line, { what: "}" }); }
+          if (peek().t === "eof") { throw wanted("}"); }
           body.push.apply(body, notesBefore(peek().line));
           body.push.apply(body, cStatement());
         }
@@ -2186,6 +2665,10 @@
             if (/^(while|dowhile|for|foreach)$/.test(st.k)) { st.label = t.v; }
           });
           return inner;
+        }
+        if (t.t === "name" && ts) {
+          if (tsSkipsHere()) { return []; }
+          if (tsEnumAhead()) { return [tsEnum()]; }
         }
         if (t.t === "name") {
           switch (t.v) {
@@ -2276,13 +2759,15 @@
               return [{ k: "note", text: "goto " + to.v, line: t.line }];
             }
             case "class": case "struct": case "interface": case "enum": case "record":
-              if (peek(1).t === "name") {
+              // (struct Point p = {1, 2}; is a Point, not the making of one)
+              if (peek(1).t === "name" && !(cpp && !/^(class|struct|final)$/.test(peek(1).v) &&
+                                            !/^(final|sealed)$/.test(peek(2).v) && (peek(2).t === "name" || isOp("*", 2)))) {
                 localTypes.push(typeDecl({}, []));
                 return [];
               }
               break;
             case "function":
-              if (js) { return [jsFunction()]; }
+              if (js) { var jf1 = jsFunction(); return jf1.signature ? [] : [jf1]; }
               break;
             case "async":
               if (js && isName("function", 1)) { next(); return [jsFunction()]; }
@@ -2327,7 +2812,11 @@
             case "delete":
               if (cpp) { skipToSemi(); return []; }
               break;
-            case "typedef": case "static_assert":
+            case "typedef":
+              if (typedefAhead()) { localTypes.push(typedefStruct([])); return []; }
+              skipToSemi();
+              return [];
+            case "static_assert":
               skipToSemi();
               return [];
           }
@@ -2336,7 +2825,7 @@
         var e = cAssign();
         if (!accept(";")) {
           if (!js || (peek().line === toks[pos - 1].line && !isOp("}"))) {
-            throw oops("cm_expected", toks[pos - 1].line, { what: ";" });
+            throw wanted(";", toks[pos - 1]);
           }
         }
         return [{ k: "expr", e: e, line: t.line }];
@@ -2380,6 +2869,15 @@
             keys.push(null);
           } else {
             if (isOp("&")) { next(); }
+            if (own) { accept("mut"); accept("ref"); }
+            // (_, age): the first let go (Kotlin, Swift, Go, Rust)
+            if (own && isName("_") && (isOp(",", 1) || isOp(close, 1))) {
+              next();
+              items.push(null);
+              keys.push(null);
+              if (!accept(",")) { break; }
+              continue;
+            }
             if ((cs || cpp) && peek(1).t === "name") { typeName(); }   // var (int a, string b)
             var nm = next();
             if (nm.t !== "name" && nm.t !== "str") { throw odd(nm); }
@@ -2416,6 +2914,7 @@
         do {
           if (isOp("[") || isOp("{") || (isOp("(") && !js)) {
             var pat = patternHere();
+            tsAfterName();
             var pv = accept("=") ? cAssign() : null;
             names.push({ pattern: pat, value: pv, line: t.line });
             continue;
@@ -2424,6 +2923,10 @@
           if (nm.t !== "name") { throw odd(nm); }
           var sizes = [];
           while (accept("[")) { sizes.push(isOp("]") ? null : cAssign()); expect("]"); }
+          // char word[20]: words, twenty letters long at most
+          var letters = cpp && type && type.name === "char" && sizes.length > 0;
+          if (letters) { sizes.pop(); }
+          tsAfterName();
           var value = null;
           if (accept("=")) {
             value = cAssign();
@@ -2437,10 +2940,13 @@
                   : { k: "new", type: type, args: braced, direct: true, braces: true, line: nm.line };
           }
           names.push({ name: nm.v, value: value, dims: sizes.length + (type ? type.dims : 0),
-                       sizes: sizes, line: nm.line });
+                       sizes: sizes, line: nm.line, letters: letters });
         } while (accept(","));
+        if (names.length && names.every(function (one) { return one.letters; })) {
+          type = Object.assign({}, type, { name: "string" });
+        }
         if (isOp(":") && cpp) { next(); cAssign(); }      // a bit field
-        if (!bare && !accept(";") && !js) { throw oops("cm_expected", toks[pos - 1].line, { what: ";" }); }
+        if (!bare && !accept(";") && !js) { throw wanted(";", toks[pos - 1]); }
         return [{ k: "decl", type: type ? type.name : null, typeInfo: type, dims: type ? type.dims : 0,
                   konst: konst, names: names, line: t.line }];
       }
@@ -2508,7 +3014,7 @@
         var cases = [], cur = null, arrows = false;
         while (!isOp("}")) {
           var c = peek();
-          if (c.t === "eof") { throw oops("cm_expected", c.line, { what: "}" }); }
+          if (c.t === "eof") { throw wanted("}"); }
           if (isName("case") || (isName("default") && (isOp(":", 1) || isOp("->", 1)))) {
             next();
             var labels = [], isDefault = c.v === "default", guard = null;
@@ -2570,13 +3076,18 @@
               modifiers();
               var ty = typeName();
               type = { k: "name", v: ty.name, line: h.line };
-              while (accept("|")) { typeName(); }
+              var several = false;
+              while (accept("|")) { typeName(); several = true; }
+              if (several) { type.several = true; }
               if (peek().t === "name") { name = next().v; }
             }
             expect(")");
           }
           if (isName("when")) { next(); expect("("); cAssign(); expect(")"); }
-          if (name) { CAUGHT[name] = true; }
+          if (name) {
+            CAUGHT[name] = true;
+            caughtAs(name, type && !type.several ? type.v : "");
+          }
           handlers.push({ type: type, name: name, body: cBraces(), line: h.line });
         }
         if (isName("finally")) { next(); fin = cBraces(); }
@@ -2590,12 +3101,20 @@
           if (isName("void") && isOp(")", 1)) { next(); break; }
           if (js && (isOp("{") || isOp("["))) {
             var pat = patternHere();
+            tsAfterName();
             var pd = accept("=") ? cAssign() : null;
             params.push({ name: "arg" + (params.length + 1), pattern: pat, dflt: pd, type: null, dims: 0, line: p.line });
             if (!accept(",")) { break; }
             continue;
           }
           if (isOp("...")) { next(); rest = true; }
+          // TypeScript's constructor(private name: string): a field as well
+          var prop = false;
+          while (ts && peek().t === "name" && /^(public|private|protected|readonly|override)$/.test(peek().v) &&
+                 peek(1).t === "name") {
+            next();
+            prop = true;
+          }
           while (peek().t === "name" && /^(final|const|ref|out|in|params|let|var|readonly|scoped|this|register)$/.test(peek().v) &&
                  (peek(1).t === "name" || isOp("<", 1) || isOp("[", 1))) {
             var m = next().v;
@@ -2627,9 +3146,15 @@
           }
           var dims = type ? type.dims : 0;
           while (accept("[")) { if (!isOp("]")) { cAssign(); } expect("]"); dims++; }
+          // char name[]: words, as char *name is
+          if (cpp && type && type.name === "char" && dims > type.dims) {
+            dims--;
+            type = Object.assign({}, type, { name: "string", dims: dims });
+          }
+          tsAfterName();
           var dflt = accept("=") ? cAssign() : null;
           params.push({ name: nm.v, type: type ? type.name : null, typeInfo: type,
-                        dims: dims, ref: ref, rest: rest, dflt: dflt, line: nm.line });
+                        dims: dims, ref: ref, rest: rest, dflt: dflt, line: nm.line, prop: prop });
           if (!accept(",")) { break; }
         }
         expect(")");
@@ -2640,9 +3165,34 @@
         var gen = !!accept("*");
         var nm = next();
         if (nm.t !== "name") { throw oops("cm_lambda", t.line); }
+        if (ts && isOp("<")) { skipAngles(); }
         var params = cParams();
-        var body = helpersOf(lang).test(nm.v) ? skipBraces() : cBraces();
-        return { k: "func", name: nm.v, params: params, rtype: null, body: body, line: t.line, gen: gen };
+        tsAfterName();
+        // function f(a: number): number; -- one of its ways of being called, said ahead
+        if (ts && accept(";")) { return { k: "func", name: nm.v, params: params, rtype: null, body: [], line: t.line, signature: true }; }
+        var paged = helperHere(nm.v);
+        var body = paged ? skipBraces() : cBraces();
+        return { k: "func", name: nm.v, params: params, rtype: null, body: body, line: t.line, gen: gen,
+                 pageHelper: paged };
+      }
+      // One of the helpers the page writes into code it hands out -- ask,
+      // wait, stop, askWhole, money -- told by what its body does as well as
+      // its name: a program's own ask(item, number) is the program's own.
+      var HELPER_TELLS = { ask: /readSync/, wait: /Date/, stop: /process/,
+                           askWhole: /cin|getline/, askReal: /cin|getline/, askText: /cin|getline/,
+                           askFlag: /cin|getline/, money: /setprecision|fixed/, nap: /sleep|thread/,
+                           toUpper: /toupper|transform/, toLower: /tolower|transform/ };
+      function helperHere(name) {
+        if (!helpersOf(lang).test(name) || !isOp("{")) { return false; }
+        var deep = 0, words = [];
+        for (var k = pos; k < toks.length; k++) {
+          var tk = toks[k];
+          if (tk.t === "op" && tk.v === "{") { deep++; }
+          else if (tk.t === "op" && tk.v === "}") { deep--; if (!deep) { break; } }
+          words.push(String(tk.v));
+        }
+        var tell = HELPER_TELLS[name];
+        return !tell || tell.test(words.join(" "));
       }
 
       // ---- classes, and what is in them -----------------------------------
@@ -2736,7 +3286,7 @@
       }
       function classMembers(cls) {
         while (!isOp("}")) {
-          if (peek().t === "eof") { throw oops("cm_expected", peek().line, { what: "}" }); }
+          if (peek().t === "eof") { throw wanted("}"); }
           var t = peek();
           var lead = notesBefore(t.line);
           if (accept(";")) { continue; }
@@ -2783,6 +3333,19 @@
             var cbody;
             if (accept("=>")) { cbody = [{ k: "expr", e: cAssign(), line: ct.line }]; accept(";"); }
             else { cbody = cBraces(); }
+            // TypeScript's constructor(private name: string): a field, given what is handed over
+            var props = params.filter(function (q) { return q.prop; });
+            if (props.length) {
+              var sets = props.map(function (q) {
+                cls.fields.push({ name: q.name, value: null, statik: false, line: q.line });
+                return { k: "expr", line: q.line, e: { k: "assignx", op: "=", line: q.line,
+                         target: { k: "member", obj: { k: "name", v: "this", line: q.line }, name: q.name, line: q.line },
+                         value: { k: "name", v: q.name, line: q.line } } };
+              });
+              var first0 = cbody[0] && cbody[0].k === "expr" && stripParens(cbody[0].e).k === "call" &&
+                           pathOf(stripParens(cbody[0].e).fn) === "super";
+              cbody = first0 ? [cbody[0]].concat(sets, cbody.slice(1)) : sets.concat(cbody);
+            }
             cls.ctors.push({ params: params, body: cbody, inits: inits, line: ct.line, lead: lead });
             continue;
           }
@@ -2792,15 +3355,24 @@
               kind = next().v;
             }
             if (isName("async") && (peek(1).t === "name" || isOp("*", 1))) { next(); }
+            if (ts && isOp("[")) { skipMember(); continue; }      // [key: string]: number;
             var gen = !!accept("*");
             var mt = next();
             if (mt.t !== "name" && mt.t !== "str") { throw odd(mt); }
+            if (ts) {
+              if (isOp("?") || isOp("!")) { next(); }
+              if (isOp("<")) { skipAngles(); }
+            }
             if (isOp("(")) {
               var mps = cParams();
+              if (ts && accept(":")) { tsType(); }
+              // abstract area(): number; -- nothing to run
+              if (ts && !isOp("{")) { accept(";"); continue; }
               cls.methods.push({ k: "func", name: String(mt.v), params: mps, rtype: null, body: cBraces(),
                                  line: mt.line, statik: !!mods.static, kind: kind, gen: gen, lead: lead,
                                  getter: kind === "get", setter: kind === "set" });
             } else {
+              if (ts && accept(":")) { tsType(); }
               var fv = accept("=") ? cAssign() : null;
               accept(";");
               cls.fields.push({ name: String(mt.v), value: fv, statik: !!mods.static, line: mt.line, lead: lead });
@@ -2856,7 +3428,7 @@
               body2 = [rtype.name === "void" ? { k: "expr", e: be, line: nmt.line }
                                              : { k: "return", value: be, line: nmt.line }];
             } else {
-              body2 = helpersOf(lang).test(nmt.v) ? skipBraces() : cBraces();
+              body2 = helperHere(nmt.v) ? skipBraces() : cBraces();
             }
             cls.methods.push({ k: "func", name: nmt.v, params: params2, rtype: rtype.name, rtypeInfo: rtype,
                                rdims: rtype.dims, body: body2, line: nmt.line, statik: !!mods.static,
@@ -2875,6 +3447,32 @@
       }
       // friend Fraction operator*(...), friend ostream& operator<<(...):
       // an operator the class says for itself, kept
+      // typedef struct { char name[20]; int score; } Player;  -- a struct by
+      // the name after it (typedef struct node { ... } Node; as well)
+      function typedefAhead() {
+        return cpp && isName("typedef") && /^(struct|union|enum)$/.test(peek(1).v) &&
+               (isOp("{", 2) || (peek(2).t === "name" && isOp("{", 3)));
+      }
+      function typedefStruct(lead) {
+        next();
+        var at = pos + 1;
+        if (toks[at].t === "name") { at++; }
+        var deep = 0, k = at;
+        for (; k < toks.length; k++) {
+          if (toks[k].t === "op" && toks[k].v === "{") { deep++; }
+          if (toks[k].t === "op" && toks[k].v === "}") { deep--; if (!deep) { break; } }
+        }
+        var alias = toks[k + 1] && toks[k + 1].t === "name" ? toks[k + 1].v : null;
+        if (toks[pos + 1].t !== "name") {
+          toks.splice(pos + 1, 0, { t: "name", v: alias || "Record", line: toks[pos].line });
+        }
+        var cls = typeDecl({}, lead || []);
+        if (alias && cls.name !== alias) {
+          classes[classes.indexOf(cls.name)] = alias;
+          cls.name = alias;
+        }
+        return cls;
+      }
       function friendOperator() {
         for (var at = 1; at < 8; at++) {
           var t0 = peek(at);
@@ -3032,6 +3630,4348 @@
         }
       }
 
+      // ================================================= Kotlin, Swift, Go, Rust ==
+      // Four languages with statements of their own, read into the same tree
+      // as the rest.  What they share is here: a line ending a statement
+      // (Kotlin and Swift -- Go puts its own semicolons in, and Rust writes
+      // them), if, when and match that are values as well as statements,
+      // and ranges.  Each has its own part after this one.
+      var BIN = kt ? { "||": 1, "&&": 2, "==": 3, "!=": 3, "===": 3, "!==": 3,
+                       "<": 4, ">": 4, "<=": 4, ">=": 4, "in": 5, "!in": 5, "is": 5, "!is": 5,
+                       "?:": 6, "until": 7, "downTo": 7, "step": 7, "to": 7, "shl": 7, "shr": 7, "ushr": 7,
+                       "and": 7, "or": 7, "xor": 7, "..": 8, "..<": 8, "+": 9, "-": 9, "*": 10, "/": 10, "%": 10,
+                       "as": 11, "as?": 11 }
+              : sw ? { "||": 1, "&&": 2, "==": 3, "!=": 3, "===": 3, "!==": 3, "<": 3, ">": 3, "<=": 3, ">=": 3,
+                       "??": 4, "is": 5, "as": 5, "as?": 5, "as!": 5, "...": 6, "..<": 6,
+                       "+": 7, "-": 7, "|": 7, "^": 7, "*": 8, "/": 8, "%": 8, "&": 8, "<<": 9, ">>": 9 }
+              : rs ? { "..": 1, "..=": 1, "||": 2, "&&": 3, "==": 4, "!=": 4, "<": 4, ">": 4, "<=": 4, ">=": 4,
+                       "|": 5, "^": 6, "&": 7, "<<": 8, ">>": 8, "+": 9, "-": 9, "*": 10, "/": 10, "%": 10, "as": 11 }
+              : go ? { "||": 1, "&&": 2, "==": 3, "!=": 3, "<": 3, ">": 3, "<=": 3, ">=": 3,
+                       "+": 4, "-": 4, "|": 4, "^": 4, "*": 5, "/": 5, "%": 5, "<<": 5, ">>": 5, "&": 5, "&^": 5 }
+              : C_BIN;
+      // Kotlin's and Swift's lines end their statements
+      var lines = kt || sw;
+      // where a { opens a block, not a lambda or a value: after if, while, for, match
+      var noBrace = false;
+      // names not already in the program, for the values if and when hand over
+      var takenNames = Object.create(null);
+      toks.forEach(function (tk) { if (tk.t === "name") { takenNames[tk.v] = true; } });
+      function freshName(base) {
+        var n = 1, name = base + n;
+        while (takenNames[name]) { name = base + (++n); }
+        takenNames[name] = true;
+        return name;
+      }
+      function nameAt(v, line) { return { k: "name", v: v, line: line || 0 }; }
+      function pathAt(path, line) {
+        var bits = path.split("."), e = nameAt(bits[0], line);
+        for (var b = 1; b < bits.length; b++) { e = { k: "member", obj: e, name: bits[b], line: line }; }
+        return e;
+      }
+      function callAt(fn, args, line) {
+        return { k: "call", fn: typeof fn === "string" ? pathAt(fn, line) : fn, args: args || [], line: line };
+      }
+      function builtAt(name, args, line) { return { k: "call", fn: nameAt(name, line), args: args, builtin: true, line: line }; }
+      function numAt(v, line) { return { k: "num", v: String(v), line: line }; }
+      function binAt(op, a, b, line) { return { k: "bin", op: op, a: a, b: b, line: line }; }
+      function notAt(e, line) { return { k: "un", op: "!", a: { k: "paren", e: e, line: line }, line: line }; }
+      function setAt(target, value, line) {
+        return { k: "expr", line: line, e: { k: "assignx", op: "=", target: target, value: value, line: line } };
+      }
+      // Is the statement over?  A ; or the end of the line says so
+      function endStatement() {
+        if (accept(";")) { return; }
+        if (!lines || isOp("}") || peek().t === "eof" || peek().first) { return; }
+      }
+
+      // ---- the binary operators of the four ------------------------------
+      function ownOpHere() {
+        var t = peek();
+        if (t.t === "op") {
+          if (t.v === ">" && isOp(">", 1) && peek(1).glued) { return { op: ">>", n: 2 }; }
+          // x !in xs, x !is String
+          if (t.v === "!" && kt && (isName("in", 1) || isName("is", 1)) && !peek(1).first) {
+            return { op: "!" + peek(1).v, n: 2 };
+          }
+          if (t.v === "=" || t.v === "?" || t.v === "!" || t.v === "!!") { return null; }
+          return { op: t.v, n: 1 };
+        }
+        if (t.t === "name") {
+          if (t.v === "as" && isOp("?", 1) && (kt || sw)) { return { op: "as?", n: 2 }; }
+          if (t.v === "as" && isOp("!", 1) && sw) { return { op: "as!", n: 2 }; }
+          if (kt && /^(in|is|as|until|downTo|step|to|shl|shr|ushr|and|or|xor)$/.test(t.v)) { return { op: t.v, n: 1 }; }
+          if (sw && /^(is|as)$/.test(t.v)) { return { op: t.v, n: 1 }; }
+          if (rs && t.v === "as") { return { op: "as", n: 1 }; }
+        }
+        return null;
+      }
+      // a range: 1..10, 0 until n, 10 downTo 1 step 2, 0..<n, 1...5, 1..=6
+      function rangeAt(from, to, incl, line) {
+        var ch0 = function (x) { x = stripParens(x); return !!x && x.k === "str" && (x.ch || x.v.length === 1); };
+        return { k: "rng", from: from, to: to, incl: incl, line: line, chars: ch0(from) && (!to || ch0(to)) };
+      }
+      // x in xs, x in 1..10: whether x is one of them
+      function inTest(x, coll, line) {
+        var c = stripParens(coll);
+        if (c && c.k === "rng") {
+          var lo = c.down ? c.to : c.from, hi = c.down ? c.from : c.to;
+          if (!c.to) { return binAt(">=", x, lo, line); }
+          if (!c.from) { return binAt(c.incl ? "<=" : "<", x, hi, line); }
+          return binAt("&&", binAt(">=", x, lo, line), binAt(c.incl || c.down ? "<=" : "<", copyOf(x), hi, line), line);
+        }
+        return callAt({ k: "member", obj: coll, name: "contains", line: line }, [x], line);
+      }
+      function ownBinary(op, a, t) {
+        var line = t.line, rank = BIN[op];
+        if (op === "is" || op === "!is") {
+          var ty = ownType();
+          var test = binAt("is", a, { k: "name", v: ty.name, line: line, type: true }, line);
+          return op === "!is" ? notAt(test, line) : test;
+        }
+        if (op === "as" || op === "as?" || op === "as!") {
+          var to = ownType();
+          // Rust's x as f64 and x as i32 change the number; Kotlin's and Swift's only say what it is
+          return rs ? { k: "cast", type: to.name, e: a, line: line } : a;
+        }
+        // Rust's 2.., ..5: a range open at one end
+        if (/^(\.\.|\.\.=|\.\.\.|\.\.<)$/.test(op) && (isOp("]") || isOp(")") || isOp(",") || isOp(";") || isOp("}") ||
+                                                    (isOp("{") && noBrace))) {
+          return rangeAt(a, null, true, line);
+        }
+        var b = cBinary(rank + 1);
+        // Kotlin's 'a' + 2 is the letter two on, and c - 'a' how far on c is
+        var letter = function (x) { x = stripParens(x); return !!x && x.k === "str" && x.ch; };
+        if (kt && (op === "+" || op === "-") && letter(a) && !letter(b)) {
+          return builtAt("chr", [binAt(op, builtAt("ord", [a], line), b, line)], line);
+        }
+        if (kt && op === "-" && letter(b)) {
+          return binAt("-", builtAt("ord", [a], line), builtAt("ord", [b], line), line);
+        }
+        switch (op) {
+          case "..": case "...": return rangeAt(a, b, true, line);
+          case "..=": return rangeAt(a, b, true, line);
+          case "..<": case "until": return rangeAt(a, b, false, line);
+          case "downTo": { var d = rangeAt(a, b, true, line); d.down = true; return d; }
+          case "step":
+            if (stripParens(a).k === "rng") { a = stripParens(a); a.step = b; return a; }
+            return binAt("*", a, b, line);
+          case "to": return { k: "tuple", items: [a, b], line: line };
+          case "in": return inTest(a, b, line);
+          case "!in": return notAt(inTest(a, b, line), line);
+          case "?:": return binAt("??", a, b, line);
+          case "shl": return binAt("<<", a, b, line);
+          case "shr": return binAt(">>", a, b, line);
+          case "ushr": return binAt(">>>", a, b, line);
+          case "and": return binAt("&", a, b, line);
+          case "or": return binAt("|", a, b, line);
+          case "xor": return binAt("^", a, b, line);
+          case "===": return binAt("==", a, b, line);
+          case "!==": return binAt("!=", a, b, line);
+          case "&^": return binAt("&", a, { k: "un", op: "~", a: b, line: line }, line);
+        }
+        return binAt(op, a, b, line);
+      }
+
+      // ---- types written after names: x: Int, xs: List<String>, f: (Int) -> Int
+      var OWN_TYPES = {
+        // Kotlin, Swift, Rust and Go's words for the kinds, said the way the rest are
+        Int: "int", Long: "long", Short: "short", Byte: "byte", UInt: "int", ULong: "long", Double: "double", Float: "float",
+        String: "string", Char: "char", Boolean: "boolean", Bool: "bool", Character: "char", Substring: "string",
+        i8: "int", i16: "int", i32: "int", i64: "long", i128: "long", isize: "int", u8: "int", u16: "int", u32: "int", u64: "long",
+        u128: "long", usize: "int", f32: "float", f64: "double", str: "string", bool: "bool", char: "char",
+        int: "int", int8: "int", int16: "int", int32: "int", int64: "long", uint: "int", uint8: "int", uint16: "int",
+        uint32: "int", uint64: "long", float32: "float", float64: "double", string: "string", byte: "int", rune: "char",
+        Int8: "int", Int16: "int", Int32: "int", Int64: "long", UInt8: "int", UInt32: "int", UInt64: "long",
+        IntArray: "int[]", LongArray: "long[]", DoubleArray: "double[]", FloatArray: "float[]", BooleanArray: "boolean[]",
+        CharArray: "char[]", ShortArray: "int[]", ByteArray: "int[]",
+        MutableList: "List", ArrayList: "List", Array: "List", Vec: "List", VecDeque: "List", LinkedList: "List",
+        MutableMap: "Map", HashMap: "Map", LinkedHashMap: "Map", BTreeMap: "TreeMap", Dictionary: "Map",
+        MutableSet: "Set", HashSet: "Set", LinkedHashSet: "Set", BTreeSet: "TreeSet"
+      };
+      function ownTypeInfo(name, args, dims) {
+        var said = Object.prototype.hasOwnProperty.call(OWN_TYPES, name) ? OWN_TYPES[name] : name;
+        var d = dims || 0;
+        if (/\[\]$/.test(said)) { d++; said = said.replace(/\[\]$/, ""); args = []; }
+        // Array<Int>, [Int], []int: a list of them, said as dims
+        if (said === "List" && args.length === 1 && /^(Array)$/.test(name)) { return ownTypeInfo(args[0].name, args[0].args || [], (args[0].dims || 0) + d + 1); }
+        return { name: said, dims: d, args: args || [] };
+      }
+      function ownType() {
+        if (go) { return goType(); }
+        while (peek().life) { next(); }
+        var t = peek();
+        // (Int, Int) -> Int, a function; (Int, String), a tuple
+        if (isOp("(")) {
+          skipParens();
+          if (isOp("->")) { next(); ownType(); return { name: "Function", dims: 0, args: [] }; }
+          return { name: "Tuple", dims: 0, args: [] };
+        }
+        // Swift's [Int], [String: Int]; Rust's [i32; 5], &[i32]
+        if (isOp("[")) {
+          next();
+          var inner = ownType();
+          if (accept(":")) { var val = ownType(); expect("]"); return typeTail({ name: "Map", dims: 0, args: [inner, val] }); }
+          if (accept(";")) { cAssign(); }
+          expect("]");
+          if (go) {
+            // Go's []int (the ] came first): what follows is what it holds
+            return typeTail({ name: inner.name, dims: (inner.dims || 0) + 1, args: inner.args });
+          }
+          return typeTail({ name: inner.name, dims: (inner.dims || 0) + 1, args: inner.args });
+        }
+        if (rs && (isOp("&") || isOp("&&"))) { next(); accept("mut"); return ownType(); }
+        if (isOp("*") && (go || rs)) { next(); if (rs) { accept("const"); accept("mut"); } return ownType(); }
+        if (t.t === "name" && (t.v === "dyn" || t.v === "impl" || t.v === "mut" || t.v === "inout" || t.v === "some" || t.v === "any")) {
+          next();
+          return ownType();
+        }
+        if (t.t !== "name") { throw odd(t); }
+        next();
+        var name = t.v;
+        while ((isOp(".") || isOp("::")) && peek(1).t === "name") { next(); name = next().v; }
+        var args = [];
+        if (isOp("<")) {
+          next();
+          while (!isOp(">")) {
+            // List<*>, List<out T>, Vec<_>: whatever is in it
+            if (peek().life) { next(); if (!accept(",")) { break; } continue; }
+            if (isOp("*") || isName("_")) { next(); args.push({ name: "Any", dims: 0, args: [] }); }
+            else {
+              if ((isName("out") || isName("in")) && peek(1).t === "name") { next(); }
+              args.push(ownType());
+            }
+            if (!accept(",")) { break; }
+          }
+          expect(">");
+        }
+        return typeTail(ownTypeInfo(name, args, 0));
+      }
+      function typeTail(ti) {
+        // Int?, String!, [Int]?: what may be nothing is the same kind
+        while ((isOp("?") || isOp("!")) && !peek().first && !(isOp("?", 0) && isOp(":", 1) && kt)) {
+          if (isOp("?") && (isOp(".", 1))) { break; }
+          next();
+        }
+        return ti;
+      }
+
+      // ---- blocks that are values: if, when, match, try -------------------
+      // Where one is a value -- val x = if (c) a else b, return when (n) {...}
+      // -- it is said as the statement it is, each way through it setting the
+      // name or handing back the value that way ends in.
+      function blocky(e) { e = stripParens(e); return !!e && (e.k === "ifx" || e.k === "whenx" || e.k === "tryx" || e.k === "blockx"); }
+      function valueOfBody(list, put) {
+        var body = list.slice(), last = body[body.length - 1];
+        if (!last) { return body; }
+        if (last.k === "expr") { body.pop(); return body.concat(into(last.e, put)); }
+        if (last.k === "if" && last.orelse && last.orelse.length) {
+          body[body.length - 1] = Object.assign({}, last, { then: valueOfBody(last.then, put), orelse: valueOfBody(last.orelse, put) });
+        } else if (last.k === "match") {
+          body[body.length - 1] = Object.assign({}, last, { cases: last.cases.map(function (c) { return Object.assign({}, c, { body: valueOfBody(c.body, put) }); }) });
+        } else if (last.k === "try") {
+          body[body.length - 1] = Object.assign({}, last, { body: valueOfBody(last.body, put),
+            handlers: last.handlers.map(function (h) { return Object.assign({}, h, { body: valueOfBody(h.body, put) }); }) });
+        }
+        return body;
+      }
+      function into(e, put) {
+        var x = stripParens(e);
+        if (x && x.k === "ifx") {
+          var orelse = valueOfBody(x.orelse, put);
+          // else if: the next of the chain
+          if (orelse.length === 1 && orelse[0].k === "if") { orelse[0] = Object.assign({}, orelse[0], { chained: true }); }
+          return [{ k: "if", cond: x.cond, then: valueOfBody(x.then, put), orelse: orelse, line: x.line }];
+        }
+        if (x && x.k === "whenx") {
+          var st = whenStatement(x);
+          return valueOfBody([st], put);
+        }
+        if (x && x.k === "tryx") {
+          return [{ k: "try", body: valueOfBody(x.body, put), line: x.line, orelse: [], fin: x.fin || [],
+                    handlers: x.handlers.map(function (h) { return Object.assign({}, h, { body: valueOfBody(h.body, put) }); }) }];
+        }
+        if (x && x.k === "blockx") { return valueOfBody(x.body, put); }
+        if (x && x.k === "cond" && (blocky(x.a) || blocky(x.b))) {
+          return [{ k: "if", cond: x.test, then: into(x.a, put), orelse: into(x.b, put), line: x.line }];
+        }
+        var made = put(e);
+        return Array.isArray(made) ? made : [made];
+      }
+      // The first value-block anywhere in an expression (not inside a lambda)
+      function firstBlocky(e) {
+        var found = null;
+        (function look(x) {
+          if (found || !x || typeof x !== "object") { return; }
+          if (Array.isArray(x)) { x.forEach(look); return; }
+          if (x.k === "fn") { return; }
+          if (blocky(x)) { found = x; return; }
+          for (var key in x) { if (key !== "line" && x[key] && typeof x[key] === "object") { look(x[key]); } }
+        })(e);
+        return found;
+      }
+      function swapNodeIn(e, from, to) {
+        if (e === from) { return to; }
+        if (!e || typeof e !== "object") { return e; }
+        if (Array.isArray(e)) { return e.map(function (y) { return swapNodeIn(y, from, to); }); }
+        var o = {};
+        for (var key in e) { o[key] = key === "line" ? e[key] : swapNodeIn(e[key], from, to); }
+        return o;
+      }
+      // A statement with a value-block in it, as statements that have none
+      function settle(st) {
+        if (!st || typeof st !== "object") { return [st]; }
+        var line = st.line;
+        if (st.k === "decl" && st.names.length === 1 && blocky(st.names[0].value)) {
+          var one = st.names[0];
+          var bare0 = Object.assign({}, st, { names: [Object.assign({}, one, { value: null })] });
+          return [bare0].concat(settleAll(into(one.value, function (v) { return setAt(nameAt(one.name, line), v, line); })));
+        }
+        if (st.k === "return" && blocky(st.value)) {
+          return settleAll(into(st.value, function (v) { return { k: "return", value: v, line: line }; }));
+        }
+        if (st.k === "expr" && blocky(st.e)) {
+          return settleAll(into(st.e, function (v) { return { k: "expr", e: v, line: line }; }));
+        }
+        if (st.k === "expr" && stripParens(st.e).k === "assignx" && blocky(stripParens(st.e).value)) {
+          var ax = stripParens(st.e);
+          return settleAll(into(ax.value, function (v) {
+            return { k: "expr", line: line, e: { k: "assignx", op: ax.op, target: ax.target, value: v, line: line } };
+          }));
+        }
+        // anywhere else: worked out first, into a name of its own
+        var heads = st.k === "decl" ? st.names.map(function (n) { return n.value; })
+                  : st.k === "if" || st.k === "while" ? [st.cond] : st.k === "return" ? [st.value]
+                  : st.k === "expr" ? [st.e] : st.k === "foreach" ? [st.over] : [];
+        for (var h = 0; h < heads.length; h++) {
+          var inner = firstBlocky(heads[h]);
+          if (inner) {
+            var temp = freshName("value");
+            var before = [{ k: "decl", type: null, typeInfo: null, dims: 0, konst: false, line: line,
+                            names: [{ name: temp, value: null, line: line }] }]
+                         .concat(into(inner, function (v) { return setAt(nameAt(temp, line), v, line); }));
+            return settleAll(before).concat(settle(swapNodeIn(st, inner, nameAt(temp, line))));
+          }
+        }
+        return [st];
+      }
+      function settleAll(list) {
+        var out = [];
+        list.forEach(function (st) { out.push.apply(out, settle(st)); });
+        return out;
+      }
+      // when / switch / match as a statement: a match of the patterns, or
+      // with no subject, a chain of ifs
+      function whenStatement(x) {
+        if (x.subject) {
+          return { k: "match", subject: x.subject, cases: x.cases.map(function (c) {
+            return { pat: c.pat, guard: c.guard || null, body: c.body, line: c.line };
+          }), line: x.line };
+        }
+        var chain = null, tail = null, other = null;
+        x.cases.forEach(function (c) {
+          if (c.isElse) { other = c.body; return; }
+          var node = { k: "if", cond: c.cond, then: c.body, orelse: [], line: c.line, chained: !!chain };
+          if (!chain) { chain = node; } else { tail.orelse = [node]; }
+          tail = node;
+        });
+        if (!chain) { return { k: "if", cond: { k: "bool", v: true, line: x.line }, then: other || [], orelse: [], line: x.line }; }
+        if (other) { tail.orelse = other; }
+        return chain;
+      }
+      // A range to count over: For i = a To b
+      function rangeLoop(v, r, body, line, label) {
+        var args, step = r.step || null;
+        if (r.down) {
+          args = [r.from, binAt("-", r.to, numAt(1, line), line), step ? { k: "un", op: "-", a: step, line: line } : numAt(-1, line)];
+        } else {
+          var to = r.incl ? binAt("+", r.to, numAt(1, line), line) : r.to;
+          args = step ? [r.from, to, step] : [r.from, to];
+        }
+        return { k: "range", v: v, args: args, body: body, line: line, label: label || null };
+      }
+      // A range as a value, where it is one: the list of its numbers
+      function rangeValue(r) {
+        var line = r.line;
+        // 'a'..'e': the letters
+        if (r.chars && stripParens(r.from).k === "str" && r.to && stripParens(r.to).k === "str") {
+          var a0 = stripParens(r.from).v.charCodeAt(0), z0 = stripParens(r.to).v.charCodeAt(0), letters = [];
+          if (!r.incl) { z0--; }
+          for (var cc = a0; cc <= z0 && letters.length < 256; cc += r.step && stripParens(r.step).k === "num" ? Number(stripParens(r.step).v) : 1) {
+            letters.push({ k: "str", v: String.fromCharCode(cc), ch: true, line: line });
+          }
+          return { k: "list", items: letters, line: line };
+        }
+        if (r.down) {
+          return builtAt("range", [r.from, binAt("-", r.to, numAt(1, line), line),
+                                   r.step ? { k: "un", op: "-", a: r.step, line: line } : numAt(-1, line)], line);
+        }
+        var to = r.incl ? binAt("+", r.to, numAt(1, line), line) : r.to;
+        return builtAt("range", r.step ? [r.from, to, r.step] : [r.from, to], line);
+      }
+      // What is left of the four's own nodes once a program is read: a range
+      // still standing as a value is a list of numbers
+      function plainNodes(got) {
+        refitBodies(got, function (part) {
+          return rewriteTree(part, function (x) {
+            // xs[1..3], s[2..]: a piece of it
+            if (x.k === "index" && x.at && x.at.fromRange) {
+              var r = x.at.fromRange, line = x.line;
+              var args = [x.obj, r.from || numAt(0, line)];
+              if (r.to) { args.push(r.incl ? binAt("+", r.to, numAt(1, line), line) : r.to); }
+              return builtAt("slice", args, line);
+            }
+            if (x.k === "rng") { var made = rangeValue(x); made.fromRange = x; return made; }
+          });
+        });
+      }
+
+      // ---- the four's own prefixes, postfixes and values ----------------
+      function ownUnary() {
+        var t = peek();
+        if (t.t === "op" && (t.v === "!" || t.v === "-" || t.v === "+" || t.v === "~" || (go && t.v === "^"))) {
+          next();
+          return { k: "un", op: t.v === "^" ? "~" : t.v, a: ownUnary(), line: t.line };
+        }
+        if (t.t === "op" && (t.v === "++" || t.v === "--") && (kt || go)) {
+          next();
+          return { k: "incdec", op: t.v, target: ownUnary(), pre: true, line: t.line };
+        }
+        // Rust's &x, &mut x, *x; Go's &x, *p: in a chart, the thing itself
+        if (t.t === "op" && (t.v === "&" || t.v === "&&") && (rs || go)) {
+          next();
+          accept("mut");
+          var held = ownUnary();
+          // &Point{...}: the one made, handed about (not copied)
+          return held && held.structLit ? Object.assign({}, held, { viaPtr: true }) : held;
+        }
+        if (t.t === "op" && t.v === "*" && (rs || go)) { next(); return ownUnary(); }
+        // Kotlin's *xs: all of them, handed over one by one
+        if (t.t === "op" && t.v === "*" && kt) { next(); return { k: "star", e: ownUnary(), line: t.line }; }
+        // Swift's &x: handed over to be changed
+        if (t.t === "op" && t.v === "&" && sw) { next(); return { k: "ref", e: ownUnary(), line: t.line }; }
+        if (sw && (isName("try") || isName("await")) && !isOp("(", 1)) {
+          next();
+          if (isOp("?") || isOp("!")) { next(); }
+          return ownUnary();
+        }
+        if (rs && isName("await")) { next(); return ownUnary(); }
+        if (go && t.t === "op" && t.v === "<-") { next(); return ownUnary(); }
+        return cPostfix(cPrimary());
+      }
+      // One step after a value: undefined to let the C reader go on as it
+      // would, null to stop, or the value it has become.
+      function ownPostfix(a, t) {
+        // a new line starts a new statement -- unless it goes on with .name
+        if (lines && t.first && !(isOp(".") || isOp("?."))) { return null; }
+        // a lambda handed over last: xs.map { it * 2 }, repeat(3) { ... }
+        if (isOp("{") && !noBrace && (kt || sw)) {
+          var lam = kt ? ktLambda() : swClosure();
+          if (a.k === "call" && !a.closed) { return Object.assign({}, a, { args: a.args.concat([lam]), closed: true }); }
+          return { k: "call", fn: a, args: [lam], line: t.line, closed: true };
+        }
+        // x!!, x!, and Rust's f()? -- sure it is something
+        if (isOp("!!") && kt) { next(); return a; }
+        if (sw && isOp("!") && !isOp("=", 1) && !isOp("==", 1) && !t.first) { next(); return a; }
+        if (sw && isOp("?") && (isOp(".", 1) || isOp("[", 1) || isOp("(", 1))) { next(); return a; }
+        if (rs && isOp("?")) { next(); return a; }
+        // Rust's parse::<i32>(), collect::<String>(): the kind, kept with the name before it
+        if (rs && isOp("::") && isOp("<", 1)) {
+          next(); next();
+          var turbo = null;
+          while (!isOp(">")) { if (isOp("_")) { next(); } else { turbo = turbo || ownType(); } if (!accept(",")) { break; } }
+          expect(">");
+          if (a.k === "member") { a.turbo = turbo; }
+          return a;
+        }
+        // Rust's println!(...), vec![...], format!(...)
+        if (rs && isOp("!") && a.k === "name" && (isOp("(", 1) || isOp("[", 1) || isOp("{", 1))) { next(); return rsMacro(a); }
+        // Rust's Point { x: 1, y: 2 }, Go's Point{1, 2} and []int{1, 2}
+        if (isOp("{") && !noBrace && (rs || go) && literalAhead(a)) { return literalOf(a); }
+        // dict[k, default: 0]: what is under k, or 0
+        if (sw && isOp("[") && !t.first) {
+          next();
+          var ix = cArgs("]");
+          var at0 = { k: "index", obj: a, at: ix[0], line: t.line };
+          if (ix[1] && ix[1].argName === "default") { at0.dflt = ix[1]; }
+          return at0;
+        }
+        // Go's s[1:], xs[:n], xs[a:b]: a piece of it
+        if (go && isOp("[") && !t.first) {
+          var at1 = pos;
+          next();
+          var lo = isOp(":") ? null : cAssign();
+          if (accept(":")) {
+            var hi = isOp("]") ? null : cAssign();
+            expect("]");
+            return { k: "slice", obj: a, from: lo, to: hi, step: null, line: t.line };
+          }
+          pos = at1;
+        }
+        // pair.0, pair.1: the first and second of a tuple
+        if ((sw || rs) && isOp(".") && peek(1).t === "num") {
+          next();
+          return { k: "index", obj: a, at: numAt(next().v, t.line), line: t.line };
+        }
+        if (go && isOp(".") && isOp("(", 1)) {                 // x.(int): what x holds, as an int
+          next(); next();
+          if (isName("type")) { next(); expect(")"); return { k: "typeswitch", e: a, line: t.line }; }
+          ownType();
+          expect(")");
+          return a;
+        }
+        return undefined;
+      }
+      function ownPrimary() {
+        var t = peek();
+        if (kt) {
+          if (isName("if")) { return ktIf(); }
+          if (isName("when")) { return ktWhen(); }
+          if (isName("try") && isOp("{", 1)) { return ktTry(); }
+          if (isOp("{")) { return ktLambda(); }
+          if (isName("throw") || isName("return")) {
+            // x ?: throw ..., x ?: return: nothing more to be had
+            next();
+            if (!isOp(")") && !isOp("}") && !peek().first) { cAssign(); }
+            return { k: "null", line: t.line };
+          }
+          if (isName("break") || isName("continue")) { next(); return { k: "null", line: t.line }; }
+          if (isOp("::") && peek(1).t === "name") { next(); var fr = next(); return { k: "name", v: fr.v, line: fr.line, fnRef: true }; }
+          if (isName("fun") && isOp("(", 1)) {
+            next();
+            var fps = ktParams();
+            if (accept(":")) { ownType(); }
+            var fb = accept("=") ? [{ k: "return", value: cAssign(), line: t.line }] : ktBlock();
+            return { k: "fn", params: fps, body: fb, line: t.line, lambda: true };
+          }
+          if (isName("object") && isOp(":", 1)) {
+            next(); next();
+            ownType();
+            if (isOp("(")) { skipParens(); }
+            if (isOp("{")) { skipBraces(); }
+            return { k: "null", line: t.line };
+          }
+          if (isName("this") && isOp("@", 1) && !peek(1).first) { next(); next(); next(); return { k: "name", v: "this", line: t.line }; }
+          if (isName("super") && isOp("<", 1)) { next(); skipAngles(); return { k: "name", v: "super", line: t.line }; }
+        }
+        if (sw) { return swPrimary(); }
+        if (go) { return goPrimary(); }
+        if (rs) { return rsPrimary(); }
+        return null;
+      }
+
+      // ================================================================ Kotlin ==
+      var KT_MODS = /^(public|private|protected|internal|open|override|abstract|final|sealed|data|enum|annotation|inner|lateinit|const|inline|suspend|operator|infix|tailrec|external|vararg|noinline|crossinline|expect|actual|value|companion|reified)$/;
+      function ktMods() {
+        var got = {};
+        for (;;) {
+          if (isOp("@") && peek(1).t === "name" && !peek(1).first) {        // @JvmStatic, @Suppress("x")
+            next(); next();
+            while (isOp(".") && peek(1).t === "name") { next(); next(); }
+            if (isOp("(")) { skipParens(); }
+            continue;
+          }
+          if (peek().t === "name" && KT_MODS.test(peek().v) &&
+              (peek(1).t === "name" || (peek().v === "companion" && isOp("{", 1)))) {
+            got[next().v] = true;
+            continue;
+          }
+          break;
+        }
+        return got;
+      }
+      function ktBlock() {
+        expect("{");
+        var body = [];
+        while (!isOp("}")) {
+          if (peek().t === "eof") { throw wanted("}"); }
+          body.push.apply(body, notesBefore(peek().line));
+          body.push.apply(body, ktStatement());
+        }
+        body.push.apply(body, notesBefore(peek().line));
+        expect("}");
+        return body;
+      }
+      // the body of an if or a loop: a block, or one statement
+      function ktBody() {
+        if (isOp("{")) { return ktBlock(); }
+        if (accept(";")) { return []; }
+        return notesBefore(peek().line).concat(ktStatement());
+      }
+      function ktParams() {
+        expect("(");
+        var params = [];
+        while (!isOp(")")) {
+          var mods = ktMods();
+          var p = peek(), prop = null;
+          if (isName("val") || isName("var")) { prop = next().v; }
+          var nm = next();
+          if (nm.t !== "name") { throw odd(nm); }
+          var ti = accept(":") ? ownType() : null;
+          if (ti && mods.vararg) { ti = Object.assign({}, ti, { dims: (ti.dims || 0) + 1 }); }
+          var dflt = accept("=") ? cAssign() : null;
+          params.push({ name: nm.v, type: ti ? ti.name : null, typeInfo: ti, dims: ti ? ti.dims : 0, ref: false,
+                        rest: !!mods.vararg, dflt: dflt, line: p.line, prop: prop, mods: mods });
+          if (!accept(",")) { break; }
+        }
+        expect(")");
+        return params;
+      }
+      // fun name(params): Type { body }, fun name(params) = expr
+      function ktFun(mods, lead) {
+        var t = next();
+        if (isOp("<")) { skipAngles(); }
+        // fun String.shout(): an extension -- a function handed the string first
+        var receiver = null;
+        var nm = next();
+        if (nm.t !== "name") { throw odd(nm); }
+        if (isOp("<")) { skipAngles(); }
+        if (isOp("?") && isOp(".", 1)) { next(); }
+        while (isOp(".") && peek(1).t === "name") {
+          next();
+          receiver = nm.v;
+          nm = next();
+        }
+        var params = ktParams();
+        var rtype = accept(":") ? ownType() : null;
+        while (isName("where")) { next(); ownType(); while (accept(",")) { ownType(); } }
+        var body;
+        if (accept("=")) {
+          var e = cAssign();
+          body = settleAll([{ k: "return", value: e, line: t.line }]);
+        } else if (isOp("{")) {
+          body = ktBlock();
+        } else {
+          body = null;                                   // abstract, or in an interface
+        }
+        if (receiver) {
+          params = [{ name: "this", line: t.line, type: receiver, typeInfo: ownTypeInfo(receiver, [], 0) }].concat(params);
+        }
+        return { k: "func", name: nm.v, params: params, rtype: rtype ? rtype.name : null, rtypeInfo: rtype,
+                 rdims: rtype ? rtype.dims : 0, body: body, line: nm.line, lead: lead || [], statik: false,
+                 receiver: receiver, mods: mods };
+      }
+      // val x: Int = 5, var (a, b) = pair
+      function ktDecl(mods) {
+        var t = next();
+        var konst = t.v === "val";
+        if (isOp("(")) {
+          var pat = patternHere();
+          if (accept(":")) { ownType(); }
+          expect("=");
+          var pv = cAssign();
+          endStatement();
+          return settle({ k: "decl", type: null, typeInfo: null, dims: 0, konst: konst, line: t.line,
+                          names: [{ pattern: pat, value: pv, line: t.line }] });
+        }
+        var nm = next();
+        if (nm.t !== "name") { throw odd(nm); }
+        var ti = accept(":") ? ownType() : null;
+        var value = null;
+        if (accept("=")) { value = cAssign(); }
+        else if (isName("by") && !peek().first) { next(); value = cAssign(); }    // by lazy { ... }
+        endStatement();
+        var decl = { k: "decl", type: ti ? ti.name : null, typeInfo: ti, dims: ti ? ti.dims : 0, konst: konst,
+                     line: t.line, names: [{ name: nm.v, value: value, dims: ti ? ti.dims : 0, sizes: [], line: nm.line }] };
+        return settle(decl);
+      }
+      function ktStatement() {
+        var t = peek();
+        if (accept(";")) { return []; }
+        if (isOp("{")) { return ktBlock(); }
+        // loop@ for (...): a loop a break@loop can name
+        if (t.t === "name" && isOp("@", 1) && !peek(1).first && isName(undefined, 2) &&
+            !/^(break|continue|return|this|super)$/.test(t.v)) {
+          next(); next();
+          var inner = ktStatement();
+          inner.forEach(function (st) { if (/^(while|dowhile|for|foreach|range)$/.test(st.k)) { st.label = t.v; } });
+          return inner;
+        }
+        var mods = ktMods();
+        if (isName("val") || isName("var")) { return ktDecl(mods); }
+        if (isName("fun") && (peek(1).t === "name" || isOp("<", 1))) { return [ktFun(mods, [])]; }
+        if ((isName("class") || isName("interface") || isName("object")) && peek(1).t === "name") {
+          localTypes.push(ktClass(mods, []));
+          return [];
+        }
+        if (t.t === "name") {
+          switch (t.v) {
+            case "if": {
+              var ix = ktIf();
+              // if (a) f() else g(): said as the If it is
+              if (ix.k === "cond") {
+                ix = { k: "ifx", cond: ix.test, then: [{ k: "expr", e: ix.a, line: t.line }],
+                       orelse: [{ k: "expr", e: ix.b, line: t.line }], line: t.line };
+              }
+              return settleAll([{ k: "expr", e: ix, line: t.line }]);
+            }
+            case "when": return settleAll([{ k: "expr", e: ktWhen(), line: t.line }]);
+            case "try": return settleAll([{ k: "expr", e: ktTry(), line: t.line }]);
+            case "while": {
+              next();
+              expect("(");
+              var wc = cAssign();
+              expect(")");
+              return settleAll([{ k: "while", cond: wc, body: ktBody(), line: t.line }]);
+            }
+            case "do": {
+              next();
+              var db = ktBody();
+              expect("while");
+              expect("(");
+              var dc = cAssign();
+              expect(")");
+              endStatement();
+              return [{ k: "dowhile", cond: dc, body: db, line: t.line }];
+            }
+            case "for": return [ktFor()];
+            case "return": {
+              next();
+              if (isOp("@") && !peek().first) { next(); next(); }
+              var rv = (isOp("}") || isOp(";") || peek().first || peek().t === "eof") ? null : cAssign();
+              endStatement();
+              return settleAll([{ k: "return", value: rv, line: t.line }]);
+            }
+            case "break": case "continue": {
+              next();
+              var label = null;
+              if (isOp("@") && !peek().first) { next(); label = next().v; }
+              endStatement();
+              return [{ k: t.v, label: label, line: t.line }];
+            }
+            case "throw": {
+              next();
+              var thrown = cAssign();
+              endStatement();
+              return [ownThrow(thrown, t.line)];
+            }
+            case "repeat": {
+              // repeat(3) { ... }: three times round, `it` counting from 0
+              if (isOp("(", 1)) {
+                var save = pos;
+                next(); next();
+                var times = cAssign();
+                expect(")");
+                if (isOp("{") && !peek().first) {
+                  var lam = ktLambda();
+                  var counter = lam.params.length ? lam.params[0].name : "_";
+                  endStatement();
+                  return [{ k: "range", v: counter, args: [times], body: lambdaBodyStatements(lam), line: t.line }];
+                }
+                pos = save;
+              }
+              break;
+            }
+          }
+        }
+        var e = cAssign();
+        endStatement();
+        return settleAll([{ k: "expr", e: e, line: t.line }]);
+      }
+      function ownThrow(thrown, line) {
+        var tt = stripParens(thrown);
+        var tname = tt && tt.k === "call" ? String(pathOf(tt.fn) || "").split(".").pop()
+                  : tt && tt.k === "member" ? tt.name : "";
+        // Swift's throw ShopError.outOfStock(name): one of the kinds of error the enum names
+        if (sw && tname && tt && (tt.k === "member" || (tt.k === "call" && tt.fn.k === "member"))) {
+          tt = { k: "call", fn: nameAt(tname, line), args: tt.k === "call" ? tt.args : [], line: line };
+        }
+        return { k: "exit", line: line, named: tname || "", made: tt,
+                 said: tt && tt.k === "call" ? tt.args[0] || null : tt };
+      }
+      // a lambda's statements, its last value handed back where it is used as one
+      function lambdaBodyStatements(fn) {
+        return fn.body.map(function (st) { return st.k === "return" && st.fromLast ? { k: "expr", e: st.value, line: st.line } : st; });
+      }
+      function ktIf() {
+        var t = next();
+        expect("(");
+        var c = cAssign();
+        expect(")");
+        var then = ktBranch();
+        var orelse = [];
+        var elseAt = pos;
+        // else on the next line still belongs to it
+        if (isName("else")) {
+          next();
+          orelse = ktBranch();
+        } else if (accept(";") && isName("else")) {
+          next();
+          orelse = ktBranch();
+        } else { pos = elseAt; }
+        // if (c) a else b, both single values: the ?: it is
+        var one = function (list) { return list.length === 1 && list[0].k === "expr" && !blocky(list[0].e) ? list[0].e : null; };
+        if (one(then) && one(orelse)) { return { k: "cond", test: c, a: one(then), b: one(orelse), line: t.line }; }
+        return { k: "ifx", cond: c, then: then, orelse: orelse, line: t.line };
+      }
+      function ktBranch() {
+        if (isOp("{")) { return ktBlock(); }
+        var line = peek().line;
+        // a single statement: return, throw, an assignment, or a value
+        if (isName("return") || isName("throw") || isName("break") || isName("continue")) { return ktStatement(); }
+        if (isName("if")) { return [{ k: "expr", e: ktIf(), line: line }]; }
+        var e = cAssign();
+        return [{ k: "expr", e: e, line: line }];
+      }
+      // when (x) { 1, 2 -> ...; in 3..9 -> ...; is String -> ...; else -> ... }
+      function ktWhen() {
+        var t = next(), subject = null;
+        if (accept("(")) {
+          if (isName("val")) { next(); next(); if (accept(":")) { ownType(); } expect("="); }
+          subject = cAssign();
+          expect(")");
+        }
+        expect("{");
+        var cases = [];
+        while (!isOp("}")) {
+          var c = peek();
+          if (c.t === "eof") { throw wanted("}"); }
+          notesBefore(c.line);
+          if (accept(";")) { continue; }
+          var one = { line: c.line };
+          if (isName("else") && isOp("->", 1)) {
+            next();
+            one.isElse = true;
+            one.pat = { p: "any" };
+          } else if (subject) {
+            var alts = [];
+            do { alts.push(ktPattern()); } while (accept(","));
+            one.pat = alts.length === 1 ? alts[0] : { p: "or", alts: alts };
+          } else {
+            var conds = [];
+            do { conds.push(cAssign()); } while (accept(","));
+            one.cond = conds.reduce(function (a, b) { return a ? binAt("||", a, b, c.line) : b; }, null);
+          }
+          expect("->");
+          one.body = ktBranch();
+          cases.push(one);
+          if (!lines) { accept(","); }
+          accept(";");
+        }
+        expect("}");
+        return { k: "whenx", subject: subject, cases: cases, line: t.line };
+      }
+      function ktPattern() {
+        var t = peek();
+        if (isName("in") || (isOp("!") && isName("in", 1))) {
+          var neg = isOp("!");
+          if (neg) { next(); }
+          next();
+          var coll = cBinary(BIN.until || 0);
+          var cr = stripParens(coll);
+          if (cr.k === "rng") {
+            return { p: "range", lo: cr.down ? cr.to : cr.from, hi: cr.down ? cr.from : cr.to, incl: cr.incl || !!cr.down, neg: neg };
+          }
+          return { p: "in", e: coll, neg: neg };
+        }
+        if (isName("is") || (isOp("!") && isName("is", 1))) {
+          var negT = isOp("!");
+          if (negT) { next(); }
+          next();
+          return { p: "type", name: ownType().name, neg: negT };
+        }
+        return { p: "lit", e: cAssign() };
+      }
+      function ktTry() {
+        var t = next();
+        var body = ktBlock();
+        var handlers = [], fin = [];
+        while (isName("catch")) {
+          var h = next();
+          expect("(");
+          var name = next().v;
+          var type = null;
+          if (accept(":")) { var ty = ownType(); type = { k: "name", v: ty.name, line: h.line }; }
+          expect(")");
+          CAUGHT[name] = true;
+          caughtAs(name, type ? type.v : "");
+          handlers.push({ type: type, name: name, body: ktBlock(), line: h.line });
+        }
+        if (isName("finally")) { next(); fin = ktBlock(); }
+        return { k: "tryx", body: body, handlers: handlers, fin: fin, line: t.line };
+      }
+      // for (x in xs), for (i in 0 until n step 2), for ((k, v) in map), for ((i, x) in xs.withIndex())
+      function ktFor() {
+        var t = next();
+        expect("(");
+        var target;
+        if (isOp("(")) { target = patternHere(); }
+        else { var nm = next(); target = { k: "name", v: nm.v, line: nm.line }; }
+        if (accept(":")) { ownType(); }
+        expect("in");
+        var over = cAssign();
+        expect(")");
+        var body = ktBody();
+        var r = stripParens(over);
+        if (target.k === "name" && r.k === "rng" && !r.chars) { return rangeLoop(target.v, r, body, t.line); }
+        // xs.indices: 0 up to its size
+        if (target.k === "name" && r.k === "member" && r.name === "indices") {
+          return rangeLoop(target.v, rangeAt(numAt(0, t.line), { k: "member", obj: r.obj, name: "size", line: t.line }, false, t.line), body, t.line);
+        }
+        return { k: "foreach", target: target, over: over, body: body, line: t.line };
+      }
+      // { a, b -> a + b }, { it * 2 }, { (k, v) -> ... }, { println("hi") }
+      function ktLambda() {
+        var t = expect("{");
+        var params = null, save = pos;
+        // the names before -> , if there is one before anything else
+        try {
+          var ps = [];
+          while (!isOp("->")) {
+            if (isOp("(")) {
+              var pat = patternHere();
+              ps.push({ name: "arg" + (ps.length + 1), pattern: pat, type: null, dims: 0, line: t.line });
+            } else {
+              var pn = next();
+              if (pn.t !== "name") { throw odd(pn); }
+              if (accept(":")) { ownType(); }
+              ps.push({ name: pn.v, type: null, dims: 0, line: pn.line });
+            }
+            if (!accept(",")) { break; }
+          }
+          expect("->");
+          params = ps;
+        } catch (e) {
+          pos = save;
+          params = null;
+        }
+        var body = [];
+        while (!isOp("}")) {
+          if (peek().t === "eof") { throw wanted("}"); }
+          body.push.apply(body, notesBefore(peek().line));
+          body.push.apply(body, ktStatement());
+        }
+        expect("}");
+        return lambdaOf(params, body, t.line, "it");
+      }
+      // A lambda made: its last statement, where it is a value, handed back;
+      // and with no names of its own, `it` (or $0 and $1) if it uses them
+      function lambdaOf(params, body, line, implicit) {
+        body = body.slice();
+        var last = body[body.length - 1];
+        if (last && last.k === "expr" && !blocky(last.e)) {
+          body[body.length - 1] = { k: "return", value: last.e, line: last.line, fromLast: true };
+        } else if (last && (last.k === "if" || last.k === "match")) {
+          body = valueOfBody(body, function (v) { return { k: "return", value: v, line: line, fromLast: true }; });
+        }
+        if (!params) {
+          params = [];
+          var uses = namesUsedInBody(body);
+          if (implicit === "it" && uses.it) { params = [{ name: "it", type: null, dims: 0, line: line }]; }
+          if (implicit === "$") {
+            // $0, $1: a, b -- names a chart can hold
+            var most = -1;
+            Object.keys(uses).forEach(function (n) { var m = /^\$(\d+)$/.exec(n); if (m) { most = Math.max(most, +m[1]); } });
+            for (var i = 0; i <= most; i++) {
+              var said = "abcdefgh".charAt(i) || "arg" + i;
+              if (takenNames[said]) { said = freshName(said); }
+              renameIn(body, "$" + i, said);
+              params.push({ name: said, type: null, dims: 0, line: line });
+            }
+          }
+        }
+        return { k: "fn", params: params, body: body, line: line, lambda: true };
+      }
+      function namesUsedInBody(body) {
+        var seen = Object.create(null);
+        (function look(x) {
+          if (!x || typeof x !== "object") { return; }
+          if (Array.isArray(x)) { x.forEach(look); return; }
+          if (x.k === "fn") { return; }                  // its own it
+          if (x.k === "name") { seen[x.v] = true; }
+          for (var key in x) { if (key !== "line" && x[key] && typeof x[key] === "object") { look(x[key]); } }
+        })(body);
+        return seen;
+      }
+      // class, data class, enum class, object, interface
+      function ktClass(mods, lead) {
+        var kt0 = next(), kind = kt0.v;
+        var isObject = kind === "object";
+        var nt = next();
+        if (nt.t !== "name") { throw odd(nt); }
+        var cls = { k: "class", name: nt.v, kind: mods.enum ? "enum" : kind === "interface" ? "interface" : "class",
+                    bases: [], ifaces: [], fields: [], methods: [], ctors: [], values: [], inits: [], line: kt0.line,
+                    lead: lead || [], statik: isObject };
+        classes.push(cls.name);
+        if (isOp("<")) { skipAngles(); }
+        ktMods();
+        accept("constructor");
+        var primary = isOp("(") ? ktParams() : null;
+        var baseCall = null;
+        if (accept(":")) {
+          do {
+            var bt = ownType();
+            if (isOp("(") && !peek().first) {
+              next();
+              baseCall = { name: bt.name, args: cArgs(")") };
+              cls.bases.push(bt.name);
+            } else if (/^(Exception|RuntimeException|Throwable|Error|IllegalArgumentException|IllegalStateException)$/.test(bt.name)) {
+              cls.bases.push(bt.name);
+            } else {
+              cls.ifaces.push(bt.name);
+            }
+          } while (accept(","));
+        }
+        while (isName("where")) { next(); ownType(); while (accept(",")) { ownType(); } }
+        // what the constructor does, in the order the class says it
+        var made = [];
+        (primary || []).forEach(function (p) {
+          if (!p.prop) { return; }
+          cls.fields.push({ name: p.name, value: null, statik: false, type: p.typeInfo, line: p.line });
+          made.push(setAt({ k: "member", obj: nameAt("this", p.line), name: p.name, line: p.line }, nameAt(p.name, p.line), p.line));
+        });
+        var seconds = [];
+        if (isOp("{")) {
+          next();
+          if (cls.kind === "enum") { ktEnumValues(cls); }
+          while (!isOp("}")) {
+            if (peek().t === "eof") { throw wanted("}"); }
+            var mlead = notesBefore(peek().line);
+            if (accept(";")) { continue; }
+            var mm = ktMods();
+            if (isName("init") && isOp("{", 1)) { next(); made.push.apply(made, ktBlock()); continue; }
+            if (mm.companion || (isName("companion") && isName("object", 1))) {
+              if (isName("companion")) { next(); }
+              next();
+              if (peek().t === "name" && !isOp("{")) { next(); }
+              var inner = { k: "class", name: cls.name, kind: "class", bases: [], ifaces: [], fields: [], methods: [], ctors: [], values: [], inits: [] };
+              ktMembers(inner, [], true);
+              inner.fields.forEach(function (f) { f.statik = true; cls.fields.push(f); });
+              inner.methods.forEach(function (m) { m.statik = true; cls.methods.push(m); });
+              continue;
+            }
+            if ((isName("class") || isName("interface") || isName("object")) && peek(1).t === "name") {
+              localTypes.push(ktClass(mm, mlead));
+              continue;
+            }
+            if (isName("constructor")) {
+              var ct = next();
+              var cps = ktParams();
+              var inits = [];
+              if (accept(":")) {
+                var who = next().v;
+                expect("(");
+                inits.push({ name: who, args: cArgs(")") });
+              }
+              var cb = isOp("{") ? ktBlock() : [];
+              seconds.push({ params: cps, body: cb, inits: inits, line: ct.line, lead: mlead });
+              continue;
+            }
+            ktMember(cls, mm, mlead, made, isObject);
+          }
+          expect("}");
+        }
+        // data class: shown as Point(x=1, y=2)
+        if (mods.data && primary && !cls.methods.some(function (m) { return m.name === "toString" && m.params.length === 0; })) {
+          var said = null;
+          primary.filter(function (p) { return p.prop; }).forEach(function (p, i) {
+            var piece = binAt("+", { k: "str", v: (i ? ", " : cls.name + "(") + p.name + "=", line: kt0.line },
+                              { k: "member", obj: nameAt("this", kt0.line), name: p.name, line: kt0.line }, kt0.line);
+            said = said ? binAt("+", said, piece, kt0.line) : piece;
+          });
+          said = binAt("+", said || { k: "str", v: cls.name + "(", line: kt0.line }, { k: "str", v: ")", line: kt0.line }, kt0.line);
+          cls.methods.push({ k: "func", name: "toString", params: [], rtype: "String", body: [{ k: "return", value: said, line: kt0.line }],
+                             line: kt0.line, statik: false, kind: "method", lead: [] });
+        }
+        if (isObject) {
+          cls.fields.forEach(function (f) { f.statik = true; });
+          cls.methods.forEach(function (m) { m.statik = true; });
+          // what an object does as it is made: done first, as its fields are
+          cls.inits.push({ statik: true, body: made });
+          return cls;
+        }
+        // : Account(owner, balance) -- the class it is built on, made first, as super(...) would
+        if (baseCall) {
+          made.unshift({ k: "expr", line: kt0.line, e: callAt(nameAt("super", kt0.line), baseCall.args, kt0.line) });
+        }
+        if (primary || made.length || baseCall) {
+          var main0 = { params: (primary || []).map(function (p) {
+                          return { name: p.name, type: p.type, typeInfo: p.typeInfo, dims: p.dims, dflt: p.dflt, line: p.line, rest: p.rest };
+                        }), body: made, inits: [], line: kt0.line, lead: [] };
+          if (primary || !seconds.length) { cls.ctors.push(main0); }
+          else { seconds.forEach(function (s0) { s0.body = made.concat(s0.body); }); }
+        }
+        seconds.forEach(function (s0) { cls.ctors.push(s0); });
+        return cls;
+      }
+      // A property one class leaves to the kinds built on it (abstract val
+      // kind) is asked of each thing: where a kind gives it a value
+      // (override val kind = "Savings"), that is what it is asked for.
+      function ktProperties(types) {
+        var asked = Object.create(null);
+        types.forEach(function (c) { (c.abstractProps || []).forEach(function (n) { asked[n] = true; }); });
+        types.forEach(function (c) {
+          (c.abstractProps || []).forEach(function (n) {
+            if (!c.methods.some(function (m) { return m.name === n; })) {
+              c.methods.push({ k: "func", name: n, params: [], body: [{ k: "return", value: { k: "str", v: "", line: c.line }, line: c.line }],
+                               kind: "get", getter: true, statik: false, line: c.line, lead: [] });
+            }
+          });
+          c.fields = c.fields.filter(function (f) {
+            if (!asked[f.name] || !f.init || f.statik) { return true; }
+            c.methods.push({ k: "func", name: f.name, params: [], body: [{ k: "return", value: f.init, line: f.line }],
+                             kind: "get", getter: true, statik: false, line: f.line, lead: [] });
+            c.ctors.forEach(function (k0) { k0.body = k0.body.filter(function (st) { return st.propInit !== f.name; }); });
+            return false;
+          });
+        });
+      }
+      function ktEnumValues(cls) {
+        while (peek().t === "name" && !isName("fun") && !isName("val") && !isName("var") && !isName("override") &&
+               !isName("abstract") && !isName("companion") && !isName("init")) {
+          var nt = next();
+          var args = null;
+          if (isOp("(")) { next(); args = cArgs(")"); }
+          if (isOp("{")) { skipBraces(); }
+          cls.values.push({ name: nt.v, value: null, args: args, line: nt.line });
+          if (!accept(",")) { break; }
+        }
+        accept(";");
+      }
+      function ktMembers(cls, made, statik) {
+        expect("{");
+        while (!isOp("}")) {
+          if (peek().t === "eof") { throw wanted("}"); }
+          var mlead = notesBefore(peek().line);
+          if (accept(";")) { continue; }
+          var mm = ktMods();
+          ktMember(cls, mm, mlead, made, statik);
+        }
+        expect("}");
+      }
+      // Kotlin's operator functions, by the name the chart gives each
+      var KT_OPERATORS = { plus: ["plus", "+"], minus: ["minus", "-"], times: ["times", "*"], div: ["dividedBy", "/"],
+                           rem: ["modulo", "%"], get: ["itemAt", "[]"], unaryMinus: ["negated", "u-"], not: ["not", "u!"] };
+      function ktMember(cls, mm, lead, made, statik) {
+        var t = peek();
+        if (isName("fun")) {
+          var fn = ktFun(mm, lead);
+          if (!fn.body) { return; }
+          fn.kind = "method";
+          fn.statik = !!statik;
+          if (mm.operator && KT_OPERATORS[fn.name]) {
+            fn.opSign = KT_OPERATORS[fn.name][1];
+            fn.name = KT_OPERATORS[fn.name][0];
+          }
+          cls.methods.push(fn);
+          return;
+        }
+        if (isName("val") || isName("var")) {
+          var konst = next().v === "val";
+          var nm = next();
+          var ti = accept(":") ? ownType() : null;
+          var init = accept("=") ? cAssign() : null;
+          // val area: Double get() = w * h  -- worked out each time it is asked
+          var getter = null;
+          if (isName("get") && isOp("(", 1)) {
+            next(); next(); expect(")");
+            if (accept(":")) { ownType(); }
+            getter = accept("=") ? [{ k: "return", value: cAssign(), line: nm.line }] : ktBlock();
+          }
+          if ((isName("private") || isName("set")) && (isName("set", 1) || isOp("(", 1) || isName("set"))) {
+            if (isName("private")) { next(); }
+            next();
+            if (isOp("(")) { next(); next(); expect(")"); ktBlock(); }
+          }
+          endStatement();
+          if (getter) {
+            cls.methods.push({ k: "func", name: nm.v, params: [], body: settleAll(getter), kind: "get", getter: true,
+                               rtype: ti ? ti.name : null, statik: !!statik, line: nm.line, lead: lead });
+            return;
+          }
+          // abstract val kind: String -- each kind of it says its own, so it is asked of it
+          if (mm.abstract || (cls.kind === "interface" && !init)) {
+            (cls.abstractProps = cls.abstractProps || []).push(nm.v);
+            return;
+          }
+          cls.fields.push({ name: nm.v, value: statik || mm.const ? init : null, statik: !!statik, konst: konst && (statik || mm.const),
+                            type: ti, line: nm.line, lead: lead, init: !statik && !mm.const && konst ? init : null });
+          if (init && !statik && !mm.const) {
+            var sets0 = settle(setAt({ k: "member", obj: nameAt("this", nm.line), name: nm.v, line: nm.line }, init, nm.line));
+            sets0.forEach(function (st0) { st0.propInit = nm.v; });
+            made.push.apply(made, sets0);
+          }
+          return;
+        }
+        if ((isName("class") || isName("interface") || isName("object")) && peek(1).t === "name") {
+          localTypes.push(ktClass(mm, lead));
+          return;
+        }
+        if (isName("enum") || isName("data")) { next(); return; }
+        throw odd(t);
+      }
+      function topKotlin() {
+        var out = { funcs: [], globals: [], main: [], mainFound: false, types: [], outside: [] };
+        out.head = notesBefore(peek().line);
+        while (peek().t !== "eof") {
+          var t = peek();
+          var lead = notesBefore(t.line);
+          if (accept(";")) { continue; }
+          if (isName("package") || isName("import")) {
+            next();
+            while (peek().t !== "eof" && !peek().first && !isOp(";")) { next(); }
+            accept(";");
+            continue;
+          }
+          var save = pos;
+          var mods = ktMods();
+          if ((isName("class") || isName("interface") || isName("object")) && peek(1).t === "name") {
+            out.types.push(ktClass(mods, lead));
+            continue;
+          }
+          if (isName("fun") && (peek(1).t === "name" || isOp("<", 1))) {
+            var fn = ktFun(mods, lead);
+            if (!fn.body) { continue; }
+            if (fn.name === "main" && !fn.receiver && !out.mainFound) {
+              out.mainFound = true;
+              out.main = lead.concat(fn.body);
+              out.mainLine = fn.line;
+              out.mainArgs = fn.params.length ? fn.params[0].name : null;
+            } else {
+              out.funcs.push(fn);
+            }
+            continue;
+          }
+          if (isName("val") || isName("var")) {
+            var decls = ktDecl(mods);
+            decls.forEach(function (d) {
+              if (d.k === "decl" && (!d.names[0].value || !blocky(d.names[0].value))) { d.lead = lead; out.globals.push(d); lead = []; }
+              else { out.main.push(d); }
+            });
+            continue;
+          }
+          pos = save;
+          out.main.push.apply(out.main, lead);
+          out.main.push.apply(out.main, ktStatement());
+        }
+        out.trailing = notesBefore(1e9);
+        out.types = out.types.concat(localTypes);
+        ktProperties(out.types);
+        plainNodes(out);
+        ktLibrary(out);
+        return out;
+      }
+
+      // ---- Kotlin's library, said the way the rest already is ----------------
+      // println is System.out.println, readLine() the keyboard's next line,
+      // listOf(...) a list, "%.2f".format(x) String.format; a method the
+      // program's own classes have is theirs, and left alone.
+      function ownMethodNames(got) {
+        var mine = Object.create(null);
+        (got.types || []).forEach(function (c) { (c.methods || []).forEach(function (m) { mine[m.name] = true; }); });
+        return mine;
+      }
+      function lastValue(fn) {
+        var last = fn.body[fn.body.length - 1];
+        return fn.body.length === 1 && last.k === "return" ? last.value : null;
+      }
+      // what a lambda of one value hands back for x
+      function givenTo(fn, x) {
+        var name = fn.params.length ? fn.params[0].name : "it";
+        // |(name, _)|: the parts of x, by place
+        var parts = Object.create(null), pat = fn.params.length && fn.params[0].pattern;
+        if (pat && pat.k === "tuple") {
+          pat.items.forEach(function (it, i) {
+            if (it && it.k === "name") { parts[it.v] = { k: "index", obj: copyOf(x), at: numAt(i, x.line), line: x.line }; }
+          });
+        }
+        return (function swap(e) {
+          if (!e || typeof e !== "object") { return e; }
+          if (Array.isArray(e)) { return e.map(swap); }
+          if (e.k === "name" && parts[e.v]) { return copyOf(parts[e.v]); }
+          if (e.k === "name" && e.v === name) { return copyOf(x); }
+          if (e.k === "fn") { return e; }
+          var o = {};
+          for (var key in e) { o[key] = key === "line" ? e[key] : swap(e[key]); }
+          return o;
+        })(lastValue(fn));
+      }
+      // the statements of a lambda run once, with its name for `it` given x
+      function inlined(fn, x, line) {
+        var name = fn.params.length ? fn.params[0].name : "it";
+        return [{ k: "decl", type: null, typeInfo: null, dims: 0, konst: false, line: line,
+                  names: [{ name: name, value: x, line: line }] }].concat(lambdaBodyStatements(fn));
+      }
+      function ktLibrary(got) {
+        var mine = ownMethodNames(got);
+        var extensions = Object.create(null);
+        (got.funcs || []).forEach(function (fn) { if (fn.receiver) { extensions[fn.name] = true; } });
+        var MATH = /^(abs|sqrt|pow|floor|ceil|sin|cos|tan|asin|acos|atan|atan2|exp|log10|hypot|cbrt|sign|max|min|ln|round|truncate)$/;
+        function listOf(items, line) { return { k: "list", items: items, line: line }; }
+        function lastIndex(obj, line) { return binAt("-", builtAt("length", [obj], line), numAt(1, line), line); }
+        function sized(n, fill, line) { return { k: "sized", dims: [n], fill: fill, kind: null, line: line }; }
+        function member(obj, name, line) { return { k: "member", obj: obj, name: name, line: line }; }
+        function positional(args) { return args.filter(function (a) { return a.k !== "kw"; }); }
+        function named(args, name) {
+          var hit = args.filter(function (a) { return a.k === "kw" && a.name === name; })[0];
+          return hit ? hit.value : null;
+        }
+        function call(x) {
+          var line = x.line, args = x.args, pa = positional(args);
+          var lam = pa.length && stripParens(pa[pa.length - 1]).k === "fn" ? stripParens(pa[pa.length - 1]) : null;
+          if (x.fn.k === "name") {
+            var f = x.fn.v;
+            if (userFnName(f)) { return; }
+            switch (f) {
+              case "println": return callAt("System.out.println", pa, line);
+              case "print": return callAt("System.out.print", pa, line);
+              case "readLine": case "readln": case "readlnOrNull": return callAt("stdin.nextLine", [], line);
+              case "listOf": case "mutableListOf": case "arrayListOf": case "arrayOf": case "intArrayOf": case "doubleArrayOf":
+              case "longArrayOf": case "floatArrayOf": case "charArrayOf": case "booleanArrayOf": case "emptyList":
+              case "emptyArray": case "listOfNotNull": case "mutableStateListOf":
+                return listOf(pa, line);
+              case "setOf": case "mutableSetOf": case "hashSetOf": case "linkedSetOf": case "sortedSetOf": case "emptySet":
+                return { k: "set", items: pa, line: line };
+              case "mapOf": case "mutableMapOf": case "hashMapOf": case "linkedMapOf": case "sortedMapOf": case "emptyMap":
+                if (pa.every(function (a) { return stripParens(a).k === "tuple"; })) {
+                  return { k: "dict", keys: pa.map(function (a) { return stripParens(a).items[0]; }),
+                           values: pa.map(function (a) { return stripParens(a).items[1]; }), line: line };
+                }
+                return;
+              case "Pair": case "Triple": return { k: "tuple", items: pa, line: line };
+              case "maxOf": case "minOf":
+                if (!lam && pa.length >= 2) {
+                  return pa.slice(1).reduce(function (a, b) { return callAt(f === "maxOf" ? "Math.max" : "Math.min", [a, b], line); }, pa[0]);
+                }
+                return;
+              case "IntArray": case "LongArray": case "ShortArray": case "ByteArray": case "DoubleArray": case "FloatArray":
+              case "BooleanArray": case "CharArray": case "Array": case "MutableList": case "List": case "arrayOfNulls":
+                if (!pa.length) { return; }
+                if (lam) {
+                  var v0 = lastValue(lam);
+                  if (v0 && !namesUsedInBody(lam.body)[lam.params.length ? lam.params[0].name : "it"]) { return sized(pa[0], v0, line); }
+                  return callAt(member(builtAt("range", [pa[0]], line), "map", line), [lam], line);
+                }
+                return sized(pa[0], /^(Double|Float)Array$/.test(f) ? { k: "num", v: "0.0", real: true, line: line }
+                                  : f === "BooleanArray" ? { k: "bool", v: false, line: line }
+                                  : f === "CharArray" ? { k: "str", v: "", line: line }
+                                  : f === "arrayOfNulls" ? { k: "null", line: line } : numAt(0, line), line);
+              case "exitProcess": return callAt("System.exit", pa, line);
+              case "String": if (pa.length === 1) { return builtAt("join", [pa[0], { k: "str", v: "", line: line }], line); } return;
+            }
+            if (MATH.test(f)) {
+              return callAt("Math." + (f === "ln" ? "log" : f === "round" ? "rint" : f === "truncate" ? "floor" : f), pa, line);
+            }
+            return;
+          }
+          if (x.fn.k !== "member") { return; }
+          var obj = x.fn.obj, m = x.fn.name, path = pathOf(x.fn) || "";
+          // a function of the program's own, written for a kind: shout(s)
+          if (extensions[m] && !mine[m]) { return callAt(nameAt(m, line), [obj].concat(args), line); }
+          if (/^(kotlin\.math\.|Math\.)/.test(path)) { return; }
+          if (mine[m]) { return; }
+          if (/^(Random|kotlin\.random\.Random)$/.test(pathOf(obj) || "") || /^(nextInt|nextDouble)$/.test(m) && /rand/i.test(pathOf(obj) || "")) {
+            if (m === "nextInt" && pa.length === 2) { return builtAt("random", [pa[0], binAt("-", pa[1], numAt(1, line), line)], line); }
+            if (m === "nextInt" && pa.length === 1) { return builtAt("random", [numAt(0, line), binAt("-", pa[0], numAt(1, line), line)], line); }
+            if (m === "nextDouble" && !pa.length) { return builtAt("random", [], line); }
+            if (m === "nextBoolean") { return binAt("==", builtAt("random", [numAt(0, line), numAt(1, line)], line), numAt(1, line), line); }
+          }
+          switch (m) {
+            // x.toInt(), s.toDouble(): the number, whether x is words or another kind of number
+            case "toInt": case "toLong": case "toShort": case "toByte": case "toIntOrNull": case "toLongOrNull": case "toUInt":
+              if (!pa.length) { return builtAt("int", [obj], line); }
+              return;
+            case "toDouble": case "toFloat": case "toDoubleOrNull": case "toFloatOrNull": case "toBigDecimal":
+              if (!pa.length) { return builtAt("real", [obj], line); }
+              return;
+            case "toChar": return builtAt("chr", [obj], line);
+            case "digitToInt": return callAt("Integer.parseInt", [obj], line);
+            case "roundToInt": case "roundToLong": return callAt("Math.round", [obj], line);
+            case "uppercase": case "uppercaseChar": case "toUpperCase": return callAt(member(obj, "toUpperCase", line), [], line);
+            case "lowercase": case "lowercaseChar": case "toLowerCase": return callAt(member(obj, "toLowerCase", line), [], line);
+            case "isDigit": case "isLetter": case "isLetterOrDigit": case "isUpperCase": case "isLowerCase": case "isWhitespace":
+              return callAt("Character." + m, [obj], line);
+            case "reversed": case "asReversed": if (!pa.length) { return builtAt("reversed", [obj], line); } return;
+            case "reverse": if (!pa.length) { return callAt("Collections.reverse", [obj], line); } return;
+            case "sorted": if (!pa.length) { return builtAt("sorted", [obj], line); } return;
+            case "sortedDescending": return builtAt("reversed", [builtAt("sorted", [obj], line)], line);
+            case "sortedBy": if (lam) { return callAt(member(obj, "OrderBy", line), [lam], line); } return;
+            case "sortedByDescending": if (lam) { return callAt(member(obj, "OrderByDescending", line), [lam], line); } return;
+            case "sort": if (!pa.length) { return callAt("Collections.sort", [obj], line); } return;
+            case "sortBy": if (lam) { return callAt(member(obj, "sort", line), [callAt("Comparator.comparing", [lam], line)], line); } return;
+            case "joinToString": {
+              var sep = named(args, "separator") || positional(args).filter(function (a) { return stripParens(a).k !== "fn"; })[0] ||
+                        { k: "str", v: ", ", line: line };
+              var what = lam ? callAt(member(obj, "map", line), [lam], line) : obj;
+              var joined = builtAt("join", [what, sep], line);
+              var pre = named(args, "prefix"), post = named(args, "postfix");
+              if (pre) { joined = binAt("+", pre, joined, line); }
+              if (post) { joined = binAt("+", joined, post, line); }
+              return joined;
+            }
+            case "first": case "firstOrNull":
+              if (!pa.length) { return { k: "index", obj: obj, at: numAt(0, line), line: line }; }
+              if (lam) { return callAt(member(obj, "find", line), [lam], line); }
+              return;
+            case "last": case "lastOrNull":
+              if (!pa.length) { return { k: "index", obj: obj, at: lastIndex(copyOf(obj), line), line: line }; }
+              if (lam) { return callAt(member(obj, "findLast", line), [lam], line); }
+              return;
+            case "single": if (!pa.length) { return { k: "index", obj: obj, at: numAt(0, line), line: line }; } return;
+            case "count":
+              if (!pa.length) { return builtAt("length", [obj], line); }
+              if (lam) { return builtAt("length", [callAt(member(obj, "filter", line), [lam], line)], line); }
+              return;
+            case "sumOf": if (lam) { return callAt(member(obj, "Sum", line), [lam], line); } return;
+            case "maxOf": if (lam) { return callAt(member(obj, "Max", line), [lam], line); } return;
+            case "minOf": if (lam) { return callAt(member(obj, "Min", line), [lam], line); } return;
+            case "maxOrNull": case "max": if (!pa.length) { return builtAt("max", [obj], line); } return;
+            case "minOrNull": case "min": if (!pa.length) { return builtAt("min", [obj], line); } return;
+            case "maxByOrNull": case "maxBy": if (lam) { return callAt(member(obj, "maxBy", line), [lam], line); } return;
+            case "minByOrNull": case "minBy": if (lam) { return callAt(member(obj, "minBy", line), [lam], line); } return;
+            case "average": if (!pa.length) { return { k: "bin", op: "/", real: true, a: builtAt("sum", [obj], line), b: builtAt("length", [copyOf(obj)], line), line: line }; } return;
+            case "any": if (lam) { return callAt(member(obj, "some", line), [lam], line); } if (!pa.length) { return binAt(">", builtAt("length", [obj], line), numAt(0, line), line); } return;
+            case "all": if (lam) { return callAt(member(obj, "every", line), [lam], line); } return;
+            case "none": if (lam) { return notAt(callAt(member(obj, "some", line), [lam], line), line); } if (!pa.length) { return binAt("==", builtAt("length", [obj], line), numAt(0, line), line); } return;
+            case "fold": if (lam && pa.length === 2) { return callAt(member(obj, "reduce", line), [pa[0], lam], line); } return;
+            case "forEachIndexed": case "mapIndexed": case "filterIndexed":
+              if (lam && lam.params.length === 2) {
+                return callAt(member(obj, m.replace("Indexed", ""), line), [Object.assign({}, lam, { params: [lam.params[1], lam.params[0]] })], line);
+              }
+              return;
+            case "indexOfFirst": if (lam) { return callAt(member(obj, "findIndex", line), [lam], line); } return;
+            case "distinct": case "toSet": case "toMutableSet": case "toHashSet": if (!pa.length) { return builtAt("unique", [obj], line); } return;
+            case "toList": case "toMutableList": case "toTypedArray": case "toIntArray": case "toDoubleArray": case "toCharArray": case "toCollection":
+              if (!pa.length) { return builtAt("toList", [obj], line); }
+              return;
+            case "take": if (pa.length === 1) { return builtAt("slice", [obj, numAt(0, line), pa[0]], line); } return;
+            case "drop": if (pa.length === 1) { return builtAt("slice", [obj, pa[0]], line); } return;
+            case "takeLast": if (pa.length === 1) { return builtAt("slice", [obj, { k: "un", op: "-", a: pa[0], line: line }], line); } return;
+            case "subList": if (pa.length === 2) { return builtAt("slice", [obj, pa[0], pa[1]], line); } return;
+            case "shuffled": if (!pa.length) { return builtAt("shuffled", [obj], line); } return;
+            case "shuffle": if (!pa.length) { return builtAt("shuffle", [obj], line); } return;
+            case "random": if (!pa.length) { return builtAt("choice", [obj], line); } return;
+            case "withIndex": if (!pa.length) { return callAt(nameAt("enumerate", line), [obj], line); } return;
+            case "zip": if (pa.length === 1 && !lam) { return builtAt("zip", [obj, pa[0]], line); } return;
+            case "removeAt": if (pa.length === 1) { return builtAt("pop", [obj, pa[0]], line); } return;
+            case "removeLast": if (!pa.length) { return builtAt("pop", [obj], line); } return;
+            case "removeFirst": if (!pa.length) { return builtAt("pop", [obj, numAt(0, line)], line); } return;
+            case "isNotEmpty": case "isNotBlank": return binAt(">", builtAt("length", [m === "isNotBlank" ? callAt(member(obj, "trim", line), [], line) : obj], line), numAt(0, line), line);
+            case "isBlank": return binAt("==", builtAt("length", [callAt(member(obj, "trim", line), [], line)], line), numAt(0, line), line);
+            case "isNullOrEmpty": case "isNullOrBlank": return binAt("==", builtAt("length", [obj], line), numAt(0, line), line);
+            case "getOrElse": if (pa.length === 2 && lam) { return callAt(member(obj, "getOrDefault", line), [pa[0], lastValue(lam) || { k: "null", line: line }], line); } return;
+            case "getValue": if (pa.length === 1) { return { k: "index", obj: obj, at: pa[0], line: line }; } return;
+            case "padStart": if (pa.length) { return builtAt("padLeft", [obj].concat(pa), line); } return;
+            case "padEnd": if (pa.length) { return builtAt("padRight", [obj].concat(pa), line); } return;
+            case "format": if (stripParens(obj).k === "str" || stripParens(obj).k === "fstr") { return callAt("String.format", [obj].concat(pa), line); } return;
+            case "lines": if (!pa.length) { return callAt(member(obj, "split", line), [{ k: "str", v: "\n", line: line }], line); } return;
+            case "coerceAtLeast": if (pa.length === 1) { return callAt("Math.max", [obj, pa[0]], line); } return;
+            case "coerceAtMost": if (pa.length === 1) { return callAt("Math.min", [obj, pa[0]], line); } return;
+            case "coerceIn": if (pa.length === 2) { return callAt("Math.max", [pa[0], callAt("Math.min", [obj, pa[1]], line)], line); } return;
+            case "absoluteValue": return callAt("Math.abs", [obj], line);
+            case "pow": if (pa.length === 1) { return callAt("Math.pow", [obj, pa[0]], line); } return;
+            case "trimIndent": case "trimMargin": return obj;
+            // w.replaceFirstChar { it.uppercase() }: the first letter made over, and the rest
+            case "replaceFirstChar":
+              if (lam && lastValue(lam)) {
+                var firstCh = { k: "index", obj: obj, at: numAt(0, line), line: line };
+                return binAt("+", givenTo(lam, firstCh), builtAt("substring", [copyOf(obj), numAt(1, line)], line), line);
+              }
+              return;
+            case "startsWith": case "endsWith": case "contains": case "indexOf": case "replace": case "split": case "trim":
+            case "substring": case "add": case "addAll": case "clear": case "containsKey": case "get": case "put": case "set":
+            case "getOrDefault": case "remove": case "filter": case "map": case "forEach": case "reduce": case "find":
+            case "isEmpty": case "sum": case "repeat": case "equals": case "compareTo": case "toString": case "plus":
+              return;
+          }
+        }
+        function prop(x) {
+          var line = x.line, path = pathOf(x) || "";
+          if (/^(Int\.MAX_VALUE|Int\.MIN_VALUE|Long\.MAX_VALUE|Long\.MIN_VALUE|Double\.MAX_VALUE)$/.test(path)) {
+            return pathAt(path.replace(/^Int\./, "Integer."), line);
+          }
+          if (/^(kotlin\.math\.PI|PI|Math\.PI)$/.test(path)) { return pathAt("Math.PI", line); }
+          if (/^(kotlin\.math\.E|Math\.E)$/.test(path)) { return pathAt("Math.E", line); }
+          switch (x.name) {
+            case "indices": return builtAt("range", [builtAt("length", [x.obj], line)], line);
+            case "lastIndex": return binAt("-", builtAt("length", [x.obj], line), numAt(1, line), line);
+            case "keys": if (!mine.keys) { return callAt({ k: "member", obj: x.obj, name: "keySet", line: line }, [], line); } return;
+            case "values":
+              if (!mine.values && !classLike(x.obj)) { return callAt({ k: "member", obj: x.obj, name: "values", line: line }, [], line); }
+              return;
+            case "entries":
+              // Color.entries: every one of an enum's values
+              if (classLike(x.obj)) { return callAt({ k: "member", obj: x.obj, name: "values", line: line }, [], line); }
+              return callAt({ k: "member", obj: x.obj, name: "entrySet", line: line }, [], line);
+            case "code": return builtAt("ord", [x.obj], line);
+            case "absoluteValue": return callAt("Math.abs", [x.obj], line);
+          }
+        }
+        function statement(x) {
+          var e = stripParens(x.e), line = x.line;
+          if (!e || e.k !== "call") { return; }
+          if (e.fn.k === "name" && /^(require|check|assert|requireNotNull|checkNotNull)$/.test(e.fn.v) && !userFnName(e.fn.v)) { return []; }
+          if (e.fn.k !== "member") { return; }
+          var obj = e.fn.obj, m = e.fn.name, pa = positional(e.args);
+          var lam = pa.length && stripParens(pa[pa.length - 1]).k === "fn" ? stripParens(pa[pa.length - 1]) : null;
+          if (mine[m]) { return; }
+          // x.let { ... }, x.also { ... }: done once, with it standing for x
+          if (/^(let|also|run|apply)$/.test(m) && lam && pa.length === 1) { return inlined(lam, obj, line); }
+          if (m === "sortDescending" && !pa.length) {
+            return [{ k: "expr", e: callAt("Collections.sort", [obj], line), line: line },
+                    { k: "expr", e: callAt("Collections.reverse", [copyOf(obj)], line), line: line }];
+          }
+          if (m === "sortByDescending" && lam) {
+            return [{ k: "expr", e: callAt({ k: "member", obj: obj, name: "sort", line: line }, [callAt("Comparator.comparing", [lam], line)], line), line: line },
+                    { k: "expr", e: callAt("Collections.reverse", [copyOf(obj)], line), line: line }];
+          }
+          // counts.getOrPut(k) { 0 }: put there first, if nothing is
+          if (m === "getOrPut" && pa.length === 2 && lam) {
+            return [{ k: "if", line: line, orelse: [],
+                      cond: notAt(callAt({ k: "member", obj: obj, name: "containsKey", line: line }, [pa[0]], line), line),
+                      then: [{ k: "expr", e: callAt({ k: "member", obj: copyOf(obj), name: "put", line: line }, [copyOf(pa[0]), lastValue(lam) || { k: "null", line: line }], line), line: line }] }];
+          }
+          // map.forEach { (k, v) -> ... }, map.forEach { k, v -> ... }: each key and what is under it
+          if (m === "forEach" && lam && (lam.params.length === 2 || (lam.params.length === 1 && lam.params[0].pattern))) {
+            var target = lam.params.length === 2 ? { k: "tuple", items: [nameAt(lam.params[0].name, line), nameAt(lam.params[1].name, line)], line: line }
+                                                  : lam.params[0].pattern;
+            // (a table gone round gives its keys and values, a list of pairs each pair)
+            return [{ k: "foreach", target: target, over: obj, body: lambdaBodyStatements(lam), line: line }];
+          }
+        }
+        refitBodies(got, function (part) {
+          return rewriteTree(part, function (x) {
+            if (x.k === "expr") { return statement(x); }
+            if (x.k === "call") { return call(x); }
+            if (x.k === "member") { return prop(x); }
+            if (x.k === "name" && x.v === "PI" && !takenAsOwn(x.v)) { return pathAt("Math.PI", x.line); }
+          });
+        });
+        function classLike(o) { o = stripParens(o); return o && o.k === "name" && /^[A-Z]/.test(o.v); }
+        function userFnName(f) { return (got.funcs || []).some(function (fn) { return fn.name === f; }); }
+        function takenAsOwn(v) {
+          return (got.globals || []).some(function (d) { return d.names.some(function (n) { return n.name === v; }); });
+        }
+      }
+
+      // ================================================================= Swift ==
+      // Swift: lines end statements, conditions go without brackets, names
+      // are handed over with labels -- greet(person: "Ann") -- and structs
+      // are values.  `self` is this.
+      var SW_MODS = /^(public|private|fileprivate|internal|open|static|class|final|override|mutating|nonmutating|lazy|weak|unowned|required|convenience|dynamic|optional|indirect|nonisolated|isolated)$/;
+      function swMods() {
+        var got = {};
+        for (;;) {
+          if (isOp("@") && peek(1).t === "name") {                  // @discardableResult, @objc
+            next(); next();
+            if (isOp("(") && !peek().first) { skipParens(); }
+            continue;
+          }
+          if (peek().t === "name" && SW_MODS.test(peek().v) && (peek(1).t === "name" || isOp("(", 1))) {
+            if (peek().v === "class" && !/^(func|var|let|static|override|final)$/.test(peek(1).v)) { break; }
+            var m = next().v;
+            if (isOp("(")) { skipParens(); }                          // private(set)
+            got[m] = true;
+            continue;
+          }
+          break;
+        }
+        return got;
+      }
+      function swBlock() {
+        expect("{");
+        var body = [];
+        while (!isOp("}")) {
+          if (peek().t === "eof") { throw wanted("}"); }
+          body.push.apply(body, notesBefore(peek().line));
+          body.push.apply(body, swStatement());
+        }
+        body.push.apply(body, notesBefore(peek().line));
+        expect("}");
+        return body;
+      }
+      // a condition, or what for goes over: no { in it is a closure
+      function headExpr() {
+        var was = noBrace;
+        noBrace = true;
+        try { return cAssign(); } finally { noBrace = was; }
+      }
+      // func greet(person name: String, _ times: Int = 1) -> String
+      function swParams() {
+        expect("(");
+        var params = [];
+        while (!isOp(")")) {
+          var p = peek();
+          var first = next(), label = first.v, name = first.v;
+          if (peek().t === "name") { name = next().v; }
+          expect(":");
+          var ref = !!accept("inout");
+          var ti = ownType();
+          var rest = !!accept("...");
+          var dflt = accept("=") ? cAssign() : null;
+          params.push({ name: name, label: label === "_" ? null : label, type: ti.name, typeInfo: ti, dims: ti.dims,
+                        ref: ref, rest: rest, dflt: dflt, line: p.line });
+          if (!accept(",")) { break; }
+        }
+        expect(")");
+        return params;
+      }
+      function swFunc(mods, lead) {
+        var t = next();
+        var nm = next();
+        if (nm.t !== "name" && nm.t !== "op") { throw odd(nm); }
+        if (isOp("<")) { skipAngles(); }
+        var params = swParams();
+        while (isName("throws") || isName("rethrows") || isName("async")) { next(); }
+        var rtype = accept("->") ? ownType() : null;
+        if (isName("where")) { while (!isOp("{") && peek().t !== "eof") { next(); } }
+        var body = isOp("{") ? swBlock() : null;
+        // func name() -> String { "hi" }: one expression, handed back
+        var only = body && body.filter(function (s) { return s.k !== "note"; });
+        if (rtype && only && only.length === 1 && only[0].k === "expr" && stripParens(only[0].e).k !== "assignx") {
+          body = settleAll(body.map(function (s) { return s === only[0] ? { k: "return", value: s.e, line: s.line } : s; }));
+        }
+        return { k: "func", name: String(nm.v), params: params, rtype: rtype ? rtype.name : null, rtypeInfo: rtype,
+                 rdims: rtype ? rtype.dims : 0, body: body, line: nm.line, lead: lead || [], statik: !!mods.static, mods: mods };
+      }
+      // let x = 5, var total: Double = 0, let (a, b) = pair
+      function swDecl(mods) {
+        var t = next(), konst = t.v === "let", out = [];
+        do {
+          if (isOp("(")) {
+            var pat = patternHere();
+            if (accept(":")) { ownType(); }
+            expect("=");
+            var pv = cAssign();
+            out.push({ k: "decl", type: null, typeInfo: null, dims: 0, konst: konst, line: t.line,
+                       names: [{ pattern: pat, value: pv, line: t.line }] });
+            continue;
+          }
+          var nm = next();
+          if (nm.t !== "name") { throw odd(nm); }
+          var ti = accept(":") ? ownType() : null;
+          var value = accept("=") ? cAssign() : null;
+          // var area: Double { w * h } -- worked out, not kept (in a class: see swMember)
+          if (isOp("{") && !value) { skipBraces(); continue; }
+          out.push({ k: "decl", type: ti ? ti.name : null, typeInfo: ti, dims: ti ? ti.dims : 0, konst: konst, line: t.line,
+                     names: [{ name: nm.v, value: value, dims: ti ? ti.dims : 0, sizes: [], line: nm.line }] });
+        } while (accept(","));
+        endStatement();
+        return settleAll(out);
+      }
+      // if x > 0, if let n = Int(s), guard let n = ... else { ... }
+      // -- several conditions, all of which have to hold, the names they
+      // bind set first
+      function swConditions() {
+        var steps = [];
+        do {
+          if (isName("let") || isName("var")) {
+            next();
+            var nm = next().v;
+            if (accept(":")) { ownType(); }
+            var value;
+            if (accept("=")) { value = headExpr(); } else { value = nameAt(nm, peek().line); }   // if let x { }
+            var v = stripParens(value), test;
+            // if let n = Int(s): whether s is a number
+            if (v.k === "call" && v.fn.k === "name" && /^(Int|Double|Float)$/.test(v.fn.v) && v.args.length === 1) {
+              test = builtAt("isNumber", [v.args[0]], v.line);
+            } else if (v.k === "index") {
+              // if let n = ages[name]: whether the table has name
+              test = callAt({ k: "member", obj: copyOf(v.obj), name: "containsKey", line: v.line }, [copyOf(v.at)], v.line);
+            } else if (v.k === "member" && /^(first|last)$/.test(v.name)) {
+              test = binAt(">", builtAt("length", [copyOf(v.obj)], v.line), numAt(0, v.line), v.line);
+            } else if (v.k === "call" && v.fn.k === "member" && /^(firstIndex|lastIndex|index)$/.test(v.fn.name)) {
+              test = binAt(">=", copyOf(value), numAt(0, v.line), v.line);
+            } else if (v.k === "call" && pathOf(v.fn) === "readLine") {
+              test = { k: "bool", v: true, line: v.line };
+            } else {
+              test = binAt("!=", copyOf(value), { k: "null", line: v.line }, v.line);
+            }
+            steps.push({ test: test, bind: setAt(nameAt(nm, v.line), value, v.line), name: nm });
+          } else if (isName("case")) {
+            next();
+            var pat = swPattern();
+            expect("=");
+            var subj = headExpr();
+            steps.push({ test: patCond(pat, subj), bind: null });
+          } else {
+            steps.push({ test: headExpr(), bind: null });
+          }
+        } while (accept(","));
+        return steps;
+      }
+      // Whether the steps can be asked as one test: no name one binds is asked of by a later one
+      function stepsTogether(steps) {
+        return steps.every(function (s, i) {
+          return !s.name || steps.slice(i + 1).every(function (later) { return !namesUsedInBody([later.test])[s.name]; });
+        });
+      }
+      function yes(t) { return t && t.k === "bool" && t.v === true; }
+      function allOf(tests, line) {
+        tests = tests.filter(function (t) { return !yes(t); });
+        return tests.reduce(function (a, b) { return a ? binAt("&&", a, b, line) : b; }, null);
+      }
+      // if let a = x, let b = f(a) { then } else { orelse }: each named in turn,
+      // each only once the one before it held -- a flag, where one needs the last
+      function stepsIf(steps, then, orelse, line) {
+        var binds = steps.filter(function (s) { return s.bind; }).map(function (s) { return s.bind; });
+        if (stepsTogether(steps)) {
+          var test = allOf(steps.map(function (s) { return s.test; }), line);
+          if (!test) { return binds.concat(then); }
+          return [{ k: "if", cond: test, then: binds.concat(then), orelse: orelse, line: line }];
+        }
+        var ok = freshName("found");
+        return stepsFlag(steps, ok, line).concat([{ k: "if", cond: nameAt(ok, line), then: then, orelse: orelse, line: line }]);
+      }
+      function stepsFlag(steps, ok, line) {
+        var inner = [setAt(nameAt(ok, line), { k: "bool", v: true, line: line }, line)];
+        for (var i = steps.length - 1; i >= 0; i--) {
+          var body = (steps[i].bind ? [steps[i].bind] : []).concat(inner);
+          inner = yes(steps[i].test) ? body : [{ k: "if", cond: steps[i].test, then: body, orelse: [], line: line }];
+        }
+        return [{ k: "decl", type: null, typeInfo: null, dims: 0, konst: false, line: line,
+                  names: [{ name: ok, value: { k: "bool", v: false, line: line }, line: line }] }].concat(inner);
+      }
+      // guard ... else { leave }: the names bound stay bound after it
+      function stepsGuard(steps, orelse, line) {
+        var binds = steps.filter(function (s) { return s.bind; }).map(function (s) { return s.bind; });
+        if (stepsTogether(steps)) {
+          var test = allOf(steps.map(function (s) { return s.test; }), line);
+          return (test ? [{ k: "if", cond: notAt(test, line), then: orelse, orelse: [], line: line }] : []).concat(binds);
+        }
+        var ok = freshName("found");
+        return stepsFlag(steps, ok, line).concat([{ k: "if", cond: notAt(nameAt(ok, line), line), then: orelse, orelse: [], line: line }]);
+      }
+      // the test a pattern makes of a value, where the parser can say it
+      function patCond(p, e) {
+        switch (p.p) {
+          case "lit": return binAt("==", e, p.e, e.line);
+          case "range": return binAt("&&", binAt(">=", e, p.lo, e.line), binAt(p.incl ? "<=" : "<", copyOf(e), p.hi, e.line), e.line);
+          case "or": return p.alts.map(function (a) { return patCond(a, copyOf(e)); })
+                                  .reduce(function (a, b) { return binAt("||", a, b, e.line); });
+        }
+        return { k: "bool", v: true, line: e.line };
+      }
+      function swIf() {
+        var t = next();
+        var steps = swConditions();
+        var then = swBlock();
+        var orelse = [];
+        if (isName("else")) {
+          next();
+          orelse = isName("if") ? swIf() : swBlock();
+          if (orelse.length === 1 && orelse[0].k === "if") { orelse[0].chained = true; }
+        }
+        return stepsIf(steps, then, orelse, t.line);
+      }
+      function swStatement() {
+        var t = peek();
+        if (accept(";")) { return []; }
+        // outer: for ... -- a loop a break can name
+        if (t.t === "name" && isOp(":", 1) && /^(for|while|repeat)$/.test(peek(2).v || "")) {
+          next(); next();
+          var inner = swStatement();
+          inner.forEach(function (st) { if (/^(while|dowhile|for|foreach|range)$/.test(st.k)) { st.label = t.v; } });
+          return inner;
+        }
+        var mods = swMods();
+        if (isName("let") || isName("var")) { return swDecl(mods); }
+        if (isName("func")) { return [swFunc(mods, [])]; }
+        if ((isName("class") || isName("struct") || isName("enum") || isName("protocol") || isName("extension")) && peek(1).t === "name") {
+          localTypes.push(swType(mods, []));
+          return [];
+        }
+        if (t.t === "name") {
+          switch (t.v) {
+            case "if": return swIf();
+            case "guard": {
+              next();
+              var gsteps = swConditions();
+              expect("else");
+              return stepsGuard(gsteps, swBlock(), t.line);
+            }
+            case "while": {
+              next();
+              var wsteps = swConditions();
+              var wbody = swBlock();
+              if (wsteps.length === 1 && !wsteps[0].bind) { return [{ k: "while", cond: wsteps[0].test, body: wbody, line: t.line }]; }
+              // while let x = ...: round while it holds
+              return [{ k: "while", cond: { k: "bool", v: true, line: t.line }, line: t.line,
+                        body: stepsIf(wsteps, wbody, [{ k: "break", label: null, line: t.line }], t.line) }];
+            }
+            case "repeat": {
+              next();
+              var rb = swBlock();
+              expect("while");
+              var rc = headExpr();
+              endStatement();
+              return [{ k: "dowhile", cond: rc, body: rb, line: t.line }];
+            }
+            case "for": return [swFor()];
+            case "switch": return [swSwitch()];
+            case "return": {
+              next();
+              var rv = (isOp("}") || isOp(";") || peek().first || peek().t === "eof") ? null : cAssign();
+              endStatement();
+              return settleAll([{ k: "return", value: rv, line: t.line }]);
+            }
+            case "break": case "continue": {
+              next();
+              var label = peek().t === "name" && !peek().first ? next().v : null;
+              endStatement();
+              return [{ k: t.v, label: label, line: t.line }];
+            }
+            case "fallthrough": next(); return [{ k: "fallthrough", line: t.line }];
+            case "throw": {
+              next();
+              var thrown = cAssign();
+              endStatement();
+              return [ownThrow(thrown, t.line)];
+            }
+            case "do": {
+              if (isOp("{", 1)) { next(); return [swDo(t)]; }
+              break;
+            }
+            case "defer": next(); swBlock(); return [];
+            case "import": next(); while (peek().t !== "eof" && !peek().first) { next(); } return [];
+          }
+        }
+        var e = cAssign();
+        endStatement();
+        // counts[w, default: 0] += 1: what is there, or 0, and one more
+        var ax = stripParens(e);
+        if (ax.k === "assignx" && stripParens(ax.target).k === "index" && stripParens(ax.target).dflt) {
+          var tg = stripParens(ax.target);
+          var was = callAt({ k: "member", obj: tg.obj, name: "getOrDefault", line: t.line }, [tg.at, tg.dflt], t.line);
+          var put = ax.op === "=" ? ax.value : binAt(ax.op.replace(/=$/, ""), was, ax.value, t.line);
+          e = { k: "assignx", op: "=", target: { k: "index", obj: copyOf(tg.obj), at: copyOf(tg.at), line: t.line }, value: put, line: t.line };
+        }
+        return settleAll([{ k: "expr", e: e, line: t.line }]);
+      }
+      // do { try ... } catch MyError.bad { ... } catch { print(error) }
+      function swDo(t) {
+        var body = swBlock();
+        var handlers = [];
+        while (isName("catch")) {
+          var h = next(), type = null, name = "error";
+          if (!isOp("{")) {
+            if (isName("let")) { next(); name = next().v; if (accept("as")) { type = { k: "name", v: ownType().name, line: h.line }; } }
+            else {
+              var what = headExpr();
+              var tn = String(pathOf(stripParens(what)) || "").split(".").pop();
+              type = { k: "name", v: tn || "Error", line: h.line };
+              if (isName("as")) { next(); ownType(); }
+            }
+          }
+          var hbody = swBlock();
+          // catch { print(error) }: the error it names without saying so, under a name of its own
+          if (name === "error") { name = freshName("problem"); hbody = renameIn(hbody, "error", name); }
+          CAUGHT[name] = true;
+          caughtAs(name, type ? type.v : "");
+          handlers.push({ type: type, name: name, body: hbody, line: h.line });
+        }
+        return { k: "try", body: body, handlers: handlers, orelse: [], fin: [], line: t.line };
+      }
+      // for i in 0..<n, for i in stride(from: 10, to: 0, by: -2), for (i, x) in xs.enumerated()
+      function swFor() {
+        var t = next();
+        accept("case");
+        var target;
+        if (isOp("(")) { target = patternHere(); }
+        else { var nm = next(); target = { k: "name", v: nm.v, line: nm.line }; }
+        if (accept(":")) { ownType(); }
+        expect("in");
+        var over = headExpr();
+        var where = null;
+        if (isName("where")) { next(); where = headExpr(); }
+        var body = swBlock();
+        if (where) { body = [{ k: "if", cond: where, then: body, orelse: [], line: t.line }]; }
+        var r = stripParens(over);
+        if (target.k === "name" && r.k === "rng" && !r.chars) { return rangeLoop(target.v, r, body, t.line); }
+        // stride(from: 0, to: 10, by: 2), stride(from: 10, through: 0, by: -1)
+        if (target.k === "name" && r.k === "call" && pathOf(r.fn) === "stride" && r.args.length === 3) {
+          var by = r.args[2], through = r.args[1].argName === "through";
+          var down = by && stripParens(by).k === "un" && stripParens(by).op === "-";
+          var to = through ? binAt(down ? "-" : "+", r.args[1], numAt(1, t.line), t.line) : r.args[1];
+          return { k: "range", v: target.v, args: [r.args[0], to, by], body: body, line: t.line };
+        }
+        return { k: "foreach", target: target, over: over, body: body, line: t.line };
+      }
+      // switch x { case 1: ...  case 2, 3: ...  case 4...6: ...  case let n where n > 9: ...  default: ... }
+      function swSwitch() {
+        var t = next();
+        var subject = headExpr();
+        expect("{");
+        var cases = [];
+        while (!isOp("}")) {
+          var c = peek();
+          if (c.t === "eof") { throw wanted("}"); }
+          notesBefore(c.line);
+          var one = { line: c.line, body: [] };
+          if (accept("default")) { one.pat = { p: "any" }; }
+          else {
+            expect("case");
+            var alts = [];
+            do { alts.push(swPattern()); } while (accept(","));
+            one.pat = alts.length === 1 ? alts[0] : { p: "or", alts: alts };
+            if (isName("where")) { next(); one.guard = headExpr(); }
+          }
+          expect(":");
+          while (!isName("case") && !isName("default") && !isOp("}")) {
+            if (peek().t === "eof") { throw wanted("}"); }
+            one.body.push.apply(one.body, notesBefore(peek().line));
+            one.body.push.apply(one.body, swStatement());
+          }
+          // fallthrough: the next case's statements as well
+          cases.push(one);
+        }
+        expect("}");
+        cases.forEach(function (c, i) {
+          var last = c.body[c.body.length - 1];
+          if (last && last.k === "fallthrough") {
+            c.body = c.body.slice(0, -1).concat(cases[i + 1] ? cases[i + 1].body : []);
+          }
+          c.body = c.body.filter(function (s) { return !(s.k === "break" && !s.label); });
+        });
+        return whenStatement({ subject: subject, cases: cases, line: t.line });
+      }
+      function swPattern() {
+        var t = peek();
+        if (isName("_")) { next(); return { p: "any" }; }
+        if (isName("let") || isName("var")) {
+          next();
+          if (isOp("(")) { return swTuplePattern(); }
+          return { p: "cap", name: next().v };
+        }
+        if (isName("is")) { next(); return { p: "type", name: ownType().name }; }
+        if (isOp("(")) { return swTuplePattern(); }
+        // ..<10, ...5: up to
+        if (isOp("..<") || isOp("...")) {
+          var up = next().v;
+          return { p: "range", lo: { k: "un", op: "-", a: pathAt("Integer.MAX_VALUE", t.line), line: t.line }, hi: cBinary(7), incl: up === "..." };
+        }
+        var e = cBinary(BIN["..."] || 6);
+        var r = stripParens(e);
+        if (r.k === "rng") { return { p: "range", lo: r.from, hi: r.to, incl: r.incl }; }
+        return { p: "lit", e: e };
+      }
+      function swTuplePattern() {
+        expect("(");
+        var items = [];
+        while (!isOp(")")) { items.push(swPattern()); if (!accept(",")) { break; } }
+        expect(")");
+        return { p: "seq", items: items };
+      }
+      // { $0 * 2 }, { x in x * 2 }, { (a: Int, b: Int) -> Int in return a + b }
+      function swClosure() {
+        var t = expect("{");
+        var params = null, save = pos;
+        if (isOp("[")) {                                           // [weak self] -- how it holds them
+          var d0 = 0;
+          do { var x0 = next(); if (x0.v === "[") { d0++; } if (x0.v === "]") { d0--; } } while (d0 > 0);
+        }
+        var saveAfter = pos;
+        try {
+          var ps = [];
+          var bracketed = !!accept("(");
+          while (!isName("in") && !(bracketed && isOp(")"))) {
+            var pn = next();
+            if (pn.t !== "name") { throw odd(pn); }
+            if (accept(":")) { ownType(); }
+            ps.push({ name: pn.v, type: null, dims: 0, line: pn.line });
+            if (!accept(",")) { break; }
+          }
+          if (bracketed) { expect(")"); }
+          if (accept("->")) { ownType(); }
+          if (isName("throws")) { next(); }
+          expect("in");
+          params = ps;
+        } catch (e) {
+          pos = saveAfter;
+          params = null;
+        }
+        if (params === null && pos !== saveAfter) { pos = save; }
+        var body = [];
+        while (!isOp("}")) {
+          if (peek().t === "eof") { throw wanted("}"); }
+          body.push.apply(body, notesBefore(peek().line));
+          body.push.apply(body, swStatement());
+        }
+        expect("}");
+        return lambdaOf(params, body, t.line, "$");
+      }
+      function swPrimary() {
+        var t = peek();
+        if (isOp("{")) { return swClosure(); }
+        if (isName("nil")) { next(); return { k: "null", line: t.line }; }
+        if (isName("self")) { next(); return nameAt("this", t.line); }
+        if (isName("Self")) { next(); return nameAt("this", t.line); }
+        // .north, .red: one of the enum's values the context names
+        if (isOp(".") && peek(1).t === "name" && !peek(1).first) { next(); var em = next(); return nameAt(em.v, em.line); }
+        if (isName("if") || isName("switch")) {
+          // x = if c { a } else { b }: a value made by a statement
+          var st = isName("if") ? swIf() : [swSwitch()];
+          return { k: "blockx", body: st, line: t.line };
+        }
+        // [1, 2], [String: Int](), ["a": 1], [:]
+        if (isOp("[")) {
+          next();
+          if (isOp(":") && isOp("]", 1)) { next(); next(); return { k: "dict", keys: [], values: [], line: t.line }; }
+          if (isOp("]")) {
+            next();
+            return { k: "list", items: [], line: t.line };
+          }
+          // [Int]() and [String: Int](): made empty
+          var at0 = pos;
+          try {
+            var ty = ownType();
+            if (isOp("]") && isOp("(", 1)) {
+              next(); next();
+              var made0 = cArgs(")");
+              // [Int](repeating: 0, count: 5): five noughts
+              if (made0.length === 2 && made0[0].argName === "repeating") { return { k: "sized", dims: [made0[1]], fill: made0[0], kind: null, line: t.line }; }
+              return made0.length === 1 ? builtAt("toList", made0, t.line) : { k: "list", items: [], line: t.line };
+            }
+            if (accept(":")) { ownType(); expect("]"); expect("("); expect(")"); return { k: "dict", keys: [], values: [], line: t.line }; }
+          } catch (e) { /* a value, then */ }
+          pos = at0;
+          var first = cAssign();
+          if (accept(":")) {
+            var keys = [first], values = [cAssign()];
+            while (accept(",")) {
+              if (isOp("]")) { break; }
+              keys.push(cAssign());
+              expect(":");
+              values.push(cAssign());
+            }
+            expect("]");
+            return { k: "dict", keys: keys, values: values, line: t.line };
+          }
+          var items = [first];
+          while (accept(",")) { if (isOp("]")) { break; } items.push(cAssign()); }
+          expect("]");
+          return { k: "list", items: items, line: t.line };
+        }
+        // (a, b): a tuple
+        if (isOp("(")) {
+          next();
+          if (accept(")")) { return { k: "tuple", items: [], line: t.line }; }
+          var parts = [];
+          do {
+            if (peek().t === "name" && isOp(":", 1)) { next(); next(); }   // (x: 1, y: 2)
+            parts.push(cAssign());
+          } while (accept(","));
+          expect(")");
+          return parts.length === 1 ? { k: "paren", e: parts[0], line: t.line } : { k: "tuple", items: parts, line: t.line };
+        }
+        return null;
+      }
+      // class, struct, enum, protocol, extension
+      function swType(mods, lead) {
+        var kt0 = next(), kind = kt0.v;
+        var nt = next();
+        if (nt.t !== "name") { throw odd(nt); }
+        while (isOp(".") && peek(1).t === "name") { next(); nt = next(); }
+        var cls = { k: "class", name: nt.v, kind: kind === "struct" ? "struct" : kind === "enum" ? "enum" : kind === "protocol" ? "interface" : "class",
+                    bases: [], ifaces: [], fields: [], methods: [], ctors: [], values: [], inits: [], line: kt0.line,
+                    lead: lead || [], extension: kind === "extension" };
+        if (kind !== "extension") { classes.push(cls.name); }
+        if (isOp("<")) { skipAngles(); }
+        if (accept(":")) {
+          do {
+            var bt = ownType();
+            if (kind === "enum" && /^(int|long|string|double|char)$/.test(bt.name)) { cls.raw = bt.name === "string" || bt.name === "char" ? "text" : "int"; }
+            else if (kind === "class" && !cls.bases.length && !/^(CustomStringConvertible|Equatable|Hashable|Comparable|Codable|Error|CaseIterable|Identifiable)$/.test(bt.name) && cls.ifaces.length === 0) { cls.bases.push(bt.name); }
+            else { cls.ifaces.push(bt.name); }
+          } while (accept(","));
+        }
+        if (isName("where")) { while (!isOp("{") && peek().t !== "eof") { next(); } }
+        expect("{");
+        while (!isOp("}")) {
+          if (peek().t === "eof") { throw wanted("}"); }
+          var mlead = notesBefore(peek().line);
+          if (accept(";")) { continue; }
+          var mm = swMods();
+          swMember(cls, mm, mlead);
+        }
+        expect("}");
+        // a struct with no init of its own is made from its fields, by name: Point(x: 1, y: 2)
+        return cls;
+      }
+      function swMember(cls, mm, lead) {
+        var t = peek();
+        if (isName("case") && cls.kind === "enum") {
+          next();
+          do {
+            var vn = next();
+            var raw = null;
+            if (isOp("(")) { skipParens(); }                       // case circle(Double): what it carries
+            if (accept("=")) { raw = cAssign(); }
+            cls.values.push({ name: vn.v, value: raw, args: null, line: vn.line });
+          } while (accept(","));
+          endStatement();
+          return;
+        }
+        if (isName("func")) {
+          var fn = swFunc(mm, lead);
+          if (!fn.body) { return; }
+          fn.kind = "method";
+          var ops = { "+": "plus", "-": "minus", "*": "times", "/": "dividedBy", "==": "equals", "<": "lessThan" };
+          if (ops[fn.name] && mm.static && fn.params.length === 2) {
+            // static func + (a: V, b: V) -> V: the first is this
+            var first = fn.params[0].name;
+            fn.body = renameIn(fn.body, first, "this");
+            fn.params = fn.params.slice(1);
+            fn.opSign = fn.name;
+            fn.name = ops[fn.name];
+            fn.statik = false;
+          }
+          cls.methods.push(fn);
+          return;
+        }
+        if (isName("init") && (isOp("(", 1) || isOp("?", 1) || isOp("!", 1) || isOp("<", 1))) {
+          var it = next();
+          if (isOp("?") || isOp("!")) { next(); }
+          if (isOp("<")) { skipAngles(); }
+          var cps = swParams();
+          while (isName("throws")) { next(); }
+          var cbody = swBlock();
+          // super.init(name: name) is the class it is built on, made first
+          var inits = [];
+          cbody = cbody.filter(function (st) {
+            var e = st.k === "expr" ? stripParens(st.e) : null;
+            if (e && e.k === "call" && pathOf(e.fn) === "super.init") { inits.push({ name: "super", args: e.args }); return false; }
+            if (e && e.k === "call" && pathOf(e.fn) === "this.init") { inits.push({ name: "this", args: e.args }); return false; }
+            return true;
+          });
+          cls.ctors.push({ params: cps, body: cbody, inits: inits, line: it.line, lead: lead });
+          return;
+        }
+        if (isName("deinit")) { next(); swBlock(); return; }
+        if (isName("subscript")) { next(); swParams(); if (accept("->")) { ownType(); } skipBraces(); return; }
+        if (isName("let") || isName("var")) {
+          var konst = next().v === "let";
+          var nm = next();
+          var ti = accept(":") ? ownType() : null;
+          var init = accept("=") ? cAssign() : null;
+          // var area: Double { w * h }, var x: Int { get { ... } set { ... } }
+          if (isOp("{") && !init) {
+            next();
+            var getter = null;
+            if (isName("get") || isName("set") || isName("willSet") || isName("didSet")) {
+              var askedOnly = false;
+              while (!isOp("}")) {
+                var w = next();
+                if (isOp("(")) { skipParens(); }
+                // a protocol's { get set }: what a kind of it has to have, with nothing to run
+                if (!isOp("{")) { askedOnly = true; continue; }
+                var b = swBlock();
+                if (w.v === "get") { getter = b; }
+              }
+              expect("}");
+              if (askedOnly && !getter) { endStatement(); return; }
+              if (!getter) {                                     // willSet / didSet only: a stored field
+                cls.fields.push({ name: nm.v, value: null, statik: !!mm.static, type: ti, line: nm.line, lead: lead });
+                return;
+              }
+            } else {
+              pos--;
+              getter = swBlock();
+            }
+            // var description: String -- what the thing is written as
+            var named = nm.v === "description" ? "toString" : nm.v;
+            cls.methods.push({ k: "func", name: named, params: [], body: settleAll(valueOfBody(getter, function (v) { return { k: "return", value: v, line: nm.line }; })),
+                               kind: "get", getter: named !== "toString", rtype: ti ? ti.name : null, statik: !!mm.static, line: nm.line, lead: lead });
+            return;
+          }
+          endStatement();
+          cls.fields.push({ name: nm.v, value: init, statik: !!mm.static, konst: konst, type: ti, line: nm.line, lead: lead });
+          return;
+        }
+        if ((isName("class") || isName("struct") || isName("enum") || isName("protocol") || isName("extension")) && peek(1).t === "name") {
+          localTypes.push(swType(mm, lead));
+          return;
+        }
+        if (isName("typealias") || isName("associatedtype")) { next(); while (peek().t !== "eof" && !peek().first && !isOp("}")) { next(); } return; }
+        throw odd(t);
+      }
+      function topSwift() {
+        var out = { funcs: [], globals: [], main: [], mainFound: false, types: [], outside: [] };
+        out.head = notesBefore(peek().line);
+        while (peek().t !== "eof") {
+          var t = peek();
+          var lead = notesBefore(t.line);
+          if (accept(";")) { continue; }
+          var save = pos;
+          var mods = swMods();
+          if ((isName("class") || isName("struct") || isName("enum") || isName("protocol") || isName("extension")) && peek(1).t === "name") {
+            out.types.push(swType(mods, lead));
+            continue;
+          }
+          if (isName("func")) {
+            var fn = swFunc(mods, lead);
+            if (fn.body) { out.funcs.push(fn); }
+            continue;
+          }
+          pos = save;
+          out.main.push.apply(out.main, lead);
+          out.main.push.apply(out.main, swStatement());
+        }
+        out.trailing = notesBefore(1e9);
+        out.types = out.types.concat(localTypes);
+        // extension Point { ... }: more of Point; extension Int { ... }: functions handed an Int first
+        var byName = Object.create(null);
+        out.types.forEach(function (c) { if (!c.extension) { byName[c.name] = c; } });
+        out.types = out.types.filter(function (c) {
+          if (!c.extension) { return true; }
+          var home = byName[c.name];
+          if (home) {
+            home.methods = home.methods.concat(c.methods);
+            home.fields = home.fields.concat(c.fields.filter(function (f) { return f.statik; }));
+            home.ctors = home.ctors.concat(c.ctors);
+            return false;
+          }
+          c.methods.forEach(function (m) {
+            m.receiver = c.name;
+            m.params = [{ name: "this", line: m.line, type: c.name }].concat(m.params);
+            out.funcs.push(m);
+          });
+          return false;
+        });
+        // enum ShopError: Error { case outOfStock(String), badQuantity }: each a kind of error
+        out.types.slice().forEach(function (c) {
+          if (c.kind !== "enum" || !(c.ifaces || []).some(function (n) { return /Error$/.test(n); })) { return; }
+          c.values.forEach(function (v) {
+            out.types.push({ k: "class", name: v.name, kind: "class", bases: ["Error"], ifaces: [], fields: [], methods: [],
+                             ctors: [], values: [], inits: [], line: v.line, lead: [] });
+            classes.push(v.name);
+          });
+          c.values = [];
+        });
+        // @main struct App { static func main() }: the program
+        swProgramMain(out);
+        plainNodes(out);
+        swLibrary(out);
+        return out;
+      }
+      function swProgramMain(out) {
+        out.types.forEach(function (c) {
+          c.methods = c.methods.filter(function (m) {
+            if (m.statik && m.name === "main" && !out.mainFound && !out.main.some(function (s) { return s.k !== "note"; })) {
+              out.mainFound = true;
+              out.main = m.body;
+              return false;
+            }
+            return true;
+          });
+        });
+      }
+
+      // ---- Swift's library, said the way the rest already is -------------
+      function swLibrary(got) {
+        var mine = ownMethodNames(got), fields = Object.create(null);
+        (got.types || []).forEach(function (c) { (c.fields || []).forEach(function (f) { fields[f.name] = true; }); });
+        var extensions = Object.create(null);
+        (got.funcs || []).forEach(function (fn) { if (fn.receiver) { extensions[fn.name] = true; } });
+        function member(obj, name, line) { return { k: "member", obj: obj, name: name, line: line }; }
+        function labelled(args, name) { return args.filter(function (a) { return a.argName === name; })[0] || null; }
+        function unlabelled(args) { return args.filter(function (a) { return !a.argName; }); }
+        function len(obj, line) { return builtAt("length", [obj], line); }
+        function call(x) {
+          var line = x.line, args = x.args, plain = unlabelled(args);
+          var lam = args.length && stripParens(args[args.length - 1]).k === "fn" ? stripParens(args[args.length - 1]) : null;
+          if (x.fn.k === "name") {
+            var f = x.fn.v;
+            if ((got.funcs || []).some(function (fn) { return fn.name === f && !fn.receiver; })) { return; }
+            switch (f) {
+              case "print": {
+                var sep = labelled(args, "separator"), end = labelled(args, "terminator");
+                var parts = [];
+                plain.forEach(function (a, i) {
+                  if (i) { parts.push(sep ? { e: sep, spec: "", conv: "" } : " "); }
+                  parts.push(stripParens(a).k === "str" ? stripParens(a).v : { e: a, spec: "", conv: "" });
+                });
+                var ends = !end || (stripParens(end).k === "str" && /\n$/.test(stripParens(end).v));
+                if (end && !(stripParens(end).k === "str" && stripParens(end).v === "")) {
+                  var tail = stripParens(end).k === "str" ? stripParens(end).v.replace(/\n$/, "") : null;
+                  if (tail === null) { parts.push({ e: end, spec: "", conv: "" }); } else if (tail) { parts.push(tail); }
+                }
+                var said = !parts.length ? []
+                         : parts.every(function (p0) { return typeof p0 === "string"; }) ? [{ k: "str", v: parts.join(""), line: line }]
+                         : parts.length === 1 ? [parts[0].e] : [{ k: "fstr", parts: parts, line: line }];
+                return callAt(ends ? "System.out.println" : "System.out.print", said, line);
+              }
+              case "readLine": return callAt("stdin.nextLine", [], line);
+              case "Int": case "Double": case "Float": case "Bool":
+                if (plain.length === 1 && !labelled(args, "radix")) {
+                  if (f === "Bool") { return callAt("Boolean.parseBoolean", plain, line); }
+                  return builtAt(f === "Int" ? "int" : "real", [plain[0]], line);
+                }
+                return;
+              case "String":
+                if (labelled(args, "format")) { return callAt("String.format", [labelled(args, "format")].concat(plain), line); }
+                if (labelled(args, "repeating")) { return callAt(member(labelled(args, "repeating"), "repeat", line), [labelled(args, "count")], line); }
+                if (plain.length === 1) {
+                  var inner = stripParens(plain[0]);
+                  if (inner.k === "call" && inner.builtin && /^(reversed|sorted)$/.test(inner.fn.v)) { return builtAt("join", [inner, { k: "str", v: "", line: line }], line); }
+                  return callAt("String.valueOf", plain, line);
+                }
+                return;
+              case "Character": if (plain.length === 1) { return plain[0]; } return;
+              case "Array": case "Set":
+                if (labelled(args, "repeating")) { return { k: "sized", dims: [labelled(args, "count")], fill: labelled(args, "repeating"), kind: null, line: line }; }
+                if (plain.length === 1) { return builtAt(f === "Set" ? "unique" : "toList", plain, line); }
+                if (!args.length) { return { k: "list", items: [], line: line }; }
+                return;
+              case "abs": case "sqrt": case "pow": case "floor": case "ceil": case "round": case "sin": case "cos": case "tan":
+              case "exp": case "log": case "log10": case "atan2": case "hypot":
+                return callAt("Math." + f, plain, line);
+              case "max": case "min":
+                if (plain.length >= 2) { return plain.slice(1).reduce(function (a, b) { return callAt("Math." + f, [a, b], line); }, plain[0]); }
+                return;
+              case "zip": if (plain.length === 2) { return builtAt("zip", plain, line); } return;
+              case "type": if (labelled(args, "of")) { return builtAt("classOf", [labelled(args, "of")], line); } return;
+              case "exit": return callAt("System.exit", plain, line);
+              case "stride": {
+                var from = labelled(args, "from"), to = labelled(args, "to"), thru = labelled(args, "through"), by = labelled(args, "by");
+                if (from && by && (to || thru)) {
+                  return builtAt("range", [from, thru ? binAt("+", thru, numAt(1, line), line) : to, by], line);
+                }
+                return;
+              }
+            }
+            return;
+          }
+          if (x.fn.k !== "member") { return; }
+          var obj = x.fn.obj, m = x.fn.name, path = pathOf(x.fn) || "";
+          if (extensions[m] && !mine[m]) { return callAt(nameAt(m, line), [obj].concat(args), line); }
+          if (mine[m]) { return; }
+          if (/^(Int|Double|Float)\.random$/.test(path) && labelled(args, "in")) {
+            var span = labelled(args, "in");
+            return path === "Int.random" ? builtAt("choice", [span], line) : builtAt("random", [], line);
+          }
+          // a dictionary sorted, searched or gone over: its key-and-value pairs
+          if (/^(sorted|max|min|filter|map|forEach|enumerated|first|reduce|contains|allSatisfy|compactMap)$/.test(m)) {
+            obj = { k: "pairsof", e: obj, line: line };
+          }
+          // xs.max { a, b in a.n < b.n }: the first largest; min, the first smallest
+          if ((m === "max" || m === "min") && (lam || labelled(args, "by"))) {
+            var cmp = lam || labelled(args, "by");
+            var order = m === "max" && cmp.k === "fn" && cmp.params.length === 2
+                      ? Object.assign({}, cmp, { params: [cmp.params[1], cmp.params[0]] }) : cmp;
+            return { k: "index", obj: builtAt("sorted", [obj, order], line), at: numAt(0, line), line: line };
+          }
+          switch (m) {
+            case "uppercased": return callAt(member(obj, "toUpperCase", line), [], line);
+            case "lowercased": return callAt(member(obj, "toLowerCase", line), [], line);
+            case "hasPrefix": return callAt(member(obj, "startsWith", line), plain, line);
+            case "hasSuffix": return callAt(member(obj, "endsWith", line), plain, line);
+            case "starts": if (labelled(args, "with")) { return callAt(member(obj, "startsWith", line), [labelled(args, "with")], line); } return;
+            case "contains":
+              if (labelled(args, "where") || (lam && !plain.length)) { return callAt(member(obj, "some", line), [labelled(args, "where") || lam], line); }
+              return;
+            case "split":
+              if (labelled(args, "separator")) { return callAt(member(obj, "split", line), [labelled(args, "separator")], line); }
+              if (!args.length) { return callAt(member(obj, "split", line), [{ k: "str", v: " ", line: line }], line); }
+              return;
+            case "components": if (labelled(args, "separatedBy")) { return callAt(member(obj, "split", line), [labelled(args, "separatedBy")], line); } return;
+            case "replacingOccurrences":
+              if (labelled(args, "of") && labelled(args, "with")) { return callAt(member(obj, "replace", line), [labelled(args, "of"), labelled(args, "with")], line); }
+              return;
+            case "trimmingCharacters": return callAt(member(obj, "trim", line), [], line);
+            case "reversed": return builtAt("reversed", [obj], line);
+            case "sorted":
+              if (labelled(args, "by") || lam) { return builtAt("sorted", [obj, labelled(args, "by") || lam], line); }
+              if (!args.length) { return builtAt("sorted", [obj], line); }
+              return;
+            case "sort":
+              if (labelled(args, "by") || lam) { return callAt(member(obj, "sort", line), [labelled(args, "by") || lam], line); }
+              if (!args.length) { return callAt("Collections.sort", [obj], line); }
+              return;
+            case "append":
+              if (labelled(args, "contentsOf")) { return callAt(member(obj, "addAll", line), [labelled(args, "contentsOf")], line); }
+              return callAt(member(obj, "add", line), plain, line);
+            case "insert": if (labelled(args, "at") && plain.length === 1) { return callAt(member(obj, "add", line), [labelled(args, "at"), plain[0]], line); } return;
+            case "remove": if (labelled(args, "at")) { return builtAt("pop", [obj, labelled(args, "at")], line); } return;
+            case "removeLast": if (!args.length) { return builtAt("pop", [obj], line); } return;
+            case "removeFirst": if (!args.length) { return builtAt("pop", [obj, numAt(0, line)], line); } return;
+            case "removeAll": if (!args.length) { return callAt(member(obj, "clear", line), [], line); } return;
+            case "removeValue": if (labelled(args, "forKey")) { return callAt(member(obj, "remove", line), [labelled(args, "forKey")], line); } return;
+            case "firstIndex": case "index":
+              if (labelled(args, "of")) { return callAt(member(obj, "indexOf", line), [labelled(args, "of")], line); }
+              if (labelled(args, "where") || lam) { return callAt(member(obj, "findIndex", line), [labelled(args, "where") || lam], line); }
+              return;
+            case "lastIndex": if (labelled(args, "of")) { return callAt(member(obj, "lastIndexOf", line), [labelled(args, "of")], line); } return;
+            case "first": if (labelled(args, "where") || lam) { return callAt(member(obj, "find", line), [labelled(args, "where") || lam], line); } return;
+            case "reduce": return;
+            case "enumerated": return callAt(nameAt("enumerate", line), [obj], line);
+            case "joined": return builtAt("join", [obj, labelled(args, "separator") || { k: "str", v: "", line: line }], line);
+            case "min": case "max": if (!args.length) { return builtAt(m, [obj], line); } return;
+            case "allSatisfy": return callAt(member(obj, "every", line), [plain[0] || lam], line);
+            case "compactMap": case "flatMap": return callAt(member(obj, "map", line), [plain[0] || lam], line);
+            case "count": if (labelled(args, "where")) { return len(callAt(member(obj, "filter", line), [labelled(args, "where")], line), line); } return;
+            case "shuffled": return builtAt("shuffled", [obj], line);
+            case "shuffle": return builtAt("shuffle", [obj], line);
+            case "randomElement": return builtAt("choice", [obj], line);
+            case "prefix": if (plain.length === 1) { return builtAt("slice", [obj, numAt(0, line), plain[0]], line); } return;
+            case "suffix": if (plain.length === 1) { return builtAt("slice", [obj, { k: "un", op: "-", a: plain[0], line: line }], line); } return;
+            case "dropFirst": return builtAt("slice", [obj, plain[0] || numAt(1, line)], line);
+            case "dropLast": return builtAt("slice", [obj, numAt(0, line), { k: "un", op: "-", a: plain[0] || numAt(1, line), line: line }], line);
+            case "isMultiple": if (labelled(args, "of")) { return binAt("==", binAt("%", obj, labelled(args, "of"), line), numAt(0, line), line); } return;
+            case "squareRoot": return callAt("Math.sqrt", [obj], line);
+            case "rounded": if (!args.length) { return callAt("Math.round", [obj], line); } return;
+            case "map": case "filter": case "forEach": return;
+          }
+        }
+        function prop(x) {
+          var line = x.line, path = pathOf(x) || "", obj = x.obj;
+          if (/^(Double|Float|CGFloat)\.pi$/.test(path) || path === "M_PI") { return pathAt("Math.PI", line); }
+          if (/^Int\.(max|min)$/.test(path)) { return pathAt(path === "Int.max" ? "Integer.MAX_VALUE" : "Integer.MIN_VALUE", line); }
+          if (fields[x.name] || mine[x.name]) { return; }
+          switch (x.name) {
+            case "count": return len(obj, line);
+            case "isEmpty": return binAt("==", len(obj, line), numAt(0, line), line);
+            case "first": return { k: "index", obj: obj, at: numAt(0, line), line: line };
+            case "last": return { k: "index", obj: obj, at: binAt("-", len(copyOf(obj), line), numAt(1, line), line), line: line };
+            case "keys": return callAt(member(obj, "keySet", line), [], line);
+            case "values": return callAt(member(obj, "values", line), [], line);
+            case "indices": return builtAt("range", [len(obj, line)], line);
+            case "rawValue": return obj;
+            case "description": return callAt(member(obj, "toString", line), [], line);
+            case "allCases": return callAt(member(obj, "values", line), [], line);
+            case "isLetter": case "isUppercase": case "isLowercase": case "isWhitespace":
+              return callAt("Character." + { isLetter: "isLetter", isUppercase: "isUpperCase", isLowercase: "isLowerCase", isWhitespace: "isWhitespace" }[x.name], [obj], line);
+            case "isNumber": return callAt("Character.isDigit", [obj], line);
+            case "magnitude": return callAt("Math.abs", [obj], line);
+            case "uppercased": case "lowercased": return;
+          }
+        }
+        function statement(x) {
+          var e = stripParens(x.e), line = x.line;
+          if (!e) { return; }
+          if (e.k === "call" && e.fn.k === "member" && e.fn.name === "swapAt" && e.args.length === 2 && !mine.swapAt) {
+            var t0 = freshName("temp"), o = e.fn.obj;
+            return [{ k: "decl", type: null, typeInfo: null, dims: 0, konst: false, line: line,
+                      names: [{ name: t0, value: { k: "index", obj: o, at: e.args[0], line: line }, line: line }] },
+                    setAt({ k: "index", obj: copyOf(o), at: copyOf(e.args[0]), line: line }, { k: "index", obj: copyOf(o), at: e.args[1], line: line }, line),
+                    setAt({ k: "index", obj: copyOf(o), at: copyOf(e.args[1]), line: line }, nameAt(t0, line), line)];
+          }
+        }
+        refitBodies(got, function (part) {
+          return rewriteTree(part, function (x) {
+            if (x.k === "expr") { return statement(x); }
+            if (x.k === "call") { return call(x); }
+            if (x.k === "member") { return prop(x); }
+            if (x.k === "index" && x.dflt) { return callAt(member(x.obj, "getOrDefault", x.line), [x.at, x.dflt], x.line); }
+          });
+        });
+      }
+
+      // ==================================================================== Go ==
+      // Go: the lexer has put in the ; at the end of each line that needs
+      // one, so its statements end as C's do.  := declares, a function can
+      // hand back several things, for is the only loop, and structs are values.
+      function goType() {
+        var t = peek();
+        if (isOp("*")) { next(); var p = goType(); return Object.assign({}, p, { ptr: (p.ptr || 0) + 1 }); }
+        if (isOp("[")) {
+          next();
+          if (!isOp("]")) { cAssign(); }                         // [3]int: an array of three
+          expect("]");
+          var of = goType();
+          return { name: of.name, dims: (of.dims || 0) + 1, args: of.args || [], elem: of };
+        }
+        if (isOp("...")) { next(); var r = goType(); return { name: r.name, dims: (r.dims || 0) + 1, args: r.args || [], elem: r, rest: true }; }
+        if (isName("map")) {
+          next();
+          expect("[");
+          var key = goType();
+          expect("]");
+          var val = goType();
+          return { name: "Map", dims: 0, args: [key, val] };
+        }
+        if (isName("func")) {
+          next();
+          skipParens();
+          if (isOp("(")) { skipParens(); } else if (peek().t === "name" || isOp("[") || isOp("*")) { goType(); }
+          return { name: "Function", dims: 0, args: [] };
+        }
+        if (isName("chan")) { next(); accept("<-"); return goType(); }
+        if (isName("struct") || isName("interface")) { next(); skipBraces(); return { name: "Object", dims: 0, args: [] }; }
+        if (t.t !== "name") { throw odd(t); }
+        next();
+        var name = t.v;
+        while (isOp(".") && peek(1).t === "name") { next(); name = next().v; }
+        if (isOp("[") && !isOp("]", 1) && peek(1).t === "name" && isOp("]", 2)) { next(); next(); next(); }   // generic T[K]
+        return ownTypeInfo(name, [], 0);
+      }
+      // what a type is, when nothing has been put in it yet: 0, "", false, nothing
+      function zeroOf(ti, line) {
+        if (!ti) { return { k: "null", line: line }; }
+        if (ti.name === "Builder") { return { k: "str", v: "", line: line }; }
+        if (ti.dims) { return { k: "list", items: [], line: line }; }
+        if (ti.name === "Map") { return { k: "dict", keys: [], values: [], line: line }; }
+        var kind = KIND_OF_TYPE[String(ti.name).toLowerCase()];
+        if (kind === "int") { return numAt(0, line); }
+        if (kind === "real") { return { k: "num", v: "0.0", real: true, line: line }; }
+        if (kind === "text") { return { k: "str", v: "", line: line }; }
+        if (kind === "bool") { return { k: "bool", v: false, line: line }; }
+        if (!ti.ptr && /^[A-Za-z_]\w*$/.test(ti.name) && !/^(error|any|interface|Object|Function)$/.test(ti.name)) {
+          return { k: "call", fn: nameAt(ti.name, line), args: [], line: line, structLit: ti.name };
+        }
+        return { k: "null", line: line };
+      }
+      // Point{1, 2}, Point{X: 1, Y: 2}, []int{1, 2}, map[string]int{"a": 1}, [][]int{{1, 2}}
+      function literalAhead(a) {
+        if (!isOp("{")) { return false; }
+        var x = stripParens(a);
+        if (!x || (x.k !== "name" && x.k !== "member")) { return false; }
+        if (rs) {
+          // Rust: Point { x: 1 } -- a name, then a name and a colon (or }), or Point {}
+          if (!/^[A-Z]/.test(x.k === "name" ? x.v : x.name)) { return false; }
+          return isOp("}", 1) || (peek(1).t === "name" && (isOp(":", 2) || isOp(",", 2) || isOp("}", 2))) || isOp("..", 1);
+        }
+        return true;
+      }
+      function literalOf(a) {
+        var x = stripParens(a);
+        var name = x.k === "name" ? x.v : x.name;
+        return compositeFor({ name: name, dims: 0, args: [] });
+      }
+      function compositeFor(ti) {
+        var t = expect("{");
+        var line = t.line;
+        if (ti.dims) {                                    // a list, its items of the kind after []
+          var inner = ti.elem || { name: ti.name, dims: ti.dims - 1, args: ti.args };
+          var items = [];
+          while (!isOp("}")) {
+            if (isOp("{")) { items.push(compositeFor(inner)); }
+            else { items.push(cAssign()); }
+            if (!accept(",")) { break; }
+            accept(";");
+          }
+          accept(";");
+          expect("}");
+          return { k: "list", items: items, line: line };
+        }
+        if (ti.name === "Map") {
+          var keys = [], values = [], vt = ti.args[1] || null;
+          while (!isOp("}")) {
+            keys.push(isOp("{") ? compositeFor(ti.args[0]) : cAssign());
+            expect(":");
+            values.push(isOp("{") && vt ? compositeFor(vt) : cAssign());
+            if (!accept(",")) { break; }
+            accept(";");
+          }
+          accept(";");
+          expect("}");
+          return { k: "dict", keys: keys, values: values, line: line, zero: vt ? zeroOf(vt, line) : null };
+        }
+        // a struct: its fields in order, or by name
+        var args = [];
+        while (!isOp("}")) {
+          if (isOp("..")) { next(); cAssign(); break; }      // Rust's ..Default::default()
+          if (peek().t === "name" && (isOp(":", 1) || (rs && (isOp(",", 1) || isOp("}", 1))))) {
+            var fname = next();
+            var fv = accept(":") ? (isOp("{") && !rs ? compositeFor({ name: "", dims: 0, args: [] }) : cAssign()) : nameAt(fname.v, fname.line);
+            fv.argName = fname.v;
+            args.push(fv);
+          } else {
+            args.push(cAssign());
+          }
+          if (!accept(",")) { break; }
+          accept(";");
+        }
+        accept(";");
+        expect("}");
+        return { k: "call", fn: nameAt(ti.name, line), args: args, line: line, structLit: ti.name };
+      }
+      function goPrimary() {
+        var t = peek();
+        if (isName("nil")) { next(); return { k: "null", line: t.line }; }
+        if (isName("iota")) { return null; }
+        // []int{1, 2}, map[string]int{}
+        if (isOp("[") || (isName("map") && isOp("[", 1))) {
+          var ti = goType();
+          if (isOp("{")) { return compositeFor(ti); }
+          // []byte(s), []rune(s): the letters of s
+          if (isOp("(")) { next(); var of = cAssign(); expect(")"); return builtAt("toList", [of], t.line); }
+          // the type alone, as make() is handed it
+          if (ti.name === "Map") { return { k: "dict", keys: [], values: [], line: t.line, zero: ti.args[1] ? zeroOf(ti.args[1], t.line) : null }; }
+          return { k: "list", items: [], line: t.line, zero: zeroOf(ti.elem || { name: ti.name, dims: 0 }, t.line) };
+        }
+        // func(x int) int { return x * 2 }
+        if (isName("func") && isOp("(", 1)) {
+          next();
+          var ps = goParams();
+          goResults();
+          var was = noBrace;
+          noBrace = false;
+          var body = goBlock();
+          noBrace = was;
+          return { k: "fn", params: ps, body: body, line: t.line, lambda: true };
+        }
+        if (isName("struct") && isOp("{", 1)) { next(); skipBraces(); if (isOp("{")) { skipBraces(); } return { k: "dict", keys: [], values: [], line: t.line }; }
+        return null;
+      }
+      function goBlock() {
+        var was = noBrace;
+        noBrace = false;
+        expect("{");
+        var body = [];
+        while (!isOp("}")) {
+          if (peek().t === "eof") { throw wanted("}"); }
+          body.push.apply(body, notesBefore(peek().line));
+          body.push.apply(body, goStatement());
+        }
+        body.push.apply(body, notesBefore(peek().line));
+        expect("}");
+        accept(";");
+        noBrace = was;
+        return body;
+      }
+      // (a, b int, s string), (xs ...int): names sharing the type after them
+      function goParams() {
+        expect("(");
+        var params = [], pending = [];
+        while (!isOp(")")) {
+          var p = peek();
+          if (p.t === "name" && (isOp(",", 1) || isOp(")", 1)) && params.length + pending.length >= 0) {
+            // a name waiting for its type -- or a type with no name (func(int) int)
+            pending.push(next());
+          } else {
+            var nm = next();
+            var ti = goType();
+            pending.forEach(function (q) { params.push({ name: q.v, type: ti.name, typeInfo: ti, dims: ti.dims, line: q.line }); });
+            pending = [];
+            params.push({ name: nm.v, type: ti.name, typeInfo: ti, dims: ti.dims, rest: !!ti.rest, line: nm.line });
+          }
+          if (!accept(",")) { break; }
+        }
+        expect(")");
+        // only types, no names: func(int, string)
+        pending.forEach(function (q, i) { params.push({ name: "arg" + (i + 1), type: q.v, line: q.line }); });
+        return params;
+      }
+      // what a function hands back: int, (int, error), (q, r int)
+      function goResults() {
+        if (isOp("(")) {
+          var save = pos;
+          try {
+            var named = goParams();
+            if (named.every(function (p) { return p.typeInfo; })) { return named; }
+          } catch (e) { /* only types */ }
+          pos = save;
+          skipParens();
+          return [];
+        }
+        if (!isOp("{") && !isOp(";") && !isOp(")") && !isOp(",") && !isOp("}")) { goType(); }
+        return [];
+      }
+      function goFunc(lead) {
+        var t = next();
+        var receiver = null, recvName = null;
+        if (isOp("(")) {                                     // func (s *Stack) Push(x int)
+          next();
+          recvName = next().v;
+          var rt = goType();
+          expect(")");
+          receiver = rt.name;
+        }
+        var nm = next();
+        if (isOp("[")) {                                     // func Map[T any](...)
+          var d = 0;
+          do { var x = next(); if (x.v === "[") { d++; } if (x.v === "]") { d--; } } while (d > 0);
+        }
+        var params = goParams();
+        var results = goResults();
+        var body = isOp("{") ? goBlock() : [];
+        accept(";");
+        // named results: names of its own, handed back by a bare return
+        if (results.length) {
+          body = results.map(function (r) {
+            return { k: "decl", type: r.type, typeInfo: r.typeInfo, dims: r.dims || 0, konst: false, line: r.line,
+                     names: [{ name: r.name, value: zeroOf(r.typeInfo, r.line), line: r.line }] };
+          }).concat(rewriteTree(body, function (x) {
+            if (x.k === "return" && !x.value) {
+              return Object.assign({}, x, { value: results.length === 1 ? nameAt(results[0].name, x.line)
+                                                    : { k: "tuple", items: results.map(function (r) { return nameAt(r.name, x.line); }), line: x.line } });
+            }
+          }));
+        }
+        if (recvName && recvName !== "_") { body = renameIn(body, recvName, "this"); }
+        return { k: "func", name: nm.v, params: params, rtype: null, body: body, line: nm.line, lead: lead || [],
+                 statik: false, receiver: receiver, kind: "method" };
+      }
+      // var x int = 5, var a, b = 1, 2, const ( A = iota; B )
+      function goVarSpec(konst, iotaAt, last) {
+        var t = peek();
+        var names = [];
+        do { names.push(next()); } while (accept(","));
+        var ti = null;
+        if (!isOp("=") && !isOp(";") && !isOp(")")) { ti = goType(); }
+        var values = null;
+        if (accept("=")) { values = []; do { values.push(cAssign()); } while (accept(",")); }
+        else if (konst && last) { values = last.map(copyOf); }       // the one above, again
+        accept(";");
+        var withIota = function (e) {
+          return rewriteTree(copyOf(e), function (x) { if (x.k === "name" && x.v === "iota") { return numAt(iotaAt, x.line); } });
+        };
+        return { decls: names.map(function (nm, i) {
+          var v = values ? withIota(values[i] || values[values.length - 1]) : zeroOf(ti, nm.line);
+          return { k: "decl", type: ti ? ti.name : null, typeInfo: ti && ti.name !== "Function" ? ti : null, dims: ti ? ti.dims : 0,
+                   konst: konst, line: t.line, names: [{ name: nm.v, value: v, dims: ti ? ti.dims : 0, sizes: [], line: nm.line }] };
+        }), values: values };
+      }
+      function goVars() {
+        var t = next(), konst = t.v === "const", out = [];
+        if (accept("(")) {
+          var at = 0, last = null;
+          while (!isOp(")")) {
+            notesBefore(peek().line);
+            if (accept(";")) { continue; }
+            var got = goVarSpec(konst, at, last);
+            out = out.concat(got.decls);
+            last = got.values;
+            at++;
+          }
+          expect(")");
+          accept(";");
+          return out;
+        }
+        return goVarSpec(konst, 0, null).decls;
+      }
+      // type Point struct { X, Y int }, type Shape interface { ... }, type Celsius float64
+      function goTypeDecl(lead) {
+        next();
+        if (accept("(")) {
+          var many = [];
+          while (!isOp(")")) { if (accept(";")) { continue; } many.push(goOneType(lead)); }
+          expect(")");
+          accept(";");
+          return many.filter(Boolean);
+        }
+        var one = goOneType(lead);
+        return one ? [one] : [];
+      }
+      function goOneType(lead) {
+        var nt = next();
+        if (isOp("[")) { var d = 0; do { var x = next(); if (x.v === "[") { d++; } if (x.v === "]") { d--; } } while (d > 0); }
+        accept("=");
+        if (isName("struct")) {
+          next();
+          var cls = { k: "class", name: nt.v, kind: "struct", bases: [], ifaces: [], fields: [], methods: [], ctors: [],
+                      values: [], inits: [], line: nt.line, lead: lead || [] };
+          classes.push(cls.name);
+          expect("{");
+          while (!isOp("}")) {
+            notesBefore(peek().line);
+            if (accept(";")) { continue; }
+            var names = [next()];
+            // an embedded type (just a name): what it has, this has
+            if (isOp(";") || isOp("}")) { cls.bases.push(names[0].v); accept(";"); continue; }
+            while (accept(",")) { names.push(next()); }
+            var ti = goType();
+            if (peek().t === "str") { next(); }                 // `json:"name"`
+            accept(";");
+            names.forEach(function (n0) { cls.fields.push({ name: n0.v, value: null, statik: false, type: ti, line: n0.line }); });
+          }
+          expect("}");
+          accept(";");
+          return cls;
+        }
+        if (isName("interface")) {
+          next();
+          skipBraces();
+          accept(";");
+          var face = { k: "class", name: nt.v, kind: "interface", bases: [], ifaces: [], fields: [], methods: [], ctors: [],
+                       values: [], inits: [], line: nt.line, lead: lead || [] };
+          classes.push(face.name);
+          return face;
+        }
+        goType();                                                    // type Celsius float64: another name for a kind
+        accept(";");
+        return null;
+      }
+      // x := 5, a, b := b, a, v, ok := m[k], x++, x += 2, f(x)
+      function goSimple() {
+        var t = peek();
+        var left = [cAssign()];
+        while (accept(",")) { left.push(cAssign()); }
+        var line = t.line;
+        if (isOp(":=") || (isOp("=") && left.length > 1)) {
+          var declare = next().v === ":=";
+          var right = [cAssign()];
+          while (accept(",")) { right.push(cAssign()); }
+          return goAssign(left, right, declare, line);
+        }
+        if (left.length === 1) { return [{ k: "expr", e: left[0], line: line }]; }
+        throw odd(peek());
+      }
+      function goAssign(left, right, declare, line) {
+        var out = [];
+        function put(target, value) {
+          var tg = stripParens(target);
+          if (tg.k === "name" && tg.v === "_") { if (stripParens(value).k === "call") { out.push({ k: "expr", e: value, line: line }); } return; }
+          if (declare && tg.k === "name") {
+            var v = stripParens(value);
+            var ti = v && v.structLit ? { name: v.structLit, dims: 0, args: [], ptr: v.viaPtr ? 1 : 0 } : null;
+            out.push({ k: "decl", type: ti ? ti.name : null, typeInfo: ti, dims: 0, konst: false, line: line,
+                       names: [{ name: tg.v, value: value, sizes: [], line: line }] });
+          } else {
+            out.push(setAt(target, value, line));
+          }
+        }
+        if (left.length === right.length) {
+          if (left.length === 1) { put(left[0], right[0]); return out; }
+          // a, b = b, a: both worked out first
+          if (!declare) {
+            return [{ k: "expr", line: line, e: { k: "assignx", op: "=", line: line,
+                     target: { k: "tuple", items: left, line: line }, value: { k: "tuple", items: right, line: line } } }];
+          }
+          left.forEach(function (l, i) { put(l, right[i]); });
+          return out;
+        }
+        // several from one: v, ok := m[k]; n, err := strconv.Atoi(s); q, r := divmod(a, b)
+        var one = stripParens(right[0]), p = one.k === "call" ? pathOf(one.fn) || "" : "";
+        if (right.length === 1 && left.length === 2) {
+          if (one.k === "index") {
+            put(left[1], callAt({ k: "member", obj: copyOf(one.obj), name: "containsKey", line: line }, [copyOf(one.at)], line));
+            put(left[0], callAt({ k: "member", obj: one.obj, name: "getOrDefault", line: line }, [one.at, { k: "null", line: line }], line));
+            return out;
+          }
+          if (/^strconv\.(Atoi|ParseInt|ParseFloat)$/.test(p) && one.args.length) {
+            put(left[0], builtAt(/Float/.test(p) ? "real" : "int", [one.args[0]], line));
+            put(left[1], { k: "cond", test: builtAt("isNumber", [copyOf(one.args[0])], line), a: { k: "null", line: line },
+                           b: { k: "str", v: "strconv." + p.split(".")[1] + ": parsing " + "\"...\": invalid syntax", line: line }, line: line });
+            return out;
+          }
+          if (/\.(ReadString|ReadLine)$/.test(p)) {
+            put(left[0], callAt("stdin.nextLine", [], line));
+            put(left[1], { k: "null", line: line });
+            return out;
+          }
+          if (/^fmt\.(Scan|Scanln|Scanf)$/.test(p)) {
+            out.push({ k: "expr", e: one, line: line });
+            put(left[0], numAt(one.args.length, line));
+            put(left[1], { k: "null", line: line });
+            return out;
+          }
+        }
+        var temp = freshName("result");
+        out.push({ k: "decl", type: null, typeInfo: null, dims: 0, konst: false, line: line, names: [{ name: temp, value: right[0], line: line }] });
+        left.forEach(function (l, i) { put(l, { k: "index", obj: nameAt(temp, line), at: numAt(i, line), line: line }); });
+        return out;
+      }
+      function goStatement() {
+        var t = peek();
+        if (accept(";")) { return []; }
+        if (isOp("{")) { return goBlock(); }
+        // Outer: for ... -- a loop a break can name
+        if (t.t === "name" && isOp(":", 1) && !isOp(":=", 1)) {
+          next(); next();
+          accept(";");
+          var inner = goStatement();
+          inner.forEach(function (st) { if (/^(while|dowhile|for|foreach|range)$/.test(st.k)) { st.label = t.v; } });
+          return inner;
+        }
+        if (t.t === "name") {
+          switch (t.v) {
+            case "var": case "const": return goVars();
+            case "type": localTypes.push.apply(localTypes, goTypeDecl([])); return [];
+            case "if": return goIf();
+            case "for": return [goFor()];
+            case "switch": return [goSwitch()];
+            case "return": {
+              next();
+              var vals = [];
+              if (!isOp(";") && !isOp("}")) { do { vals.push(cAssign()); } while (accept(",")); }
+              accept(";");
+              return [{ k: "return", value: vals.length > 1 ? { k: "tuple", items: vals, line: t.line } : vals[0] || null, line: t.line }];
+            }
+            case "break": case "continue": {
+              next();
+              var label = peek().t === "name" ? next().v : null;
+              accept(";");
+              return [{ k: t.v, label: label, line: t.line }];
+            }
+            case "fallthrough": next(); accept(";"); return [{ k: "fallthrough", line: t.line }];
+            case "defer": case "go": next(); cAssign(); accept(";"); return [];
+            case "goto": next(); var to = next(); accept(";"); return [{ k: "note", text: "goto " + to.v, line: t.line }];
+            case "func":
+              if (peek(1).t === "name") { return [goFunc([])]; }
+              break;
+          }
+        }
+        var got = goSimple();
+        accept(";");
+        return got;
+      }
+      function goIf() {
+        var t = next();
+        var was = noBrace;
+        noBrace = true;
+        var init = [];
+        var first = goSimple();
+        var cond;
+        if (accept(";")) { init = first; cond = cAssign(); }
+        else { cond = first[0].e; }
+        noBrace = was;
+        var then = goBlock();
+        var orelse = [];
+        if (isName("else")) {
+          next();
+          orelse = isName("if") ? goIf() : goBlock();
+          if (orelse.length === 1 && orelse[0].k === "if") { orelse[0].chained = true; }
+        }
+        accept(";");
+        return init.concat([{ k: "if", cond: cond, then: then, orelse: orelse, line: t.line }]);
+      }
+      function goFor() {
+        var t = next();
+        var was = noBrace;
+        noBrace = true;
+        try {
+          if (isOp("{")) { noBrace = was; return { k: "while", cond: { k: "bool", v: true, line: t.line }, body: goBlock(), line: t.line }; }
+          // for k, v := range xs, for i := range xs, for range xs
+          var save = pos, target = null;
+          if (isName("range")) { next(); return goRange(t, null, cAssign(), was); }
+          if (peek().t === "name" && (isOp(",", 1) || isOp(":=", 1) || isOp("=", 1))) {
+            var names = [next()];
+            while (accept(",")) { names.push(next()); }
+            if ((accept(":=") || accept("=")) && isName("range")) {
+              next();
+              var over = cAssign();
+              target = names;
+              return goRange(t, target, over, was);
+            }
+          }
+          pos = save;
+          // for cond { }, for init; cond; post { }
+          var init = [], cond = null, post = [];
+          if (!isOp(";")) {
+            var first = goSimple();
+            if (!isOp(";")) {
+              noBrace = was;
+              return { k: "while", cond: first[0].e, body: goBlock(), line: t.line };
+            }
+            init = first;
+          }
+          expect(";");
+          if (!isOp(";")) { cond = cAssign(); }
+          expect(";");
+          if (!isOp("{")) { post = goSimple(); }
+          noBrace = was;
+          return { k: "for", init: init, cond: cond, step: post, body: goBlock(), line: t.line };
+        } finally {
+          noBrace = was;
+        }
+      }
+      function goRange(t, names, over, was) {
+        noBrace = was;
+        var body = goBlock();
+        var o = stripParens(over);
+        // for i := range 10: 0 to 9
+        if (o.k === "num") {
+          return { k: "range", v: names && names[0].v !== "_" ? names[0].v : "_", args: [o], body: body, line: t.line };
+        }
+        if (!names) { return { k: "foreach", target: nameAt(freshName("each"), t.line), over: over, body: body, line: t.line }; }
+        if (names.length === 1 || names[1].v === "_") {
+          // for i := range xs: its places (a table: its keys)
+          if (names[0].v === "_") { return { k: "foreach", target: nameAt(freshName("each"), t.line), over: over, body: body, line: t.line }; }
+          return { k: "foreach", target: nameAt(names[0].v, t.line), over: over, body: body, line: t.line, goKeys: true };
+        }
+        if (names[0].v === "_") { return { k: "foreach", target: nameAt(names[1].v, t.line), over: over, body: body, line: t.line }; }
+        // for i, v := range xs: each place and what is there (a table: each key and value)
+        return { k: "foreach", target: { k: "tuple", items: [nameAt(names[0].v, t.line), nameAt(names[1].v, t.line)], line: t.line },
+                 over: over, body: body, line: t.line, goPairs: true };
+      }
+      function goSwitch() {
+        var t = next();
+        var was = noBrace;
+        noBrace = true;
+        var init = [], subject = null, typeSwitch = null;
+        if (!isOp("{")) {
+          var first = goSimple();
+          if (accept(";")) { init = first; if (!isOp("{")) { first = goSimple(); } else { first = null; } }
+          if (first) {
+            var f0 = first[0];
+            // switch v := x.(type)
+            if (f0.k === "decl" && stripParens(f0.names[0].value).k === "typeswitch") {
+              typeSwitch = f0.names[0].name;
+              subject = stripParens(f0.names[0].value).e;
+            } else if (f0.k === "expr" && stripParens(f0.e).k === "typeswitch") {
+              subject = stripParens(f0.e).e;
+            } else {
+              subject = f0.k === "expr" ? f0.e : f0.names ? f0.names[0].value : null;
+            }
+          }
+        }
+        noBrace = was;
+        expect("{");
+        var cases = [];
+        while (!isOp("}")) {
+          var c = peek();
+          if (c.t === "eof") { throw wanted("}"); }
+          notesBefore(c.line);
+          if (accept(";")) { continue; }
+          var one = { line: c.line, body: [] };
+          if (accept("default")) { one.isElse = true; one.pat = { p: "any" }; }
+          else {
+            expect("case");
+            var alts = [];
+            do {
+              if (typeSwitch !== null || (subject && stripParens(subject).k === "name" && false)) { alts.push({ p: "type", name: goType().name }); }
+              else { alts.push(cAssign()); }
+            } while (accept(","));
+            if (subject) { one.pat = alts.length === 1 ? (alts[0].p ? alts[0] : { p: "lit", e: alts[0] }) : { p: "or", alts: alts.map(function (a) { return a.p ? a : { p: "lit", e: a }; }) }; }
+            else { one.cond = alts.reduce(function (a, b) { return a ? binAt("||", a, b, c.line) : b; }, null); }
+          }
+          expect(":");
+          while (!isName("case") && !isName("default") && !isOp("}")) {
+            if (peek().t === "eof") { throw wanted("}"); }
+            one.body.push.apply(one.body, notesBefore(peek().line));
+            one.body.push.apply(one.body, goStatement());
+          }
+          if (typeSwitch && typeSwitch !== "_") { one.body.unshift(setAt(nameAt(typeSwitch, c.line), copyOf(subject), c.line)); }
+          cases.push(one);
+        }
+        expect("}");
+        accept(";");
+        cases.forEach(function (c, i) {
+          var last = c.body[c.body.length - 1];
+          if (last && last.k === "fallthrough") { c.body = c.body.slice(0, -1).concat(cases[i + 1] ? cases[i + 1].body : []); }
+        });
+        var made = whenStatement({ subject: subject, cases: cases, line: t.line });
+        return init.length ? { k: "if", cond: { k: "bool", v: true, line: t.line }, then: init.concat([made]), orelse: [], line: t.line } : made;
+      }
+      function topGo() {
+        var out = { funcs: [], globals: [], main: [], mainFound: false, types: [], outside: [] };
+        out.head = notesBefore(peek().line);
+        var methods = [];
+        while (peek().t !== "eof") {
+          var t = peek();
+          var lead = notesBefore(t.line);
+          if (accept(";")) { continue; }
+          if (isName("package")) { next(); next(); accept(";"); continue; }
+          if (isName("import")) {
+            next();
+            if (accept("(")) { while (!isOp(")") && peek().t !== "eof") { next(); } expect(")"); }
+            else { if (peek().t === "name" || isOp(".") || isOp("_")) { next(); } next(); }
+            accept(";");
+            continue;
+          }
+          if (isName("type")) { out.types = out.types.concat(goTypeDecl(lead)); continue; }
+          if (isName("var") || isName("const")) {
+            goVars().forEach(function (d) { d.lead = lead; lead = []; out.globals.push(d); });
+            continue;
+          }
+          if (isName("func")) {
+            var fn = goFunc(lead);
+            if (fn.receiver) { methods.push(fn); continue; }
+            fn.kind = undefined;
+            if (fn.name === "main" && !out.mainFound) {
+              out.mainFound = true;
+              out.main = lead.concat(fn.body);
+              out.mainLine = fn.line;
+            } else if (fn.name !== "init") {
+              out.funcs.push(fn);
+            } else {
+              out.main = fn.body.concat(out.main);                   // func init(): done first
+            }
+            continue;
+          }
+          out.main.push.apply(out.main, lead);
+          out.main.push.apply(out.main, goStatement());
+        }
+        out.trailing = notesBefore(1e9);
+        out.types = out.types.concat(localTypes);
+        // func (p Point) Dist(): Point's, where Point is one of the program's structs
+        methods.forEach(function (m) {
+          var home = out.types.filter(function (c) { return c.name === m.receiver; })[0];
+          if (home) { home.methods.push(m); return; }
+          m.params = [{ name: "this", line: m.line }].concat(m.params);
+          m.kind = undefined;
+          out.funcs.push(m);
+        });
+        plainNodes(out);
+        goLibrary(out);
+        return out;
+      }
+
+      // ---- Go's library, said the way the rest already is ----------------
+      // fmt.Println puts spaces between what it prints and shows a slice as
+      // [1 2 3]; fmt.Printf's %v is the value however it is shown, %t a yes or no.
+      function goShown(e, line) { return { k: "goshown", e: e, line: line }; }
+      function goFormat(f) { return f.replace(/%(-?\d*(?:\.\d+)?)[vtq]/g, "%$1s").replace(/%T/g, "%s"); }
+      function goLibrary(got) {
+        var mine = ownMethodNames(got);
+        function member(obj, name, line) { return { k: "member", obj: obj, name: name, line: line }; }
+        function pieces(args, spaced, line) {
+          var parts = [];
+          args.forEach(function (a, i) {
+            if (i && spaced) { parts.push(" "); }
+            var s0 = stripParens(a);
+            parts.push(s0.k === "str" ? s0.v : { e: goShown(a, line), spec: "", conv: "" });
+          });
+          if (!parts.length) { return []; }
+          if (parts.every(function (p0) { return typeof p0 === "string"; })) { return [{ k: "str", v: parts.join(""), line: line }]; }
+          return parts.length === 1 ? [parts[0].e] : [{ k: "fstr", parts: parts, line: line }];
+        }
+        function formatArgs(args, line) {
+          var f = stripParens(args[0]);
+          var fmt = f && f.k === "str" ? { k: "str", v: goFormat(f.v), line: f.line } : args[0];
+          var verbs = f && f.k === "str" ? (goFormat(f.v).match(/%[-+ 0#]*\d*(?:\.\d+)?[a-zA-Z%]/g) || []).filter(function (v) { return v !== "%%"; }) : [];
+          var original = f && f.k === "str" ? (f.v.match(/%[-+ 0#]*\d*(?:\.\d+)?[a-zA-Z%]/g) || []).filter(function (v) { return v !== "%%"; }) : [];
+          return [fmt].concat(args.slice(1).map(function (a, i) {
+            var was = original[i] || "";
+            if (/[vt]$/.test(was)) { return goShown(a, line); }
+            if (/q$/.test(was)) { return binAt("+", binAt("+", { k: "str", v: '"', line: line }, a, line), { k: "str", v: '"', line: line }, line); }
+            if (/T$/.test(was)) { return builtAt("classOf", [a], line); }
+            return a;
+          }));
+        }
+        function call(x) {
+          var line = x.line, args = x.args, path = pathOf(x.fn) || "";
+          if (x.fn.k === "name") {
+            var f = x.fn.v;
+            if ((got.funcs || []).some(function (fn) { return fn.name === f && !fn.receiver; })) { return; }
+            switch (f) {
+              case "len": if (args.length === 1) { return builtAt("length", args, line); } return;
+              case "cap": if (args.length === 1) { return builtAt("length", args, line); } return;
+              case "append":
+                if (args.length >= 2 && stripParens(args[args.length - 1]).k === "star") {
+                  return binAt("+", args[0], stripParens(args[args.length - 1]).e, line);
+                }
+                if (args.length >= 1) { return binAt("+", args[0], { k: "list", items: args.slice(1), line: line }, line); }
+                return;
+              case "make":
+                if (args.length >= 1) {
+                  var mk = stripParens(args[0]);
+                  if (mk.k === "dict") { return { k: "dict", keys: [], values: [], line: line, zero: mk.zero }; }
+                  if (mk.k === "list" && args.length >= 2) {
+                    return { k: "sized", dims: [args[1]], fill: mk.zero || numAt(0, line), kind: null, line: line };
+                  }
+                  return mk.k === "list" ? { k: "list", items: [], line: line } : args[0];
+                }
+                return;
+              case "new": if (args.length === 1 && stripParens(args[0]).k === "name") { return callAt(nameAt(stripParens(args[0]).v, line), [], line); } return;
+              case "delete": if (args.length === 2) { return callAt(member(args[0], "remove", line), [args[1]], line); } return;
+              case "panic": return callAt("System.out.println", args, line);
+              case "float64": case "float32": return builtAt("real", args, line);
+              case "int": case "int64": case "int32": case "uint": case "uint8": case "byte": return builtAt("int", args, line);
+              case "string": return args.length === 1 ? builtAt("toString", args, line) : undefined;
+              case "rune": return args[0];
+              case "min": case "max": if (args.length >= 2) { return args.slice(1).reduce(function (a, b) { return callAt("Math." + f, [a, b], line); }, args[0]); } return;
+            }
+            return;
+          }
+          if (x.fn.k !== "member") { return; }
+          var obj = x.fn.obj, m = x.fn.name, root = pathOf(obj) || "";
+          switch (root) {
+            case "fmt":
+              switch (m) {
+                case "Println": return callAt("System.out.println", pieces(args, true, line), line);
+                case "Print": return callAt("System.out.print", pieces(args, false, line), line);
+                case "Printf": return callAt("System.out.printf", formatArgs(args, line), line);
+                case "Sprintf": case "Errorf": return callAt("String.format", formatArgs(args, line), line);
+                case "Sprint": case "Sprintln": return pieces(args, m === "Sprintln", line)[0] || { k: "str", v: "", line: line };
+                case "Scan": case "Scanln": case "Scanf": {
+                  var reads = args.slice(m === "Scanf" ? 1 : 0);
+                  var chain = nameAt("cin", line);
+                  reads.forEach(function (one) { chain = binAt(">>", chain, one, line); });
+                  return chain;
+                }
+              }
+              return;
+            case "strings":
+              switch (m) {
+                case "ToUpper": return callAt(member(args[0], "toUpperCase", line), [], line);
+                case "ToLower": return callAt(member(args[0], "toLowerCase", line), [], line);
+                case "Contains": return callAt(member(args[0], "contains", line), [args[1]], line);
+                case "HasPrefix": return callAt(member(args[0], "startsWith", line), [args[1]], line);
+                case "HasSuffix": return callAt(member(args[0], "endsWith", line), [args[1]], line);
+                case "Index": return callAt(member(args[0], "indexOf", line), [args[1]], line);
+                case "Split": return callAt(member(args[0], "split", line), [args[1]], line);
+                case "Fields": return builtAt("split", [args[0]], line);
+                case "Join": return builtAt("join", [args[0], args[1]], line);
+                case "Repeat": return callAt(member(args[0], "repeat", line), [args[1]], line);
+                case "TrimSpace": return callAt(member(args[0], "trim", line), [], line);
+                case "Replace": case "ReplaceAll": return callAt(member(args[0], "replace", line), [args[1], args[2]], line);
+                case "Count": return binAt("-", builtAt("length", [callAt(member(args[0], "split", line), [args[1]], line)], line), numAt(1, line), line);
+                case "Title": return args[0];
+              }
+              return;
+            case "strconv":
+              if (m === "Itoa" || m === "FormatInt") { return builtAt("toString", [args[0]], line); }
+              if (m === "Atoi") { return builtAt("int", [args[0]], line); }
+              if (m === "ParseFloat") { return builtAt("real", [args[0]], line); }
+              return;
+            case "math":
+              if (/^(Sqrt|Pow|Abs|Floor|Ceil|Round|Max|Min|Sin|Cos|Tan|Log|Log10|Exp|Hypot|Trunc|Mod|Cbrt)$/.test(m)) {
+                return callAt("Math." + m.charAt(0).toLowerCase() + m.slice(1), args, line);
+              }
+              if (m === "Inf") { return pathAt("Double.MAX_VALUE", line); }
+              return;
+            case "sort":
+              if (/^(Ints|Strings|Float64s)$/.test(m)) { return callAt("Collections.sort", args, line); }
+              // sort.Slice(xs, func(i, j int) bool { return xs[i] < xs[j] }): by that order
+              if ((m === "Slice" || m === "SliceStable") && args.length === 2 && stripParens(args[1]).k === "fn") {
+                var cmp = stripParens(args[1]), list = pathOf(args[0]);
+                if (cmp.params.length === 2 && list) {
+                  var a0 = freshName("a"), b0 = freshName("b");
+                  var body = rewriteTree(copyOf(cmp.body), function (y) {
+                    if (y.k === "index" && pathOf(y.obj) === list && stripParens(y.at).k === "name") {
+                      if (stripParens(y.at).v === cmp.params[0].name) { return nameAt(a0, y.line); }
+                      if (stripParens(y.at).v === cmp.params[1].name) { return nameAt(b0, y.line); }
+                    }
+                  });
+                  return callAt(member(args[0], "sort", line), [{ k: "fn", lambda: true, line: line,
+                                params: [{ name: a0, line: line }, { name: b0, line: line }], body: body }], line);
+                }
+              }
+              return;
+            case "unicode":
+              if (/^(IsUpper|IsLower|IsDigit|IsLetter|IsSpace)$/.test(m)) {
+                return callAt("Character." + { IsUpper: "isUpperCase", IsLower: "isLowerCase", IsDigit: "isDigit", IsLetter: "isLetter", IsSpace: "isWhitespace" }[m], args, line);
+              }
+              if (m === "ToUpper") { return callAt(member(args[0], "toUpperCase", line), [], line); }
+              if (m === "ToLower") { return callAt(member(args[0], "toLowerCase", line), [], line); }
+              return;
+            case "os": if (m === "Exit") { return callAt("System.exit", args, line); } return;
+            case "errors": if (m === "New") { return args[0]; } return;
+            case "rand": if (m === "Intn") { return builtAt("random", [numAt(0, line), binAt("-", args[0], numAt(1, line), line)], line); }
+                         if (m === "Float64") { return builtAt("random", [], line); } return;
+            case "time": if (m === "Sleep") { return callAt("Thread.sleep", args, line); } return;
+          }
+          if (mine[m]) { return; }
+          // what a bufio reader or scanner reads: a line
+          if (/^(ReadString|ReadLine|Text)$/.test(m)) { return callAt("stdin.nextLine", [], line); }
+          if (m === "Error" && !args.length) { return obj; }                 // err.Error(): its words
+          if (m === "String" && !args.length) { return obj; }                // a strings.Builder's words
+        }
+        function statement(x) {
+          var e = stripParens(x.e), line = x.line;
+          if (!e) { return; }
+          // xs = append(xs, a, b): each put on the end
+          if (e.k === "assignx" && e.op === "=" && stripParens(e.value).k === "call" && pathOf(stripParens(e.value).fn) === "append") {
+            var ap = stripParens(e.value);
+            if (ap.args.length >= 2 && pathOf(ap.args[0]) && pathOf(ap.args[0]) === pathOf(e.target)) {
+              var last = stripParens(ap.args[ap.args.length - 1]);
+              if (last.k === "star") { return { k: "expr", e: callAt({ k: "member", obj: e.target, name: "addAll", line: line }, [last.e], line), line: line }; }
+              return ap.args.slice(1).map(function (a) {
+                return { k: "expr", e: callAt({ k: "member", obj: copyOf(e.target), name: "add", line: line }, [a], line), line: line };
+              });
+            }
+          }
+          if (e.k === "call" && e.fn.k === "member") {
+            // sb.WriteString(s), sb.WriteByte(c): added to the words it is building
+            if (/^(WriteString|WriteByte|WriteRune)$/.test(e.fn.name) && e.args.length === 1) {
+              return { k: "expr", line: line, e: { k: "assignx", op: "+=", target: e.fn.obj, value: e.args[0], line: line } };
+            }
+            // scanner.Scan(): the next line read, for scanner.Text()
+            if (e.fn.name === "Scan" && !e.args.length && !/^fmt$/.test(pathOf(e.fn.obj) || "")) { return []; }
+            if (/^(Flush|Close|Reset)$/.test(e.fn.name) && !e.args.length) { return []; }
+          }
+        }
+        // a Go map read at a key it does not have gives its kind's nothing: 0, "", false
+        var zeros = Object.create(null);
+        refitBodies(got, function (part) {
+          eachNode(part, function (x) {
+            if (x.k === "decl" && x.names.length === 1 && x.names[0].name) {
+              var v0 = stripParens(x.names[0].value);
+              var z = v0 && v0.zero && v0.k === "dict" ? v0.zero
+                    : x.typeInfo && x.typeInfo.name === "Map" && x.typeInfo.args[1] ? zeroOf(x.typeInfo.args[1], x.line) : null;
+              if (z) { zeros[x.names[0].name] = z; }
+            }
+            if ((x.k === "assignx" || x.k === "incdec") && stripParens(x.target).k === "index") { stripParens(x.target).isTarget = true; }
+          });
+          return part;
+        });
+        function zeroFor(obj) { var o = stripParens(obj); return o && o.k === "name" && zeros[o.v] ? copyOf(zeros[o.v]) : null; }
+        refitBodies(got, function (part) {
+          return rewriteTree(part, function (x) {
+            if (x.k === "expr") {
+              var e0 = stripParens(x.e), tg0 = e0 && (e0.k === "assignx" || e0.k === "incdec") ? stripParens(e0.target) : null;
+              // counts[w]++, counts[w] += n: from nothing, where there was nothing
+              if (tg0 && tg0.k === "index" && zeroFor(tg0.obj) && (e0.k === "incdec" || e0.op !== "=")) {
+                var had = callAt({ k: "member", obj: copyOf(tg0.obj), name: "getOrDefault", line: x.line }, [copyOf(tg0.at), zeroFor(tg0.obj)], x.line);
+                var by = e0.k === "incdec" ? numAt(1, x.line) : e0.value;
+                var op0 = e0.k === "incdec" ? (e0.op === "++" ? "+" : "-") : e0.op.replace(/=$/, "");
+                return setAt({ k: "index", obj: tg0.obj, at: tg0.at, line: x.line }, binAt(op0, had, by, x.line), x.line);
+              }
+              return statement(x);
+            }
+            if (x.k === "index" && !x.isTarget && zeroFor(x.obj)) {
+              return callAt({ k: "member", obj: x.obj, name: "getOrDefault", line: x.line }, [x.at, zeroFor(x.obj)], x.line);
+            }
+            if (x.k === "call" && x.fn.k === "member" && x.fn.name === "getOrDefault" && x.args.length === 2 &&
+                stripParens(x.args[1]).k === "null" && zeroFor(x.fn.obj)) {
+              return Object.assign({}, x, { args: [x.args[0], zeroFor(x.fn.obj)] });
+            }
+            if (x.k === "call") { return call(x); }
+            if (x.k === "member") {
+              if (pathOf(x) === "math.Pi") { return pathAt("Math.PI", x.line); }
+              if (/^math\.(MaxInt|MaxInt64|MaxInt32)$/.test(pathOf(x) || "")) { return pathAt("Integer.MAX_VALUE", x.line); }
+              if (/^math\.(MinInt|MinInt64|MinInt32)$/.test(pathOf(x) || "")) { return pathAt("Integer.MIN_VALUE", x.line); }
+              if (pathOf(x) === "os.Stdin") { return nameAt("stdin", x.line); }
+            }
+          });
+        });
+        // a bufio reader or scanner made of the keyboard is the keyboard
+        refitBodies(got, function (part) {
+          return rewriteTree(part, function (x) {
+            if (x.k === "decl" && x.names.length === 1) {
+              var v = stripParens(x.names[0].value);
+              if (v && v.k === "call" && /^(bufio\.NewReader|bufio\.NewScanner|strings\.Builder)$/.test(pathOf(v.fn) || "")) {
+                return pathOf(v.fn) === "strings.Builder" ? undefined : [];
+              }
+            }
+          });
+        });
+      }
+
+      // ================================================================== Rust ==
+      // Rust: statements end in ;, and a block's last line without one is its
+      // value -- a function's too.  impl puts methods on a struct, a trait's
+      // are shared, and an enum's kinds may each carry something.
+      var rsSelf = null;                        // the type an impl is for: what Self is
+      var rsDebug = Object.create(null);        // structs that #[derive(Debug)]
+      function rsAttrs() {
+        var got = {};
+        while (isOp("#")) {
+          next();
+          accept("!");
+          var at = pos;
+          expect("[");
+          var d = 1, words = [];
+          while (d > 0) { var x = next(); if (x.t === "eof") { break; } if (x.v === "[") { d++; } if (x.v === "]") { d--; } words.push(String(x.v)); }
+          if (/\bderive\b/.test(words.join(" ")) && /\bDebug\b/.test(words.join(" "))) { got.debug = true; }
+          if (/\btest\b/.test(words.join(" "))) { got.test = true; }
+        }
+        return got;
+      }
+      function rsVis() {
+        while (isName("pub") || isName("async") || isName("unsafe") || isName("const") && isName("fn", 1) || isName("extern")) {
+          next();
+          if (isOp("(")) { skipParens(); }                    // pub(crate)
+          if (peek().t === "str") { next(); }                 // extern "C"
+        }
+      }
+      function rsBlock(seen) {
+        var was = noBrace;
+        noBrace = false;
+        expect("{");
+        var body = [];
+        while (!isOp("}")) {
+          if (peek().t === "eof") { throw wanted("}"); }
+          body.push.apply(body, notesBefore(peek().line));
+          body.push.apply(body, rsStatement());
+        }
+        body.push.apply(body, notesBefore(peek().line));
+        expect("}");
+        noBrace = was;
+        return settleAll(rsUnshadow(body, seen));
+      }
+      // let guess: i32 = guess.trim().parse(): a second guess, hiding the first
+      // -- given a name of its own from there on, as it holds another kind of thing
+      function rsUnshadow(list, seen) {
+        var have = Object.create(null);
+        (seen || []).forEach(function (n) { have[n] = true; });
+        for (var i = 0; i < list.length; i++) {
+          var st = list[i];
+          if (st.k !== "decl" || st.names.length !== 1 || !st.names[0].name) { continue; }
+          var nm = st.names[0].name;
+          if (have[nm]) {
+            var fresh = freshName(nm);
+            st.names[0].name = fresh;
+            for (var j = i + 1; j < list.length; j++) { list[j] = renameIn(copyOf(list[j]), nm, fresh); }
+            nm = fresh;
+          }
+          have[nm] = true;
+        }
+        return list;
+      }
+      // |a, b| a + b, |x: i32| -> i32 { x * 2 }, move || { ... }
+      function rsClosure() {
+        var t = peek();
+        accept("move");
+        var params = [];
+        if (accept("||")) { /* none */ }
+        else {
+          expect("|");
+          while (!isOp("|")) {
+            while (isOp("&") || isOp("&&")) { next(); }       // |&x|, |&&x|: the value itself
+            accept("mut");
+            if (isOp("(")) {
+              var pat = patternHere();
+              params.push({ name: "arg" + (params.length + 1), pattern: pat, line: t.line });
+            } else {
+              var pn = next();
+              params.push({ name: pn.v, line: pn.line });
+            }
+            if (accept(":")) { ownType(); }
+            if (!accept(",")) { break; }
+          }
+          expect("|");
+        }
+        if (accept("->")) { ownType(); }
+        var body = isOp("{") ? rsBlock() : [{ k: "expr", e: cAssign(), line: t.line }];
+        return lambdaOf(params, body, t.line, null);
+      }
+      function rsPrimary() {
+        var t = peek();
+        if (isOp("|") || isOp("||") || (isName("move") && (isOp("|", 1) || isOp("||", 1)))) { return rsClosure(); }
+        if (isName("if")) { return rsIf(); }
+        if (isName("match")) { return rsMatch(); }
+        if (isName("loop") || isName("while") || isName("for")) {
+          var st = rsStatement();
+          return { k: "blockx", body: st, line: t.line };
+        }
+        if (isOp("{")) { return { k: "blockx", body: rsBlock(), line: t.line }; }
+        if (isName("unsafe") && isOp("{", 1)) { next(); return { k: "blockx", body: rsBlock(), line: t.line }; }
+        if (isName("self")) { next(); return nameAt("this", t.line); }
+        if (isName("Self") && rsSelf) { next(); return nameAt(rsSelf, t.line); }
+        if (isName("None")) { next(); return { k: "null", line: t.line }; }
+        if ((isName("Some") || isName("Ok") || isName("Box")) && isOp("(", 1)) {
+          next(); next();
+          var inner = cAssign();
+          expect(")");
+          return t.v === "Ok" ? { k: "call", fn: nameAt("Ok", t.line), args: [inner], line: t.line, rsOk: true } : inner;
+        }
+        if (isName("Err") && isOp("(", 1)) {
+          next(); next();
+          var why = cAssign();
+          expect(")");
+          return { k: "call", fn: nameAt("Err", t.line), args: [why], line: t.line };
+        }
+        // (a, b), ()
+        if (isOp("(")) {
+          next();
+          if (accept(")")) { return { k: "tuple", items: [], line: t.line }; }
+          var parts = [cAssign()], comma = false;
+          while (accept(",")) { comma = true; if (isOp(")")) { break; } parts.push(cAssign()); }
+          expect(")");
+          return parts.length === 1 && !comma ? { k: "paren", e: parts[0], line: t.line } : { k: "tuple", items: parts, line: t.line };
+        }
+        // [1, 2, 3], [0; 5]
+        if (isOp("[")) {
+          next();
+          if (accept("]")) { return { k: "list", items: [], line: t.line }; }
+          var first = cAssign();
+          if (accept(";")) { var many = cAssign(); expect("]"); return { k: "sized", dims: [many], fill: first, kind: null, line: t.line }; }
+          var items = [first];
+          while (accept(",")) { if (isOp("]")) { break; } items.push(cAssign()); }
+          expect("]");
+          return { k: "list", items: items, line: t.line };
+        }
+        if (t.t === "name" && t.life) { next(); return nameAt(t.v, t.line); }
+        return null;
+      }
+      function rsIf() {
+        var t = next();
+        var was = noBrace;
+        noBrace = true;
+        var steps = [];
+        if (isName("let")) {
+          next();
+          var pat = rsPattern();
+          expect("=");
+          var subject = cAssign();
+          noBrace = was;
+          var then = rsBlock(), orelse = [];
+          if (isName("else")) { next(); orelse = isName("if") ? [{ k: "expr", e: rsIf(), line: t.line }] : rsBlock(); }
+          return rsLetIf(pat, subject, then, orelse, t.line);
+        }
+        var cond = cAssign();
+        noBrace = was;
+        var th = rsBlock();
+        var el = [];
+        if (isName("else")) { next(); el = isName("if") ? [{ k: "expr", e: rsIf(), line: t.line }] : rsBlock(); }
+        return { k: "ifx", cond: cond, then: th, orelse: el, line: t.line };
+      }
+      // if let Some(x) = opt { ... }: a pattern met, and what it names set
+      function rsLetIf(pat, subject, then, orelse, line) {
+        var s = stripParens(subject);
+        var how = rsOptionTest(pat, s, line);
+        if (how) {
+          return { k: "ifx", cond: how.test, then: how.binds.concat(then), orelse: orelse, line: line };
+        }
+        return { k: "whenx", subject: subject, line: line,
+                 cases: [{ pat: pat, body: then, line: line }, { pat: { p: "any" }, isElse: true, body: orelse, line: line }] };
+      }
+      // Some(x) = map.get(&k), Ok(n) = s.parse::<i32>(), Some(x) = v.pop(): the test and the name
+      function rsOptionTest(pat, s, line) {
+        if (pat.p !== "cls" || pat.args.length !== 1 || pat.args[0].p !== "cap" || !/^(Some|Ok)$/.test(pat.name)) { return null; }
+        var name = pat.args[0].name, test, value = s;
+        var call0 = s.k === "call" && s.fn.k === "member" ? s : null;
+        var m = call0 ? call0.fn.name : "";
+        if (m === "get" && call0.args.length === 1) {
+          test = callAt({ k: "member", obj: copyOf(call0.fn.obj), name: "containsKey", line: line }, [copyOf(call0.args[0])], line);
+        } else if (m === "parse") {
+          var text = call0.fn.obj;
+          test = builtAt("isNumber", [copyOf(text)], line);
+          value = builtAt(call0.fn.turbo && kindOfType(call0.fn.turbo) === "real" ? "real" : "int", [copyOf(text)], line);
+        } else if (/^(pop|first|last|iter)$/.test(m) || /^(max|min)$/.test(m)) {
+          var holder = call0.fn.obj;
+          test = binAt(">", builtAt("length", [copyOf(holder)], line), numAt(0, line), line);
+        } else if (/^(position|find)$/.test(m)) {
+          test = binAt("!=", copyOf(s), { k: "null", line: line }, line);
+          if (m === "position") { test = binAt(">=", copyOf(s), numAt(0, line), line); }
+        } else {
+          test = binAt("!=", copyOf(s), { k: "null", line: line }, line);
+        }
+        return { test: test, binds: name === "_" ? [] : [setAt(nameAt(name, line), value, line)] };
+      }
+      // match x { 1 | 2 => ..., 3..=9 => ..., Some(v) => ..., Shape::Circle(r) => ..., _ => ... }
+      function rsMatch() {
+        var t = next();
+        var was = noBrace;
+        noBrace = true;
+        var subject = cAssign();
+        noBrace = was;
+        expect("{");
+        var cases = [];
+        while (!isOp("}")) {
+          var c = peek();
+          if (c.t === "eof") { throw wanted("}"); }
+          notesBefore(c.line);
+          var alts = [];
+          accept("|");
+          do { alts.push(rsPattern()); } while (accept("|"));
+          var one = { line: c.line, pat: alts.length === 1 ? alts[0] : { p: "or", alts: alts } };
+          if (isName("if")) { next(); one.guard = cAssign(); }
+          expect("=>");
+          if (isOp("{")) { one.body = rsBlock(); accept(","); }
+          else {
+            var e = cAssign();
+            one.body = isName("return") ? [] : [{ k: "expr", e: e, line: c.line }];
+            accept(",");
+          }
+          if (one.pat.p === "any") { one.isElse = true; }
+          cases.push(one);
+        }
+        expect("}");
+        // match s.trim().parse::<i32>() { Ok(n) => ..., Err(_) => ... }: whether it is a number
+        var s0 = stripParens(subject);
+        while (s0.k === "call" && s0.fn.k === "member" && /^(expect|unwrap)$/.test(s0.fn.name)) { s0 = stripParens(s0.fn.obj); }
+        if (s0.k === "call" && s0.fn.k === "member" && s0.fn.name === "parse" &&
+            cases.some(function (c) { return c.pat.p === "cls" && /^(Ok|Err)$/.test(c.pat.name); })) {
+          var text = s0.fn.obj, kind = s0.fn.turbo ? kindOfType(s0.fn.turbo) : "int";
+          var okCase = cases.filter(function (c) { return c.pat.p === "cls" && c.pat.name === "Ok"; })[0];
+          var errCase = cases.filter(function (c) { return c.pat.p === "cls" && c.pat.name === "Err" || c.pat.p === "any"; })[0];
+          var binds = okCase && okCase.pat.args[0] && okCase.pat.args[0].p === "cap"
+                      ? [setAt(nameAt(okCase.pat.args[0].name, t.line), builtAt(kind === "real" ? "real" : "int", [copyOf(text)], t.line), t.line)] : [];
+          return { k: "ifx", cond: builtAt("isNumber", [copyOf(text)], t.line), line: t.line,
+                   then: binds.concat(okCase ? okCase.body : []), orelse: errCase ? errCase.body : [] };
+        }
+        return { k: "whenx", subject: subject, cases: cases, line: t.line };
+      }
+      function rsPattern() {
+        var t = peek();
+        if (isName("_")) { next(); return { p: "any" }; }
+        if (isOp("&")) { next(); return rsPattern(); }
+        accept("ref");
+        accept("mut");
+        if (isName("None")) { next(); return { p: "lit", e: { k: "null", line: t.line } }; }
+        if (isOp("(")) {
+          next();
+          var items = [];
+          while (!isOp(")")) { items.push(rsPattern()); if (!accept(",")) { break; } }
+          expect(")");
+          return { p: "seq", items: items };
+        }
+        if (isOp("[")) {
+          next();
+          var els = [];
+          while (!isOp("]")) {
+            if (isOp("..")) { next(); els.push({ p: "rest", name: null }); }
+            else { els.push(rsPattern()); }
+            if (!accept(",")) { break; }
+          }
+          expect("]");
+          return { p: "seq", items: els };
+        }
+        if (t.t === "num" || t.t === "str" || isOp("-") || isName("true") || isName("false")) {
+          var lo = cUnary();
+          if (isOp("..=") || isOp("..")) {
+            var incl = next().v === "..=";
+            var hi = isOp("=>") || isOp("|") || isName("if") || isOp(",") ? null : cUnary();
+            return { p: "range", lo: lo, hi: hi, incl: incl };
+          }
+          return { p: "lit", e: lo };
+        }
+        if (t.t === "name") {
+          next();
+          var path = t.v, whole = nameAt(t.v, t.line);
+          while (isOp("::") && peek(1).t === "name") { next(); path = next().v; whole = { k: "member", obj: whole, name: path, line: t.line }; }
+          // i32::MIN..=-1, LOW..=HIGH: between two named values
+          if (isOp("..=") || (isOp("..") && !isOp("}", 1))) {
+            var incl0 = next().v === "..=";
+            var hi0 = isOp("=>") || isOp("|") || isName("if") || isOp(",") ? null : cUnary();
+            return { p: "range", lo: whole, hi: hi0, incl: incl0 };
+          }
+          // x @ 1..=5
+          if (isOp("@")) { next(); return { p: "as", name: path, pat: rsPattern() }; }
+          if (isOp("(")) {
+            next();
+            var args = [];
+            while (!isOp(")")) { args.push(rsPattern()); if (!accept(",")) { break; } }
+            expect(")");
+            return { p: "cls", name: path, args: args, kws: [] };
+          }
+          if (isOp("{")) {
+            next();
+            var kws = [];
+            while (!isOp("}")) {
+              if (isOp("..")) { next(); continue; }
+              var fnm = next().v;
+              kws.push({ name: fnm, pat: accept(":") ? rsPattern() : { p: "cap", name: fnm } });
+              if (!accept(",")) { break; }
+            }
+            expect("}");
+            return { p: "cls", name: path, args: [], kws: kws };
+          }
+          // a name alone: a kind of an enum (Color::Red, Red) or a name to hold what it is
+          if (t.v !== path || /^[A-Z]/.test(path)) { return rsVariantPattern(path); }
+          return { p: "cap", name: path };
+        }
+        throw odd(t);
+      }
+      function rsVariantPattern(name) { return { p: "rsvariant", name: name }; }
+      function rsDecl() {
+        var t = next();
+        accept("mut");
+        var pat = null, nm = null;
+        if (isOp("(") || isOp("[")) { pat = patternHere(); }
+        else {
+          var n0 = next();
+          if (n0.t !== "name") { throw odd(n0); }
+          nm = n0.v;
+        }
+        var ti = accept(":") ? ownType() : null;
+        var value = accept("=") ? cAssign() : null;
+        // let Some(x) = ... else { return }: rare; the value, and on
+        if (isName("else") && isOp("{", 1)) { next(); rsBlock(); }
+        accept(";");
+        // let n: i32 = s.trim().parse().unwrap(): a whole number (or f64, a number with a point)
+        if (value && ti) { rsParseAs(value, ti); }
+        if (pat) {
+          return [{ k: "decl", type: null, typeInfo: null, dims: 0, konst: false, line: t.line,
+                    names: [{ pattern: pat, value: value, line: t.line }] }];
+        }
+        return [{ k: "decl", type: ti ? ti.name : null, typeInfo: ti, dims: ti ? ti.dims : 0, konst: false, line: t.line,
+                  names: [{ name: nm, value: value, dims: ti ? ti.dims : 0, sizes: [], line: t.line }] }];
+      }
+      function rsParseAs(value, ti) {
+        var kind = kindOfType(ti);
+        eachNode(value, function (x) {
+          if (x.k === "member" && x.name === "parse" && !x.turbo) { x.parseAs = kind; }
+          if (x.k === "member" && x.name === "collect" && !x.turbo && kind === "text") { x.turbo = { name: "string", dims: 0, args: [] }; }
+        });
+      }
+      function rsStatement() {
+        var t = peek();
+        if (accept(";")) { return []; }
+        var attrs = rsAttrs();
+        rsVis();
+        t = peek();
+        if (t.t === "name" && t.life && isOp(":", 1)) {                    // 'outer: loop
+          next(); next();
+          var inner = rsStatement();
+          inner.forEach(function (st) { if (/^(while|dowhile|for|foreach|range)$/.test(st.k)) { st.label = t.v.slice(1); } });
+          return inner;
+        }
+        if (isName("let")) { return rsDecl(); }
+        if (isName("fn")) { var f = rsFn([], null); return f ? [f] : []; }
+        if (isName("struct") || isName("enum") || isName("trait") || isName("impl")) {
+          rsItem(attrs, [], { types: localTypes, funcs: [] });
+          return [];
+        }
+        if (isName("use") || isName("mod") && isOp(";", 2)) { while (!isOp(";") && peek().t !== "eof") { next(); } accept(";"); return []; }
+        if (isName("const") || isName("static")) { return [rsConst()]; }
+        if (t.t === "name") {
+          switch (t.v) {
+            case "while": {
+              next();
+              var was = noBrace;
+              noBrace = true;
+              if (isName("let")) {
+                next();
+                var pat = rsPattern();
+                expect("=");
+                var subj = cAssign();
+                noBrace = was;
+                var wbody = rsBlock();
+                var how = rsOptionTest(pat, stripParens(subj), t.line);
+                // while let Some(top) = stack.pop(): round while there is one
+                var cond = how ? how.test : { k: "bool", v: true, line: t.line };
+                return [{ k: "while", cond: cond, body: (how ? how.binds : []).concat(wbody), line: t.line }];
+              }
+              var wc = cAssign();
+              noBrace = was;
+              return [{ k: "while", cond: wc, body: rsBlock(), line: t.line }];
+            }
+            case "loop": next(); return [{ k: "while", cond: { k: "bool", v: true, line: t.line }, body: rsBlock(), line: t.line }];
+            case "for": {
+              next();
+              var target;
+              if (isOp("(")) { target = patternHere(); }
+              else { accept("mut"); var nm = next(); target = nameAt(nm.v, nm.line); }
+              expect("in");
+              var was2 = noBrace;
+              noBrace = true;
+              var over = cAssign();
+              noBrace = was2;
+              var body = rsBlock();
+              var r = stripParens(over);
+              // (0..n).rev(): down
+              if (r.k === "call" && r.fn.k === "member" && r.fn.name === "rev" && stripParens(r.fn.obj).k === "rng") {
+                var rr = stripParens(r.fn.obj);
+                var down = { k: "rng", from: rr.incl ? rr.to : binAt("-", rr.to, numAt(1, t.line), t.line), to: rr.from, incl: true, down: true, line: t.line };
+                if (target.k === "name") { return [rangeLoop(target.v, down, body, t.line)]; }
+              }
+              if (r.k === "call" && r.fn.k === "member" && r.fn.name === "step_by" && stripParens(r.fn.obj).k === "rng" && target.k === "name") {
+                var sr = Object.assign({}, stripParens(r.fn.obj), { step: r.args[0] });
+                return [rangeLoop(target.v, sr, body, t.line)];
+              }
+              if (target.k === "name" && r.k === "rng" && !r.chars) { return [rangeLoop(target.v, r, body, t.line)]; }
+              return [{ k: "foreach", target: target, over: over, body: body, line: t.line }];
+            }
+            case "return": {
+              next();
+              var rv = isOp(";") || isOp("}") ? null : cAssign();
+              accept(";");
+              return settleAll([{ k: "return", value: rv, line: t.line }]);
+            }
+            case "break": case "continue": {
+              next();
+              var label = peek().t === "name" && peek().life ? next().v.slice(1) : null;
+              if (t.v === "break" && !isOp(";") && !isOp("}")) { cAssign(); }       // break value
+              accept(";");
+              return [{ k: t.v, label: label, line: t.line }];
+            }
+          }
+        }
+        var e;
+        // if, match, a block: over at their }, what comes next a statement of its own
+        if (isName("if")) { e = rsIf(); }
+        else if (isName("match")) { e = rsMatch(); }
+        else if (isOp("{")) { e = { k: "blockx", body: rsBlock(), line: t.line }; }
+        else if (isName("unsafe") && isOp("{", 1)) { next(); e = { k: "blockx", body: rsBlock(), line: t.line }; }
+        else { e = cAssign(); }
+        var semi = !!accept(";");
+        var st = { k: "expr", e: e, line: t.line, noSemi: !semi };
+        return settleAll([rsCounting(st)]);
+      }
+      // *counts.entry(w).or_insert(0) += 1: what is under w, or 0, and one more
+      function rsCounting(st) {
+        var e = stripParens(st.e);
+        if (!e || e.k !== "assignx") { return st; }
+        var tg = stripParens(e.target);
+        if (tg.k === "call" && tg.fn.k === "member" && /^(or_insert|or_default|or_insert_with)$/.test(tg.fn.name)) {
+          var entry = stripParens(tg.fn.obj);
+          if (entry.k === "call" && entry.fn.k === "member" && entry.fn.name === "entry" && entry.args.length === 1) {
+            var map = entry.fn.obj, key = entry.args[0];
+            var start = tg.fn.name === "or_insert" ? tg.args[0] : tg.fn.name === "or_insert_with" ? callAt(tg.args[0], [], st.line) : numAt(0, st.line);
+            var was = callAt({ k: "member", obj: map, name: "getOrDefault", line: st.line }, [key, start], st.line);
+            var put = e.op === "=" ? e.value : binAt(e.op.replace(/=$/, ""), was, e.value, st.line);
+            return setAt({ k: "index", obj: copyOf(map), at: copyOf(key), line: st.line }, put, st.line);
+          }
+        }
+        return st;
+      }
+      function rsConst() {
+        var t = next();
+        accept("mut");
+        var nm = next();
+        var ti = accept(":") ? ownType() : null;
+        expect("=");
+        var v = cAssign();
+        accept(";");
+        return { k: "decl", type: ti ? ti.name : null, typeInfo: ti, dims: ti ? ti.dims : 0, konst: t.v === "const", line: t.line,
+                 names: [{ name: nm.v, value: v, dims: ti ? ti.dims : 0, sizes: [], line: nm.line }] };
+      }
+      // fn name(params) -> T { body }; with &self first, a method
+      function rsFn(lead, owner) {
+        var t = next();
+        var nm = next();
+        if (isOp("<")) { skipAngles(); }
+        expect("(");
+        var params = [], method = false;
+        while (!isOp(")")) {
+          while (isOp("&") || isOp("&&")) { next(); if (peek().life) { next(); } }
+          accept("mut");
+          if (isName("self")) { next(); method = true; if (accept(":")) { ownType(); } if (!accept(",")) { break; } continue; }
+          var p = peek(), pat = null, pname;
+          if (isOp("(")) { pat = patternHere(); pname = "arg" + (params.length + 1); }
+          else { pname = next().v; }
+          expect(":");
+          var ti = ownType();
+          params.push({ name: pname, pattern: pat, type: ti.name, typeInfo: ti, dims: ti.dims, line: p.line });
+          if (!accept(",")) { break; }
+        }
+        expect(")");
+        var rtype = accept("->") ? ownType() : null;
+        if (isName("where")) { while (!isOp("{") && !isOp(";") && peek().t !== "eof") { next(); } }
+        if (accept(";")) { return null; }                     // in a trait, said ahead
+        var body = rsBlock(params.map(function (p) { return p.name; }));
+        body = rsValueLast(body, !!rtype);
+        return { k: "func", name: nm.v, params: params, rtype: rtype ? rtype.name : null, rtypeInfo: rtype,
+                 rdims: rtype ? rtype.dims : 0, body: body, line: nm.line, lead: lead || [], statik: !method,
+                 method: method, kind: "method" };
+      }
+      // a body whose last line has no ; : that is what it hands back
+      function rsValueLast(body, gives) {
+        var last = body[body.length - 1];
+        if (gives && last && last.k === "expr" && last.noSemi) {
+          return settleAll(body.slice(0, -1).concat([{ k: "return", value: last.e, line: last.line }]));
+        }
+        if (gives && last && (last.k === "if" || last.k === "match")) {
+          return valueOfBody(body, function (v) { return { k: "return", value: v, line: last.line }; });
+        }
+        return body;
+      }
+      // struct, enum, trait, impl -- into `into` (the program's types and functions)
+      function rsItem(attrs, lead, into) {
+        var t = next();
+        if (t.v === "struct") {
+          var nt = next();
+          if (isOp("<")) { skipAngles(); }
+          var cls = { k: "class", name: nt.v, kind: "struct", bases: [], ifaces: [], fields: [], methods: [], ctors: [],
+                      values: [], inits: [], line: t.line, lead: lead || [] };
+          classes.push(cls.name);
+          if (attrs.debug) { rsDebug[cls.name] = true; }
+          if (accept(";")) { into.types.push(cls); return; }
+          if (isOp("(")) {                                     // struct Meters(f64);
+            next();
+            var k = 0;
+            while (!isOp(")")) { rsVis(); var ft = ownType(); cls.fields.push({ name: "item" + k++, value: null, statik: false, type: ft, line: t.line }); if (!accept(",")) { break; } }
+            expect(")");
+            accept(";");
+            cls.tuple = true;
+            into.types.push(cls);
+            return;
+          }
+          expect("{");
+          while (!isOp("}")) {
+            notesBefore(peek().line);
+            rsAttrs();
+            rsVis();
+            var fn0 = next();
+            expect(":");
+            var fti = ownType();
+            cls.fields.push({ name: fn0.v, value: null, statik: false, type: fti, line: fn0.line });
+            if (!accept(",")) { break; }
+          }
+          expect("}");
+          into.types.push(cls);
+          return;
+        }
+        if (t.v === "enum") {
+          var en = next();
+          if (isOp("<")) { skipAngles(); }
+          var e = { k: "class", name: en.v, kind: "enum", bases: [], ifaces: [], fields: [], methods: [], ctors: [],
+                    values: [], inits: [], line: t.line, lead: lead || [] };
+          classes.push(e.name);
+          expect("{");
+          var kinds = [], carries = false;
+          while (!isOp("}")) {
+            notesBefore(peek().line);
+            rsAttrs();
+            var vn = next(), fields = null;
+            if (isOp("(")) {
+              next();
+              fields = [];
+              while (!isOp(")")) { fields.push({ name: "item" + fields.length, type: ownType() }); if (!accept(",")) { break; } }
+              expect(")");
+              carries = true;
+            } else if (isOp("{")) {
+              next();
+              fields = [];
+              while (!isOp("}")) { var fnm = next().v; expect(":"); fields.push({ name: fnm, type: ownType() }); if (!accept(",")) { break; } }
+              expect("}");
+              carries = true;
+            }
+            var raw = accept("=") ? cAssign() : null;
+            kinds.push({ name: vn.v, fields: fields, raw: raw, line: vn.line });
+            if (!accept(",")) { break; }
+          }
+          expect("}");
+          if (!carries) {
+            // enum Color { Red, Green }: its kinds, each a name
+            kinds.forEach(function (v) { e.values.push({ name: v.name, value: v.raw, args: null, line: v.line }); });
+            if (kinds.some(function (v) { return v.raw; })) { e.raw = "int"; }
+            into.types.push(e);
+            return;
+          }
+          // enum Shape { Circle(f64), Rect { w: f64, h: f64 } }: each kind a record of its own
+          e.kind = "interface";
+          into.types.push(e);
+          kinds.forEach(function (v) {
+            var one = { k: "class", name: v.name, kind: "struct", bases: [], ifaces: [en.v], fields: [], methods: [], ctors: [],
+                        values: [], inits: [], line: v.line, lead: [], variantOf: en.v };
+            (v.fields || []).forEach(function (f) { one.fields.push({ name: f.name, value: null, statik: false, type: f.type, line: v.line }); });
+            classes.push(one.name);
+            into.types.push(one);
+          });
+          return;
+        }
+        if (t.v === "trait") {
+          var tn = next();
+          if (isOp("<")) { skipAngles(); }
+          if (accept(":")) { while (!isOp("{")) { next(); } }
+          var tr = { k: "class", name: tn.v, kind: "interface", bases: [], ifaces: [], fields: [], methods: [], ctors: [],
+                     values: [], inits: [], line: t.line, lead: lead || [], trait: true };
+          classes.push(tr.name);
+          expect("{");
+          while (!isOp("}")) {
+            notesBefore(peek().line);
+            rsAttrs();
+            if (isName("fn")) { var dm = rsFn([], tn.v); if (dm) { tr.methods.push(dm); } continue; }
+            while (!isOp(";") && !isOp("}")) { next(); }
+            accept(";");
+          }
+          expect("}");
+          into.types.push(tr);
+          return;
+        }
+        if (t.v === "impl") {
+          if (isOp("<")) { skipAngles(); }
+          var first = ownType(), traitName = null, forType = first;
+          if (accept("for")) { traitName = first.name; forType = ownType(); }
+          if (isName("where")) { while (!isOp("{")) { next(); } }
+          var was = rsSelf;
+          rsSelf = forType.name;
+          expect("{");
+          var methods = [];
+          while (!isOp("}")) {
+            var ml = notesBefore(peek().line);
+            rsAttrs();
+            rsVis();
+            if (isName("fn")) { var m = rsFn(ml, forType.name); if (m) { methods.push(m); } continue; }
+            if (isName("type") || isName("const")) { while (!isOp(";")) { next(); } accept(";"); continue; }
+            throw odd(peek());
+          }
+          expect("}");
+          rsSelf = was;
+          (into.impls = into.impls || []).push({ type: forType.name, trait: traitName, methods: methods, line: t.line });
+          return;
+        }
+        throw odd(t);
+      }
+      // impl fmt::Display for P { fn fmt(&self, f) { write!(f, "...", ...) } }: how a P is written
+      function rsDisplay(m) {
+        var body = rewriteTree(m.body, function (x) {
+          if (x.k === "call" && x.rsWrite) { return x.rsWrite; }
+        });
+        return Object.assign({}, m, { name: "toString", params: [], body: body, statik: false });
+      }
+      function topRust() {
+        var out = { funcs: [], globals: [], main: [], mainFound: false, types: [], outside: [], impls: [] };
+        out.head = notesBefore(peek().line);
+        while (peek().t !== "eof") {
+          var t = peek();
+          var lead = notesBefore(t.line);
+          if (accept(";")) { continue; }
+          var attrs = rsAttrs();
+          rsVis();
+          if (attrs.test && isName("fn")) { rsFn([], null); continue; }
+          if (isName("use") || isName("extern")) { while (!isOp(";") && peek().t !== "eof") { next(); } accept(";"); continue; }
+          if (isName("mod")) {
+            next(); next();
+            if (accept(";")) { continue; }
+            // mod tests { ... }: stepped over; any other module's items are the program's
+            skipBraces();
+            continue;
+          }
+          if (isName("struct") || isName("enum") || isName("trait") || isName("impl")) { rsItem(attrs, lead, out); continue; }
+          if (isName("const") || isName("static")) { var c = rsConst(); c.lead = lead; out.globals.push(c); continue; }
+          if (isName("fn")) {
+            var fn = rsFn(lead, null);
+            if (!fn) { continue; }
+            fn.kind = undefined;
+            fn.statik = false;
+            if (fn.name === "main" && !out.mainFound) {
+              out.mainFound = true;
+              out.main = lead.concat(fn.body);
+              out.mainLine = fn.line;
+            } else {
+              out.funcs.push(fn);
+            }
+            continue;
+          }
+          out.main.push.apply(out.main, lead);
+          out.main.push.apply(out.main, rsStatement());
+        }
+        out.trailing = notesBefore(1e9);
+        out.types = out.types.concat(localTypes);
+        // impl blocks: their methods to their struct; a trait's own methods to every struct it is for
+        var byName = Object.create(null);
+        out.types.forEach(function (c) { byName[c.name] = c; });
+        out.impls.forEach(function (im) {
+          var home = byName[im.type];
+          var methods = im.methods.map(function (m) {
+            return im.trait === "Display" || (im.trait || "").split(/::/).pop() === "Display" ? (m.name === "fmt" ? rsDisplay(m) : m) : m;
+          });
+          if (im.trait && byName[im.trait] && byName[im.trait].trait) {
+            byName[im.trait].methods.forEach(function (dm) {
+              if (!methods.some(function (m) { return m.name === dm.name; })) { methods.push(copyOf(dm)); }
+            });
+          }
+          if (!home) {
+            // impl for a kind not the program's own: functions handed one first
+            methods.forEach(function (m) {
+              if (m.method) { m.params = [{ name: "this", line: m.line }].concat(m.params); }
+              m.kind = undefined;
+              m.statik = false;
+              out.funcs.push(m);
+            });
+            return;
+          }
+          if (im.trait && home.ifaces.indexOf(im.trait) < 0) { home.ifaces.push(im.trait); }
+          methods.forEach(function (m) {
+            m.kind = "method";
+            home.methods.push(m);
+          });
+        });
+        // an enum whose kinds carry things: a match on one of them is a match on its record
+        out.types.forEach(function (c) {
+          if (c.variantOf) {
+            var parent = byName[c.variantOf];
+            if (parent) { parent.methods.forEach(function (m) { if (!c.methods.some(function (x) { return x.name === m.name; })) { c.methods.push(copyOf(m)); } }); }
+          }
+        });
+        plainNodes(out);
+        rsLibrary(out);
+        return out;
+      }
+
+      // ---- Rust's macros: println!, format!, vec!, write! ----------------
+      // "{} is {:.2} {name}": the pieces, each value said with its spec the way
+      // Python's is -- {:.2} of a number is to two places, {:>5} five wide.
+      function rsFormat(f, args, line) {
+        var parts = [], text = "", at = 0, auto = 0;
+        for (var i = 0; i < f.length; i++) {
+          var c = f.charAt(i);
+          if (c === "{" && f.charAt(i + 1) === "{") { text += "{"; i++; continue; }
+          if (c === "}" && f.charAt(i + 1) === "}") { text += "}"; i++; continue; }
+          if (c !== "{") { text += c; continue; }
+          var close = f.indexOf("}", i);
+          if (close < 0) { text += f.slice(i); break; }
+          var inside = f.slice(i + 1, close), colon = inside.indexOf(":");
+          var which = colon >= 0 ? inside.slice(0, colon) : inside, spec = colon >= 0 ? inside.slice(colon + 1) : "";
+          var value;
+          if (which === "") { value = args[auto++]; }
+          else if (/^\d+$/.test(which)) { value = args[parseInt(which, 10)]; }
+          else {
+            var named = args.filter(function (a) { return a.argName === which; })[0];
+            value = named || subExpr(which, line);
+          }
+          var conv = "";
+          if (/\?$/.test(spec)) { conv = "r"; spec = spec.replace(/#?\?$/, ""); }
+          // {:.2}: to two places (a number with a point)
+          if (/\.\d+$/.test(spec)) { spec += "f"; }
+          if (text) { parts.push(text); text = ""; }
+          parts.push({ e: value || { k: "str", v: "", line: line }, spec: spec, conv: conv });
+          i = close;
+        }
+        if (text) { parts.push(text); }
+        if (!parts.length) { return { k: "str", v: "", line: line }; }
+        if (parts.length === 1 && typeof parts[0] === "string") { return { k: "str", v: parts[0], line: line }; }
+        return { k: "fstr", parts: parts, line: line };
+      }
+      function rsMacro(a) {
+        var t = peek(), name = a.v, line = t.line;
+        var close = t.v === "(" ? ")" : t.v === "[" ? "]" : "}";
+        next();
+        // vec![0; n]: n noughts
+        if (name === "vec" && !isOp(close)) {
+          var first = cAssign();
+          if (accept(";")) { var many = cAssign(); expect(close); return { k: "sized", dims: [many], fill: first, kind: null, line: line }; }
+          var items = [first];
+          while (accept(",")) { if (isOp(close)) { break; } items.push(cAssign()); }
+          expect(close);
+          return { k: "list", items: items, line: line };
+        }
+        var args = [];
+        while (!isOp(close)) {
+          if (peek().t === "name" && isOp("=", 1)) { var an = next().v; next(); var av = cAssign(); av.argName = an; args.push(av); }
+          else { args.push(cAssign()); }
+          if (!accept(",")) { break; }
+        }
+        expect(close);
+        var fmt = function (from) {
+          var f0 = args[from] && stripParens(args[from]);
+          return f0 && f0.k === "str" ? rsFormat(f0.v, args.slice(from + 1), line) : (args[from] || { k: "str", v: "", line: line });
+        };
+        switch (name) {
+          case "vec": return { k: "list", items: [], line: line };
+          case "println": case "eprintln": return callAt("System.out.println", args.length ? [fmt(0)] : [], line);
+          case "print": case "eprint": return callAt("System.out.print", [fmt(0)], line);
+          case "format": return fmt(0);
+          case "panic": case "todo": case "unimplemented": case "unreachable":
+            return { k: "call", fn: nameAt("panic", line), args: args.length ? [fmt(0)] : [], line: line, rsPanic: true };
+          case "write": case "writeln": {
+            var said = fmt(1);
+            if (name === "writeln") { said = binAt("+", said, { k: "str", v: "\n", line: line }, line); }
+            return { k: "call", fn: nameAt("write", line), args: [], line: line, rsWrite: said };
+          }
+          case "assert": case "assert_eq": case "assert_ne": case "debug_assert": return { k: "null", line: line, rsDrop: true };
+          case "matches": return binAt("==", args[0], args[1], line);
+          case "dbg": return args[0] || { k: "null", line: line };
+        }
+        return callAt(nameAt(name, line), args, line);
+      }
+
+      // ---- Rust's library, said the way the rest already is --------------
+      function rsLibrary(got) {
+        var mine = ownMethodNames(got);
+        var variants = Object.create(null), plainEnums = Object.create(null), anyErr = false;
+        (got.types || []).forEach(function (c) {
+          if (c.variantOf) { variants[c.name] = c; }
+          if (c.kind === "enum") { c.values.forEach(function (v) { plainEnums[v.name] = c.name; }); }
+        });
+        function member(obj, name, line) { return { k: "member", obj: obj, name: name, line: line }; }
+        function lam(a) { a = stripParens(a); return a && a.k === "fn" ? a : null; }
+        // the names and fields holding a HashMap: gone over, each is a key and its value
+        var maps = Object.create(null);
+        function mapType(ti) { return !!ti && /^(Map|TreeMap)$/.test(ti.name); }
+        refitBodies(got, function (part) {
+          eachNode(part, function (y) {
+            if (y.k === "decl" && y.names.length === 1 && y.names[0].name) {
+              var v0 = stripParens(y.names[0].value);
+              var made0 = v0 && v0.k === "call" ? pathOf(v0.fn) || "" : "";
+              if (mapType(y.typeInfo) || /(^|\.)(HashMap|BTreeMap)\.new$/.test(made0)) { maps[y.names[0].name] = true; }
+            }
+          });
+          return part;
+        });
+        (got.types || []).forEach(function (c) { (c.fields || []).forEach(function (f) { if (mapType(f.type)) { maps[f.name] = true; } }); });
+        function isMapHere(e) {
+          e = stripParens(e);
+          return !!e && ((e.k === "name" && maps[e.v]) || (e.k === "member" && maps[e.name]));
+        }
+        // what a chain comes to with its iter(), copied() and cloned() taken off
+        function core(x) {
+          x = stripParens(x);
+          while (x && x.k === "call" && x.fn.k === "member" && /^(iter|iter_mut|into_iter|copied|cloned|by_ref|as_str|as_slice|borrow|as_ref)$/.test(x.fn.name) && !x.args.length) {
+            x = stripParens(x.fn.obj);
+          }
+          return x;
+        }
+        function call(x) {
+          var line = x.line, args = x.args, path = pathOf(x.fn) || "";
+          if (x.rsPanic) { return callAt("System.out.println", [binAt("+", { k: "str", v: "panicked: ", line: line }, args[0] || { k: "str", v: "", line: line }, line)], line); }
+          if (x.fn.k === "name" && x.fn.v === "Err") { anyErr = true; return; }
+          if (x.fn.k === "name" && x.fn.v === "Ok" && x.rsOk) { return args[0]; }
+          // Vec::new(), String::from("x"), Box::new(v), Shape::Circle(2.0)
+          var bits = path.split(".");
+          if (bits.length >= 2) {
+            var owner = bits[bits.length - 2], fnName = bits[bits.length - 1];
+            if (variants[fnName]) { return callAt(nameAt(fnName, line), args, line); }
+            if (fnName === "new" || fnName === "with_capacity" || fnName === "default") {
+              if (/^(Vec|VecDeque|LinkedList|BinaryHeap)$/.test(owner)) { return { k: "list", items: [], line: line }; }
+              if (/^(HashMap|BTreeMap)$/.test(owner)) { return { k: "dict", keys: [], values: [], line: line }; }
+              if (/^(HashSet|BTreeSet)$/.test(owner)) { return { k: "set", items: [], line: line }; }
+              if (owner === "String") { return { k: "str", v: "", line: line }; }
+              if (/^(Box|Rc|Arc|RefCell|Cell|Mutex)$/.test(owner) && args.length === 1) { return args[0]; }
+            }
+            if (owner === "String" && fnName === "from" && args.length === 1) { return args[0]; }
+            if (/^(Vec|String)$/.test(owner) && fnName === "from" && args.length === 1) { return args[0]; }
+            if (owner === "process" && fnName === "exit") { return callAt("System.exit", args, line); }
+            if (/^(cmp|std)$/.test(owner) && /^(max|min)$/.test(fnName) && args.length === 2) { return callAt("Math." + fnName, args, line); }
+            if (/^(f64|f32)$/.test(owner) && /^(sqrt|abs|floor|ceil|round|max|min|powi|powf)$/.test(fnName)) {
+              return callAt("Math." + fnName.replace(/^pow[if]$/, "pow"), args, line);
+            }
+            if (owner === "io" && fnName === "stdin") { return nameAt("stdin", line); }
+          }
+          if (x.fn.k === "name") {
+            var f = x.fn.v;
+            if ((got.funcs || []).some(function (fn) { return fn.name === f; })) { return; }
+            if (/^(max|min)$/.test(f) && args.length === 2) { return callAt("Math." + f, args, line); }
+            if (f === "stdin" && !args.length) { return nameAt("stdin", line); }
+            if (f === "exit") { return callAt("System.exit", args, line); }
+            return;
+          }
+          if (x.fn.k !== "member") { return; }
+          var obj = x.fn.obj, m = x.fn.name, fnArg = lam(args[args.length - 1]);
+          if (mine[m] && !/^(new)$/.test(m)) { return; }
+          switch (m) {
+            case "to_string": case "to_owned": case "into": case "as_str": case "to_str": case "borrow": case "as_ref":
+              return m === "to_string" ? builtAt("toString", [obj], line) : obj;
+            case "clone": case "to_vec": return builtAt("copy", [obj], line);
+            case "len": return builtAt("length", [obj], line);
+            case "is_empty": return binAt("==", builtAt("length", [obj], line), numAt(0, line), line);
+            case "iter": case "iter_mut": case "into_iter": case "copied": case "cloned": case "by_ref": case "unwrap": case "expect":
+            case "unwrap_or_default": case "ok": case "as_slice": case "chars_count":
+              // ages.iter(): each name and age
+              if (/^(iter|iter_mut|into_iter)$/.test(m) && isMapHere(obj)) { return builtAt("items", [obj], line); }
+              return obj;
+            case "unwrap_or": case "unwrap_or_else": {
+              var dflt = m === "unwrap_or_else" && fnArg ? lastValue(fnArg) || { k: "null", line: line } : args[0];
+              var c0 = core(obj);
+              if (c0.k === "call" && c0.fn.k === "member" && c0.fn.name === "get" && c0.args.length === 1) {
+                return callAt(member(c0.fn.obj, "getOrDefault", line), [c0.args[0], dflt], line);
+              }
+              return binAt("??", obj, dflt, line);
+            }
+            case "is_some": return binAt("!=", obj, { k: "null", line: line }, line);
+            case "is_none": return binAt("==", obj, { k: "null", line: line }, line);
+            case "is_ok": return binAt("!=", builtAt("classOf", [obj], line), { k: "str", v: "Err", line: line }, line);
+            case "is_err": return binAt("==", builtAt("classOf", [obj], line), { k: "str", v: "Err", line: line }, line);
+            case "push": return callAt(member(obj, "add", line), args, line);
+            case "push_str": return { k: "assignx", op: "+=", target: obj, value: args[0], line: line };
+            case "pop": if (!args.length) { return builtAt("pop", [obj], line); } return;
+            case "contains_key": return callAt(member(obj, "containsKey", line), args, line);
+            case "keys": return callAt(member(obj, "keySet", line), [], line);
+            case "values": return callAt(member(obj, "values", line), [], line);
+            case "sum": return builtAt("sum", [obj], line);
+            case "product": return callAt(member(obj, "reduce", line), [numAt(1, line), { k: "fn", lambda: true, line: line,
+                               params: [{ name: "a", line: line }, { name: "b", line: line }],
+                               body: [{ k: "return", value: binAt("*", nameAt("a", line), nameAt("b", line), line), line: line }] }], line);
+            case "count": if (!args.length) { return builtAt("length", [obj], line); } return;
+            case "max": case "min":
+              if (!args.length) { return builtAt(m, [obj], line); }
+              if (args.length === 1) { return callAt("Math." + m, [obj, args[0]], line); }
+              return;
+            case "map":
+              // found.map(|x| ...), where found is one thing or nothing (an Option): done to it
+              var src0 = core(obj);
+              if (fnArg && lastValue(fnArg) && src0.k === "call" && src0.fn.k === "member" &&
+                  /^(maxBy|minBy|max_by_key|min_by_key|find|get|first|last|max|min|pop|position|next)$/.test(src0.fn.name)) {
+                return givenTo(fnArg, obj);
+              }
+              if (fnArg && lastValue(fnArg) && src0.k === "call" && src0.builtin && /^(max|min|pop)$/.test(src0.fn.v)) {
+                return givenTo(fnArg, obj);
+              }
+              return;
+            case "max_by_key": return fnArg ? callAt(member(obj, "maxBy", line), [fnArg], line) : undefined;
+            case "min_by_key": return fnArg ? callAt(member(obj, "minBy", line), [fnArg], line) : undefined;
+            case "for_each": return fnArg ? callAt(member(obj, "forEach", line), [fnArg], line) : undefined;
+            case "any": return fnArg ? callAt(member(obj, "some", line), [fnArg], line) : undefined;
+            case "all": return fnArg ? callAt(member(obj, "every", line), [fnArg], line) : undefined;
+            case "position": return fnArg ? callAt(member(obj, "findIndex", line), [fnArg], line) : undefined;
+            case "find":
+              if (fnArg) { return undefined; }
+              return callAt(member(obj, "indexOf", line), args, line);
+            case "fold": return args.length === 2 ? callAt(member(obj, "reduce", line), [args[0], args[1]], line) : undefined;
+            case "enumerate": return callAt(nameAt("enumerate", line), [obj], line);
+            case "rev": return builtAt("reversed", [obj], line);
+            case "zip": return builtAt("zip", [obj, args[0]], line);
+            case "take": return builtAt("slice", [obj, numAt(0, line), args[0]], line);
+            case "skip": return builtAt("slice", [obj, args[0]], line);
+            case "last": if (!args.length) { return { k: "index", obj: obj, at: binAt("-", builtAt("length", [copyOf(obj)], line), numAt(1, line), line), line: line }; } return;
+            case "first": if (!args.length) { return { k: "index", obj: obj, at: numAt(0, line), line: line }; } return;
+            case "nth": return { k: "index", obj: obj, at: args[0], line: line };
+            case "collect":
+              if (x.fn.turbo && x.fn.turbo.name === "string") { return builtAt("join", [obj, { k: "str", v: "", line: line }], line); }
+              return obj;
+            case "join": case "concat": return builtAt("join", [obj, args[0] || { k: "str", v: "", line: line }], line);
+            case "sort": case "sort_unstable": if (!args.length) { return callAt("Collections.sort", [obj], line); } return;
+            case "sort_by": case "sort_unstable_by": return fnArg ? callAt(member(obj, "sort", line), [fnArg], line) : undefined;
+            case "sort_by_key": return fnArg ? callAt(member(obj, "sort", line), [callAt("Comparator.comparing", [fnArg], line)], line) : undefined;
+            case "reverse": if (!args.length) { return callAt("Collections.reverse", [obj], line); } return;
+            case "extend": case "append": return callAt(member(obj, "addAll", line), args, line);
+            case "cmp": case "partial_cmp": case "total_cmp": return builtAt("compare", [obj, args[0]], line);
+            case "to_uppercase": case "to_ascii_uppercase": return callAt(member(obj, "toUpperCase", line), [], line);
+            case "to_lowercase": case "to_ascii_lowercase": return callAt(member(obj, "toLowerCase", line), [], line);
+            case "split_whitespace": return builtAt("split", [obj], line);
+            case "lines": return callAt(member(obj, "split", line), [{ k: "str", v: "\n", line: line }], line);
+            case "chars": return builtAt("toList", [obj], line);
+            case "char_indices": return callAt(nameAt("enumerate", line), [builtAt("toList", [obj], line)], line);
+            case "starts_with": return callAt(member(obj, "startsWith", line), args, line);
+            case "ends_with": return callAt(member(obj, "endsWith", line), args, line);
+            case "trim_start": case "trim_end": return callAt(member(obj, "trim", line), [], line);
+            case "is_alphabetic": case "is_ascii_alphabetic": return callAt("Character.isLetter", [obj], line);
+            case "is_numeric": case "is_ascii_digit": case "is_digit": return callAt("Character.isDigit", [obj], line);
+            case "is_alphanumeric": case "is_ascii_alphanumeric": return callAt("Character.isLetterOrDigit", [obj], line);
+            case "is_uppercase": case "is_ascii_uppercase": return callAt("Character.isUpperCase", [obj], line);
+            case "is_lowercase": case "is_ascii_lowercase": return callAt("Character.isLowerCase", [obj], line);
+            case "is_whitespace": case "is_ascii_whitespace": return callAt("Character.isWhitespace", [obj], line);
+            case "to_digit": return builtAt("int", [obj], line);
+            case "abs": if (!args.length) { return callAt("Math.abs", [obj], line); } return;
+            case "pow": case "powi": case "powf": return callAt("Math.pow", [obj, args[0]], line);
+            case "sqrt": case "floor": case "ceil": case "round": case "exp": case "ln": case "log10": case "signum": case "trunc":
+              if (!args.length) { return callAt("Math." + (m === "ln" ? "log" : m === "signum" ? "signum" : m), [obj], line); }
+              return;
+            case "remove":
+              return callAt(member(obj, "remove", line), args, line);
+            case "insert":
+              if (args.length === 2) { return { k: "call", fn: member(obj, "insert", line), args: args, line: line, rsInsert: true }; }
+              if (args.length === 1) { return callAt(member(obj, "add", line), args, line); }
+              return;
+            case "get":
+              if (args.length === 1) { return callAt(member(obj, "get", line), args, line); }
+              return;
+            case "parse": {
+              var pk = x.fn.turbo ? kindOfType(x.fn.turbo) : x.fn.parseAs || "int";
+              return builtAt(pk === "real" ? "real" : "int", [obj], line);
+            }
+            case "retain": return undefined;
+            case "swap": return undefined;
+          }
+        }
+        function statement(x) {
+          var e = stripParens(x.e), line = x.line;
+          if (!e) { return; }
+          if (e.k === "null" && e.rsDrop) { return []; }
+          // io::stdin().read_line(&mut s).expect("..."): s is the line typed
+          var c = e;
+          while (c.k === "call" && c.fn.k === "member" && /^(expect|unwrap|ok)$/.test(c.fn.name)) { c = stripParens(c.fn.obj); }
+          if (c.k === "call" && c.fn.k === "member" && c.fn.name === "read_line" && c.args.length === 1) {
+            return setAt(stripParens(c.args[0]), callAt("stdin.nextLine", [], line), line);
+          }
+          if (c.k === "call" && c.fn.k === "member" && c.fn.name === "flush") { return []; }
+          if (e.k === "call" && e.fn.k === "member" && e.fn.name === "clear" && !e.args.length && !mine.clear) { return; }
+          // v.retain(|x| ...): only those kept
+          if (e.k === "call" && e.fn.k === "member" && e.fn.name === "retain" && lam(e.args[0])) {
+            return setAt(e.fn.obj, callAt(member(copyOf(e.fn.obj), "filter", line), [e.args[0]], line), line);
+          }
+          if (e.k === "call" && e.fn.k === "member" && e.fn.name === "swap" && e.args.length === 2 && !mine.swap) {
+            var t0 = freshName("temp"), o = e.fn.obj;
+            return [{ k: "decl", type: null, typeInfo: null, dims: 0, konst: false, line: line,
+                      names: [{ name: t0, value: { k: "index", obj: o, at: e.args[0], line: line }, line: line }] },
+                    setAt({ k: "index", obj: copyOf(o), at: copyOf(e.args[0]), line: line }, { k: "index", obj: copyOf(o), at: e.args[1], line: line }, line),
+                    setAt({ k: "index", obj: copyOf(o), at: copyOf(e.args[1]), line: line }, nameAt(t0, line), line)];
+          }
+        }
+        refitBodies(got, function (part) {
+          return rewriteTree(part, function (x) {
+            if (x.k === "expr") { return statement(x); }
+            if (x.k === "call") { return call(x); }
+            if (x.k === "member") {
+              var path = pathOf(x) || "";
+              if (/(^|\.)(PI)$/.test(path) && /f64|f32|consts/.test(path)) { return pathAt("Math.PI", x.line); }
+              if (/^(i32|i64|u32|u64|usize|isize)\.MAX$/.test(path)) { return pathAt("Integer.MAX_VALUE", x.line); }
+              if (/^(i32|i64|isize)\.MIN$/.test(path)) { return pathAt("Integer.MIN_VALUE", x.line); }
+              if (/^(f64|f32)\.(MAX|INFINITY)$/.test(path)) { return pathAt("Double.MAX_VALUE", x.line); }
+              // Shape::Empty (a kind carrying nothing): made
+              if (variants[x.name] && !variants[x.name].fields.length && stripParens(x.obj).k === "name") { return callAt(nameAt(x.name, x.line), [], x.line); }
+            }
+            if (x.k === "match") { x.cases.forEach(function (c) { c.pat = rsPat(c.pat); }); }
+          });
+        });
+        // Some(x), Ok(x), Err(e), Color::Red, Shape::Circle(r): what each asks of the value
+        function rsPat(p) {
+          if (!p) { return p; }
+          if (p.p === "or") { return { p: "or", alts: p.alts.map(rsPat) }; }
+          if (p.p === "as") { return Object.assign({}, p, { pat: rsPat(p.pat) }); }
+          if (p.p === "seq") { return Object.assign({}, p, { items: p.items.map(rsPat) }); }
+          if (p.p === "rsvariant") {
+            if (plainEnums[p.name]) { return { p: "lit", e: nameAt(p.name, 0) }; }
+            if (variants[p.name]) { return { p: "type", name: p.name }; }
+            return { p: "cap", name: p.name };
+          }
+          if (p.p === "cls") {
+            if (p.name === "Some" && p.args.length === 1) { return { p: "some", pat: rsPat(p.args[0]) }; }
+            if (p.name === "Ok" && p.args.length === 1) { return { p: "okv", pat: rsPat(p.args[0]) }; }
+            if (p.name === "Err" && p.args.length === 1) { anyErr = true; return { p: "errv", pat: rsPat(p.args[0]) }; }
+            var v = variants[p.name];
+            if (v) {
+              return { p: "cls", name: p.name, kws: p.kws.map(function (kw) { return { name: kw.name, pat: rsPat(kw.pat) }; }),
+                       args: [], byField: p.args.map(function (a, i) { return { name: (v.fields[i] || {}).name || "item" + i, pat: rsPat(a) }; }) };
+            }
+          }
+          return p;
+        }
+        // Err(why): a record of its own, holding why
+        if (anyErr && !(got.types || []).some(function (c) { return c.name === "Err"; })) {
+          got.types.push({ k: "class", name: "Err", kind: "struct", bases: [], ifaces: [], fields: [{ name: "item0", value: null, statik: false, line: 0 }],
+                           methods: [], ctors: [], values: [], inits: [], line: 0, lead: [] });
+          classes.push("Err");
+        }
+      }
+
       // ---- the top of a file ------------------------------------------
       // What a program is made of before any statement: functions, the
       // names they share, the classes, and the statements a script does.
@@ -3041,11 +7981,15 @@
           var t = peek();
           var lead = notesBefore(t.line);
           if (isOp(";")) { next(); return; }
+          if (js && isName("import") && !isOp("(", 1)) { skipImport(); return; }
           if (isName("import") || isName("package") ||
               (isName("using") && !isOp("(", 1) && !(cs && (isName("var", 1) || declAheadAt(pos + 1))))) {
             skipToSemi();
             return;
           }
+          if (tsSkipsHere()) { return; }
+          if (tsEnumAhead()) { out.main.push.apply(out.main, lead); out.main.push(tsEnum()); return; }
+          if (ts && isName("export") && (isOp("{", 1) || isOp("*", 1))) { skipImport(); return; }
           if (isName("namespace")) {
             next();
             while (!isOp("{") && !isOp(";")) { next(); }
@@ -3061,6 +8005,7 @@
             return;
           }
           if (isName("template")) { next(); skipAngles(); }
+          if (typedefAhead()) { out.types.push(typedefStruct(lead)); return; }
           if (isName("typedef") || isName("static_assert")) { skipToSemi(); return; }
           // the page's own C++ Value -- struct Value { enum Kind { ... } ... } --
           // is not the program's, only the way C++ had to hold more than one kind
@@ -3072,13 +8017,16 @@
           var save = pos;
           var mods = modifiers();
           if ((isName("class") || isName("struct") || isName("interface") || isName("enum") ||
-               isName("record")) && (peek(1).t === "name" || isName("class", 1) || isName("struct", 1))) {
+               isName("record")) && (peek(1).t === "name" || isName("class", 1) || isName("struct", 1)) &&
+              !(cpp && peek(1).t === "name" && !/^(class|struct)$/.test(peek(1).v) &&
+                !/^(final|sealed)$/.test(peek(2).v) && (peek(2).t === "name" || isOp("*", 2)))) {
             out.types.push(typeDecl(mods, lead));
             return;
           }
           if (js && (isName("function") || (isName("async") && isName("function", 1)))) {
             if (isName("async")) { next(); }
-            out.funcs.push(Object.assign(jsFunction(), { lead: lead }));
+            var jf = jsFunction();
+            if (!jf.signature) { out.funcs.push(Object.assign(jf, { lead: lead })); }
             return;
           }
           if (js && !declAhead()) {
@@ -3165,10 +8113,11 @@
             var params = cParams();
             skipQualifiers();
             if (accept(";")) { return; }         // a prototype: the real one is further on
-            var body = helpersOf(lang).test(nm.v) ? skipBraces() : cBraces();
+            var paged = helperHere(nm.v);
+            var body = paged ? skipBraces() : cBraces();
             var fn = { k: "func", name: nm.v, params: params, rtype: rtype.name, rtypeInfo: rtype,
                        rdims: rtype.dims, body: body, line: nm.line, lead: lead,
-                       statik: !!mods.static };
+                       statik: !!mods.static, pageHelper: paged };
             if (within) {
               out.outside.push({ owner: within, method: fn });
               return;
@@ -3242,6 +8191,164 @@
         });
         return out;
       }
+      // ---- a tree gone over, bottom first ------------------------------
+      // `fn` is asked of every node once what is inside it has been gone
+      // over, and may hand back something else in its place; a statement
+      // may become several, or none (an array).
+      function rewriteTree(x, fn) {
+        if (!x || typeof x !== "object") { return x; }
+        if (Array.isArray(x)) {
+          var list = [];
+          x.forEach(function (one) {
+            var got = rewriteTree(one, fn);
+            if (Array.isArray(got) && one && typeof one === "object" && !Array.isArray(one)) { list.push.apply(list, got); }
+            else { list.push(got); }
+          });
+          return list;
+        }
+        for (var key in x) {
+          if (key !== "line" && x[key] && typeof x[key] === "object") { x[key] = rewriteTree(x[key], fn); }
+        }
+        var swapped = fn(x);
+        return swapped === undefined ? x : swapped;
+      }
+      // every list of statements a program read has, each put back as `fix` hands it
+      function refitBodies(got, fix) {
+        got.main = fix(got.main || []);
+        got.globals = fix(got.globals || []);
+        (got.funcs || []).forEach(function (fn) { fn.body = fix(fn.body || []); });
+        (got.types || []).forEach(function (c) {
+          (c.methods || []).forEach(function (m) { m.body = fix(m.body || []); });
+          (c.ctors || []).forEach(function (k0) { k0.body = fix(k0.body || []); });
+          (c.inits || []).forEach(function (b) { b.body = fix(b.body || []); });
+          (c.fields || []).forEach(function (f) { if (f.value) { f.value = fix([f.value])[0]; } });
+        });
+      }
+
+      // ---- C: what its library does, said the way C++ says it ---------
+      // strcpy(a, b) is a = b, scanf("%d %d", &a, &b) is cin >> a >> b,
+      // sizeof(a) / sizeof(a[0]) is how many a holds; and an int *p
+      // handed over to have *p set is the name itself, handed by reference.
+      function cLibrary(got) {
+        function nm(e) { e = stripParens(e); while (e && (e.k === "addr" || e.k === "deref")) { e = stripParens(e.e); } return e; }
+        function call(fn, args, line) { return { k: "call", fn: fn, args: args, line: line }; }
+        function member(obj, name, line) { return { k: "member", obj: obj, name: name, line: line }; }
+        function sizeOfWhole(e) {
+          e = stripParens(e);
+          return e && e.k === "un" && e.op === "sizeof " ? stripParens(e.a) : null;
+        }
+        // the pointers each function sets through: its by-reference names
+        (got.funcs || []).forEach(function (fn) {
+          fn.params.forEach(function (p) {
+            if (!p.typeInfo || !p.typeInfo.ptrDims || p.dims !== p.typeInfo.ptrDims) { return; }
+            var through = false, indexed = false;
+            eachNode(fn.body, function (x) {
+              if (x.k === "deref" && stripParens(x.e).k === "name" && stripParens(x.e).v === p.name) { through = true; }
+              if (x.k === "index" && stripParens(x.obj).k === "name" && stripParens(x.obj).v === p.name) { indexed = true; }
+            });
+            if (!through || indexed) { return; }
+            p.ref = true;
+            p.dims = 0;
+            p.typeInfo = Object.assign({}, p.typeInfo, { dims: 0, ptrDims: 0 });
+            fn.body = rewriteTree(fn.body, function (x) {
+              if (x.k === "deref" && stripParens(x.e).k === "name" && stripParens(x.e).v === p.name) { return x.e; }
+            });
+          });
+        });
+        // the names that hold words, which C ends with a '\0' that is not there here
+        var wordy = Object.create(null);
+        function wordsIn(list) {
+          eachNode(list, function (x) {
+            if (x.k === "decl" && x.type === "string") { x.names.forEach(function (one) { wordy[one.name] = true; }); }
+          });
+        }
+        wordsIn([got.main, got.globals]);
+        (got.funcs || []).forEach(function (fn) {
+          fn.params.forEach(function (p) { if (p.type === "string" && !p.dims) { wordy[p.name] = true; } });
+          wordsIn(fn.body);
+        });
+        // s[i] != '\0', s[i], *p: still in the words -- i < strlen(s)
+        function stillIn(cond) {
+          var c = stripParens(cond);
+          var at = c && c.k === "bin" && c.op === "!=" && (stripParens(c.b).k === "str" && stripParens(c.b).v === "" ||
+                   stripParens(c.b).k === "num" && stripParens(c.b).v === "0") ? stripParens(c.a) : c;
+          if (at && at.k === "index" && stripParens(at.obj).k === "name" && wordy[stripParens(at.obj).v]) {
+            return { k: "bin", op: "<", a: at.at, b: call(member(at.obj, "length", c.line), [], c.line), line: c.line };
+          }
+          return cond;
+        }
+        refitBodies(got, function (part) {
+          return rewriteTree(part, function (x) {
+            var line = x.line;
+            if ((x.k === "for" || x.k === "while" || x.k === "dowhile") && x.cond) { x.cond = stillIn(x.cond); }
+            // sizeof(a) / sizeof(a[0]), sizeof a / sizeof *a, sizeof(a) / sizeof(int)
+            if (x.k === "bin" && x.op === "/" && sizeOfWhole(x.a) && sizeOfWhole(x.b)) {
+              var whole = sizeOfWhole(x.a), one = sizeOfWhole(x.b);
+              if (whole.k === "name" && (one.k === "index" || one.k === "deref" || one.k === "name")) {
+                return call(member(whole, "size", line), [], line);
+              }
+            }
+            if (x.k === "call" && x.fn.k === "name") {
+              var f = x.fn.v, a = x.args;
+              if (f === "strlen" && a.length === 1) { return call(member(a[0], "length", line), [], line); }
+              if (f === "atoi" || f === "atol") { return call({ k: "name", v: "stoi", line: line }, a, line); }
+              if (f === "atof") { return call({ k: "name", v: "stod", line: line }, a, line); }
+              if ((f === "malloc" || f === "calloc") && a.length) {
+                // malloc(n * sizeof(int)), calloc(n, sizeof(int)): n of them
+                var many = f === "calloc" ? a[0] : null, of = null;
+                if (f === "malloc") {
+                  var m = stripParens(a[0]);
+                  if (m.k === "bin" && m.op === "*") {
+                    if (sizeOfWhole(m.b)) { many = m.a; of = sizeOfWhole(m.b); }
+                    else if (sizeOfWhole(m.a)) { many = m.b; of = sizeOfWhole(m.a); }
+                  }
+                } else { of = sizeOfWhole(a[1]); }
+                if (many) {
+                  var elem = of && of.k === "name" && KIND_OF_TYPE[of.v.toLowerCase()] ? { name: of.v, dims: 0, args: [] } : { name: "int", dims: 0, args: [] };
+                  return { k: "newarr", elem: elem, dims: [many], init: null, line: line };
+                }
+              }
+            }
+            if (x.k === "expr" && stripParens(x.e).k === "call" && stripParens(x.e).fn.k === "name") {
+              var c = stripParens(x.e), g = c.fn.v, args = c.args;
+              var set = function (target, value) {
+                return { k: "expr", line: line, e: { k: "assignx", op: "=", target: target, value: value, line: line } };
+              };
+              if (g === "strcpy" && args.length === 2) { return set(nm(args[0]), args[1]); }
+              if (g === "strncpy" && args.length === 3) {
+                return set(nm(args[0]), call(member(args[1], "substr", line), [{ k: "num", v: "0", line: line }, args[2]], line));
+              }
+              if ((g === "strcat" || g === "strncat") && args.length >= 2) {
+                return { k: "expr", line: line, e: { k: "assignx", op: "+=", target: nm(args[0]), value: args[1], line: line } };
+              }
+              if ((g === "sprintf" || g === "snprintf") && args.length >= 2) {
+                var rest = g === "snprintf" ? args.slice(2) : args.slice(1);
+                return set(nm(args[0]), call({ k: "name", v: "String.format", line: line }, rest, line));
+              }
+              // scanf("%d %d", &a, &b): as many words as it names, the way cin reads them
+              if (g === "scanf" && args.length >= 2) {
+                var chain = { k: "name", v: "cin", line: line };
+                args.slice(1).forEach(function (one) { chain = { k: "bin", op: ">>", a: chain, b: nm(one), line: line }; });
+                return { k: "expr", e: chain, line: line };
+              }
+              // gets(s), fgets(s, n, stdin): the whole line
+              if ((g === "gets" || g === "fgets") && args.length >= 1) {
+                return { k: "expr", line: line, e: call({ k: "name", v: "getline", line: line }, [{ k: "name", v: "cin", line: line }, nm(args[0])], line) };
+              }
+              if (g === "putchar" && args.length === 1) {
+                return { k: "expr", line: line, e: call({ k: "name", v: "printf", line: line }, [{ k: "str", v: "%c", line: line }, args[0]], line) };
+              }
+              if (/^(free|fflush|memset|getchar|setbuf|setvbuf)$/.test(g)) { return []; }
+            }
+            // s[strcspn(s, "\n")] = 0: the line break fgets kept, taken off -- getline keeps none
+            if (x.k === "expr" && stripParens(x.e).k === "assignx" && stripParens(stripParens(x.e).target).k === "index") {
+              var at = stripParens(stripParens(stripParens(x.e).target).at);
+              if (at.k === "call" && at.fn.k === "name" && at.fn.v === "strcspn") { return []; }
+              if (at.k === "bin" && at.op === "-" && stripParens(at.a).k === "call" && /strlen|length/.test(pathOf(stripParens(at.a).fn) || "")) { return []; }
+            }
+          });
+        });
+      }
       function topPy() {
         var out = { funcs: [], globals: [], main: [], types: [] };
         // what the file says about itself, above everything in it
@@ -3264,7 +8371,8 @@
 
       return {
         program: function () {
-          var got = py ? topPy() : topC();
+          var got = py ? topPy() : kt ? topKotlin() : sw ? topSwift() : go ? topGo() : rs ? topRust() : topC();
+          if (cc) { cLibrary(got); }
           got.imports = imports;
           got.classes = classes;
           got.defines = lexed.defines || [];
@@ -3346,6 +8454,11 @@
     // The names an error is caught under -- except ValueError as e, catch (e)
     // -- which hold the words it was thrown with.
     var CAUGHT = Object.create(null);
+    // and the kinds each of those names catches: catch (NotFound e)
+    var CAUGHT_AS = Object.create(null);
+    function caughtAs(name, type) {
+      (CAUGHT_AS[name] = CAUGHT_AS[name] || []).push(type ? String(type).replace(/^.*[.:]/, "") : "");
+    }
     function mergeKinds(a, b) {
       if (!a) { return b; }
       if (!b || a === b) { return a; }
@@ -3447,6 +8560,11 @@
           err.file = at.file;
           err.line = at.line;
         }
+        // and the lines a fix would go in at, in that file too
+        (err.fix ? err.fix.edits : []).forEach(function (one) {
+          if (one.line) { one.line = where(one.line).line; }
+          if (one.like) { one.like = where(one.like).line; }
+        });
         throw err;
       } finally {
         knownRecords = Object.create(null);
@@ -3454,13 +8572,27 @@
     }
 
     function translateFiles(files, spans, where, lang) {
+      var dialect = lang;
+      var kt = lang === "kotlin", sw = lang === "swift", go = lang === "go", rs = lang === "rust";
+      var ts = lang === "typescript", cc = lang === "c";
+      lang = baseOf(lang);
       var py = lang === "python", js = lang === "javascript";
       var cpp = lang === "cpp", cs = lang === "csharp", java = lang === "java";
       var some = files.map(function (one, k) { return { one: one, k: k }; })
                       .filter(function (x) { return String(x.one.text || "").trim(); });
       if (!some.length) { throw oops("cm_empty", 0); }
       var tops = some.map(function (x) {
-        var read = parserFor(lexCode(x.one.text, lang, spans[x.k].from - 1), lang).program();
+        var lexed = null, read;
+        try {
+          lexed = lexCode(x.one.text, dialect, spans[x.k].from - 1);
+          read = parserFor(lexed, dialect).program();
+        } catch (err) {
+          // stuck reading this file, and how much of it was left unread: a
+          // fix that leaves less has helped (32-code-side.js)
+          err.reading = true;
+          if (lexed && err.at !== undefined) { err.left = lexed.src.length - err.at; }
+          throw err;
+        }
         read.name = String(x.one.name || "").replace(/^.*[\\/]/, "").replace(/\.\w+$/, "");
         return read;
       });
@@ -3580,7 +8712,7 @@
       // into C++ and JavaScript to ask for things: none of them is part of
       // the program being described, only of the way the language had to
       // go about it.
-      var HELPERS = helpersOf(lang);
+      var HELPERS = helpersOf(dialect);
       var pageHelpers = Object.create(null);     // the ones found, by name
       var devices = Object.create(null);
       function deviceOf(value) {
@@ -3601,6 +8733,8 @@
           }
           if (value.fn.k === "call" && pathOf(value.fn.fn) === "require") { return "keys"; }
           if (/^readline\.createInterface$/.test(p)) { return "keys"; }
+          // Kotlin's Scanner(System.`in`): made with no new
+          if (/^(java\.util\.)?(Scanner|BufferedReader|InputStreamReader)$/.test(p)) { return "keys"; }
           if (/^(random\.Random|Random|random\.SystemRandom)$/.test(p)) { return "dice"; }
         }
         return null;
@@ -3619,7 +8753,9 @@
         });
       }
       top.globals = dropDevices(top.globals);
-      top.funcs = top.funcs.filter(function (fn) { return !HELPERS.test(fn.name); });
+      // the page's own helpers go; a function of the program's that only
+      // shares a name with one is the program's
+      top.funcs = top.funcs.filter(function (fn) { return !(HELPERS.test(fn.name) && fn.pageHelper !== false); });
       // #define LIMIT 10: a Constant, where what it stands for reads as one
       top.defines.forEach(function (d) {
         var e = null;
@@ -3955,6 +9091,14 @@
                         args: [{ k: "str", v: v.name, line: v.line }, num(n)].concat(v.args || []) };
               n++;
             }
+            // Swift's enum Planet: Int { case mercury = 1, venus }: numbered on;
+            // enum Suit: String { case hearts = "H" }: said by what it is given
+            else if (c.raw === "text") { value = v.value || { k: "str", v: v.name, line: v.line }; }
+            else if (c.raw === "int") {
+              if (v.value && stripParens(v.value).k === "num") { n = parseInt(stripParens(v.value).v, 10); }
+              value = { k: "num", v: String(n), line: v.line };
+              n++;
+            }
             else if (py) { value = v.value; }
             else if (java || js || cs) { value = { k: "str", v: v.name, line: v.line }; }
             else {
@@ -3969,6 +9113,9 @@
         }
         c.fields.forEach(function (f) {
           if (!f.statik) { return; }
+          // static Scanner input = new Scanner(System.in): the keyboard, as a local one is
+          var dev = deviceOf(f.value);
+          if (dev) { devices[f.name] = dev; return; }
           top.globals.push({ k: "decl", type: f.type ? f.type.name || f.type : null, typeInfo: f.type,
                              konst: !!f.konst, line: f.line, lead: f.lead || [],
                              names: [{ name: f.name, value: f.value, line: f.line, sizes: f.sizes }] });
@@ -3983,7 +9130,7 @@
       });
       // The page's own helpers, where this is code the page wrote: left
       // out, and each call to one read as the chart's word for it.
-      var TELLS = PAGE_HELPERS[lang] || {};
+      var TELLS = PAGE_HELPERS[dialect] || {};
       top.funcs = top.funcs.filter(function (fn) {
         var tell = Object.prototype.hasOwnProperty.call(TELLS, fn.name) ? TELLS[fn.name]
                  : cs && /^(BindV?\d+_\d+|Bind_\w+)$/.test(fn.name) ? /=>|lambda|"fn"/ : null;
@@ -4040,11 +9187,19 @@
           (METHODS[key] = METHODS[key] || { list: [] }).list.push({ cls: c, fn: m });
         });
       });
+      // What a record says it is -- toString, __str__, ToString -- is asked
+      // of things whose kind is not known where they are shown (an item of
+      // a list filled somewhere else, an error caught), so it always goes
+      // through a function that asks which kind of record it has, and
+      // shows anything else the way it would be shown anyway.
+      var describeKey = ["__str__", "toString", "ToString", "__repr__"].filter(function (k) {
+        return METHODS[k] && !METHODS[k].list.some(function (x) { return x.fn.params.length; });
+      })[0] || null;
       Object.keys(METHODS).forEach(function (key) {
         var one = METHODS[key], first = one.list[0].fn;
         var base = first.setter || first.kind === "set" ? "set" + first.name.charAt(0).toUpperCase() + first.name.slice(1)
                                         : plainName(first.name);
-        if (one.list.length === 1 && free(base)) {
+        if (one.list.length === 1 && free(base) && key !== describeKey) {
           first.name = base;
           taken[low(base)] = true;
           one.single = base;
@@ -4056,11 +9211,12 @@
           x.fn.name = nm;
           taken[low(nm)] = true;
         });
-        if (one.list.length > 1) {
+        if (one.list.length > 1 || key === describeKey) {
           var disp = free(base) ? base : "call_" + base;
           while (!free(disp)) { disp += "_"; }
           taken[low(disp)] = true;
           one.dispatch = disp;
+          if (key === describeKey) { one.anyKind = true; }
         } else {
           one.single = one.list[0].fn.name;
         }
@@ -4163,12 +9319,15 @@
           // an error with no constructor of its own takes what went wrong
           var bareError = !ctor && c.isError && !(c.parent && CLS[c.parent]);
           if (bareError) { params = [{ name: "message", line: line, dflt: { k: "str", v: "" } }]; }
-          var aggregate = cpp && !ctor && !c.parent;
+          // (Swift's, Go's and Rust's structs are made from their fields, named)
+          var aggregate = (cpp || ((sw || go || rs) && c.kind === "struct")) && !ctor && !c.parent;
           if (aggregate) {
             params = c.fields.filter(function (f) { return !f.statik; }).map(function (f) {
               var start = f.value || (f.sizes && f.sizes.length && f.sizes[0]
                             ? { k: "newarr", elem: f.type, dims: f.sizes, line: f.line } : blankFor(f.type, f.line));
-              return { name: f.name, type: f.type ? f.type.name : null, typeInfo: f.type, line: f.line, dflt: start };
+              var many = (f.sizes || []).length + (f.dims && !(f.type && f.type.dims) ? 0 : 0);
+              var ti = f.type && many ? Object.assign({}, f.type, { dims: (f.type.dims || 0) + many }) : f.type;
+              return { name: f.name, type: ti ? ti.name : null, typeInfo: ti, dims: ti ? ti.dims : 0, line: f.line, dflt: start };
             });
           }
           var suffix = i ? String(params.length === (ctors[0] ? ctors[0].params.length : 0) ? i + 1 : params.length) : "";
@@ -4272,11 +9431,26 @@
                        body: [gives ? { k: "return", value: call, line: widest.line }
                                     : { k: "expr", e: call, line: widest.line }], line: widest.line });
         });
-        madeFns.push({ k: "func", name: one.dispatch, line: widest.line, lead: [], params: params,
-                       rtype: gives ? null : "void", dispatcher: true,
-                       body: [{ k: "switch", noFall: true, line: widest.line, cases: cases,
-                                subject: { k: "call", fn: nameNode("classOf"), builtin: true,
-                                           args: [nameNode(selfWord)], line: widest.line } }] });
+        // what a record says it is, asked of something that is not one of
+        // the program's records: what it would be shown as anyway
+        if (one.anyKind) {
+          cases.push({ labels: [], isDefault: true, line: widest.line,
+                       body: [{ k: "return", line: widest.line,
+                                value: builtinCall("toString", [nameNode(selfWord)], widest.line) }] });
+        }
+        // what it gives: what every one of them gives, where they agree --
+        // and words, always, for what a record says it is
+        var rtypes = one.list.map(function (x) { return x.fn.rtype ? String(x.fn.rtype) : ""; });
+        var agreed = rtypes[0] && rtypes.every(function (r) { return r === rtypes[0]; }) ? rtypes[0] : null;
+        var chooser = { k: "func", name: one.dispatch, line: widest.line, lead: [], params: params,
+                        rtype: gives ? (one.anyKind ? "string" : agreed) : "void", dispatcher: true,
+                        body: [{ k: "switch", noFall: true, line: widest.line, cases: cases,
+                                 subject: { k: "call", fn: nameNode("classOf"), builtin: true,
+                                            args: [nameNode(selfWord)], line: widest.line } }] };
+        // one class saying what it is: asked of it directly, and the chooser
+        // made only if something of no kind known is shown (see "maydescribe")
+        if (one.anyKind && one.list.length === 1) { one.lazyFn = chooser; return; }
+        madeFns.push(chooser);
       });
       function renamed(list, from, to) {
         return copyOf(list).map(function (st) {
@@ -4317,20 +9491,29 @@
         var locals = {};
         params.forEach(function (p) { locals[p.name] = true; });
         declaredIn(body, locals);
-        var fields = allFields(c), methods = {};
+        var fields = allFields(c), methods = {}, getters = {};
         // an abstract one as well: area() in Shape is whichever area this
         // is, which only the classes made from Shape say
         ancestry(c).forEach(function (a) {
-          a.methods.forEach(function (m) { if (!m.statik) { methods[m.origName || m.name] = true; } });
+          a.methods.forEach(function (m) {
+            if (m.statik) { return; }
+            methods[m.origName || m.name] = true;
+            if (m.getter || m.kind === "get") { getters[m.origName || m.name] = true; }
+          });
         });
         Object.keys(CLS).forEach(function (name) {
           if (ancestry(CLS[name]).indexOf(c) < 0) { return; }
-          instanceMethods(CLS[name]).forEach(function (m) { methods[m.origName || m.name] = true; });
+          instanceMethods(CLS[name]).forEach(function (m) {
+            methods[m.origName || m.name] = true;
+            if (m.getter || m.kind === "get") { getters[m.origName || m.name] = true; }
+          });
         });
         function fix(x, parentKey) {
           if (!x || typeof x !== "object") { return x; }
           if (Array.isArray(x)) { return x.map(function (y) { return fix(y); }); }
-          if (x.k === "name" && !x.type && fields[x.v] && !locals[x.v] && !x.via) {
+          // a field -- or a property worked out by its getter, Name => ...,
+          // which reading this.Name calls
+          if (x.k === "name" && !x.type && (fields[x.v] || getters[x.v]) && !locals[x.v] && !x.via) {
             return { k: "member", obj: nameNode("this", x.line), name: x.v, line: x.line };
           }
           // getClass() inside a method is this one's class
@@ -4783,8 +9966,10 @@
         var own = fn.params.filter(function (p) { return !p.captured; });
         var most = own.some(function (p) { return p.rest; }) ? 1e9 : own.length;
         // handed the wrong number of things, it is handed them as they were,
-        // for the runner to say so
-        if (!named && (pos.length > most || pos.length < own.filter(function (p) {
+        // for the runner to say so -- except in JavaScript, where what is not
+        // handed over is undefined, and what is handed over beyond them is lost
+        if (js && pos.length > most) { pos = pos.slice(0, most); }
+        if (!named && !js && (pos.length > most || pos.length < own.filter(function (p) {
               return !p.dflt && !p.rest; }).length)) {
           return fn.params.filter(function (p) { return p.captured; }).map(function (p) {
             return kws[p.name] || nameNode(p.name);
@@ -5490,7 +10675,8 @@
                        return { name: p.name, line: fn.line, dflt: p.dflt || null };
                      }), body: fn.body, line: fn.line, lead: [], lambda: true };
         made.params.forEach(function (p) {
-          if (fn.params.filter(function (q) { return q.name === p.name; })[0].pattern) { p.pattern = true; }
+          var q = fn.params.filter(function (q) { return q.name === p.name; })[0];
+          if (q.pattern) { p.pattern = q.pattern; }
         });
         // what it uses of the chart it was made in: handed to it as well
         var own = localsOf({ params: fn.params, body: fn.body }).set, used = namesUsedIn(fn.body);
@@ -5520,16 +10706,32 @@
       // when x is something, and y when it is not: the question it asks,
       // written as one.  Two yes-or-noes stay the OR they are.
       function valueOrs(e, ch) {
-        if (!(py || js || cs) || !e || typeof e !== "object") { return e; }
+        var typed = cs || kt || sw || rs || go;
+        if (!(py || js || typed) || !e || typeof e !== "object") { return e; }
         if (Array.isArray(e)) { return e.map(function (x) { return valueOrs(x, ch); }); }
         if (e.k === "fn" || e.k === "comp") { return e; }
         // C#'s || and && are only ever yes-or-no; its ?? is the one that picks
-        if (cs && e.k === "bin" && e.op === "??") {
+        // (and Kotlin's ?:, Swift's ??)
+        if (typed && e.k === "bin" && e.op === "??") {
           var a0 = valueOrs(e.a, ch), b0 = valueOrs(e.b, ch);
           if (stripParens(a0).k === "null") { return b0; }
+          // counts[w] ?: 0: what is under w, or 0
+          var ia = stripParens(a0);
+          if (ia.k === "index" && kindOf(ia.obj, ch) === "map") { return builtinCall("get", [ia.obj, ia.at, b0], e.line); }
+          // readLine() ?: "": what is typed is always something
+          if (inputOf(ia)) { return a0; }
+          // name?.length ?: -1: the default where name is nothing
+          var safeOf = null;
+          for (var sx = ia; sx && !safeOf && (sx.k === "member" || sx.k === "call" || sx.k === "index"); ) {
+            if (sx.k === "member" && sx.safe) { safeOf = sx.obj; }
+            sx = stripParens(sx.k === "call" ? sx.fn : sx.obj);
+          }
+          if (safeOf) {
+            return { k: "cond", test: { k: "bin", op: "!=", a: copyOf(safeOf), b: { k: "null" } }, a: a0, b: b0, line: e.line };
+          }
           return { k: "cond", test: { k: "bin", op: "!=", a: a0, b: { k: "null" } }, a: copyOf(a0), b: b0, line: e.line };
         }
-        if (cs && e.k === "bin") {
+        if (typed && e.k === "bin") {
           return Object.assign({}, e, { a: valueOrs(e.a, ch), b: valueOrs(e.b, ch) });
         }
         if (e.k === "bin" && (e.op === "||" || e.op === "??") && stripParens(e.a).k === "call") {
@@ -5538,6 +10740,12 @@
           if (gc.fn.k === "member" && gc.fn.name === "get" && gc.args.length === 1) {
             return builtinCall("get", [valueOrs(gc.fn.obj, ch), valueOrs(gc.args[0], ch), valueOrs(e.b, ch)], e.line);
           }
+        }
+        // cart.bag ?? 0, where cart is a table: what is under "bag", or 0
+        if (e.k === "bin" && (e.op === "||" || e.op === "??") && js && stripParens(e.a).k === "member" &&
+            kindOf(stripParens(e.a).obj, ch) === "map") {
+          var mx = stripParens(e.a);
+          return builtinCall("get", [valueOrs(mx.obj, ch), { k: "str", v: mx.name, line: e.line }, valueOrs(e.b, ch)], e.line);
         }
         if (e.k === "bin" && (e.op === "||" || e.op === "??") && stripParens(e.a).k === "index") {
           var ix = stripParens(e.a), ik = kindOf(ix.obj, ch);
@@ -6593,6 +11801,28 @@
             });
             return mt;
           }
+          // Kotlin's in 1..9, Rust's 1..=9, Swift's 1...9: between the two
+          case "range": {
+            var rt = and({ k: "bin", op: ">=", a: e, b: p.lo }, p.hi ? { k: "bin", op: p.incl ? "<=" : "<", a: copyOf(e), b: p.hi } : null);
+            return p.neg ? { k: "un", op: "!", a: { k: "paren", e: rt } } : rt;
+          }
+          // in xs: one of them
+          case "in": {
+            var it0 = builtinCall("contains", [p.e, e]);
+            return p.neg ? { k: "un", op: "!", a: it0 } : it0;
+          }
+          // is String, is Circle: of that kind
+          case "type": {
+            var tt0 = typeTest(e, p.name, 0);
+            return p.neg ? { k: "un", op: "!", a: { k: "paren", e: tt0 } } : tt0;
+          }
+          // a test of its own (Swift's case let x where x > 5, Go's case x > 0)
+          case "test": return p.e;
+          // Rust's Some(x): something there; Ok(x) / Err(e): went right, went wrong
+          case "some": return and({ k: "bin", op: "!=", a: e, b: { k: "null" } }, patTest(p.pat, e, binds));
+          case "okv": return and({ k: "bin", op: "!=", a: builtinCall("classOf", [e]), b: { k: "str", v: "Err" } }, patTest(p.pat, e, binds));
+          case "errv": return and({ k: "bin", op: "==", a: builtinCall("classOf", [e]), b: { k: "str", v: "Err" } },
+                                  patTest(p.pat, { k: "member", obj: e, name: "item0" }, binds));
           case "cls": {
             var ct = typeTest(e, p.name, 0);
             var cls = CLS[p.name];
@@ -6602,6 +11832,7 @@
               ct = and(ct, patTest(a, { k: "member", obj: e, name: order[i] || "item" + i }, binds));
             });
             p.kws.forEach(function (kw) { ct = and(ct, patTest(kw.pat, { k: "member", obj: e, name: kw.name }, binds)); });
+            (p.byField || []).forEach(function (kw) { ct = and(ct, patTest(kw.pat, { k: "member", obj: e, name: kw.name }, binds)); });
             return ct;
           }
         }
@@ -6623,6 +11854,23 @@
       // and what is under it.
       function lowerForeach(st, ch, out) {
         var line = st.line, target = stripParens(st.target), over = stripParens(st.over);
+        // Go's for i := range xs: its places -- a table's keys; for i, v := range xs: each place and item
+        if (st.goKeys || st.goPairs) {
+          var goK = kindNow(over), isTable = goK === "map";
+          if (st.goKeys && !isTable) {
+            lowerOne({ k: "range", v: target.v, args: [builtinCall("length", [over], line)], body: st.body, line: line, label: st.label }, ch, out);
+            return;
+          }
+          if (st.goPairs && !isTable) {
+            st = Object.assign({}, st, { goPairs: false, over: { k: "call", fn: nameNode("enumerate", line), args: [over], line: line } });
+          } else if (st.goKeys) {
+            st = Object.assign({}, st, { goKeys: false, over: builtinCall("keys", [over], line) });
+          } else {
+            st = Object.assign({}, st, { goKeys: false, goPairs: false });
+          }
+          target = stripParens(st.target);
+          over = stripParens(st.over);
+        }
         // for (box.n of xs): a name of its own for each one, and each one put in box.n
         if (target.k === "member" || target.k === "index") {
           var each0 = fresh(ch, target.name || "item");
@@ -6640,6 +11888,8 @@
         var label = st.label || null, orelse = st.orelse ? lower(st.orelse, ch) : null;
         var fn = over.k === "call" ? bare(pathOf(over.fn) || (over.fn.k === "member" ? "." + over.fn.name : "")) : "";
         var dot = over.k === "call" && over.fn.k === "member" ? over.fn.name : null;
+        // w.items(), where w is one of the program's records: its own method
+        if (dot && METHODS[dot] && recordOf(kindOf(over.fn.obj, ch))) { dot = null; }
         var args = over.k === "call" ? over.args.filter(function (a) { return a.k !== "kw"; }) : [];
         var pair = target.k === "tuple" && target.items.length === 2 && target.items[0] && target.items[1] &&
                    target.items[0].k === "name" && target.items[1].k !== "star";
@@ -6952,7 +12202,7 @@
           var k = kindOfType(ti);
           return isListKind(k) || k === "map" || !!(recordOf(k) && CLS[recordOf(k)]);
         }
-        if (cs) { return !!(CLS[name] && CLS[name].kind === "struct"); }
+        if (cs || sw || go) { return !!(CLS[name] && CLS[name].kind === "struct"); }
         return false;
       }
       // C#'s int[,] grid: how many ways it goes (2), where it is one block
@@ -7008,7 +12258,7 @@
       // v, as the language hands it over: copied where v is a place holding
       // a value -- not something made just now -- going into one
       function valueCopy(v, ch, into) {
-        if (!cpp && !cs) { return v; }
+        if (!cpp && !cs && !sw && !go) { return v; }
         var s = stripParens(v);
         if (!s || !/^(name|member|index|deref)$/.test(s.k) || (s.k === "name" && s.v === "this")) { return v; }
         var from = placeType(s, ch);
@@ -7055,6 +12305,10 @@
       function assign(target, value, ch, out, line, fromDecl, typeInfo) {
         target = stripParens(target);
         if (!target) { return; }
+        // bank[101] = {"Ava", 500}, where bank is a map<int, Account>: an Account
+        if (cpp && !fromDecl && stripParens(value) && stripParens(value).k === "list") {
+          value = bracedAs(value, heldKind(target, ch));
+        }
         if (js && target.k === "member" && target.name === "length" && isListKind(kindOf(target.obj, ch))) {
           var cut = stripParens(value);
           if (cut && cut.k === "num" && cut.v === "0") { out.push({ k: "call", e: builtinCall("clear", [ready(target.obj, ch, out).e], line), line: line }); return; }
@@ -7307,7 +12561,8 @@
       }
       function assignMany(target, value, ch, out, line) {
         var v = stripParens(value);
-        var items = target.items || [];
+        // [, p]: the first one skipped
+        var items = (target.items || []).map(function (t) { return t && t.k === "null" ? null : t; });
         // [a, b = 5] and {x, y = 0}: what each is given when there is nothing there
         var dflts = items.map(function (t) {
           var d = t && stripParens(t);
@@ -7461,7 +12716,7 @@
           if (/^(int|Integer\.parseInt|int\.Parse|Int32\.Parse|Convert\.ToInt32|Convert\.ToInt64|parseInt|stoi|Math\.trunc|long\.Parse|Long\.parseLong|Integer\.valueOf)$/.test(p)) {
             wrap("int"); e = stripParens(e.args[0]); continue;
           }
-          if (/^(float|Double\.parseDouble|double\.Parse|Double\.Parse|Convert\.ToDouble|decimal\.Parse|Convert\.ToDecimal|parseFloat|Number|stod|stof|Float\.parseFloat|float\.Parse|Double\.valueOf)$/.test(p)) {
+          if (/^(float|real|Double\.parseDouble|double\.Parse|Double\.Parse|Convert\.ToDouble|decimal\.Parse|Convert\.ToDecimal|parseFloat|Number|stod|stof|Float\.parseFloat|float\.Parse|Double\.valueOf)$/.test(p)) {
             wrap("real"); e = stripParens(e.args[0]); continue;
           }
           if (/^(bool|Boolean\.parseBoolean|bool\.Parse|Convert\.ToBoolean)$/.test(p)) {
@@ -7473,7 +12728,8 @@
           }
           // and the reading itself
           if (py && p === "input") { seen = true; prompt = e.args[0] || null; break; }
-          if (js && /^(prompt|ask|readlineSync\.question|question)$/.test(p) ||
+          // (a function of the program's own called ask or question is its own)
+          if (js && /^(prompt|ask|readlineSync\.question|question)$/.test(p) && !(e.fn.k === "name" && userFn(p)) ||
               (js && dot === "question" && devices[obj])) {
             seen = true; prompt = e.args[0] || null; break;
           }
@@ -7545,10 +12801,18 @@
           });
           return found;
         }
+        // What runs next: int choice; says nothing, and a try runs its first
+        function nextOf(list) {
+          var st = list.filter(function (s) {
+            return s.k !== "note" && !(s.k === "decl" && s.names.every(function (n) { return !n.value; }));
+          })[0];
+          if (st && st.k === "try") { return nextOf(st.body) || st; }
+          return st;
+        }
         function scan(list) {
           list.forEach(function (st, i) {
             if (isOpenPrint(st)) {
-              var nextSt = list.slice(i + 1).filter(function (s) { return s.k !== "note"; })[0];
+              var nextSt = nextOf(list.slice(i + 1));
               if (nextSt && asks(nextSt)) { st.prompt = true; }
               else { st.open = true; open = true; }
             }
@@ -7624,10 +12888,27 @@
             return;
           }
           if (e.op === ">>" && head === "cin") {
-            chain.forEach(function (t) {
+            var into = chain.map(function (t) {
               t = stripParens(t);
               if (t.k === "name") { ch.meet(t.v, { set: true }); }
-              askFor(t.k === "name" ? t : ready(t, ch, out).e, out, line, ch);
+              return t.k === "name" ? t : ready(t, ch, out).e;
+            });
+            if (into.length === 1) { askFor(into[0], out, line, ch); return; }
+            // cin >> name >> rate >> hours: C++ reads words, and takes as
+            // many from a line as are typed on it -- "Ann 20 45" all three,
+            // "Ann" just the first, and the rest asked for after
+            var typed = nameNode(fresh(ch, "typed"), line), words = nameNode(fresh(ch, "words"), line);
+            ch.meet(typed.v, { set: true, kind: "text" });
+            ch.meet(words.v, { set: true, kind: "list<text>" });
+            out.push({ k: "input", target: typed, line: line });
+            assign(words, builtinCall("split", [typed], line), ch, out, line);
+            into.forEach(function (t, i) {
+              var word = { k: "index", obj: words, at: num(i), line: line }, tk = kindNow(t);
+              var val = tk === "int" ? builtinCall("int", [word], line) : tk === "real" ? builtinCall("real", [word], line) : word;
+              var given = lowered(function (o) { assign(t, val, ch, o, line); });
+              if (!i) { out.push.apply(out, given); return; }
+              out.push({ k: "if", line: line, then: given, orelse: [{ k: "input", target: t, line: line }],
+                         cond: { k: "bin", op: ">", a: builtinCall("length", [words], line), b: num(i), line: line } });
             });
             return;
           }
@@ -7733,13 +13014,20 @@
           var mr = ready(mine, ch, out);
           out.push({ k: "call", e: mr.e, line: line });
           lowerPost(mr.post, ch, out);
+          if (cpp && stripParens(mine).k === "call" && stripParens(mine).fn.k === "name") {
+            coutAfter(funcs[low(stripParens(mine).fn.v)]);
+          }
           return;
         }
         // what lists, tables and words have done to them
         if (libStatement(e, ch, out, line)) { return; }
         var r = ready(e, ch, out);
         var got = libCall(r.e, ch);
-        if (!got) { note(line, (dot || p || "…") + "()"); }
+        // (a function held in a name -- next(), from counter() -- is run by the runner as it is)
+        var heldFn = (e.fn.k === "name" && (ch.names[e.fn.v] || ch.params[e.fn.v] || globalChart.names[e.fn.v])) ||
+                     // counter.inc(), where counter is a table holding functions
+                     (e.fn.k === "member" && stripParens(e.fn.obj).k === "name" && kindOf(e.fn.obj, ch) === "map");
+        if (!got && !heldFn) { note(line, (dot || p || "…") + "()"); }
         out.push({ k: "call", e: got || r.e, line: line });
         lowerPost(r.post, ch, out);
       }
@@ -7894,6 +13182,32 @@
       // What cout has been told so far: fixed and setprecision stay said,
       // setw is for the next thing only.
       var coutSays = { fixed: false, places: null, width: null, align: ">", fill: " ", words: false };
+      // cout << fixed << setprecision(2) said in a function stays said for
+      // what is printed after it is called: what each function leaves said
+      function coutAfter(fn) {
+        if (!fn || !fn.body) { return; }
+        if (!fn.coutLeaves) {
+          var left = fn.coutLeaves = [];
+          eachNode(fn.body, function (x) {
+            if (x.k === "func" || x.k === "fn" || x.k === "class") { return false; }
+            if (x.k !== "bin" || x.op !== "<<") { return; }
+            var chain = [], at = x;
+            while (at.k === "bin" && at.op === "<<") { chain.unshift(at.b); at = stripParens(at.a); }
+            if (bare(pathOf(at) || "") !== "cout") { return; }
+            chain.forEach(function (one) {
+              var s0 = stripParens(one), p0 = bare(pathOf(s0) || ""), told = s0.k === "call" ? bare(pathOf(s0.fn) || "") : "";
+              if (p0 === "fixed") { left.push(["fixed", true]); }
+              if (/^(scientific|defaultfloat)$/.test(p0)) { left.push(["fixed", false]); }
+              if (p0 === "boolalpha" || p0 === "noboolalpha") { left.push(["words", p0 === "boolalpha"]); }
+              if (told === "setprecision" && s0.args.length === 1 && stripParens(s0.args[0]).k === "num") {
+                left.push(["places", s0.args[0]]);
+              }
+            });
+            return false;
+          });
+        }
+        fn.coutLeaves.forEach(function (said) { coutSays[said[0]] = said[1]; });
+      }
       function streamOut(chain, line) {
         var parts = [], open = true, cs0 = coutSays;
         chain.forEach(function (one, i) {
@@ -8041,8 +13355,24 @@
       }
       // A record printed is what its describe() says, where it has one.
       function described(e) {
-        var s = stripParens(e), k = kindNow(s), cls = recordOf(k);
-        if (!cls) { return e; }
+        var s = stripParens(e);
+        if (s && s.k === "maydescribe") { return e; }                // (asked once is enough)
+        var k = kindNow(s), cls = recordOf(k);
+        // a caught error's message: words already
+        var said = s && (s.k === "member" && /^(message|Message)$/.test(s.name) ? s.obj
+                 : s.k === "call" && s.fn.k === "member" && !s.args.length &&
+                   /^(getMessage|getLocalizedMessage|what)$/.test(s.fn.name) ? s.fn.obj : null);
+        if (said && stripParens(said).k === "name" && CAUGHT[stripParens(said).v]) { return e; }
+        if (!cls) {
+          // of no kind known here, where the program's records say what
+          // they are: the function that asks which it is, if any
+          var any = describeKey && METHODS[describeKey].anyKind ? METHODS[describeKey].dispatch : null;
+          if (any && s && (!k || k === "mixed" || k === "obj") &&
+              !/^(str|fstr|num|bool|null|list|dict|tuple|set|places)$/.test(s.k)) {
+            return { k: "maydescribe", e: e, line: s.line };
+          }
+          return e;
+        }
         var keys = ["__str__", "__repr__", "toString", "ToString"];
         for (var i = 0; i < keys.length; i++) {
           var target = METHODS[keys[i]] ? methodTarget(keys[i], k) : null;
@@ -8229,6 +13559,21 @@
       // {"Ann", 72} where a Player is wanted, or a list of them: made into
       // Players, field by field -- C++'s way of making a struct with no
       // constructor of its own
+      // What a place was declared to hold: a name its type, and one of the
+      // things in a vector<Player> or map<int, Account> what those hold
+      function heldKind(place, ch) {
+        place = stripParens(place);
+        if (!place) { return null; }
+        if (place.k === "name") { return kindOf(place, ch); }
+        if (place.k !== "index") { return null; }
+        var of = stripParens(place.obj);
+        var one = of && of.k === "name" && (ch && (ch.names[of.v] || ch.params[of.v]) || globalChart.names[of.v]);
+        var ti = one && one.typeInfo;
+        if (ti && typeof ti === "object" && MAP_TYPES.test(String(ti.name || "").replace(/^.*::/, "")) && ti.args && ti.args[1]) {
+          return kindOfType(ti.args[1]);
+        }
+        return elemKind(heldKind(of, ch));
+      }
       function bracedAs(value, kind) {
         var v = stripParens(value);
         if (!cpp || !v || !kind || v.k !== "list") { return value; }
@@ -8292,7 +13637,8 @@
             if (viaM) { return userCallNode(viaM, py ? args : [nameNode("this")].concat(args), e.line); }
           }
           var fn = userFn(f.v, argCount(args), args, ch);
-          if (fn && !fn.methodOf) { return userCallNode(fn, args, e.line); }
+          // a method called by the function that chooses it: that one, as it is
+          if (fn && (!fn.methodOf || e.dispatched)) { return userCallNode(fn, args, e.line); }
           return null;
         }
         if (f.k === "member") {
@@ -8378,7 +13724,8 @@
         fn = stripParens(fn);
         if (fn.k === "fn") {
           var body = fn.body.filter(function (s) { return s.k !== "note"; });
-          if (body.length === 1 && body[0].k === "return" && body[0].value) {
+          var patterned = fn.params.some(function (p) { return p.pattern && typeof p.pattern === "object"; });
+          if (body.length === 1 && body[0].k === "return" && body[0].value && !patterned) {
             var e = copyOf(body[0].value);
             fn.params.forEach(function (p, i) {
               if (given[i] && !(given[i].k === "name" && given[i].v === p.name)) { e = swapName(e, p.name, given[i]); }
@@ -8468,7 +13815,9 @@
         out.push({ k: "foreach", v: each, over: src, body: body, line: line });
         return true;
       }
-      // A lambda's statements, with its names swapped for the loop's.
+      // A lambda's statements, with its names swapped for the loop's -- and
+      // one handed its things in a pattern, ([key, count]) => ..., starting
+      // by taking them out of what it was handed.
       function bodyOf(fn, names) {
         var body = fn.body.map(function (s) {
           return s.k === "return" && s.value && fn.body.length === 1 ? { k: "expr", e: s.value, line: s.line } : s;
@@ -8476,7 +13825,14 @@
         fn.params.forEach(function (p, i) {
           if (names[i] && names[i] !== p.name) { body = swapName(body, p.name, nameNode(names[i])); }
         });
-        return body;
+        var unpacked = [];
+        fn.params.forEach(function (p, i) {
+          if (!p.pattern || typeof p.pattern !== "object") { return; }
+          unpacked.push({ k: "expr", line: p.line || fn.line,
+                          e: { k: "assignx", op: "=", target: copyOf(p.pattern), value: nameNode(names[i] || p.name),
+                               line: p.line || fn.line } });
+        });
+        return unpacked.concat(body);
       }
       // xs.map(f), xs.filter(f), stream chains, LINQ, Python's map and
       // filter, reduce, any, all: a list or a value built by a loop.
@@ -8618,10 +13974,16 @@
             if (js && args.length === 1 && stripParens(args[0]).k === "name" && stripParens(args[0]).v === "Boolean") {
               var whole = walk(recv), sw = stripParens(whole);
               if (sw && sw.k === "call" && sw.builtin && sw.fn.v === "split" && sw.args.length === 1) { return whole; }
-              var nothing = /^(int|real)$/.test(elemKind(kindOf(recv, ch)) || "") ? num(0) : { k: "str", v: "" };
+              var ek = elemKind(kindOf(recv, ch)) || elemKind(kindOf(whole, ch)) || "";
+              // not known yet: asked the way its kind says, once that is known
+              // -- g.flat() a list of what g's lists hold
+              var flatOf = function (r) {
+                r = stripParens(r);
+                return r.k === "call" && r.fn.k === "member" && r.fn.name === "flat" && !r.args.length &&
+                       stripParens(r.fn.obj).k === "name" ? { k: "flatof", e: stripParens(r.fn.obj) } : null;
+              };
               return built("filter", whole, { k: "fn", params: [{ name: "x", line: line }], line: line, lambda: true,
-                                             body: [{ k: "return", line: line,
-                                                      value: { k: "bin", op: "!=", a: nameNode("x", line), b: nothing, line: line } }] });
+                                             body: [{ k: "return", line: line, value: { k: "truthy", e: nameNode("x", line), of: flatOf(recv) || whole, line: line } }] });
             }
             return args.length === 1 && isFn(args[0]) ? built("filter", walk(recv), args[0]) : null;
           // xs.reduceRight(f, start): the same, from the last one back
@@ -8644,6 +14006,9 @@
               return builtinCall("all", [walk(recv)], line);
             }
             return args.length === 1 && isFn(args[0]) ? flagged(walk(recv), args[0], false) : null;
+          // Kotlin's maxByOrNull { it.length }, C#'s MaxBy(w => w.Length): the one it is largest for
+          case "maxBy": case "minBy": case "MaxBy": case "MinBy":
+            return args.length === 1 && isFn(args[0]) ? best(walk(recv), args[0], /^[mM]ax/.test(dot)) : null;
           case "noneMatch":
             return args.length === 1 ? { k: "un", op: "!", a: flagged(walk(recv), args[0], true) } : null;
           case "find": case "First": case "FirstOrDefault": case "Find":
@@ -8874,8 +14239,10 @@
         function best(src, key, most) {
           var list = itemsName(src, ch, out);
           var got = nameNode(fresh(ch, most ? "biggest" : "smallest"), line);
-          out.push({ k: "set", target: got, value: { k: "index", obj: list, at: num(0) }, line: line });
-          ch.meet(got.v, { set: true }).values = [{ k: "index", obj: list, at: num(0) }];
+          // the first of them -- a table's first key, where it is one of
+          // those after all (known once the whole program has been read)
+          out.push({ k: "set", target: got, value: { k: "firstof", obj: list, line: line }, line: line });
+          ch.meet(got.v, { set: true }).values = [{ k: "firstof", obj: list, line: line }];
           var each = loopName(key, 0, ch, singular(list));
           ch.meet(each, { set: true, loop: true, elem: { of: list } });
           var a = applied(key, [nameNode(each)], ch), b = applied(key, [got], ch);
@@ -9445,6 +14812,8 @@
             return true;
           }
           case "insert": case "Insert": case "emplace":
+            // Rust's map.insert(k, v): under k; its vec.insert(i, x): at i
+            if (e.rsInsert && isMap && args.length === 2) { return put({ k: "index", obj: o, at: args[0] }, args[1]); }
             // v.insert(v.end(), w.begin(), w.end()): all of w on the end
             if (cpp && args.length === 3 && beginOf(args[1]) !== stripParens(args[1])) {
               var at0 = stripParens(args[0]);
@@ -9577,6 +14946,18 @@
             out.push({ k: "if", cond: { k: "un", op: "!", a: builtinCall("contains", [o, R(args[0])]) }, orelse: [], line: line,
                        then: lowered(function (t) { assign({ k: "index", obj: o, at: args[0] }, args[1], ch, t, line); }) });
             return true;
+          // counts.merge(word, 1, Integer::sum): the two put together where
+          // the key is there already, and the value by itself where not
+          case "merge": {
+            if (!java || args.length !== 3) { return false; }
+            var mk = R(args[0]);
+            var joined = applied(args[2], [{ k: "index", obj: o, at: mk, line: line }, args[1]], ch);
+            if (!joined) { return false; }
+            out.push({ k: "if", cond: builtinCall("contains", [o, mk], line), line: line,
+                       then: lowered(function (t) { assign({ k: "index", obj: o, at: mk }, joined, ch, t, line); }),
+                       orelse: lowered(function (t) { assign({ k: "index", obj: o, at: mk }, args[1], ch, t, line); }) });
+            return true;
+          }
           case "fill":
             if (args.length === 1) { return libStatement({ k: "call", fn: nameNode("fill"), args: [f.obj, args[0]] }, ch, out, line); }
             return false;
@@ -10172,11 +15553,27 @@
           var total = B("sum", [a[0]]);
           return a[1] ? bin("+", total, a[1]) : total;
         }
+        // statistics.mean(xs): the total over how many; median(xs) the
+        // middle one in order, or halfway between the middle two
+        if (py && /^(statistics\.)?(mean|fmean)$/.test(p) && a.length === 1 && !userFn(p)) {
+          return Object.assign(bin("/", B("sum", [a[0]]), B("length", [a[0]])), { real: true });
+        }
+        if (py && /^(statistics\.)?median$/.test(p) && a.length === 1 && !userFn(p)) {
+          // the two middle ones, which are the same one when there are an odd number
+          var mid = function (less) {
+            var n = B("length", [a[0]]);
+            return { k: "index", obj: B("sorted", [a[0]]), line: e.line,
+                     at: B("int", [bin("/", less ? { k: "paren", e: bin("-", n, num(1)) } : n, num(2))]) };
+          };
+          return Object.assign(bin("/", { k: "paren", e: bin("+", mid(true), mid(false)) }, num(2)), { real: true });
+        }
         if (dot && /^(sum|Sum)$/.test(dot) && !a.length) { return B("sum", [self]); }
         if (dot && /^(max|Max|min|Min)$/.test(dot) && !a.length) { return B(dot.toLowerCase(), [self]); }
         if (dot && /^(average|Average)$/.test(dot) && !a.length) {
           return Object.assign(bin("/", B("sum", [self]), B("length", [self])), { real: true });
         }
+        // shapes[0].get(), p.get(): what a unique_ptr or shared_ptr points at is the thing itself
+        if (cpp && dot === "get" && !a.length && self && kindOf(self, ch) !== "map") { return self; }
         if (dot && /^(getAsInt|getAsDouble|orElse|get|Value|orElseThrow)$/.test(dot) && self && stripParens(self).k === "call") {
           return self;
         }
@@ -10205,6 +15602,8 @@
         if (/^(reversed)$/.test(p) && a.length === 1) { return B("reversed", [a[0]]); }
         if (/^(list|tuple|Array\.from|List\.copyOf|new ArrayList)$/.test(p) && a.length === 1) {
           var src = stripParens(a[0]);
+          // Array.from(m), m a Map: its [key, value] pairs
+          if (js && kindOf(a[0], ch) === "map") { return B("items", [a[0]]); }
           if (src.k === "call" && pathOf(src.fn) === "range") { return libCall(src, ch) || src; }
           return B("toList", [a[0]]);
         }
@@ -10299,8 +15698,8 @@
           return types.map(function (t) { return typeTest(a[0], pathOf(t) || "", e.line); })
                       .reduce(function (x, y) { return x ? bin("||", x, y) : y; }, null);
         }
-        if (/^(type)$/.test(p) && a.length === 1) { return B("classOf", a); }
-        if (dot === "getClass" || dot === "GetType") { return B("classOf", [self]); }
+        if (/^(type)$/.test(p) && a.length === 1) { return classNode(a[0], e.line); }
+        if (dot === "getClass" || dot === "GetType") { return classNode(self, e.line); }
         if (dot && /^(getKey|getValue)$/.test(dot) && !a.length && self) {
           return { k: "index", obj: self, at: num(dot === "getKey" ? 0 : 1), line: e.line };
         }
@@ -10314,8 +15713,9 @@
         if (dot && /^(getSimpleName|getName)$/.test(dot) && !a.length && self) {
           var asked = stripParens(self);
           if (asked.k === "call" && asked.fn.k === "member" && /^(getClass|GetType)$/.test(asked.fn.name)) {
-            return B("classOf", [asked.fn.obj]);
+            return classNode(asked.fn.obj, e.line);
           }
+          if (asked.k === "str") { return asked; }
           if (asked.k === "call" && asked.builtin && pathOf(asked.fn) === "classOf") { return asked; }
         }
         // random
@@ -10418,11 +15818,29 @@
         return messageSeen;
       }
       function propOf(e, ch) {
+        // x.GetType().Name: the name of its class -- never the program's
+        // own Name, whatever else in it is called that
+        var typeOf = stripParens(e.obj);
+        if (/^(Name|FullName)$/.test(e.name) && typeOf && typeOf.k === "call" && typeOf.fn.k === "member" &&
+            /^(GetType|getClass)$/.test(typeOf.fn.name) && !typeOf.args.length) {
+          return builtinCall("classOf", [typeOf.fn.obj], e.line);
+        }
         var getter = getterCall(e, ch);
         if (getter) { return getter; }
         if (/^(Keys|Values)$/.test(e.name) && (sk === "map" || cs)) {
           var mapKeys = builtinCall(e.name === "Keys" ? "keys" : "values", [e.obj], e.line);
           return e.name === "Keys" && sortedMap(e.obj, ch) ? builtinCall("sorted", [mapKeys], e.line) : mapKeys;
+        }
+        // e.name, e.constructor.name, where e was caught: the kind of error
+        // (an error of the program's own may say its name itself: this.name = "NotFound")
+        // (JavaScript's own errors only: RangeError, TypeError -- any other says its name itself)
+        var jsErr = js && e.name === "name" && !recordErrors ? caughtClass(e.obj) : null;
+        if (jsErr && /^(Error|RangeError|TypeError|SyntaxError|ReferenceError|EvalError|URIError)$/.test(jsErr.v)) {
+          return jsErr;
+        }
+        if (js && e.name === "name" && stripParens(e.obj).k === "member" && stripParens(e.obj).name === "constructor" &&
+            caughtClass(stripParens(e.obj).obj)) {
+          return caughtClass(stripParens(e.obj).obj);
         }
         if (/^(message|Message)$/.test(e.name) && stripParens(e.obj).k === "name" && CAUGHT[stripParens(e.obj).v]) {
           // errors that are records hold their message: e.Message is its message field
@@ -10447,10 +15865,10 @@
           return all;
         }
         if (/^(length|Length|Count|size)$/.test(e.name) && !recordOf(sk)) { return builtinCall("length", [e.obj], e.line); }
-        if (/^(first|Key|key)$/.test(e.name) && (isListKind(sk) || sk === null) && !recordOf(sk) && (cpp || cs)) {
+        if (/^(first|Key|key)$/.test(e.name) && (isListKind(sk) || sk === null) && !recordOf(sk) && (cpp || cs || kt || sw || rs)) {
           return { k: "index", obj: e.obj, at: num(0), line: e.line };
         }
-        if (/^(second|Value|value)$/.test(e.name) && (isListKind(sk) || sk === null) && !recordOf(sk) && (cpp || cs)) {
+        if (/^(second|Value|value)$/.test(e.name) && (isListKind(sk) || sk === null) && !recordOf(sk) && (cpp || cs || kt || sw || rs)) {
           return { k: "index", obj: e.obj, at: num(1), line: e.line };
         }
         // C#'s int? n: n.HasValue is whether it holds anything, n.Value what
@@ -10475,6 +15893,9 @@
         if (e.name === "__name__" || (e.name === "Name" && cs && stripParens(e.obj).k === "call")) { return e.obj; }
         if (py && path === "sys.argv") { return { k: "list", items: [{ k: "str", v: "program.py" }], line: e.line }; }
         if (e.name === "name" && e.obj.k === "name" && enumValues[e.obj.v]) { return { k: "str", v: e.obj.v }; }
+        // Kotlin's c.name, c one of an enum's values: its name, which is what it is here
+        // (words have no name of their own in Kotlin)
+        if (kt && e.name === "name" && kindOf(e.obj, ch) === "text") { return e.obj; }
         return null;
       }
       // new Point(3, 4) is Point(3, 4); new ArrayList<>() is []; new
@@ -10663,6 +16084,15 @@
           case "compare": return "int";
           case "regex": return "text";
           case "record": return "obj:" + e.kind;
+          case "truthy": return "bool";
+          case "maydescribe": return recordOf(kindOf(e.e, ch)) ? "text" : kindOf(e.e, ch);
+          case "pairsof": { var pk0 = kindOf(e.e, ch); return pk0 === "map" ? "list" : pk0; }
+          case "goshown": return isListKind(kindOf(e.e, ch)) ? "text" : kindOf(e.e, ch);
+          case "firstof": return kindOf(e.obj, ch) === "map" ? null : kindOf({ k: "index", obj: e.obj, at: { k: "num", v: "0" } }, ch);
+          case "flatof": {
+            var fk = elemKind(kindOf(e.e, ch));
+            return fk && isListKind(fk) ? fk : "list";
+          }
           case "fn": return "fn";
           case "sized": {
             var sk = e.kind || kindOf(e.fill, ch);
@@ -10672,7 +16102,7 @@
           case "list": case "tuple": case "set": {
             var ek = null;
             (e.items || []).forEach(function (x) {
-              if (x && x.k === "star") { ek = mergeKinds(ek, elemKind(kindOf(x.e, ch))); }
+              if (x && x.k === "star") { ek = mergeKinds(ek, js && kindOf(x.e, ch) === "map" ? "list" : elemKind(kindOf(x.e, ch))); }
               else { ek = mergeKinds(ek, kindOf(x, ch)); }
             });
             return (e.k === "set" ? "set" : "list") + (ek && ek !== "mixed" ? "<" + ek + ">" : "");
@@ -10814,13 +16244,80 @@
                 if (said && kindOfType(said.type)) { return kindOfType(said.type); }
               }
             }
-            return null;
+            // of something that may be any record -- a caught error's
+            // message -- what every record with a field of that name holds
+            if (!rec) {
+              var every = null, agree = true;
+              Object.keys(FIELD_KINDS).forEach(function (r) {
+                var fk3 = FIELD_KINDS[r][e.name];
+                if (!fk3) { return; }
+                if (every && every !== fk3) { agree = false; }
+                every = every || fk3;
+              });
+              if (every && agree && every !== "mixed") { return every; }
+            }
+            // and before then, or of a record not known here: what the
+            // program's methods put in a field of that name
+            return fieldGuess(rec, e.name);
           }
         }
         return null;
       }
       // What each record's fields hold: every value any method puts there.
       var FIELD_VALUES = Object.create(null), FIELD_KINDS = Object.create(null);
+
+      // A first guess, read straight off the classes before anything is
+      // worked out: this.log = new Map(), self.items = [] -- a table, a
+      // list.  Asked where nothing better is known yet: a record's fields
+      // are settled only once every chart has been read, and the program's
+      // own lines, read first, go round them before then.
+      var FIELD_GUESS = null;
+      function fieldGuess(rec, name) {
+        if (!FIELD_GUESS) {
+          FIELD_GUESS = { byClass: Object.create(null), byName: Object.create(null) };
+          var roughly = function (v) {
+            v = stripParens(v);
+            if (!v) { return null; }
+            if (v.k === "dict") { return "map"; }
+            if (v.k === "list" || v.k === "newarr") { return "list"; }
+            if (v.k === "str" || v.k === "fstr") { return "text"; }
+            if (v.k === "num") { return v.real ? "real" : "int"; }
+            if (v.k === "bool") { return "bool"; }
+            if (v.k === "new") { return kindOfType(v.type) || null; }
+            return null;
+          };
+          clsOrder.forEach(function (c) {
+            // items = [], private log = new Map(): what a field is given where it is declared
+            (c.fields || []).forEach(function (f) {
+              var k0 = f.value ? roughly(f.value) : null;
+              if (!k0 || f.statik) { return; }
+              var mine0 = FIELD_GUESS.byClass[c.name] = FIELD_GUESS.byClass[c.name] || Object.create(null);
+              mine0[f.name] = mine0[f.name] === undefined || mine0[f.name] === k0 ? k0 : "mixed";
+              FIELD_GUESS.byName[f.name] = FIELD_GUESS.byName[f.name] === undefined || FIELD_GUESS.byName[f.name] === k0 ? k0 : "mixed";
+            });
+            (c.ctors || []).concat(c.methods || []).forEach(function (m) {
+            // this.message = message, where message is a String handed in
+            var typed = Object.create(null);
+            (m.params || []).forEach(function (p0) { if (p0.type && !p0.dims) { typed[p0.name] = kindOfType(p0.type); } });
+            eachNode(m.body, function (x) {
+              var t = x.k === "assign" ? x.target : x.k === "expr" && x.e && x.e.k === "assignx" ? x.e.target : null;
+              var v = x.k === "assign" ? x.value : t ? x.e.value : null;
+              t = stripParens(t);
+              if (!t || t.k !== "member" || !t.obj || t.obj.k !== "name" || !/^(this|self)$/.test(t.obj.v)) { return; }
+              var sv = stripParens(v);
+              var k = roughly(v) || (sv && sv.k === "name" && typed[sv.v]) || null;
+              if (!k) { return; }
+              var mine = FIELD_GUESS.byClass[c.name] = FIELD_GUESS.byClass[c.name] || Object.create(null);
+              mine[t.name] = mine[t.name] === undefined || mine[t.name] === k ? k : "mixed";
+              var any = FIELD_GUESS.byName;
+              any[t.name] = any[t.name] === undefined || any[t.name] === k ? k : "mixed";
+            });
+            });
+          });
+        }
+        var got = rec && FIELD_GUESS.byClass[rec] ? FIELD_GUESS.byClass[rec][name] : FIELD_GUESS.byName[name];
+        return got && got !== "mixed" ? got : null;
+      }
 
       function noteField(t, v, ch) {
         var rec = recordOf(kindOf(t.obj, ch));
@@ -11073,15 +16570,34 @@
       // the call; and, at the try that catches it, the handler.
       // raise TooBig(n), throw new NotFound(v): where the error is one of
       // the program's own records, what is thrown is the whole record
-      var recordErrors = false;
+      var recordErrors = false, THROWN = [];
       eachNode([order.map(function (fn) { return fn.body; }), main], function (x) {
         if (x.k === "func" || x.k === "fn" || x.k === "class") { return; }
+        if (x.k === "exit" && x.named && !/^(SystemExit|sys\.exit|exit)$/.test(x.named) &&
+            THROWN.indexOf(x.named) < 0) {
+          THROWN.push(x.named);
+        }
         if (x.k === "exit" && x.made && CLS[x.named] && CLS[x.named].record && !x.recordSaid) {
           x.said = x.made;
           x.recordSaid = true;
           recordErrors = true;
         }
       });
+      // The kind of a caught error -- type(e).__name__, e.name,
+      // e.getClass().getSimpleName() -- where it is known: the one kind it
+      // was caught as, or else the one kind the program ever throws.
+      function caughtClass(x) {
+        x = stripParens(x);
+        if (!x || x.k !== "name" || !CAUGHT[x.v]) { return null; }
+        var as = CAUGHT_AS[x.v] || [];
+        if (as.length === 1 && as[0] && !/^(Exception|Error|Throwable|BaseException|exception|SystemException)$/.test(as[0])) {
+          return { k: "str", v: as[0], line: x.line };
+        }
+        return THROWN.length === 1 ? { k: "str", v: THROWN[0], line: x.line } : null;
+      }
+      function classNode(x, line) {
+        return caughtClass(x) || builtinCall("classOf", [x], line);
+      }
       (function throwsAcross() {
         function catching(st) { return st.k === "try" && (st.handlers || []).length > 0; }
         function stops(x) { return x.k === "exit" && /^(SystemExit|sys\.exit|exit)$/.test(String(x.named || "")); }
@@ -11362,8 +16878,10 @@
               return !ch.names[one.name] && usesName(ch.body, one.name);
             }
             var own = ch.names[one.name];
-            // for (let i ...) in a function: that function's own i
-            return own ? !(own.declared || own.ownLoop) : usesName(ch.body, one.name);
+            // for (let i ...) in a function: that function's own i -- and so
+            // is the i of xs.forEach((x, i) => ...), a name the loop made
+            return own ? !(own.declared || own.ownLoop || (own.loopOnly && own.sets > 0))
+                       : usesName(ch.body, one.name);
           });
           if (shared) {
             var g = globalChart.meet(one.name, {});
@@ -11613,15 +17131,61 @@
       var rows = [];
       function row(deep, text) { rows.push(new Array(deep + 1).join("    ") + text); }
 
+      // Names the language tells apart by their capitals -- a Constant TAX
+      // and a tax worked out from it -- are one name to pseudocode, which
+      // lets people write Total and total for the same thing.  Where a
+      // chart can see both, the one met second is written a little
+      // differently: tax_.  What every chart shares is met first.
+      var RECASED = Object.create(null);
+      (function () {
+        var every = Object.create(null);
+        [globalChart].concat(charts).forEach(function (ch) {
+          Object.keys(ch.names).concat(Object.keys(ch.params)).forEach(function (n) { every[n.toLowerCase()] = true; });
+        });
+        charts.forEach(function (ch) {
+          var byLow = Object.create(null);
+          Object.keys(globalChart.names).concat(Object.keys(ch.names), Object.keys(ch.params)).forEach(function (n) {
+            var l = n.toLowerCase(), list = byLow[l] = byLow[l] || [];
+            if (list.indexOf(n) < 0) { list.push(n); }
+          });
+          Object.keys(byLow).forEach(function (l) {
+            byLow[l].slice(1).forEach(function (s) {
+              if (RECASED[s]) { return; }
+              var t = s + "_";
+              while (every[t.toLowerCase()]) { t += "_"; }
+              every[t.toLowerCase()] = true;
+              RECASED[s] = t;
+            });
+          });
+        });
+      })();
+      // What ...x puts into a list: [...word] its letters, [...m] of a
+      // JavaScript Map its [key, value] pairs, and anything else its items
+      // one of several: a loop's item, an item of a list, what a function handed
+      // back -- which may be one of the program's records, where nothing says
+      function fromMany(e, ch) {
+        var x = stripParens(e);
+        if (!x) { return false; }
+        if (x.k === "index" || (x.k === "call" && !x.builtin)) { return true; }
+        var one = x.k === "name" && ch && (ch.names[x.v] || globalChart.names[x.v]);
+        return !!one && !!(one.loop || one.loopOnly);
+      }
+      function spreadOf(e, ch) {
+        var k = kindOf(e, ch);
+        if (k === "text") { return builtinCall("toList", [e], e.line); }
+        if (js && k === "map") { return builtinCall("items", [e], e.line); }
+        return e;
+      }
       function nameOf(n) {
         var s = String(n).replace(/^std::/, "");
+        if (RECASED[s]) { return RECASED[s]; }
         return KEPT.test(s) ? s + "_" : s;
       }
       // Pseudocode's strings have no escapes: they run from a quote to the
       // next one of the same kind.  Words with double quotes in them go in
-      // single ones -- unless they hold an odd number, which the reader of
-      // the pseudocode would take for a line carrying on to the next.  A
-      // line break inside words is NewLine, joined on.
+      // single ones, and words with both kinds in them go in as pieces,
+      // each in the quote it does not hold.  A line break inside words is
+      // NewLine, joined on.
       function quoted(v) {
         var s = String(v).replace(/\t/g, "    ");
         if (s.indexOf("\n") >= 0) {
@@ -11633,9 +17197,22 @@
           });
           return out.join(" + ");
         }
-        var doubles = (s.match(/"/g) || []).length;
-        if (doubles && s.indexOf("'") < 0 && doubles % 2 === 0) { return "'" + s + "'"; }
-        return '"' + s.replace(/"/g, "'") + '"';
+        if (s.indexOf('"') < 0) { return '"' + s + '"'; }
+        if (s.indexOf("'") < 0) { return "'" + s + "'"; }
+        var pieces = [], from = 0, has = "";
+        for (var qi = 0; qi < s.length; qi++) {
+          var qc = s.charAt(qi);
+          if (qc !== '"' && qc !== "'") { continue; }
+          if (has && has !== qc) {
+            pieces.push(s.slice(from, qi));
+            from = qi;
+          }
+          has = qc;
+        }
+        pieces.push(s.slice(from));
+        return pieces.map(function (p) {
+          return p.indexOf('"') >= 0 ? "'" + p + "'" : '"' + p + '"';
+        }).join(" + ");
       }
       // Precedence, pseudocode's own: OR, AND, = <>, < >, + -, * / MOD, ^.
       var RANKS = { "OR": 1, "AND": 2, "=": 3, "<>": 3, "<": 4, "<=": 4, ">": 4, ">=": 4,
@@ -11657,6 +17234,48 @@
         }
         switch (s.k) {
           case "fn": return px(asValue(liftLambda(s, ch, "lambda")), ch);
+          // shown, where what kind it is was not known when it was read: a
+          // record says what it is; anything else is shown as it is
+          case "maydescribe": {
+            var mk = kindOf(s.e, ch), rec0 = recordOf(mk), one0 = describeKey ? METHODS[describeKey] : null;
+            if (rec0) { return px(described(s.e), ch); }
+            // (only where it may be one of the program's records -- in Python and
+            // JavaScript, where nothing says what a name holds, that includes a kind never found)
+            if (one0 && one0.dispatch && (mk === "mixed" || mk === "obj" || (!mk && (py || js) && fromMany(s.e, ch)))) {
+              if (!funcs[low(one0.dispatch)] && one0.lazyFn) {
+                funcs[low(one0.dispatch)] = one0.lazyFn;
+                order.push(one0.lazyFn);
+                lateFns.push(one0.lazyFn);
+              }
+              if (funcs[low(one0.dispatch)]) { return px(userCallNode(funcs[low(one0.dispatch)], [s.e], s.line), ch); }
+            }
+            return px(s.e, ch);
+          }
+          // a table gone over where its pairs are meant: its items
+          case "pairsof":
+            return px(kindOf(s.e, ch) === "map" ? builtinCall("items", [s.e], s.line) : s.e, ch);
+          // Go shows a slice as [1 2 3]
+          case "goshown": {
+            var gk = kindOf(s.e, ch) || "";
+            if (isListKind(gk)) {
+              return px({ k: "bin", op: "+", line: s.line, a: { k: "bin", op: "+", a: { k: "str", v: "[" }, b: builtinCall("join", [s.e, { k: "str", v: " " }], s.line) },
+                          b: { k: "str", v: "]" } }, ch);
+            }
+            return px(described(s.e), ch);
+          }
+          case "firstof":
+            return px({ k: "index", at: num(0), line: s.line,
+                        obj: kindOf(s.obj, ch) === "map" ? builtinCall("keys", [s.obj], s.line) : s.obj }, ch);
+          // JavaScript's Boolean(x): a yes-or-no as itself, a number not 0,
+          // a list with something in it, words that are not ""
+          case "truthy": {
+            var tk = (s.of && elemKind(kindOf(s.of, ch))) || kindOf(s.e, ch) || "";
+            if (tk === "bool") { return px(s.e, ch); }
+            if (isListKind(tk) || tk === "map") {
+              return px({ k: "bin", op: ">", a: builtinCall("length", [s.e], s.line), b: num(0), line: s.line }, ch);
+            }
+            return px({ k: "bin", op: "!=", a: s.e, b: /^(int|real)$/.test(tk) ? num(0) : { k: "str", v: "" }, line: s.line }, ch);
+          }
           case "comp": note(s.line, "for … in"); return { t: "[]", r: 9 };
           case "obj": return { t: "{}", r: 9 };
           case "dict": {
@@ -11674,7 +17293,10 @@
           case "regex": return { t: quoted(s.v), r: 9 };
           case "star": case "dstar": return px(s.e, ch);
           case "num": return { t: String(s.v), r: /^-/.test(String(s.v)) ? 8 : 9 };
-          case "str": return { t: quoted(s.v), r: s.v.indexOf("\n") >= 0 && s.v !== "\n" ? 5 : 9 };
+          case "str": {
+            var sq = quoted(s.v);
+            return { t: sq, r: / \+ /.test(sq) && !/^"[^"]*"$|^'[^']*'$/.test(sq) ? 5 : 9 };
+          }
           case "bool": return { t: s.v ? "True" : "False", r: 9 };
           case "null": return { t: '""', r: 9 };
           case "name":
@@ -11803,15 +17425,15 @@
             (s.items || []).forEach(function (x) {
               if (x && x.k === "star") {
                 if (cur.length) { groups.push({ t: "[" + cur.join(", ") + "]" }); cur = []; }
-                // [...word]: its letters, a list of them
-                groups.push({ t: wrapAt(kindOf(x.e, ch) === "text" ? builtinCall("toList", [x.e], s.line) : x.e, 6, ch) });
+                groups.push({ t: wrapAt(spreadOf(x.e, ch), 6, ch) });
               } else if (x) {
                 cur.push(px(x, ch).t);
               }
             });
             if (cur.length || !groups.length) { groups.push({ t: "[" + cur.join(", ") + "]" }); }
             if (groups.length === 1 && (s.items || []).length === 1 && s.items[0].k === "star") {
-              return px(builtinCall(kindOf(s.items[0].e, ch) === "text" ? "toList" : "copy", [s.items[0].e], s.line), ch);
+              var one = spreadOf(s.items[0].e, ch);
+              return px(one === s.items[0].e ? builtinCall("copy", [one], s.line) : one, ch);
             }
             return { t: groups.map(function (g) { return g.t; }).join(" + "), r: groups.length > 1 ? 5 : 9 };
           }
@@ -11888,6 +17510,26 @@
       }
       function pxBin(s, ch) {
         var op = s.op;
+        // JavaScript's typeof x === "string": whether x is words (the chart's
+        // kinds are called String, Integer, Real, Boolean, List, Table)
+        if (js && (op === "==" || op === "!=")) {
+          var ta = stripParens(s.a), tb = stripParens(s.b);
+          if (tb && tb.k === "un" && tb.op === "typeof ") { var sw0 = ta; ta = tb; tb = sw0; }
+          if (ta && ta.k === "un" && ta.op === "typeof " && tb && tb.k === "str") {
+            var what = ta.a, kindIs = function (k) { return { k: "bin", op: "==", a: builtinCall("classOf", [what], s.line), b: { k: "str", v: k }, line: s.line }; };
+            var either = function (x, y) { return { k: "bin", op: "||", a: x, b: y, line: s.line }; };
+            var test = tb.v === "string" ? kindIs("String")
+                     : tb.v === "number" ? either(kindIs("Integer"), kindIs("Real"))
+                     : tb.v === "boolean" ? kindIs("Boolean")
+                     : tb.v === "undefined" ? { k: "bin", op: "==", a: what, b: { k: "null" }, line: s.line }
+                     : tb.v === "object" ? either(kindIs("List"), either(kindIs("Table"), { k: "bin", op: "!=", a: builtinCall("toString", [what], s.line), b: builtinCall("toString", [what], s.line), line: s.line }))
+                     : null;
+            if (tb.v === "object") {
+              test = { k: "un", op: "!", a: { k: "paren", e: either(either(kindIs("String"), kindIs("Boolean")), either(either(kindIs("Integer"), kindIs("Real")), { k: "bin", op: "==", a: what, b: { k: "null" } })) } };
+            }
+            if (test) { return px(op === "!=" ? { k: "un", op: "!", a: { k: "paren", e: test }, line: s.line } : test, ch); }
+          }
+        }
         if (cpp && (op === "-" || op === "==" || op === "!=")) {
           var rb = stripParens(s.b), la0 = stripParens(s.a);
           var isEnd = rb && rb.k === "call" && rb.fn.k === "member" && /^(c?end)$/.test(rb.fn.name) && !rb.args.length;
@@ -12042,6 +17684,10 @@
       function pxCall(s, ch) {
         var dressed = shownPlain(s);       // x.toFixed(2), format(x, ".2f")
         if (dressed !== s) { return px(dressed, ch); }
+        // copy(x) of words or a number: x -- Rust's name.clone()
+        if (s.builtin && s.fn.v === "copy" && s.args.length === 1 && /^(text|int|real|bool)$/.test(kindOf(s.args[0], ch) || "")) {
+          return px(s.args[0], ch);
+        }
         if (s.builtin || s.mine) {
           return { t: nameOf(s.fn.v) + "(" + s.args.map(function (a) {
             return px(a.k === "ref" || a.k === "addr" ? a.e : a, ch).t;
@@ -12434,11 +18080,39 @@
                    [/\bfunction\s+\w+\s*\(/, 4], [/=>/, 3], [/===|!==/, 5], [/\bprompt\s*\(/, 5],
                    [/\brequire\s*\(/, 6], [/\bdocument\./, 6], [/\x60[^\x60]*\$\{/, 6],
                    [/\b(?:parseInt|parseFloat|Number)\s*\(/, 3], [/\bmodule\.exports\b/, 8],
-                   [/\.toFixed\s*\(/, 4]]
+                   [/\.toFixed\s*\(/, 4]],
+      // JavaScript's signs and its own: the types written in
+      typescript: [[/\bconsole\.(?:log|error|warn|info)\s*\(/, 10], [/\b(?:let|const|var)\s+\w+\s*=/, 4],
+                   [/\bfunction\s+\w+\s*\(/, 4], [/=>/, 3], [/===|!==/, 5],
+                   [/\b(?:let|const|var)\s+\w+\s*:\s*(?:number|string|boolean|any|\w+\[\]|Array<|Map<|Record<)/, 14],
+                   [/\)\s*:\s*(?:number|string|boolean|void|any|\w+\[\])\s*(?:\{|=>)/, 14],
+                   [/\(\s*\w+\s*:\s*(?:number|string|boolean|any)\b/, 10],
+                   [/^\s*(?:export\s+)?(?:interface|type)\s+\w+/m, 6], [/\bas\s+(?:number|string|const)\b/, 5],
+                   [/\b(?:private|public|readonly)\s+\w+\s*:/, 8]],
+      c: [[/^\s*#include\s*<(?:stdio|stdlib|string|math|stdbool|ctype|time)\.h>/m, 12], [/\bprintf\s*\(/, 6],
+          [/\bscanf\s*\(/, 10], [/\bint\s+main\s*\(\s*(?:void)?\s*\)/, 4], [/\bmalloc\s*\(|\bstrcpy\s*\(|\bstrcmp\s*\(/, 6],
+          [/\bstd::|\bcout\b|\bcin\b|\busing\s+namespace\b|\bclass\s+\w+|\bvector\s*</, -25]],
+      kotlin: [[/\bfun\s+main\s*\(/, 14], [/\bfun\s+\w+\s*\(/, 8], [/\bval\s+\w+/, 5],
+               [/(?:^|[^.\w])println\s*\(/m, 3], [/\breadLine\s*\(\s*\)|\breadln\s*\(/, 6],
+               [/:\s*(?:Int|String|Double|Boolean|Long)\??\s*[=,)]/, 4], [/\bwhen\s*(?:\(|\{)/, 4],
+               [/\b(?:mutableListOf|listOf|mapOf|mutableMapOf|arrayOf|setOf)\s*[(<]/, 7], [/\bdata\s+class\b/, 8],
+               [/\b\d+\s*(?:until|downTo)\s/, 5], [/\bfor\s*\(\s*\w+\s+in\s/, 3]],
+      swift: [[/^\s*import\s+(?:Foundation|UIKit|SwiftUI)\b/m, 12], [/\bfunc\s+\w+\s*\(/, 5],
+              [/\\\(/, 6], [/\b(?:guard|if)\s+let\b/, 8], [/\.\.<|\.\.\./, 3], [/\blet\s+\w+\s*(?::\s*\w+)?\s*=/, 2],
+              [/\bvar\s+\w+\s*:\s*(?:Int|String|Double|Bool)\b/, 6], [/\breadLine\s*\(\s*\)/, 3],
+              [/\bfor\s+\w+\s+in\s+(?:\d|stride)/, 4], [/\brepeat\s*\{/, 6], [/\bstruct\s+\w+\s*(?::\s*\w+\s*)?\{/, 2],
+              [/^\s*package\s+\w+/m, -20], [/\bfn\s+\w+\s*\(/, -10]],
+      go: [[/^\s*package\s+\w+/m, 15], [/\bfunc\s+main\s*\(\s*\)/, 8], [/\bfmt\.(?:Print|Scan|Sprint)/, 12],
+           [/:=/, 4], [/^\s*import\s*\(/m, 6], [/\bfunc\s*\(\s*\w+\s+\*?\w+\s*\)/, 8]],
+      rust: [[/\bfn\s+main\s*\(/, 14], [/\b(?:println|print|format|eprintln)!\s*\(/, 12], [/\blet\s+mut\b/, 10],
+             [/\bimpl\b/, 6], [/&mut\b/, 6], [/\bVec</, 6], [/\bvec!\s*\[/, 8], [/^\s*use\s+std::/m, 10],
+             [/\bfn\s+\w+\s*\(/, 6], [/->\s*(?:i32|i64|u32|usize|f64|bool|String)\b/, 6]]
     };
     var EXT_LANG = { py: "python", pyw: "python", java: "java", cs: "csharp", cpp: "cpp",
                      cc: "cpp", cxx: "cpp", hpp: "cpp", h: "cpp", js: "javascript",
-                     mjs: "javascript", cjs: "javascript" };
+                     mjs: "javascript", cjs: "javascript", ts: "typescript", tsx: "typescript",
+                     mts: "typescript", c: "c", kt: "kotlin", kts: "kotlin", swift: "swift",
+                     go: "go", rs: "rust" };
     function detect(src) {
       var files = typeof src === "string" ? [{ name: "", text: src }] : (src || []);
       var score = {};
@@ -12457,7 +18131,56 @@
       });
       return best;
     }
+    // ------------------------------------------------- putting it in --
+    // A file with the fix an "expected ; here" came with put in (err.fix,
+    // from wanted): a piece put in at a line and a column -- a tab counted
+    // as the four spaces it is read as -- or a line of its own put in above
+    // a line, or after the last (line 0), indented like the line `like`.
+    // Done from the foot of the file up, so the lines above each one are
+    // still where they were; and the ones after the last line in the order
+    // given, the innermost block's first.
+    function mended(text, fix) {
+      var lines = String(text).split("\n"), was = lines.slice(), tail = [];
+      function lead(n) { return /^[ \t]*/.exec(was[n - 1] || "")[0]; }
+      for (var k = fix.edits.length - 1; k >= 0; k--) {
+        var one = fix.edits[k];
+        if (!one.line || one.line > lines.length) { tail.unshift(lead(one.like) + one.text); }
+        else if (one.col === undefined) { lines.splice(one.line - 1, 0, lead(one.like) + one.text); }
+        else {
+          var row = lines[one.line - 1], at = 0, col = 0;
+          while (at < row.length && col < one.col) { col += row[at] === "\t" ? 4 : 1; at++; }
+          lines[one.line - 1] = row.slice(0, at) + one.text + row.slice(at);
+        }
+      }
+      if (tail.length) {
+        var after = lines.length;
+        while (after > 0 && !lines[after - 1].trim()) { after--; }
+        lines.splice.apply(lines, [after, 0].concat(tail));
+      }
+      return lines.join("\n");
+    }
+    // The fix, tried before it is offered: {file, text} with it put in, if
+    // the reading then gets further than it did -- all the way, or stuck
+    // later on -- and null if not.  Not, where what is wrong is not a piece
+    // left out: print(a b) is "expected ) here" too, and print(a) b) is no
+    // better.
+    function tryMend(src, lang, err) {
+      var files = typeof src === "string" ? [{ name: "", text: src }] : (src || []);
+      var k = err && err.fix ? err.file || 0 : -1;
+      if (!files[k]) { return null; }
+      var text = mended(files[k].text, err.fix);
+      var fixed = files.map(function (one, j) { return j === k ? { name: one.name, text: text } : one; });
+      try { translate(fixed, lang); }
+      catch (again) {
+        var at = again.file || 0;
+        if (again.reading && (at < k || (at === k && !(again.left < err.left)))) { return null; }
+      }
+      return { file: k, text: text };
+    }
+
     translate.detect = detect;
+    translate.dialects = DIALECTS;
+    translate.tryMend = tryMend;
 
     return translate;
   })();
