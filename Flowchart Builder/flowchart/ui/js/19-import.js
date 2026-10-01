@@ -17,8 +17,20 @@
   // holding several things to open -- a week of exercises, or a program and
   // a picture of its chart -- asks which, and is kept so the next one can be
   // opened from it too.
-  var IN_MOST = 400;                     // files looked into from one folder
+  //
+  // A folder can be a whole project: hundreds of thousands of files.  Each
+  // is sorted by its name alone, with nothing read, and only what has to be
+  // is read -- the words that might be pseudocode or a drawing, a few
+  // hundred at most, and of the code, the program itself: the file it starts
+  // in and the files that one uses, followed from one to the next, up to
+  // CODE_MOST.  Everything else is kept, unread, in the Code tab's list of
+  // files, to be found there and brought in (32-code-side.js).  Reading is
+  // a few files at a time, said at the foot of the page, and Stop stops it.
+  var IN_MOST = 400;                     // files looked into for what they are
   var CODE_MOST = 80;                    // files of code read in as one program
+  var CODE_BYTES = 6e6;                  // and their words, at most
+  var WALK_MOST = 1000000;               // files a dropped folder is walked for
+  var LIST_MOST = 20;                    // files listed under each heading of "which"
   var inTurn = 0;                        // the opening going on; Stop moves it on
   var inBatch = null;                    // the last folder that asked which
 
@@ -139,19 +151,14 @@
 
   // -> Promise of { what, e, ... }: what is "code", "pseudo", "text" (words
   // that are not plainly pseudocode), "design", "drawing" (made in another
-  // program; `kind` says which), "picture", "zip" or "skip".
+  // program; `kind` says which), "picture", "zip" or "skip".  Code is not
+  // read here: its name says what it is, and its words are read when it is
+  // opened (`text` is null until then).
   function sortEntry(e) {
+    var known = sortByName(e);
+    if (known) { return Promise.resolve(known); }
     var low = e.name.toLowerCase();
-    if (/\.zip$/.test(low)) { return Promise.resolve({ what: "zip", e: e }); }
-    if (R_PICTURE.test(low)) { return Promise.resolve({ what: "picture", e: e }); }
-    if (/\.vsdx$/.test(low)) { return Promise.resolve({ what: "drawing", kind: "visio", e: e }); }
-    var lang = langOfFile(low);
-    if (!lang && !R_DRAWN_END.test(low) && !R_WORDS_END.test(low)) {
-      return Promise.resolve({ what: "skip", e: e });
-    }
-    if (e.size > 4e6) { return Promise.resolve({ what: "skip", e: e }); }
     return entryText(e).then(function (text) {
-      if (lang) { return { what: "code", lang: lang, text: text, e: e }; }
       var data = null;
       if (/^\s*[\[{]/.test(text)) { try { data = JSON.parse(text); } catch (err) { data = null; } }
       if (data && data.what === "flowchart-builder") { return { what: "design", data: data, e: e }; }
@@ -167,6 +174,43 @@
       return { what: looksPseudo(text) || R_PSEUDO_END.test(low) ? "pseudo" : "text", text: text, e: e,
                main: shape.main, subs: shape.subs };
     }, function () { return { what: "skip", e: e }; });
+  }
+
+  // What a file is by its name alone, where that is enough -- which is all
+  // but words that might be pseudocode or a drawing.  Null: read it to see.
+  function sortByName(e) {
+    var low = e.name.toLowerCase();
+    if (/\.zip$/.test(low)) { return { what: "zip", e: e }; }
+    if (R_PICTURE.test(low)) { return { what: "picture", e: e }; }
+    if (/\.vsdx$/.test(low)) { return { what: "drawing", kind: "visio", e: e }; }
+    var lang = langOfFile(low);
+    if (!lang && !R_DRAWN_END.test(low) && !R_WORDS_END.test(low)) { return { what: "skip", e: e }; }
+    if (e.size > 4e6) { return { what: "skip", e: e }; }
+    if (lang) { return { what: "code", lang: lang, text: null, e: e }; }
+    return null;
+  }
+
+  // `fn` over a list a few at a time, rather than all at once -- a hundred
+  // thousand files read at once is a hundred thousand reads waiting on the
+  // disk together -- with `step(done, all)` told as each one finishes.
+  // -> Promise of the answers, in the list's order (null where one failed).
+  function eachFew(list, many, fn, step) {
+    var out = new Array(list.length), next = 0, done = 0;
+    return new Promise(function (ok) {
+      if (!list.length) { ok(out); return; }
+      function one() {
+        if (next >= list.length) { return; }
+        var i = next++;
+        Promise.resolve().then(function () { return fn(list[i], i); })
+          .then(function (v) { out[i] = v; }, function () { out[i] = null; })
+          .then(function () {
+            done++;
+            if (step) { step(done, list.length); }
+            if (done === list.length) { ok(out); } else { one(); }
+          });
+      }
+      for (var k = 0; k < Math.min(many, list.length); k++) { one(); }
+    });
   }
 
   // What another program is called, for the tag beside its file.
@@ -201,8 +245,136 @@
     return units.concat(drawn);
   }
   function byPath(a, b) {
-    var da = a.e.path.split("/").length, db = b.e.path.split("/").length;
+    var da = depthOf(a.e), db = depthOf(b.e);
     return da - db || (a.e.path < b.e.path ? -1 : a.e.path > b.e.path ? 1 : 0);
+  }
+  // How far down the folder a file is, worked out once rather than at
+  // every comparison of a sort through a hundred thousand of them.
+  function depthOf(e) {
+    if (e.depth === undefined) { e.depth = String(e.path || "").split("/").length; }
+    return e.depth;
+  }
+  function stemOf(name) { return String(name || "").replace(/\.[^.\/]+$/, ""); }
+  function dirOf(path) { return String(path || "").replace(/[^\/]*$/, ""); }
+
+  // ------------------------------------------------- what matters most --
+  // Of a folder of code, the files the program is: the one it starts in,
+  // then what that one uses -- a file named in it, as Python imports a
+  // module, Java names a class, C includes a header or JavaScript a path --
+  // and what those use, and so on, nearest first.  A Go program's package
+  // is its folder, so the files beside its main come too.  Test, example
+  // and vendored folders are where a program is least likely to start.
+  var R_MAIN_FILE = /^(main|app|application|index|program|__main__|run|start|cli|server|game|demo)$/i;
+  var R_SIDE_PATH = /(^|\/)(tests?|specs?|__tests__|__mocks__|examples?|samples?|docs?|vendor|third[_-]?party|external|benchmarks?|fixtures?|migrations?|generated)(\/|$)/i;
+  var R_TEST_FILE = /(^test_|_test$|\.test$|\.spec$|Tests?$|Spec$)/;
+  var R_HAS_MAIN = /\bdef\s+main\s*\(|__name__\s*==\s*["']__main__["']|\bstatic\s+(?:async\s+)?(?:void|int|Task(?:<int>)?)\s+Main\s*\(|\bpublic\s+static\s+void\s+main\s*\(|\bint\s+main\s*\(|\bfunc\s+main\s*\(\s*\)|\bfn\s+main\s*\(\s*\)|\bfun\s+main\s*\(|@main\b/;
+
+  // How much a file's name and place say it matters, before it is read.
+  function nameWeight(it) {
+    var stem = stemOf(it.e.name), w = 0;
+    if (R_MAIN_FILE.test(stem)) { w += 40; }
+    if (R_SIDE_PATH.test(dirOf(it.e.path))) { w -= 30; }
+    if (R_TEST_FILE.test(stem)) { w -= 30; }
+    if (it.e.size > 3e5) { w -= 10; }
+    return w - 4 * depthOf(it.e);
+  }
+
+  function readTexts(items, turn, step) {
+    var want = items.filter(function (it) { return it.text === null || it.text === undefined; });
+    return eachFew(want, 12, function (it) {
+      if (turn !== inTurn) { return null; }
+      return entryText(it.e).then(function (text) { it.text = text; }, function () { it.text = ""; });
+    }, step);
+  }
+
+  // The files a file uses, of those there are: each word in it that is
+  // another file's name, the nearest of that name -- the same folder
+  // first, then the one sharing most of its path.
+  function usesOf(it, stems, items) {
+    var words = {}, found = [];
+    var own = stemOf(it.e.name).toLowerCase(), dir = dirOf(it.e.path);
+    (String(it.text || "").match(/[A-Za-z_][A-Za-z0-9_]*/g) || []).forEach(function (w) {
+      words[w.toLowerCase()] = true;
+    });
+    function shared(other) {
+      var a = dirOf(other.e.path), n = 0;
+      while (n < a.length && n < dir.length && a.charAt(n) === dir.charAt(n)) { n++; }
+      return n;
+    }
+    Object.keys(words).forEach(function (w) {
+      if (w === own || w.length < 2) { return; }
+      var list = stems[w];
+      if (!list) { return; }
+      var near = list.length === 1 ? list : list.slice().sort(function (a, b) {
+        return shared(b) - shared(a) || depthOf(a.e) - depthOf(b.e);
+      }).slice(0, 3);
+      found.push.apply(found, near);
+    });
+    if (it.lang === "go") {
+      items.forEach(function (o) { if (o !== it && dirOf(o.e.path) === dir) { found.push(o); } });
+    }
+    return found;
+  }
+
+  // -> Promise of { read: the program, nearest the start first, each with
+  // its words; rest: everything else, likeliest first, unread } -- or null
+  // where Stop was pressed.  A folder small enough to read whole is read
+  // whole, in the same order of what matters.
+  function chooseProgram(items, turn) {
+    var all = items.length <= CODE_MOST;
+    var weighed = items.map(function (it, i) { return { it: it, w: nameWeight(it), i: i }; })
+      .sort(function (a, b) { return b.w - a.w || a.i - b.i; });
+    var stems = {};
+    items.forEach(function (it) {
+      var key = stemOf(it.e.name).toLowerCase();
+      (stems[key] = stems[key] || []).push(it);
+    });
+    var told = 0;
+    function reading(n) {
+      told = Math.max(told, n);
+      inBusy(say("in_reading", { n: bigNum(told), of: bigNum(Math.min(items.length, CODE_MOST)) }));
+    }
+    var first = all ? items : weighed.slice(0, 40).map(function (x) { return x.it; });
+    return readTexts(first, turn, function (n) { if (all) { reading(n); } }).then(function () {
+      if (turn !== inTurn) { return null; }
+      var start = weighed.map(function (x) { return x.it; }).filter(function (it) {
+        return it.text !== null && it.text !== undefined && R_HAS_MAIN.test(it.text);
+      })[0] || weighed[0].it;
+      var picked = [], seen = new Set([start]), queue = [start], bytes = 0;
+      function step() {
+        if (turn !== inTurn) { return Promise.resolve(); }
+        if (!queue.length || picked.length >= CODE_MOST || bytes > CODE_BYTES) { return Promise.resolve(); }
+        var batch = queue.splice(0, 12);
+        return readTexts(batch, turn).then(function () {
+          batch.forEach(function (it) {
+            if (picked.length >= CODE_MOST || bytes > CODE_BYTES) { return; }
+            picked.push(it);
+            bytes += String(it.text || "").length;
+            if (!all) { reading(picked.length); }
+            usesOf(it, stems, items).forEach(function (other) {
+              if (!seen.has(other)) { seen.add(other); queue.push(other); }
+            });
+          });
+          return step();
+        });
+      }
+      return step().then(function () {
+        if (turn !== inTurn) { return null; }
+        // read whole: what the start never reaches is still the program's
+        if (all) {
+          weighed.forEach(function (x) { if (!seen.has(x.it)) { seen.add(x.it); picked.push(x.it); } });
+        }
+        picked.forEach(function (it, k) { it.rank = k; });
+        var inIt = new Set(picked);
+        return { read: picked, rest: weighed.map(function (x) { return x.it; })
+                                            .filter(function (it) { return !inIt.has(it); }) };
+      });
+    });
+  }
+
+  // 1234567 as 1,234,567, the way the page's language writes it.
+  function bigNum(n) {
+    try { return Number(n).toLocaleString(LANG); } catch (e) { return String(n); }
   }
 
   // Several files of pseudocode that are one program: exactly one of them
@@ -229,11 +401,24 @@
 
   function openUnit(u) {
     if (u.kind === "code") {
-      var list = u.items.slice(0, CODE_MOST);
-      openCodeFiles(list.map(function (it) { return { name: it.e.name, path: it.e.path, text: it.text }; }));
-      broughtDone(true, u.items.length > CODE_MOST ? say("in_many", { n: CODE_MOST })
-                  : say("f_opened", { name: u.items.length > 1 ? say("in_files", { n: u.items.length })
-                                                               : u.items[0].e.name }));
+      var turn = ++inTurn;
+      inBusy(TXT.in_looking);
+      chooseProgram(u.items, turn).then(function (pick) {
+        if (!pick || turn !== inTurn) { return; }
+        inDone();
+        // in the folder's own order, which is the order the reader is used
+        // to; how much each matters goes with it, for the tabs
+        var read = pick.read.slice().sort(byPath);
+        openCodeFiles(read.map(function (it) {
+          return { name: it.e.name, path: it.e.path, text: it.text, rank: it.rank };
+        }), pick.rest.map(function (it) {
+          return { name: it.e.name, path: it.e.path, entry: it.e, lang: it.lang };
+        }));
+        broughtDone(true, pick.rest.length
+          ? say("in_most", { n: bigNum(read.length), all: bigNum(u.items.length) })
+          : say("f_opened", { name: u.items.length > 1 ? say("in_files", { n: bigNum(u.items.length) })
+                                                       : u.items[0].e.name }));
+      }, function () { inDone(); broughtDone(false, TXT.in_cannot); });
       return;
     }
     if (u.kind === "pseudo") {
@@ -252,8 +437,10 @@
         broughtDone(true, say("f_opened", { name: name }));
         return;
       case "code":
-        openCodeFiles([{ name: name, text: it.text }]);
-        broughtDone(true, say("f_opened", { name: name }));
+        entryText(it.e).then(function (text) {
+          openCodeFiles([{ name: name, path: it.e.path, text: text }]);
+          broughtDone(true, say("f_opened", { name: name }));
+        }, function () { broughtDone(false, TXT.in_cannot); });
         return;
       case "pseudo": case "text":
         if (!String(it.text || "").trim()) { broughtDone(false, TXT.f_empty); return; }
@@ -301,21 +488,30 @@
     list = list.filter(function (e) { return !junkPath(e.path); });
     if (!list.length) { broughtDone(false, TXT.in_nothing); return; }
     if (list.length === 1 && !folder) { openOne(list[0]); return; }
-    inBusy(TXT.in_looking);
-    // zips inside, opened as the folders they are
-    Promise.all(list.map(function (e) {
-      return /\.zip$/i.test(e.name) && list.length < 50 ? zipEntries(e).catch(function () { return []; }) : [e];
-    })).then(function (lists) {
+    inBusy(list.length > 1000 ? say("in_sorting", { n: bigNum(list.length) }) : TXT.in_looking);
+    // zips inside, opened as the folders they are -- in a folder of a few
+    (list.length < 50 ? Promise.all(list.map(function (e) {
+      return /\.zip$/i.test(e.name) ? zipEntries(e).catch(function () { return []; }) : [e];
+    })) : Promise.resolve([list])).then(function (lists) {
       var every = [].concat.apply([], lists).filter(function (e) { return !junkPath(e.path); });
-      var looked = every.slice(0, IN_MOST);
-      return Promise.all(looked.map(sortEntry)).then(function (items) {
+      // what each is, by its name; and of the rest, the first few hundred
+      // read to see whether they are pseudocode or a drawing
+      var named = every.map(sortByName), unknown = [];
+      named.forEach(function (it, i) { if (!it) { unknown.push(i); } });
+      var looked = unknown.slice(0, IN_MOST);
+      return eachFew(looked, 12, function (i) { return sortEntry(every[i]); }).then(function (got) {
         if (turn !== inTurn) { return; }
+        looked.forEach(function (i, k) { named[i] = got[k] || { what: "skip", e: every[i] }; });
+        var items = named.filter(Boolean);
         inDone();
         var units = unitsOf(items);
+        var used = new Set();
+        units.forEach(function (u) {
+          if (u.item) { used.add(u.item); }
+          (u.items || []).forEach(function (it) { used.add(it); });
+        });
         var skipped = every.length - items.filter(function (it) {
-          return it.what !== "skip" && it.what !== "zip" && (it.what !== "text" || units.some(function (u) {
-            return u.item === it || (u.items && u.items.indexOf(it) >= 0);
-          }));
+          return it.what !== "skip" && it.what !== "zip" && (it.what !== "text" || used.has(it));
         }).length;
         if (!units.length) { broughtDone(false, TXT.in_nothing); return; }
         if (units.length === 1) { inBatch = null; openUnit(units[0]); return; }
@@ -372,29 +568,50 @@
       body.appendChild(sec);
       return list;
     }
-    var parts = {};
+    // A few of each, and how many more: a folder of ten thousand pictures
+    // is not ten thousand buttons.  Every file of code is still a press
+    // away -- the program opens with all of them in its list of files.
+    var parts = {}, counts = {};
     function listFor(key, title) { return parts[key] || (parts[key] = part(title)); }
+    function room(key, list) {
+      counts[key] = (counts[key] || 0) + 1;
+      if (counts[key] <= LIST_MOST) { return true; }
+      if (counts[key] === LIST_MOST + 1) {
+        var more = document.createElement("p");
+        more.className = "hint in-more";
+        list.appendChild(more);
+        list.moreNote = more;
+      }
+      list.moreNote.textContent = say("in_more_items", { n: bigNum(counts[key] - LIST_MOST) });
+      return false;
+    }
     batch.units.forEach(function (u) {
       if (u.kind === "code") {
-        var list = listFor("code-" + u.lang, TXT.mode_lang + " \u00b7 " + langName(u.lang));
+        var key = "code-" + u.lang;
+        var list = listFor(key, TXT.mode_lang + " \u00b7 " + langName(u.lang));
         if (u.items.length > 1) {
-          list.appendChild(pickButton(say("in_all", { n: u.items.length }), "", "", function () { openUnit(u); }, true));
+          list.appendChild(pickButton(say("in_all", { n: bigNum(u.items.length) }), "", "", function () { openUnit(u); }, true));
         }
-        u.items.forEach(function (it) {
-          list.appendChild(pickButton(it.e.name, folderOf(it), "", function () { openItem(it); }));
+        u.items.slice(0, LIST_MOST + 1).forEach(function (it) {
+          if (room(key, list)) { list.appendChild(pickButton(it.e.name, folderOf(it), "", function () { openItem(it); })); }
         });
+        if (u.items.length > LIST_MOST + 1) {
+          list.moreNote.textContent = say("in_more_items", { n: bigNum(u.items.length - LIST_MOST) });
+        }
         return;
       }
       if (u.kind === "pseudo") {
         var plist = listFor("pseudo", TXT.mode_code);
-        plist.appendChild(pickButton(say("in_all", { n: u.items.length }), "", "", function () { openUnit(u); }, true));
+        plist.appendChild(pickButton(say("in_all", { n: bigNum(u.items.length) }), "", "", function () { openUnit(u); }, true));
         u.items.forEach(function (it) {
-          plist.appendChild(pickButton(it.e.name, folderOf(it), it.from || "", function () { openItem(it); }));
+          if (room("pseudo", plist)) { plist.appendChild(pickButton(it.e.name, folderOf(it), it.from || "", function () { openItem(it); })); }
         });
         return;
       }
       var it = u.item;
-      var home = u.part === "pseudo" ? listFor("pseudo", TXT.mode_code) : listFor("drawn", TXT.mode_hand);
+      var where = u.part === "pseudo" ? "pseudo" : "drawn";
+      var home = where === "pseudo" ? listFor("pseudo", TXT.mode_code) : listFor("drawn", TXT.mode_hand);
+      if (!room(where, home)) { return; }
       var tag = it.what === "picture" ? TXT.in_picture : it.what === "design" ? TXT.in_design
               : it.from || DRAWN_FROM[it.kind] || "";
       home.appendChild(pickButton(it.e.name, folderOf(it), tag, function () { openItem(it); }));
@@ -402,7 +619,7 @@
     if (batch.skipped > 0) {
       var note = document.createElement("p");
       note.className = "hint";
-      note.textContent = batch.skipped === 1 ? TXT.in_skipped_one : say("in_skipped", { n: batch.skipped });
+      note.textContent = batch.skipped === 1 ? TXT.in_skipped_one : say("in_skipped", { n: bigNum(batch.skipped) });
       body.appendChild(note);
     }
     showBroughtSheet(true);
@@ -508,7 +725,7 @@
     dragDeep = 0;
     dropShown(false);
     dropped(ev.dataTransfer).then(function (got) {
-      if (got.list.length) { broughtIn(got.list, got.folder); }
+      if (got.list.length) { broughtIn(got.list, got.folder); } else { inDone(); }
     });
   }, true);
 
@@ -523,15 +740,25 @@
       return Promise.resolve({ list: [].slice.call(dt.files || []).map(function (f) { return fileEntry(f, f.name); }),
                                folder: "" });
     }
+    // Walked a folder at a time, a few at once, rather than every folder of
+    // a big project opened together; and how many files it has found so
+    // far said as it goes, with Stop to stop it.
     var out = [], folder = entries.length === 1 && entries[0].isDirectory ? entries[0].name : "";
+    var turn = ++inTurn, said = 0;
+    function found() {
+      if (out.length - said >= 500) {
+        said = out.length;
+        inBusy(say("in_found", { n: bigNum(out.length) }));
+      }
+    }
     function walk(entry, path) {
-      if (out.length >= 3000) { return Promise.resolve(); }
+      if (out.length >= WALK_MOST || turn !== inTurn) { return Promise.resolve([]); }
       if (entry.isFile) {
         return new Promise(function (ok) {
-          entry.file(function (f) { out.push(fileEntry(f, path + f.name)); ok(); }, function () { ok(); });
+          entry.file(function (f) { out.push(fileEntry(f, path + f.name)); found(); ok([]); }, function () { ok([]); });
         });
       }
-      if (!entry.isDirectory || junkPath(path + entry.name + "/x")) { return Promise.resolve(); }
+      if (!entry.isDirectory || junkPath(path + entry.name + "/x")) { return Promise.resolve([]); }
       var reader = entry.createReader(), kids = [];
       return new Promise(function (ok) {
         (function more() {
@@ -542,11 +769,28 @@
           }, function () { ok(kids); });
         })();
       }).then(function (list) {
-        return Promise.all(list.map(function (k) { return walk(k, path + entry.name + "/"); }));
+        var inner = path + entry.name + "/";
+        // the files in it now; the folders in it go on the list to walk
+        return eachFew(list.filter(function (k) { return k.isFile; }), 16, function (k) { return walk(k, inner); })
+          .then(function () {
+            return list.filter(function (k) { return k.isDirectory; }).map(function (k) { return [k, inner]; });
+          });
       });
     }
-    return Promise.all(entries.map(function (e) { return walk(e, ""); }))
-      .then(function () { return { list: out, folder: folder || (entries.length > 1 ? " " : "") }; });
+    var todo = entries.map(function (e) { return [e, ""]; });
+    function next() {
+      if (!todo.length || out.length >= WALK_MOST || turn !== inTurn) { return Promise.resolve(); }
+      var now = todo.splice(0, 8);
+      return eachFew(now, 8, function (pair) { return walk(pair[0], pair[1]); }).then(function (got) {
+        got.forEach(function (more) { if (more) { todo.push.apply(todo, more); } });
+        return next();
+      });
+    }
+    if (entries.length > 1 || entries[0].isDirectory) { inBusy(TXT.in_looking); }
+    return next().then(function () {
+      if (turn !== inTurn) { inDone(); return { list: [], folder: "" }; }
+      return { list: out, folder: folder || (entries.length > 1 ? " " : "") };
+    });
   }
 
   // ------------------------------------------------------------ pasted --

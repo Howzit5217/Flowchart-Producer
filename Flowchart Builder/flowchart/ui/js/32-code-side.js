@@ -29,7 +29,17 @@
   var langFrom = null;                   // the code the pseudocode was last read from
   var langMade = null;                   // and the pseudocode that reading made
   var langAsked = false;                 // Build asked for by its keys, not its button
+  // Read in whatever was there before -- a file just opened, a translation
+  // asked for -- but not put right: that waits for Build to be pressed.
+  var langForced = false;
   var langFiles = [{ name: "", text: "" }];   // the program's files; the box holds one
+  // The rest of a big folder: kept to be found and brought in, not read --
+  // { name, path, entry, lang, low } (chosen in 19-import.js).
+  var langShelf = [];
+  var LANG_TABS = 20;                    // tabs over the box, at most
+  var LIST_ROW = 30;                     // a row of the list of every file, in pixels
+  var LIST_TALL = 8e6;                   // and the list no taller than this: see paintList
+  var listOpen = false, listFind = "", listRowsNow = [];
   var langAt = 0;                        // which one
   var langSeen = null;                   // the language the code was last found to be in
 
@@ -153,17 +163,46 @@
     return (k === 0 ? "main" : "file" + (k + 1)) + "." + ext;
   }
 
+  // The files, most important first: the one the program starts in, then
+  // what it uses, as they were found when the folder was opened (`rank`,
+  // 19-import.js) -- and any added since after them, in the order they came.
+  function langOrder() {
+    return langFiles.map(function (one, k) { return k; }).sort(function (a, b) {
+      var ra = langFiles[a].rank, rb = langFiles[b].rank;
+      ra = typeof ra === "number" ? ra : Infinity;
+      rb = typeof rb === "number" ? rb : Infinity;
+      return (ra === rb ? 0 : ra < rb ? -1 : 1) || a - b;
+    });
+  }
+
+  // The tabs: the twenty that matter most -- and the one on show, wherever
+  // it comes -- with every other file a press away, in the list under them.
   function drawFiles() {
     var strip = el("#lang-files");
     if (!strip) { return; }
+    var list = el("#lang-list");
+    var wasAt = list ? list.querySelector(".lang-list-rows").scrollTop : 0;
+    if (list) { list.remove(); }        // kept, with what was typed into it, and where it was
     strip.innerHTML = "";
-    langFiles.forEach(function (one, k) {
+    var shown = langOrder().slice(0, LANG_TABS);
+    if (shown.indexOf(langAt) < 0) { shown[shown.length - 1] = langAt; }
+    var hidden = langFiles.length - shown.length + langShelf.length;
+    if (hidden > 0) {
+      var head = document.createElement("div");
+      head.className = "lang-files-head";
+      head.textContent = say("lang_top", { n: shown.length, all: bigNum(langFiles.length + langShelf.length) });
+      strip.appendChild(head);
+    } else {
+      listOpen = false;
+    }
+    shown.forEach(function (k) {
+      var one = langFiles[k];
       var tab = document.createElement("button");
       tab.type = "button";
       tab.className = "lang-file" + (k === langAt ? " on" : "");
       tab.setAttribute("role", "tab");
       tab.setAttribute("aria-selected", k === langAt ? "true" : "false");
-      tab.title = TXT.lang_file_tip || "";
+      tab.title = [one.path, TXT.lang_file_tip].filter(Boolean).join(" \u00b7 ");
       var name = document.createElement("span");
       name.className = "lang-file-name";
       name.textContent = fileLabel(k);
@@ -190,8 +229,187 @@
     add.innerHTML = '<svg viewBox="0 0 20 20"><path d="M10 4.5v11M4.5 10h11"/></svg>';
     add.onclick = addFile;
     strip.appendChild(add);
+    if (hidden > 0) {
+      var more = document.createElement("button");
+      more.type = "button";
+      more.className = "lang-file more" + (listOpen ? " on" : "");
+      more.setAttribute("aria-expanded", listOpen ? "true" : "false");
+      more.textContent = listOpen ? (TXT.lang_less || "") : say("lang_more", { n: bigNum(hidden) });
+      more.title = TXT.lang_more_tip || "";
+      more.onclick = function () { fileList(!listOpen); };
+      strip.appendChild(more);
+    }
+    if (listOpen) {
+      strip.appendChild(list || makeList());
+      el("#lang-list .lang-list-rows").scrollTop = wasAt;
+      drawList();
+    }
     var keepAll = el("#lang-save-all");
     if (keepAll) { keepAll.hidden = langFiles.length < 2; }
+  }
+
+  // ---- every file, in a list that opens under the tabs --------------------
+  // A folder can hold a hundred thousand files.  They are all in here: the
+  // ones Build reads first, most important at the top, then the rest of
+  // the folder, likeliest first -- each found by typing part of its name or
+  // its folder.  Only the rows in sight are made: the list is as tall as
+  // all of them, and scrolled, the few in view are written afresh, so a
+  // hundred thousand files cost what thirty do.  A file from the rest of
+  // the folder is read when it is picked, and from then on is one of the
+  // program's, read with the others when Build is pressed.
+  function fileList(on) {
+    listOpen = !!on;
+    drawFiles();
+    var find = el("#lang-list .lang-find");
+    if (on && find) { find.focus(); }
+  }
+
+  function makeList() {
+    var box = document.createElement("div");
+    box.id = "lang-list";
+    box.className = "lang-list";
+    var top = document.createElement("div");
+    top.className = "lang-list-top";
+    var find = document.createElement("input");
+    find.type = "search";
+    find.className = "field lang-find";
+    find.placeholder = TXT.lang_find || "";
+    find.setAttribute("aria-label", TXT.lang_find || "");
+    find.spellcheck = false;
+    find.autocomplete = "off";
+    find.value = listFind;
+    var count = document.createElement("span");
+    count.className = "lang-list-count";
+    top.appendChild(find);
+    top.appendChild(count);
+    var rows = document.createElement("div");
+    rows.className = "lang-list-rows";
+    rows.setAttribute("role", "listbox");
+    var room = document.createElement("div");
+    room.className = "lang-list-room";
+    rows.appendChild(room);
+    box.appendChild(top);
+    box.appendChild(rows);
+    var due = 0;
+    find.addEventListener("input", function () {
+      clearTimeout(due);
+      due = setTimeout(function () { listFind = find.value; rows.scrollTop = 0; drawList(); }, 90);
+    });
+    find.addEventListener("keydown", function (ev) {
+      if (ev.key === "Enter") {
+        ev.preventDefault();
+        clearTimeout(due);
+        listFind = find.value;
+        drawList();
+        var first = listRowsNow.filter(function (r) { return r.kind !== "head"; })[0];
+        if (first) { listPick(first); }
+      }
+      if (ev.key === "Escape") { ev.preventDefault(); ev.stopPropagation(); fileList(false); }
+    });
+    rows.addEventListener("scroll", function () { paintList(); });
+    return box;
+  }
+
+  // Which rows there are, for what has been typed: every word of it
+  // somewhere in the file's name or folder.
+  function drawList() {
+    var box = el("#lang-list");
+    if (!box) { return; }
+    var words = String(listFind || "").toLowerCase().split(/\s+/).filter(Boolean);
+    function fits(low) {
+      for (var w = 0; w < words.length; w++) { if (low.indexOf(words[w]) < 0) { return false; } }
+      return true;
+    }
+    var mine = [], rest = [];
+    langOrder().forEach(function (k) {
+      var low = (String(langFiles[k].path || "") + " " + fileLabel(k)).toLowerCase();
+      if (!words.length || fits(low)) { mine.push({ kind: "file", k: k }); }
+    });
+    for (var i = 0; i < langShelf.length; i++) {
+      if (!words.length || fits(langShelf[i].low)) { rest.push({ kind: "shelf", s: i }); }
+    }
+    listRowsNow = [];
+    if (mine.length) {
+      listRowsNow.push({ kind: "head", text: say("lang_list_read", { n: bigNum(mine.length) }) });
+      listRowsNow = listRowsNow.concat(mine);
+    }
+    if (rest.length) {
+      listRowsNow.push({ kind: "head", text: say("lang_list_rest", { n: bigNum(rest.length) }) });
+      listRowsNow = listRowsNow.concat(rest);
+    }
+    if (!listRowsNow.length) { listRowsNow.push({ kind: "head", text: TXT.lang_list_none || "", none: true }); }
+    box.querySelector(".lang-list-count").textContent =
+      say("lang_count", { n: bigNum(langFiles.length + langShelf.length) });
+    box.querySelector(".lang-list-room").style.height =
+      Math.min(listRowsNow.length * LIST_ROW, LIST_TALL) + "px";
+    paintList();
+  }
+
+  // The rows in sight, and a few either side of them.  A browser will not
+  // make a box taller than some tens of millions of pixels, and a million
+  // files are thirty million; past LIST_TALL the bar stands for the whole
+  // list rather than for its pixels, and the rows are set where the view is.
+  function paintList() {
+    var rows = el("#lang-list .lang-list-rows"), room = el("#lang-list .lang-list-room");
+    if (!rows || !room) { return; }
+    var view = rows.clientHeight || 300, n = listRowsNow.length;
+    var whole = n * LIST_ROW <= LIST_TALL;
+    var first = whole ? rows.scrollTop / LIST_ROW
+              : rows.scrollTop / Math.max(1, LIST_TALL - view) * Math.max(0, n - view / LIST_ROW);
+    var from = Math.max(0, Math.floor(first) - 4);
+    var upto = Math.min(n, from + Math.ceil(view / LIST_ROW) + 8);
+    room.innerHTML = "";
+    for (var i = from; i < upto; i++) {
+      room.appendChild(listRow(listRowsNow[i], whole ? i * LIST_ROW : rows.scrollTop + (i - first) * LIST_ROW));
+    }
+  }
+
+  function listRow(r, top) {
+    if (r.kind === "head") {
+      var head = document.createElement("div");
+      head.className = "lang-row-head" + (r.none ? " none" : "");
+      head.style.top = top + "px";
+      head.textContent = r.text;
+      return head;
+    }
+    var path = r.kind === "file" ? String(langFiles[r.k].path || "") : langShelf[r.s].path;
+    var b = document.createElement("button");
+    b.type = "button";
+    b.className = "lang-row" + (r.kind === "shelf" ? " shelf" : "") +
+                  (r.kind === "file" && r.k === langAt ? " on" : "");
+    b.setAttribute("role", "option");
+    b.style.top = top + "px";
+    var name = document.createElement("span");
+    name.className = "lang-row-name";
+    name.textContent = r.kind === "file" ? fileLabel(r.k) : langShelf[r.s].name;
+    var where = document.createElement("span");
+    where.className = "lang-row-where";
+    where.textContent = path.replace(/[^\/]*$/, "").replace(/\/$/, "");
+    b.appendChild(name);
+    b.appendChild(where);
+    b.title = r.kind === "shelf" ? [path, TXT.lang_list_bring].filter(Boolean).join(" \u00b7 ") : path;
+    b.onclick = function () { listPick(r); };
+    return b;
+  }
+
+  function listPick(r) {
+    if (r.kind === "file") { if (r.k !== langAt) { showFile(r.k); } else { drawFiles(); } return; }
+    bringIn(langShelf[r.s]);
+  }
+
+  // A file from the rest of the folder, read and made one of the program's.
+  function bringIn(one) {
+    if (!one || one.coming) { return; }
+    one.coming = true;
+    entryText(one.entry).then(function (text) {
+      var at = langShelf.indexOf(one);
+      if (at >= 0) { langShelf.splice(at, 1); }
+      langKeep();
+      langFiles.push({ name: one.name, path: one.path, text: text });
+      showFile(langFiles.length - 1);
+      translateReady();
+      langDetect();
+    }, function () { one.coming = false; });
   }
 
   function showFile(k) {
@@ -395,6 +613,22 @@
     try { fixHand.terminate(); } catch (e) { /* gone already */ }
     fixHand = null;
     fixJobs = {};
+    buildBusy(false);                    // the job it was red for is gone
+  }
+
+  // Build, while the code is being put right: red, the way it is while a
+  // chart is drawn, and not to be pressed again until it is done -- Check
+  // too, in full screen, where it is the button that set it going.
+  // `keep` lets go of the press but keeps the red, for the drawing that
+  // follows straight on from it, which is red in its own right.
+  function buildBusy(on, keep) {
+    ["#build", "#lang-check"].forEach(function (q) {
+      var b = el(q);
+      if (!b) { return; }
+      b.disabled = !!on;
+      if (on) { b.classList.remove("done"); }
+      if (!keep) { b.classList.toggle("working", !!on); }
+    });
   }
 
   // A job for the fixer -- {kind, files, lang, notes} -- and a promise of
@@ -513,11 +747,13 @@
     langSays("", [slot]);
     fillSlot(slot, function () { return [fixBar()]; });
     fixBarTo(id, 0);
+    buildBusy(true);
     fixAsk({ kind: "all", files: before, lang: langNow() }, function (at) {
       fixBarTo(id, at);
     }).then(function (got) {
-      if (langKey() !== key) { return; }  // changed while it worked: that code is gone
-      if (!got || !got.n) { langStop(err); return; }
+      // changed while it worked: that code is gone
+      if (langKey() !== key) { buildBusy(false); return; }
+      if (!got || !got.n) { buildBusy(false); langStop(err); return; }
       try {
         langPutIn(got.files);
         fixTried = langKey();             // what is left, if anything, is said, not tried again
@@ -525,14 +761,25 @@
         fixBarTo(id, 1, true);
       } catch (e) {
         // never a bar left standing: what is wrong said instead
+        buildBusy(false);
         langStop(err);
         setTimeout(function () { throw e; }, 0);
         return;
       }
       // full, a moment to be seen -- and not a flash where it was quick
-      setTimeout(again, Date.now() - began < 300 ? 120 : 360);
+      setTimeout(function () { goOnFrom(again); }, Date.now() - began < 300 ? 120 : 360);
     });
     return true;
+  }
+
+  // Put right, and on to what it was put right for: the drawing, which is
+  // red as well, so the button stays red into it -- or Check, which draws
+  // nothing, and the red goes.
+  function goOnFrom(again) {
+    buildBusy(false, true);
+    again();
+    var build = el("#build");
+    if (!build || !build.disabled) { buildBusy(false); }
   }
 
   // The code read, and calls in it can't be run: where that is a name
@@ -543,8 +790,9 @@
     if (!asked || !calls.length || renameTried === key) { return false; }
     renameTried = key;
     var before = langAll();
+    buildBusy(true);
     fixAsk({ kind: "rename", files: before, lang: langNow(), notes: calls }).then(function (got) {
-      if (langKey() !== key) { return; }
+      if (langKey() !== key) { buildBusy(false); return; }
       var found = [];
       ((got && got.names) || []).forEach(function (one, i) {
         if (one) { found.push({ file: one.file, fix: one.fix, stop: { line: calls[i].line, file: calls[i].file || 0, text: calls[i].text } }); }
@@ -558,7 +806,7 @@
         renameTried = langKey();
         fixReportAdd(before, found, key);
       }
-      again();
+      goOnFrom(again);
     });
     return true;
   }
@@ -860,10 +1108,11 @@
     if (!build || !build.onclick) { return; }
     var pressed = build.onclick;
     build.onclick = function (ev) {
-      var asked = langAsked;
+      var asked = langAsked, forced = langForced;
       langAsked = false;
+      langForced = false;
       if (byLang && langBox() &&
-          ((ev && ev.isTrusted) || asked || langKey() !== langFrom)) {
+          ((ev && ev.isTrusted) || asked || forced || langKey() !== langFrom)) {
         if (!readLangIn((ev && ev.isTrusted) || asked)) {
           langTranslating = null;        // nothing to translate from, as it stands
           return;
@@ -983,10 +1232,17 @@
   // What the Code box holds, for a save, a file or a reload to carry: the
   // files, how the language is chosen, and what it was last read into -- so
   // it comes back knowing whether the pseudocode has moved on from it.
+  // (Not the rest of a big folder: that is files on the disk, and a reload
+  // or a save keeps the program read from it.)
   function langData() {
     if (!langBox() || !langHasCode()) { return null; }
     var pick = el("#lang-pick");
-    return { lang: pick ? pick.value : "auto", files: langAll(), at: langAt,
+    var files = langAll();
+    langFiles.forEach(function (one, k) {
+      if (typeof one.rank === "number") { files[k].rank = one.rank; }
+      if (one.path) { files[k].path = one.path; }
+    });
+    return { lang: pick ? pick.value : "auto", files: files, at: langAt,
              from: langFrom, made: langMade, folder: langFolder };
   }
 
@@ -998,7 +1254,12 @@
     if (pick) { pick.value = was.lang && (langKnown(was.lang) || was.lang === "auto") ? was.lang : "auto"; }
     // saved before a program could be in several files, it is one file
     langFiles = (was.files && was.files.length ? was.files : [{ name: "", text: was.text || "" }])
-      .map(function (one) { return { name: String(one.name || ""), text: String(one.text || "") }; });
+      .map(function (one) {
+        return { name: String(one.name || ""), text: String(one.text || ""), path: String(one.path || ""),
+                 rank: typeof one.rank === "number" ? one.rank : undefined };
+      });
+    langShelf = [];
+    listOpen = false;
     langAt = Math.min(Math.max(0, was.at || 0), langFiles.length - 1);
     box.value = langFiles[langAt].text;
     langFrom = typeof was.from === "string" ? was.from : null;
@@ -1029,13 +1290,25 @@
   function openCodeFile(name, text) {
     return openCodeFiles([{ name: name, text: text }]);
   }
-  function openCodeFiles(list) {
+  // `shelf`, where a folder was too big to read whole, is the rest of it:
+  // { name, path, entry, lang }, likeliest first, read when picked from
+  // the list of files.
+  function openCodeFiles(list, shelf) {
     var box = langBox();
     if (!box || !list.length) { return false; }
     langFiles = list.map(function (one) {
       return { name: String(one.name || "").replace(/^.*[\\/]/, ""),
-               text: String(one.text || "").replace(/\r\n?/g, "\n") };
+               text: String(one.text || "").replace(/\r\n?/g, "\n"),
+               path: String(one.path || ""),
+               rank: typeof one.rank === "number" ? one.rank : undefined };
     });
+    langShelf = (shelf || []).map(function (one) {
+      var path = String(one.path || one.name || "");
+      return { name: String(one.name || "").replace(/^.*[\\/]/, ""), path: path,
+               entry: one.entry, lang: one.lang, low: path.toLowerCase() };
+    });
+    listOpen = false;
+    listFind = "";
     // the folder they all came in, which is as often as not what the
     // program is called (LibrarySystem/Main.java)
     var tops = list.map(function (one) {
@@ -1044,8 +1317,8 @@
     });
     langFolder = tops[0] && tops.every(function (t) { return t === tops[0]; }) ? tops[0] : "";
     langNamed = null;
-    langAt = 0;
-    box.value = langFiles[0].text;
+    langAt = langOrder()[0] || 0;        // on show: the one it starts in
+    box.value = langFiles[langAt].text;
     if (el("#lang-pick")) { el("#lang-pick").value = "auto"; }
     try { localStorage.setItem("flowchart-code-pick", "auto"); } catch (e) { /* fine */ }
     langFrom = null;
@@ -1053,7 +1326,10 @@
     drawFiles();
     langDetect();
     setMode(false, true);
-    langAsked = true;                    // read it in, whatever was there
+    // Read in and drawn, whatever was there -- but nothing put right: a
+    // file is opened to be looked at, and what is wrong with it is said,
+    // not mended, until Build is pressed.
+    langForced = true;
     el("#build").click();
     return true;
   }
@@ -1169,7 +1445,7 @@
       if (byLang && langBox() && langHasCode() &&
           (langKey() !== langFrom || !runnable())) {
         langTranslating = el("#see-code").value;
-        langAsked = true;
+        langForced = true;               // read in, not put right: that is Build's
         el("#build").click();            // read in and drawn; langBuilt goes on
         return;
       }

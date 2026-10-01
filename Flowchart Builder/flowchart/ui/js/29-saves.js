@@ -265,7 +265,7 @@
       if (!kind || n.classList.contains("back-here")) { continue; }
       var text = kind === "card"
         ? Array.prototype.filter.call(n.children, function (row) {
-            return row.tagName !== "BUTTON";
+            return row.tagName !== "BUTTON" && !row.classList.contains("ask");   // not what puts it right
           }).map(function (row) { return row.textContent; }).join("\n")
         : n.textContent;
       var how = kind === "card" ? "bad"

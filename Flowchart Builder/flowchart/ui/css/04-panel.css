@@ -338,6 +338,52 @@
     width: 14ch; min-width: 0; border: 0; padding: 0; margin: 0; outline: 0;
     background: transparent; color: inherit; font: inherit;
   }
+  /* Over twenty files: the twenty that matter most, said so over them, and
+     the rest behind "+N more" -- a list under the tabs of every file, found
+     by typing, only the rows in sight ever made (32-code-side.js). */
+  .lang-files-head {
+    flex: 1 1 100%; font-size: 11px; color: var(--muted); letter-spacing: .02em;
+    margin-bottom: -1px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .lang-file.more { color: var(--accent); border-style: dashed; }
+  .lang-file.more.on { border-style: solid; background: var(--accent-soft); }
+  .lang-list {
+    flex: 1 1 100%; min-width: 0; margin-top: 4px; overflow: hidden;
+    border: 1px solid var(--line); border-radius: 8px; background: var(--panel);
+  }
+  .lang-list-top {
+    display: flex; align-items: center; gap: 8px; padding: 6px;
+    border-bottom: 1px solid var(--line-soft);
+  }
+  .lang-list .lang-find { flex: 1 1 auto; min-width: 0; padding: 5px 8px; font-size: 12.5px; }
+  .lang-list-count { flex: none; font-size: 11px; color: var(--muted); }
+  .lang-list-rows { position: relative; height: 300px; overflow: auto; overscroll-behavior: contain; }
+  #lang-over .lang-list-rows { height: min(46vh, 460px); }
+  .lang-list-room { position: relative; }
+  .lang-row, .lang-row-head {
+    position: absolute; left: 0; right: 0; height: 30px; box-sizing: border-box;
+    display: flex; align-items: center; gap: 10px; padding: 0 10px; min-width: 0;
+  }
+  .lang-row {
+    border: 0; background: transparent; color: var(--ink); cursor: pointer; text-align: left;
+    font: 12px/1.2 "Cascadia Mono", Consolas, "SF Mono", Menlo, monospace;
+  }
+  .lang-row:hover, .lang-row:focus-visible { background: var(--line-soft); outline: 0; }
+  .lang-row.on { background: var(--accent-soft); }
+  .lang-row::before {
+    content: ""; flex: none; width: 6px; height: 6px; border-radius: 50%; background: var(--accent);
+  }
+  .lang-row.shelf::before { background: transparent; box-shadow: inset 0 0 0 1px var(--muted); }
+  .lang-row-name { flex: 0 1 auto; max-width: 60%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .lang-row-where {
+    flex: 1 1 0; min-width: 0; color: var(--muted); font-size: 11px;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .lang-row-head {
+    font-size: 11px; font-weight: 650; color: var(--muted); letter-spacing: .03em;
+    background: var(--field); border-bottom: 1px solid var(--line-soft);
+  }
+  .lang-row-head.none { font-weight: 400; background: transparent; border: 0; }
   /* over the box filling the screen, the same tabs on the sheet's ground */
   #lang-over .lang-files {
     flex: none; margin: 0; padding: 10px 16px 0; background: var(--code-bg);
@@ -613,6 +659,10 @@
      cursor at the very moment it had nothing whatever to run. */
   .btn.primary.working[disabled], .btn.primary.done[disabled] {
     opacity: 1; cursor: progress;
+  }
+  /* Check, in full screen, while it puts the code right (32-code-side.js) */
+  #lang-check.working, #lang-check.working[disabled] {
+    background: var(--busy); border-color: var(--busy); color: #fff; opacity: 1; cursor: progress;
   }
   /* The line under the button keeps its place whether it is saying anything
      or not.  It was holding 1em open -- the size of the letters -- while a

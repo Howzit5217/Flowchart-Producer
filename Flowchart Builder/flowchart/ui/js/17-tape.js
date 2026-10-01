@@ -155,8 +155,10 @@
     Array.prototype.forEach.call(box.children, function (one) {
       if (!tapeKind(one)) { return; }
       if (one.classList.contains("blame")) {
+        // not the buttons that put it right, nor the box asking for what
+        // would (27-ask.js): those are the page's, not what the run said
         Array.prototype.forEach.call(one.children, function (row) {
-          if (row.tagName !== "BUTTON") { said.push(row.textContent); }
+          if (row.tagName !== "BUTTON" && !row.classList.contains("ask")) { said.push(row.textContent); }
         });
         return;
       }

@@ -9,3 +9,5 @@ Three ways in, one tab each:
 Every yellow warning and red error comes with a way to put it right. Where the page knows the answer it is a button; where it needs something only you know — the value a name starts at, the test a loop stops on, the line an If ends after, the words for a shape or where an arrow goes — a small box under the warning asks for it, and the page writes your answer in the right place, draws the chart again and, for a run that stopped, runs it again.
 
 The **Trace table** after a run lists every step: the line and what it says, each name's new value (the main program's names first, then each module's under its name), and what was printed, with a small chart of every number over it.
+
+A whole folder can be opened — even one of hundreds of thousands of files. The program is read from the file it starts in and the files that one uses; the 20 that matter most are tabs over the code, and every other file is in a list behind **+N more**, found by typing part of its name and brought in with a click. Code is only put right when you press **Build the chart**, never just by opening a file, and the button goes red and waits while it works.
