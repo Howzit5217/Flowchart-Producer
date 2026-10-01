@@ -51,9 +51,14 @@
   // The chart itself.  `series`: [{ name, values: [number|null] }]; `names`
   // the name under each place along the bottom (bars), or none (a line,
   // counted along).  Drawn in the page's own colors, so it follows the
-  // theme; sized by its box, words and all.
-  function graphSvg(series, names, bars) {
-    var W = 600, H = 190, left = 44, right = 12, top = 12, foot = names && bars ? 34 : 22;
+  // theme; sized by its box, words and all.  `size`, where it is given, is
+  // a smaller one -- { w, h } -- drawn to be shown about that size, so its
+  // words come out the size of everybody else's; and `tint` starts its
+  // lines on another of the colors.
+  function graphSvg(series, names, bars, size) {
+    var W = (size && size.w) || 600, H = (size && size.h) || 190;
+    var tint = (size && size.tint) || 0;
+    var left = 44, right = 12, top = 12, foot = names && bars ? 34 : 22;
     var lo = Infinity, hi = -Infinity, count = 0;
     series.forEach(function (s) {
       count = Math.max(count, s.values.length);
@@ -62,7 +67,8 @@
         lo = Math.min(lo, v); hi = Math.max(hi, v);
       });
     });
-    if (bars || lo > 0) { lo = Math.min(lo, 0); }
+    // a line of its own (`fit`) is drawn to its own span, not up from nought
+    if (bars || (lo > 0 && !(size && size.fit))) { lo = Math.min(lo, 0); }
     if (hi < 0) { hi = 0; }
     if (hi === lo) { hi = lo + 1; }
     // what a screen reader says for it: each line or the bars, and their
@@ -119,12 +125,12 @@
       s.values.forEach(function (v, i) {
         if (v !== null) { pts.push((left + step * i).toFixed(1) + "," + yOf(v).toFixed(1)); }
       });
-      svg.appendChild(svgEl("polyline", { points: pts.join(" "), "class": "graph-line graph-c" + (k % 4) }));
+      svg.appendChild(svgEl("polyline", { points: pts.join(" "), "class": "graph-line graph-c" + ((k + tint) % 4) }));
       if (count <= 30) {
         s.values.forEach(function (v, i) {
           if (v === null) { return; }
           var dot = svgEl("circle", { cx: (left + step * i).toFixed(1), cy: yOf(v).toFixed(1), r: 3,
-                                      "class": "graph-dot graph-c" + (k % 4) });
+                                      "class": "graph-dot graph-c" + ((k + tint) % 4) });
           dot.appendChild(svgEl("title", {}, (s.name ? s.name + " " : "") + "#" + (i + 1) + ": " + graphSays(v)));
           svg.appendChild(dot);
         });
@@ -301,25 +307,54 @@
   // ---- the trace table's numbers, over the run --------------------------------
   // Each name that only ever held numbers, drawn step by step: what the
   // table says row by row, seen at once -- the total climbing, the counter
-  // going round.  Four at most, the ones that changed most often.
-  function traceGraph(page, rows, cols) {
+  // going round.  A small chart each, every one to its own scale: drawn
+  // together on one, a total in the hundreds flattened a counter going one
+  // to five into a line along the floor.  Six at most -- the ones that
+  // changed most often -- in the table's own order, and counted along in
+  // steps, the table's rows, to the last one, however many points the line
+  // was thinned to.  `groups` are the table's columns (traceGroups).
+  var TRACE_GRAPHS = 6;
+  function traceGraph(page, rows, groups) {
     if (rows.length < 3) { return; }
-    var picked = cols.map(function (c) {
+    var cols = [];
+    groups.forEach(function (g) {
+      g.cols.forEach(function (c) { cols.push({ key: c.key, name: c.name, chart: g.chart }); });
+    });
+    var picked = cols.map(function (c, order) {
       var vals = [], now = null, changes = 0, numeric = true;
       rows.forEach(function (r) {
-        if (r.cells[c] !== undefined) {
-          var v = parseFloat(r.cells[c]);
-          if (!/^-?\d+(\.\d+)?$/.test(String(r.cells[c]).trim())) { numeric = false; }
-          else { now = v; changes++; }
+        var v = r.cells[c.key];
+        if (v !== undefined) {
+          if (!/^-?\d+(\.\d+)?(e[-+]?\d+)?$/i.test(String(v).trim())) { numeric = false; }
+          else { now = parseFloat(v); changes++; }
         }
         vals.push(now);
       });
-      return { name: c, values: vals, changes: changes, numeric: numeric };
+      return { col: c, values: vals, changes: changes, numeric: numeric, order: order };
     }).filter(function (s) { return s.numeric && s.changes >= 2; });
     if (!picked.length) { return; }
-    picked.sort(function (a, b) { return b.changes - a.changes; });
-    var holder = document.createElement("div");
-    page.appendChild(holder);
-    graphCard(holder, picked.slice(0, 4), null, false, "");
-    holder.remove();
+    picked.sort(function (a, b) { return b.changes - a.changes || a.order - b.order; });
+    picked = picked.slice(0, TRACE_GRAPHS).sort(function (a, b) { return a.order - b.order; });
+    var steps = rows.map(function (r, i) { return String(i + 1); });
+    var shelf = document.createElement("div");
+    shelf.className = "trace-graphs";
+    picked.forEach(function (s, k) {
+      var card = document.createElement("div");
+      card.className = "tape-chart";
+      var head = document.createElement("div");
+      head.className = "graph-head";
+      head.textContent = s.col.name;
+      if (s.col.chart) {
+        var of = document.createElement("span");
+        of.className = "graph-of";
+        of.textContent = s.col.chart + "()";
+        head.appendChild(of);
+      }
+      card.appendChild(head);
+      var thin = thinned(s.values, steps);
+      card.appendChild(graphSvg([{ name: s.col.name, values: thin.values }], thin.names, false,
+                                { w: 320, h: 120, tint: k, fit: true }));
+      shelf.appendChild(card);
+    });
+    page.appendChild(shelf);
   }

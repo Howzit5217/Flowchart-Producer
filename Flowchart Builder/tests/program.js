@@ -82,8 +82,11 @@ function runner(WORDS) {
   function showLine() {}
   function pickLine() {}
   function markFault() {}
+  var whenBuilt = [];                    // eslint-disable-line no-unused-vars
+  var builtText = null;                  // the box as it was built, while asking
+  function buildAsked() {}
   function sayFault(err, how) {
-    faults.push({ how: how || "bad", message: err.message || String(err),
+    faults.push({ raw: err, how: how || "bad", message: err.message || String(err),
                   tip: err.tip || "", line: (err.at && err.at.line) || 0,
                   fix: err.fix || null,
                   trail: (err.trail || []).map(function (s) { return s.name; }) });
@@ -99,6 +102,7 @@ function runner(WORDS) {
   eval(part("18-code.js"));              // eslint-disable-line no-eval
   eval(part("18-write.js"));             // eslint-disable-line no-eval
   eval(part("27-mend.js"));              // eslint-disable-line no-eval
+  eval(part("27-ask.js"));               // eslint-disable-line no-eval
 
   var go = function (ast, typed) {
     var left = (typed || []).slice();
@@ -170,6 +174,48 @@ function runner(WORDS) {
       return { fix: fault.fix, at: done.at, text: done.text };
     });
   };
+  // A fault that needs a word first: run it, take what the box under the
+  // fault asks (27-ask.js), answer it, and hand back what got written --
+  // `also` presses the button with nothing to type instead of a row.
+  go.asked = function (source, ast, typed, answers, row, also) {
+    // run the way a puzzle is marked: a loop that never stops is said to
+    // be one after thousands of steps, not after a quarter of a second each
+    return go.quietly(ast, typed).then(function (out) {
+      var fault = out.faults[0];
+      if (!fault) { return { text: null, not: "it did not stop" }; }
+      codeBox = { value: source, focus: function () {},
+                  dispatchEvent: function () {},
+                  setSelectionRange: function () {} };
+      builtText = source;
+      var line = fault.line;
+      var mended = !!(fault.fix && fixSays(fault.fix, line) && planRight(fault.fix, line));
+      var ask = askForFault(fault.raw, mended);
+      var got = { text: null, not: "nothing was asked" };
+      if (ask) {
+        var guess = ask.rows[0] && ask.rows[0].fields[0].value;
+        var not = also !== undefined && also !== null
+                ? (ask.also && ask.also[also] ? ask.also[also].put() : "no button " + also)
+                : ask.rows[row || 0].put(answers || []);
+        got = { text: codeBox.value, not: not || "", guess: guess || "" };
+      }
+      codeBox = null;
+      builtText = null;
+      return got;
+    });
+  };
+  // And one the reading gave, answered the same way.
+  go.problemAsked = function (source, fix, answers) {
+    codeBox = { value: source, focus: function () {},
+                dispatchEvent: function () {},
+                setSelectionRange: function () {} };
+    builtText = source;
+    var ask = askForProblem(fix);
+    var got = ask ? { text: null, not: ask.rows[0].put(answers || []) } : { text: null, not: "nothing was asked" };
+    if (ask) { got.text = codeBox.value; }
+    codeBox = null;
+    builtText = null;
+    return got;
+  };
   return go;
 }
 
@@ -237,6 +283,35 @@ function wanted(one) {                   // what run.py said it should print
     } else if (end.text !== each.want) {
       bad.push(each.name + ":\n      wanted " + JSON.stringify(each.want) +
                "\n      got    " + JSON.stringify(end.text));
+    }
+  }
+
+  // ---- and put right by asking -----------------------------------------
+  // What the box under a fault asks for, answered, has to write the line
+  // where it goes -- and the program it makes has to run to the end.
+  for (var q = 0; q < (asked.asks || []).length; q++) {
+    var one = asked.asks[q], got;
+    try {
+      got = one.fix ? go.problemAsked(one.source, one.fix, one.answers)
+                    : await go.asked(one.source, one.ast, one.typed, one.answers, one.row, one.also);
+    } catch (blew) {
+      bad.push(one.name + ": it threw -- " + (blew && blew.stack || blew));
+      continue;
+    }
+    if (got.not) {
+      bad.push(one.name + ": it said " + JSON.stringify(got.not));
+    } else if (got.text !== one.want) {
+      bad.push(one.name + ":\n      wanted " + JSON.stringify(one.want) +
+               "\n      got    " + JSON.stringify(got.text));
+    } else if (one.guess !== undefined && one.guess !== null && got.guess !== one.guess) {
+      bad.push(one.name + ": it guessed " + JSON.stringify(got.guess) + ", not " + JSON.stringify(one.guess));
+    } else if (one.wantAst) {
+      // and what it made runs, start to end
+      var after = await go.quietly(one.wantAst, (one.then || []).slice());
+      if (after.faults.length) {
+        bad.push(one.name + ": put right, it still stops -- " +
+                 (after.faults[0].message || "it went wrong"));
+      }
     }
   }
 
@@ -361,6 +436,7 @@ function wanted(one) {                   // what run.py said it should print
   console.log(asked.cases.length + " programs run, " +
               (asked.written || []).length + " written out, " +
               ((asked.mends || []).length + (asked.ran || []).length) +
-              " put right: " + (bad.length ? bad.length + " wrong" : "ok"));
+              " put right, " + (asked.asks || []).length + " asked: " +
+              (bad.length ? bad.length + " wrong" : "ok"));
   process.exit(bad.length ? 1 : 0);
 })();

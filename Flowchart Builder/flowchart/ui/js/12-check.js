@@ -44,7 +44,9 @@
       var highest = hand.nodes.reduce(function (a, b) { return b.y < a.y ? b : a; });
       fault("p_no_start", null, null, startAbove(highest));
     }
-    else if (mains.length > 1) { fault("p_many_starts", null, { n: mains.length }, joinStarts(mains)); }
+    else if (mains.length > 1) {
+      fault("p_many_starts", null, { n: mains.length }, joinStarts(mains) || askOtherStart(mains));
+    }
     else if (mains.length === 1 && !endsKind(mains[0].kind)) {
       fault("p_start_kind", mains[0], endShape, startAbove(mains[0]));
     }
@@ -53,7 +55,7 @@
       return endsKind(n.kind) && !outOf(n.id).length;
     });
     var endFix = ends.length ? null : endBelow();
-    if (!ends.length) { fault("p_no_end", null, endShape, endFix); }
+    if (!ends.length) { fault("p_no_end", null, endShape, endFix || askEndAfter()); }
 
     // Shapes on top of each other are looked for among the shapes near
     // each one (shapesNear, 10-hand.js), and each shape that would be moved off
@@ -134,7 +136,7 @@
         outOf(id).forEach(function (l) { stack.push(l.to); });
       }
       hand.nodes.forEach(function (n) {
-        if (!seen[n.id]) { fault("p_unreached", n, null, joinFromAbove(n, seen)); }
+        if (!seen[n.id]) { fault("p_unreached", n, null, joinFromAbove(n, seen) || askedFix(askArrowInto(n.id))); }
       });
     }
     // ...and from everything, an End has to be reachable, or the flow is
@@ -151,7 +153,9 @@
         });
       }
       hand.nodes.forEach(function (n) {
-        if (!safe[n.id] && outOf(n.id).length) { fault("p_trapped", n, null, asksKind(n.kind) ? wayOut(n) : null); }
+        if (!safe[n.id] && outOf(n.id).length) {
+          fault("p_trapped", n, null, asksKind(n.kind) ? wayOut(n) : askLeaveLoop(n));
+        }
       });
     }
     return found;
@@ -376,7 +380,7 @@
         } };
       }
     }
-    return { auto: false, says: TXT.hf_type, go: function () {
+    return { auto: false, says: TXT.hf_type, ask: askWords(id, asksKind(node.kind)), go: function () {
       picked = id; chosen = null;
       drawHand(); drawHandPanel();
       var g = el('.node[data-i="h' + id + '"]', chart);
@@ -388,7 +392,7 @@
   // starts the arrow -- press the shape it should go to next.
   function arrowFrom(node) {
     var id = node.id;
-    return { auto: false, says: TXT.hf_arrow, go: function () {
+    return { auto: false, says: TXT.hf_arrow, ask: askArrowFrom(id), go: function () {
       picked = id; chosen = null; joining = true; joinFrom = null;
       drawHand(); drawHandPanel();
     } };
@@ -491,7 +495,7 @@
     var bare = outs.length === 1 ? outs[0] : outs.filter(function (l) { return !String(l.label || "").trim(); })[0];
     if (!bare || bare.id === undefined) { return null; }
     var id = bare.id;
-    return { auto: false, says: TXT.hf_name_way, go: function () {
+    return { auto: false, says: TXT.hf_name_way, ask: askWayName(id), go: function () {
       pickLink(id);
       var field = el("#hand-sel input.field");
       if (field) { field.focus(); }
@@ -506,7 +510,12 @@
     var a = String(outs[0].label || "").trim(), b = String(outs[1].label || "").trim();
     var wantA = a || (isYes(b) ? TXT.no : isNo(b) ? TXT.yes : (b ? "" : TXT.yes));
     var wantB = b || (isYes(a) ? TXT.no : isNo(a) ? TXT.yes : (a ? "" : TXT.no));
-    if (!wantA || !wantB) { return null; }
+    // one way saying something of its own -- "over 18" -- and the other
+    // nothing: what the other says is asked for
+    if (!wantA || !wantB) {
+      var bare = a ? outs[1] : outs[0];
+      return bare.id === undefined ? null : askedFix(askWayName(bare.id));
+    }
     var one = outs[0], two = outs[1];
     return { auto: true,
              says: !a && !b ? say("hf_yes_no", { yes: TXT.yes, no: TXT.no })
@@ -518,7 +527,7 @@
   function labelOther(outs) {
     var a = String(outs[0].label || "").trim();
     var want = isYes(a) ? TXT.no : isNo(a) ? TXT.yes : "";
-    if (!want) { return null; }
+    if (!want) { return outs[1].id === undefined ? null : askedFix(askWayName(outs[1].id)); }
     var two = outs[1];
     return { auto: true, says: say("hf_relabel", { word: want }),
              go: function () { two.label = want; } };
@@ -597,6 +606,129 @@
     } };
   }
 
+  // ---- asked for, by hand -------------------------------------------------
+  // Where what puts it right is yours to say -- the words in a shape, the
+  // shape an arrow goes on to, the words on a way out -- the box under the
+  // warning asks for it (askBox, 27-ask.js) and this does the rest: the
+  // words written in, the arrow drawn, one step for Undo to take back, and
+  // the design checked again.
+  function askedFix(ask) {
+    return { auto: false, says: "", ask: ask, go: function () {} };
+  }
+  function handAsked(change) {
+    keepUndo();
+    change();
+    drawHand(); drawHandPanel(); showReport();
+    return "";
+  }
+  // Every other shape, to pick one from: its words, or what it is where it
+  // has none, from the top down the way a chart is read.
+  function shapesToPick(not) {
+    return hand.nodes.filter(function (m) { return m.id !== not; })
+      .sort(function (a, b) { return a.y - b.y || a.x - b.x; })
+      .map(function (m) {
+        var words = String(m.text || "").replace(/\s+/g, " ").trim();
+        if (words.length > 30) { words = words.slice(0, 29) + "…"; }
+        return { value: String(m.id), text: words || kindName(m.kind) };
+      });
+  }
+  function shapeOfPick(value) {
+    return hand.nodes.filter(function (m) { return String(m.id) === String(value); })[0] || null;
+  }
+  function askArrowFrom(id) {
+    return { rows: [{ says: TXT.ask_arrow_to, go: TXT.ask_join,
+      fields: [{ kind: "pick", options: shapesToPick(id) }],
+      put: function (a) {
+        var from = nodeById(id), to = shapeOfPick(a[0]);
+        if (!from || !to) { return TXT.ask_stale; }
+        return handAsked(function () { joinOn(from, to); });
+      } }] };
+  }
+  function askArrowInto(id, says) {
+    return { rows: [{ says: says || TXT.ask_arrow_from, go: TXT.ask_join,
+      fields: [{ kind: "pick", options: shapesToPick(id) }],
+      put: function (a) {
+        var from = shapeOfPick(a[0]), to = nodeById(id);
+        if (!from || !to) { return TXT.ask_stale; }
+        return handAsked(function () { joinOn(from, to); });
+      } }] };
+  }
+  // Two places the flow starts, and nothing to say which shape the second
+  // was meant to come after: the lower one is asked about.
+  function askOtherStart(heads) {
+    var low = heads.slice().sort(function (a, b) { return b.y - a.y; })[0];
+    if (!low) { return null; }
+    var words = String(low.text || "").replace(/\s+/g, " ").trim() || kindName(low.kind);
+    return askedFix(askArrowInto(low.id, say("ask_arrow_into", { name: words })));
+  }
+  // No End, and no shape the flow stops dead at to put one under: which
+  // shape it stops after is asked -- one with a way out still to give.
+  function askEndAfter() {
+    var free = hand.nodes.filter(function (n) {
+      var outs = outOf(n.id).length;
+      return !endsKind(n.kind) && (asksKind(n.kind) ? outs < 2 : outs === 0);
+    }).map(function (n) { return String(n.id); });
+    if (!free.length) { return null; }
+    return askedFix({ rows: [{ says: TXT.ask_end_after, go: TXT.ask_go,
+      fields: [{ kind: "pick", options: shapesToPick(null).filter(function (o) { return free.indexOf(o.value) >= 0; }) }],
+      put: function (a) {
+        var from = shapeOfPick(a[0]);
+        if (!from) { return TXT.ask_stale; }
+        return handAsked(function () {
+          var end = newShape(ruleShape("oval"), TXT.end, from.x, from.y + from.h / 2 + 70);
+          joinOn(from, end);
+        });
+      } }] });
+  }
+  // Round and round with no way out: on the arrow going back up to the
+  // top of the loop, a decision is put in asking the test that lets it
+  // out -- True on to an End, False round again the way it went before.
+  // Asked on that one shape only; the rest of the loop is put right by it.
+  function askLeaveLoop(node) {
+    var outs = outOf(node.id);
+    if (outs.length !== 1) { return null; }
+    var back = nodeById(outs[0].to);
+    if (!back || back.y > node.y) { return null; }
+    var id = node.id;
+    return askedFix({ rows: [{ says: TXT.ask_leave_when, go: TXT.ask_go,
+      fields: [{ kind: "text", hint: "n > 5" }],
+      put: function (a) {
+        var from = nodeById(id), link = outOf(id)[0];
+        if (!from || !link) { return TXT.ask_stale; }
+        return handAsked(function () {
+          var test = newShape(ruleShape("diamond"), a[0], from.x, from.y + from.h / 2 + 80);
+          // the arrow back up now leaves from the test, on False: a new one
+          // in its place rather than the old one bent (routes are kept by
+          // the arrows they were worked out for)
+          hand.links.splice(hand.links.indexOf(link), 1);
+          hand.links.push({ from: id, to: test.id, label: "" });
+          hand.links.push({ from: test.id, to: link.to, label: TXT.no });
+          var ends = hand.nodes.filter(function (n) { return endsKind(n.kind) && intoOf(n.id).length && !outOf(n.id).length; });
+          var end = ends.length ? ends[0]
+                  : newShape(ruleShape("oval"), TXT.end, test.x, test.y + test.h / 2 + 80);
+          hand.links.push({ from: test.id, to: end.id, label: TXT.yes });
+        });
+      } }] });
+  }
+  function askWords(id, asks) {
+    return { rows: [{ says: TXT.ask_write_in,
+      fields: [{ kind: "text", hint: asks ? "x > 5" : TXT.ask_write_eg }],
+      put: function (a) {
+        var n = nodeById(id);
+        if (!n) { return TXT.ask_stale; }
+        return handAsked(function () { n.text = a[0]; });
+      } }] };
+  }
+  function askWayName(linkId) {
+    return { rows: [{ says: TXT.ask_name_way,
+      fields: [{ kind: "text", hint: TXT.yes }],
+      put: function (a) {
+        var l = linkById(linkId);
+        if (!l) { return TXT.ask_stale; }
+        return handAsked(function () { l.label = a[0]; });
+      } }] };
+  }
+
   // One of them, pressed: done, and the drawing and the list drawn again.
   function handMendNow(fix) {
     if (!byHand || !fix) { return; }
@@ -607,6 +739,13 @@
   }
 
   function offerHandMend(row, box, fix) {
+    // what is yours to say, asked for in a box rather than a button that
+    // only starts the job (27-ask.js)
+    if (fix.ask) {
+      var asked = askBox(fix.ask);
+      box.appendChild(asked);
+      return asked;
+    }
     var button = document.createElement("button");
     button.className = "mend";
     button.type = "button";

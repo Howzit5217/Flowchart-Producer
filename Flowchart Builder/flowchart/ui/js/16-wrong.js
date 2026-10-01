@@ -40,7 +40,10 @@
     // say, the button that acts on it.  The tip used to be the end of the
     // help: it named the word that was probably meant and left you to go and
     // type it, on a line you then had to find.
-    var mended = offerMend(box, box, err.fix, at && at.line);
+    var mended = offerMend(box, box, err.fix, at && at.line, true);
+    // And where putting it right needs a word from you -- a value, a
+    // test, the line written again -- the box that asks for it (27-ask.js).
+    var asked = offerAsk(box, err, !!mended);
     (err.trail || []).forEach(function (step) {
       var row = document.createElement("div");
       row.className = "trail";
@@ -52,10 +55,11 @@
     if (at && (at.line || at.id)) {
       box.setAttribute("role", "button");
       box.tabIndex = 0;
-      box.title = [TXT.r_show_line, mended ? TXT.w_mend_tip : ""]
+      box.title = [TXT.r_show_line, mended ? TXT.w_mend_tip : "", asked ? TXT.ask_tip : ""]
                   .filter(Boolean).join(" · ");
       box.onclick = function () { goToFault(at); };
       box.onkeydown = function (ev) {
+        if (ev.target !== box) { return; }   // typed into the box asking for something
         if (ev.key === "Enter" || ev.key === " ") {
           ev.preventDefault();
           goToFault(at);

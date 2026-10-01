@@ -801,6 +801,24 @@
     margin: 6px 0 2px; background: var(--accent); color: #fff; font-weight: 600;
   }
   .mend-all:hover, .mend-all:focus-visible { filter: brightness(1.1); }
+  /* A fix that needs a word from you first (27-ask.js): what it asks, a
+     box to type the answer in and the button that puts it in, under the
+     warning and set in as far as the fix buttons are.  The question on a
+     line of its own, so a long one does not squeeze the box. */
+  .ask { display: flex; flex-direction: column; gap: 6px; margin: 7px 0 4px; cursor: auto; }
+  #build-faults .ask, #report .ask { margin-left: 13px; }
+  .ask-row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+  .ask-says { flex: 1 1 100%; font-size: 11.5px; color: var(--muted); line-height: 1.35; }
+  .ask-label { font-size: 11.5px; color: var(--muted); }
+  .ask .ask-in { flex: 1 1 9em; min-width: 0; padding: 5px 8px; font-size: 12.5px; border-radius: 7px; }
+  .ask .ask-code { font-family: "Cascadia Mono", Consolas, "SF Mono", Menlo, monospace; }
+  .ask input[type="number"].ask-in { flex: 0 1 6em; }
+  .ask .ask-in.ask-wrong { border-color: var(--bad); }
+  .ask .mend, #build-faults .ask .mend, #report .ask .mend { margin: 0; flex: none; }
+  .ask .ask-go { background: var(--accent); color: #fff; font-weight: 600; }
+  .ask .ask-go:hover, .ask .ask-go:focus-visible { filter: brightness(1.1); }
+  .ask-also { display: flex; flex-wrap: wrap; gap: 6px; }
+  .ask-bad { font-size: 11.5px; color: var(--bad); }
   #lang-note .mend-all { margin: 0 6px 4px 0; }
   /* Fix all at work: the chart's bar (05-chart.css), in the place of the
      buttons under the code and over it, and as wide as the words. */
@@ -1312,9 +1330,6 @@
   .tape-chart .graph-key .graph-c1::before { background: #e8710a; }
   .tape-chart .graph-key .graph-c2::before { background: #1e9e5a; }
   .tape-chart .graph-key .graph-c3::before { background: #a142f4; }
-  /* the trace table's chart sits over the table, the same way */
-  .trace-page .tape-chart { margin: 0 0 12px; max-width: 720px; border: 1px solid var(--line-soft);
-    border-radius: 8px; padding: 8px 10px 6px; background: var(--panel); }
   /* the Run card's switch for them: its name, and the switch at the far end */
 
   /* Tests of the program's own (34-tests.js): a card each, what is typed

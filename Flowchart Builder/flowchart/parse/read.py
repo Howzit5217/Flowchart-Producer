@@ -242,9 +242,20 @@ def parse_program(text, story=True):
             if key:
                 at = getattr(frame.owner, "line", 0)
                 shut = closer_for(frame.owner)
-                goes = shuts_before(frame) if shut else 0
-                trouble(key, at, fix={"how": "insert", "text": shut,
-                                      "at": goes, "like": at} if goes else None)
+                goes = shuts_before(frame)
+                if shut and goes:
+                    fix = {"how": "insert", "text": shut, "at": goes, "like": at}
+                elif shut:
+                    # Nothing indented under it to say where it stops: that
+                    # is asked -- the line it stops after -- not guessed.
+                    fix = {"how": "ask", "ask": "close", "text": shut, "like": at}
+                elif goes and is_post(frame.owner):
+                    # A Do with no test at all: where it ends is plain, and
+                    # the test it ends on is asked for.
+                    fix = {"how": "ask", "ask": "until", "at": goes, "like": at}
+                else:
+                    fix = None
+                trouble(key, at, fix=fix)
 
     def is_if(o):
         return isinstance(o, If)
@@ -435,7 +446,10 @@ def parse_program(text, story=True):
             # End For inside a Do ... Until closes the For, not the Do
             shut = find(is_post)
             if shut >= 0 and shut == find(is_loop) and not stack[shut].owner.cond:
-                trouble("w_do_no_test", stack[shut].owner.line)
+                # the test is asked for, and goes on this line in place of it
+                trouble("w_do_no_test", stack[shut].owner.line,
+                        fix={"how": "ask", "ask": "until", "at": at_line,
+                             "like": stack[shut].owner.line, "swap": True})
             if not close(is_loop):
                 trouble("w_no_loop", at_line, s, {"how": "drop", "at": at_line})
             continue

@@ -270,7 +270,7 @@
 
   // The button, where there is anything to press it for -- and nothing at
   // all where there is not, which is most of the time.
-  function mendable(fix, line) {
+  function mendable(fix, line, rerun) {
     // In Code the name is changed in the code the pseudocode was read from
     // (codeMend, 32-code-side.js) -- not in the pseudocode, which would be
     // made again from the code as it was.
@@ -285,20 +285,22 @@
     button.title = TXT.w_mend_tip || "";
     button.onclick = function (ev) {
       ev.stopPropagation();              // not the "show me the line" underneath
-      mendNow(fix, line);
+      mendNow(fix, line, rerun);
     };
     return button;
   }
 
   // Put it right, show which line moved, and draw the chart again.  A fix you
   // have to go and press Build after is a fix you have to be told about, and
-  // not having to be told is the whole of the point.
-  function mendNow(fix, line) {
+  // not having to be told is the whole of the point.  `rerun`, for a fault a
+  // run stopped at: and run it again, once it is drawn (27-ask.js).
+  function mendNow(fix, line, rerun) {
     if (mendsOff()) { return; }          // a warning left over from before the puzzle
     var at = putRight(fix, line);
     if (!at) { return; }
     tapeFull(false);                     // out of the full screen, if it is up
     pickLine(0, at);
+    if (rerun) { runWhenBuilt(); }
     buildAsked();                        // asks first if blocks were moved
   }
 
@@ -308,11 +310,11 @@
   // box with rows in it and the button is one more row, while the warning
   // under Build is itself a button and nothing may be put inside one -- so
   // the caller says where the button goes.
-  function offerMend(row, into, fix, line) {
-    var button = mendable(fix, line);
+  function offerMend(row, into, fix, line, rerun) {
+    var button = mendable(fix, line, rerun);
     if (!button) { return null; }
     (into || row).appendChild(button);
-    row.ondblclick = function () { if (byLang) { button.click(); } else { mendNow(fix, line); } };
+    row.ondblclick = function () { if (byLang) { button.click(); } else { mendNow(fix, line, rerun); } };
     row.title = [row.title, TXT.w_mend_tip].filter(Boolean).join(" · ");
     return button;
   }

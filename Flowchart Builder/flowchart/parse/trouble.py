@@ -22,9 +22,13 @@ def trouble(key, line, text="", fix=None, **fill):
     `fix` is what would put it right, where there is one right answer:
     {"how": "drop", "at": n} to take a line out, or {"how": "insert",
     "text": "End If", "at": n, "like": n} to put one in.  The studio makes
-    a button of it.  Most of these have no such answer -- a Do with no test
-    needs a test somebody has to write -- and those carry none, because a
-    fix that guesses is worse than a warning that waits.
+    a button of it.  Where the answer needs something only the author
+    knows -- the test a Do with no test stops on, the line an If with
+    nothing under it stops after -- it is {"how": "ask", "ask": ...}, and
+    the studio asks for that one thing in a box beside the warning and
+    writes it in (27-ask.js), because a fix that guesses is worse than a
+    warning that waits, and a warning that waits on you to go and find the
+    line is worse than one that asks.
     """
     fill.setdefault("line", line)
     PROBLEMS.append({"line": line, "text": text, "why": key,

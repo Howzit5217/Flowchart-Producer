@@ -2022,15 +2022,118 @@ MENDED_RUNS = [
 ]
 
 
+# And the faults whose fix needs a word from you first (27-ask.js): what is
+# typed into the box under the fault, written where it goes -- and the
+# program that makes run to the end.  Each is (name, program, what was
+# typed into the run, the answers, which question -- or which button with
+# nothing to type, "also" -- the program it should come to, what to type
+# into that one, and, where there is one, what the box guessed).
+ASKED = [
+    ("a name never started, started before the line it is used on",
+     'Start\nDisplay total\nEnd\n', [], ["0"], 0, None,
+     'Start\ntotal = 0\nDisplay total\nEnd\n', [], None),
+
+    ("started in front of the loop it is used in, not inside it",
+     'Start\nFor i = 1 To 3\n    total = total + i\nEnd For\nDisplay total\nEnd\n', [], ["0"], 0, None,
+     'Start\ntotal = 0\nFor i = 1 To 3\n    total = total + i\nEnd For\nDisplay total\nEnd\n', [], None),
+
+    ("or asked for when it runs",
+     'Start\nDisplay n * 2\nEnd\n', [], [], None, 0,
+     'Start\nInput n\nDisplay n * 2\nEnd\n', ["4"], None),
+
+    ("written with Set, where the program says Set",
+     'Start\nSet x = 1\nDisplay x + y\nEnd\n', [], ["5"], 0, None,
+     'Start\nSet x = 1\nSet y = 5\nDisplay x + y\nEnd\n', [], None),
+
+    ("a loop that never stops, given the line that moves it on",
+     'Start\nn = 1\nWhile n <= 3\n    Display n\nEnd While\nEnd\n', [], ["n = n + 1"], 0, None,
+     'Start\nn = 1\nWhile n <= 3\n    Display n\n    n = n + 1\nEnd While\nEnd\n', [], "n = n + 1"),
+
+    ("one that counts down to stop counts down",
+     'Start\nn = 3\nDo\n    Display n\nLoop Until n <= 0\nEnd\n', [], ["n = n - 1"], 0, None,
+     'Start\nn = 3\nDo\n    Display n\n    n = n - 1\nLoop Until n <= 0\nEnd\n', [], "n = n - 1"),
+
+    ("one waiting on an answer asks for it again",
+     'Start\nanswer = "yes"\nWhile answer <> "no"\n    Display "again"\nEnd While\nEnd\n', [],
+     ["Input answer"], 0, None,
+     'Start\nanswer = "yes"\nWhile answer <> "no"\n    Display "again"\n    Input answer\nEnd While\nEnd\n',
+     ["no"], "Input answer"),
+
+    ("or told when to stop",
+     'Start\nn = 1\nWhile n > 0\n    n = n + 1\nEnd While\nDisplay n\nEnd\n', [], ["n > 5"], 1, None,
+     'Start\nn = 1\nWhile n > 0\n    n = n + 1\n    If n > 5 Then\n        Exit While\n    End If\nEnd While\nDisplay n\nEnd\n',
+     [], ""),
+
+    ("a sum divided by nought, given what to be instead",
+     'Start\ncount = 0\ntotal = 10\naverage = total / count\nDisplay average\nEnd\n', [], ["0"], 0, None,
+     'Start\ncount = 0\ntotal = 10\nIf count <> 0 Then\n    average = total / count\nElse\n'
+     '    average = 0\nEnd If\nDisplay average\nEnd\n', [], None),
+
+    ("or what to show instead",
+     'Start\ncount = 0\nDisplay 10 / count\nEnd\n', [], ["No values"], 0, None,
+     'Start\ncount = 0\nIf count <> 0 Then\n    Display 10 / count\nElse\n    Display "No values"\nEnd If\nEnd\n',
+     [], None),
+
+    ("or skipped",
+     'Start\ncount = 0\nDisplay 10 / count\nEnd\n', [], [], None, 0,
+     'Start\ncount = 0\nIf count <> 0 Then\n    Display 10 / count\nEnd If\nEnd\n', [], None),
+
+    ("a module handed too few, handed the rest",
+     'Module main()\n    Display add(2)\nEnd Module\n\nFunction add(x, y)\n    Return x + y\nEnd Function\n',
+     [], ["3"], 0, None,
+     'Module main()\n    Display add(2, 3)\nEnd Module\n\nFunction add(x, y)\n    Return x + y\nEnd Function\n',
+     [], None),
+
+    ("and handed too many, the extra taken out",
+     'Module main()\n    Display add(2, 3, 4)\nEnd Module\n\nFunction add(x, y)\n    Return x + y\nEnd Function\n',
+     [], [], None, 0,
+     'Module main()\n    Display add(2, 3)\nEnd Module\n\nFunction add(x, y)\n    Return x + y\nEnd Function\n',
+     [], None),
+
+    ("a function that calls itself for ever, given a place to stop",
+     'Start\nDisplay fact(3)\nEnd\n\nFunction fact(n)\n    Return n * fact(n - 1)\nEnd Function\n',
+     [], ["n <= 1", "1"], 0, None,
+     'Start\nDisplay fact(3)\nEnd\n\nFunction fact(n)\n    If n <= 1 Then\n        Return 1\n    End If\n'
+     '    Return n * fact(n - 1)\nEnd Function\n', [], None),
+
+    ("a call to nothing, pointed at something",
+     'Start\nDisplay wibble(9)\nEnd\n', [], ["sqrt"], 0, None,
+     'Start\nDisplay sqrt(9)\nEnd\n', [], None),
+
+    ("anything else, the line written again",
+     'Start\nxs = [1, 2]\nDisplay xs[5]\nEnd\n', [], ["Display xs[1]"], 0, None,
+     'Start\nxs = [1, 2]\nDisplay xs[1]\nEnd\n', [], None),
+]
+
+# The same, for what the reading asks for: (name, program, the fix it gave,
+# the answers, the program it should come to).
+ASKED_READ = [
+    ("a Do never closed, closed on the test asked for",
+     'Start\nDo\n    Display "round"\nEnd\n', {"how": "ask", "ask": "until", "at": 4, "like": 2},
+     ["n > 3"], 'Start\nDo\n    Display "round"\nLoop Until n > 3\nEnd\n'),
+    ("a Loop with no test, given one",
+     'Start\nDo\n    Display "round"\nLoop\nEnd\n',
+     {"how": "ask", "ask": "until", "at": 4, "like": 2, "swap": True},
+     ["n > 3"], 'Start\nDo\n    Display "round"\nLoop Until n > 3\nEnd\n'),
+    ("a Repeat ends on Until",
+     'Start\nRepeat\n    Display 1\nEnd\n', {"how": "ask", "ask": "until", "at": 4, "like": 2},
+     ["n > 3"], 'Start\nRepeat\n    Display 1\nUntil n > 3\nEnd\n'),
+    ("an If with nothing under it, closed after the line asked for, and what it holds set in",
+     'Start\nIf n > 5 Then\nDisplay "big"\nDisplay "after"\nEnd\n',
+     {"how": "ask", "ask": "close", "text": "End If", "like": 2},
+     ["3"], 'Start\nIf n > 5 Then\n    Display "big"\nEnd If\nDisplay "after"\nEnd\n'),
+]
+
+
 @check("a warning says what would put it right")
 def _():
     """What the reading offers to do about what it had to paper over.
 
-    Only where there is one right answer.  A Do with no test needs a test
-    that is nobody's to invent, and an If with nothing indented under it
-    could be closed in as many places as it has lines below it -- so both
-    are left saying what is wrong and offering nothing, which is the honest
-    answer and the one this pins down.
+    A button where there is one right answer.  A Do with no test needs a
+    test that is nobody's to invent, and an If with nothing indented under
+    it could be closed in as many places as it has lines below it -- so
+    neither is guessed: each asks for the one thing it is missing (the
+    test, the line it stops after), and the studio writes the answer in.
     """
     want = [
         ('Start\nDisplay "hi"\nEnd If\nEnd\n',
@@ -2039,10 +2142,12 @@ def _():
          [("w_open_if", {"how": "insert", "text": "End If", "at": 4, "like": 2})]),
         ('Start\nFor i = 1 To 5\n    Display i\nEnd\n',
          [("w_open_for", {"how": "insert", "text": "End For", "at": 4, "like": 2})]),
-        ('Start\nDo\n    Display "round"\nEnd\n',
-         [("w_open_loop", {})]),                    # a test is not ours to invent
-        ('Start\nIf n > 5 Then\nDisplay "after"\nEnd\n',
-         [("w_open_if", {})]),                      # nothing indented: nothing to go on
+        ('Start\nDo\n    Display "round"\nEnd\n',      # a test is not ours to invent
+         [("w_open_loop", {"how": "ask", "ask": "until", "at": 4, "like": 2})]),
+        ('Start\nIf n > 5 Then\nDisplay "after"\nEnd\n',  # nothing indented: nothing to go on
+         [("w_open_if", {"how": "ask", "ask": "close", "text": "End If", "like": 2})]),
+        ('Start\nDo\n    Display "round"\nLoop\nEnd\n',
+         [("w_do_no_test", {"how": "ask", "ask": "until", "at": 4, "like": 2, "swap": True})]),
     ]
     bad = []
     for text, expect in want:
@@ -2080,8 +2185,14 @@ def _():
     ran = [{"name": name, "source": source, "typed": typed, "fix": fix,
             "want": want, "ast": read_as_data(source)}
            for name, source, typed, fix, want in MENDED_RUNS]
+    asks = [{"name": name, "source": source, "ast": read_as_data(source), "typed": typed,
+             "answers": answers, "row": row, "also": also, "want": want,
+             "wantAst": read_as_data(want), "then": then, "guess": guess}
+            for name, source, typed, answers, row, also, want, then, guess in ASKED]
+    asks += [{"name": name, "source": source, "fix": fix, "answers": answers, "want": want}
+             for name, source, fix, answers, want in ASKED_READ]
     asked = {"words": fb.WORDS["en"], "cases": cases, "written": written,
-             "mends": mends, "ran": ran}
+             "mends": mends, "ran": ran, "asks": asks}
     handle, where = tempfile.mkstemp(suffix=".json")
     try:
         with io.open(handle, "w", encoding="utf-8") as f:

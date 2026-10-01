@@ -40,7 +40,7 @@ JS = ["js/01-start.js", "js/02-paint.js", "js/02-read.js", "js/03-shapes.js",
       "js/19-picture.js", "js/19-import.js",
       "js/20-menu.js", "js/20-slide.js", "js/21-typing.js",
       "js/22-settings.js", "js/22-reset.js", "js/23-undo.js", "js/24-scroll.js",
-      "js/25-keys.js", "js/26-motion.js", "js/27-mend.js",
+      "js/25-keys.js", "js/26-motion.js", "js/27-mend.js", "js/27-ask.js",
       "js/28-puzzles.js", "js/29-saves.js", "js/30-blocks.js", "js/31-app.js",
       "js/32-code-side.js", "js/33-told.js", "js/34-tests.js", "js/99-go.js"]
 

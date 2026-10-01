@@ -509,6 +509,7 @@
                 transform var(--tap) var(--ease-soft);
   }
   .mend:active { transform: scale(.96); transition-duration: .05s; }
+  .ask { animation: row-in .3s var(--ease) .08s backwards; }
   .edit-box { animation: edit-in .18s var(--ease) backwards; }
   @keyframes edit-in { from { opacity: 0; transform: scale(.94); } }
   @keyframes line-in { from { opacity: 0; transform: translateY(5px); } }

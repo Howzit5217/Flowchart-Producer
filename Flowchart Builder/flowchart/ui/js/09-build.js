@@ -896,6 +896,8 @@
       // it: the warning is itself a button, and a button inside a button is
       // not a thing a page may have.
       offerMend(row, box, bit.fix, bit.line);
+      // or, where it needs something only you know, the box asking for it
+      offerAskProblem(box, bit.fix);
     });
     // And all of them at once, first thing under the heading, where there
     // are two or more it can do.
@@ -1411,6 +1413,17 @@
   // The words the chart on the paper was last drawn from, so a check can
   // tell whether what is in the box has moved on since.
   var builtText = null;
+  // What is to happen once the chart being drawn is up: a run, after a
+  // fault it stopped at was put right (27-ask.js).  A minute old and it is
+  // forgotten, rather than going off under some later build.
+  var whenBuilt = [];
+  function builtNow() {
+    var then = whenBuilt.splice(0);
+    if (!then.length) { return; }
+    setTimeout(function () {
+      then.forEach(function (w) { if (Date.now() - w.at < 60000) { w.go(); } });
+    }, 60);
+  }
   // The drawing goes onto the paper here and nowhere else.  Drawn `again`
   // (see drawItNow) it is the same chart with its shapes moved over a
   // little to make room, and 26-motion.js wraps this to carry each of them
@@ -1488,6 +1501,7 @@
         });
         if (!data.ok) {
           barEnd(false);
+          whenBuilt.length = 0;
           says.className = "bad";
           says.textContent = data.error === "MemoryError"
             ? say("py_gave_out", { err: data.error }) : data.error || TXT.failed;
@@ -1544,8 +1558,10 @@
         says.textContent = "";
         showProblems(data.problems);
         barEnd(true);
+        builtNow();
       }).catch(function (err) {
         barEnd(false);
+        whenBuilt.length = 0;
         afterTheRed(function () {
           build.disabled = false;
           build.classList.remove("working");

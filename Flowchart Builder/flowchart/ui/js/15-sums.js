@@ -130,7 +130,9 @@
     // with nothing on the right.  Said plainly, rather than as a half of
     // something that was never there.
     if (!String(src === undefined || src === null ? "" : src).trim()) {
-      throw wrong(TXT.r_empty_expr, { from: 0, to: 1 });
+      var none = wrong(TXT.r_empty_expr, { from: 0, to: 1 });
+      none.why = "r_empty_expr";
+      throw none;
     }
     var ts = tokens(src), at = 0;
     var dry = 0;                         // > 0: reading past, not working out
@@ -350,9 +352,13 @@
           return new FnRef(null, low);
         }
         var meant = nearest(name, seenNames(where));
-        throw wrong(say("r_unknown", { name: name }), tok,
-                    meant ? say("r_mean", { name: meant }) : "",
-                    meant ? { how: "change", word: name, instead: meant } : null);
+        var lost = wrong(say("r_unknown", { name: name }), tok,
+                         meant ? say("r_mean", { name: meant }) : "",
+                         meant ? { how: "change", word: name, instead: meant } : null);
+        // what it is and whose, for asking what it should start out as
+        // (27-ask.js) -- a list, where an item of it was being picked out
+        lost.why = "r_unknown"; lost.name = name; lost.listy = isOp("[");
+        throw lost;
       }
       if (tok.v === ")") { throw wrong(TXT.r_shut_bracket, tok, "", cutOut(tok)); }
       throw wrong(say("r_odd_here", { bit: tok.v }), tok, "", cutOut(tok));
@@ -376,11 +382,17 @@
           left = truthy(left);
           continue;
         }
+        var rightAt = at;
         var right = await expr(rank + 1);
         if (dry) { continue; }
         try {
           left = apply(op, left, right);
         } catch (bad) {
+          // what it was divided by, as written, for the fix that asks
+          // what to do when it is nought (27-ask.js)
+          if (bad && bad.why === "r_zero" && bad.divisor === undefined) {
+            bad.divisor = between(rightAt, at);
+          }
           throw spotIn(bad, src, tok);   // which + or / it was that failed
         }
       }
@@ -608,6 +620,11 @@
     }
     return num(a) - num(b);
   }
+  function zeroErr() {
+    var err = new Error(TXT.r_zero);
+    err.why = "r_zero";
+    return err;
+  }
   function apply(op, a, b) {
     switch (op) {
       case "+":
@@ -620,13 +637,13 @@
         if (Array.isArray(b) && !Array.isArray(a)) { return repeated(b, a); }
         return num(a) * num(b);
       case "/":
-        if (num(b) === 0) { throw new Error(TXT.r_zero); }
+        if (num(b) === 0) { throw zeroErr(); }
         return num(a) / num(b);
       case "mod": case "%":
-        if (num(b) === 0) { throw new Error(TXT.r_zero); }
+        if (num(b) === 0) { throw zeroErr(); }
         return num(a) % num(b);
       case "div":
-        if (num(b) === 0) { throw new Error(TXT.r_zero); }
+        if (num(b) === 0) { throw zeroErr(); }
         return Math.floor(num(a) / num(b));
       case "^": return Math.pow(num(a), num(b));
       // = and <> let capitals go, the way people mean it; == and != are
@@ -1115,7 +1132,11 @@
     // then whatever it is called with.  How a function made inside another
     // takes the names it uses from there along with it.
     bind: function (fn) {
-      if (!(fn instanceof FnRef)) { throw new Error(say("r_unknown_fn", { name: String(fn) })); }
+      if (!(fn instanceof FnRef)) {
+        var nofn = new Error(say("r_unknown_fn", { name: String(fn) }));
+        nofn.why = "r_unknown_fn"; nofn.name = String(fn);
+        throw nofn;
+      }
       var made = new FnRef(fn.mod, fn.built);
       made.extra = (fn.extra || []).concat(Array.prototype.slice.call(arguments, 1));
       return made;
@@ -1197,6 +1218,7 @@
     // Worth saying differently, and worth saying what it is nearly.
     var meant = nearest(name, knownCalls());
     var err = new Error(say("r_unknown_fn", { name: name }));
+    err.why = "r_unknown_fn"; err.name = name;
     if (meant) {
       err.tip = say("r_mean", { name: meant + "()" });
       // The name, without the brackets the tip puts on it for reading: what

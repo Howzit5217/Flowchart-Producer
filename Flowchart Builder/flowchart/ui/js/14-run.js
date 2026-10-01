@@ -65,7 +65,11 @@
   async function tick() {
     if (stopping) { throw new Stop(); }
     stepsUsed++;
-    if (++sinceAsked > STEP_CAP) { throw new Error(TXT.r_forever); }
+    if (++sinceAsked > STEP_CAP) {
+      var round = new Error(TXT.r_forever);
+      round.why = "r_forever";
+      throw round;
+    }
     if (++breaths >= BREATH) {
       breaths = 0;
       await breathe();
@@ -347,7 +351,7 @@
   var traced = null;
 
   function traceClear() {
-    traced = { rows: [], cols: [], seen: {}, last: {}, cut: false, out: [] };
+    traced = { rows: [], cols: [], seen: {}, last: {}, of: {}, cut: false, out: [] };
     traceButton();
   }
 
@@ -365,24 +369,31 @@
   function traceStep(item, where) {
     if (quiet || !traced || traced.cut) { return; }
     var got = {}, any = false;
-    function look(key, v) {
+    // `of` is whose name it is and what it is called, for the heading: the
+    // key "n (fact)" is the column, and the heading says n under fact().
+    function look(key, v, of, name) {
       var said = traceSays(v);
       if (traced.last[key] === said) { return; }
       traced.last[key] = said;
-      if (!traced.seen[key]) { traced.seen[key] = true; traced.cols.push(key); }
+      if (!traced.seen[key]) {
+        traced.seen[key] = true;
+        traced.cols.push(key);
+        traced.of[key] = { chart: of, name: name };
+      }
       got[key] = said;
       any = true;
     }
     var own = (where && where.vars) || {};
     var chart = where && where.name && where.name !== "main" ? where.name : "";
     Object.keys(GLOBALS).forEach(function (name) {
-      if (!Object.prototype.hasOwnProperty.call(own, name)) { look(name, GLOBALS[name]); }
+      if (!Object.prototype.hasOwnProperty.call(own, name)) { look(name, GLOBALS[name], "", name); }
     });
     Object.keys(own).forEach(function (name) {
-      look(chart ? name + " (" + chart + ")" : name, own[name]);
+      look(chart ? name + " (" + chart + ")" : name, own[name], chart, name);
     });
     if (!any && !traced.out.length) { return; }
-    traced.rows.push({ line: (item && item.line) || "", cells: got, out: traced.out.join("\n") });
+    traced.rows.push({ line: (item && item.line) || "", code: (item && item.text) || "",
+                       cells: got, out: traced.out.join("\n") });
     traced.out = [];
     if (traced.rows.length >= TRACE_ROWS) { traced.cut = true; }
     if (traced.rows.length === 1) { traceButton(); }
@@ -394,18 +405,70 @@
   }
 
   // The table as text: between tabs to paste into a document or a sheet,
-  // or as a spreadsheet's commas, every cell that needs it in quotes.
+  // or as a spreadsheet's commas, every cell that needs it in quotes.  The
+  // columns go in the order they are shown in (traceGroups).
   function traceText(sep) {
     function cell(v) {
       v = String(v === undefined ? "" : v);
       if (sep === "\t") { return v.replace(/[\t\n\r]+/g, " "); }
       return /[",\n\r]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v;
     }
-    var rows = [[TXT.trace_line].concat(traced.cols, [TXT.trace_out])];
+    var cols = traceOrder();
+    var rows = [[TXT.trace_line].concat(cols, [TXT.trace_out])];
     traced.rows.forEach(function (r) {
-      rows.push([r.line].concat(traced.cols.map(function (c) { return r.cells[c]; }), [r.out]));
+      rows.push([r.line].concat(cols.map(function (c) { return r.cells[c]; }), [r.out]));
     });
     return rows.map(function (r) { return r.map(cell).join(sep); }).join("\n") + "\n";
+  }
+
+  // The columns, ruled the way a class would rule them: the main program's
+  // names first, in the order the run first changed them, then each
+  // module's own names together under the module's name.  They used to go
+  // in one row in the order they turned up, so n (fact) landed between
+  // total and count, and the same name in two modules was two columns a
+  // screen apart.
+  function traceGroups() {
+    var groups = [], at = {};
+    traced.cols.forEach(function (key) {
+      var of = traced.of[key] || { chart: "", name: key };
+      var g = at[of.chart];
+      if (!g) { g = at[of.chart] = { chart: of.chart, cols: [] }; groups.push(g); }
+      g.cols.push({ key: key, name: of.name });
+    });
+    return groups.filter(function (g) { return !g.chart; })
+                 .concat(groups.filter(function (g) { return g.chart; }));
+  }
+
+  function traceOrder() {
+    var out = [];
+    traceGroups().forEach(function (g) {
+      g.cols.forEach(function (c) { out.push(c.key); });
+    });
+    return out;
+  }
+
+  // What a value is, for how it is set: a number, a piece of text, a yes
+  // or no, or a list.  A column that only ever held numbers is set to the
+  // right, so that their places line up down it.
+  var TRACE_NUM = /^-?\d+(\.\d+)?(e[-+]?\d+)?$/i;
+  function traceKind(v) {
+    v = String(v);
+    if (TRACE_NUM.test(v)) { return "t-num"; }
+    if (v.charAt(0) === '"') { return "t-str"; }
+    if (v === TXT.yes || v === TXT.no) { return "t-flag"; }
+    if (v.charAt(0) === "[" || v.charAt(0) === "{") { return "t-list"; }
+    return "";
+  }
+
+  function traceNumeric(key) {
+    var any = false;
+    for (var i = 0; i < traced.rows.length; i++) {
+      var v = traced.rows[i].cells[key];
+      if (v === undefined) { continue; }
+      if (!TRACE_NUM.test(String(v))) { return false; }
+      any = true;
+    }
+    return any;
   }
 
   function showTrace() {
@@ -423,31 +486,9 @@
       none.textContent = TXT.trace_none;
       page.appendChild(none);
     } else {
-      if (typeof traceGraph === "function") { traceGraph(page, traced.rows, traced.cols); }   // its numbers, drawn (17-graphs.js)
-      var table = document.createElement("table");
-      table.className = "trace";
-      var head = table.createTHead().insertRow();
-      [TXT.trace_line].concat(traced.cols, [TXT.trace_out]).forEach(function (name, k) {
-        var th = document.createElement("th");
-        th.textContent = name;
-        if (k === 0) { th.className = "trace-at"; }
-        head.appendChild(th);
-      });
-      var body = table.createTBody();
-      traced.rows.forEach(function (r) {
-        var tr = body.insertRow();
-        var at = tr.insertCell();
-        at.className = "trace-at";
-        at.textContent = r.line;
-        traced.cols.forEach(function (c) {
-          var td = tr.insertCell();
-          if (r.cells[c] !== undefined) { td.textContent = r.cells[c]; }
-        });
-        var said = tr.insertCell();
-        said.className = "trace-said";
-        said.textContent = r.out;
-      });
-      page.appendChild(table);
+      var groups = traceGroups();
+      if (typeof traceGraph === "function") { traceGraph(page, traced.rows, groups); }   // its numbers, drawn (17-graphs.js)
+      page.appendChild(traceTable(groups));
     }
     out.appendChild(page);
     var row = document.createElement("div");
@@ -462,7 +503,95 @@
     tapeShow("code");
     if (el("#tape-lang")) { el("#tape-lang").hidden = true; }
     tapeSays("", TXT.trace_head, say("trace_rows", { n: traced.rows.length }) +
-             (traced.cut ? " \u00b7 " + say("trace_cut", { n: TRACE_ROWS }) : ""));
+             (traced.cut ? " · " + say("trace_cut", { n: TRACE_ROWS }) : ""));
+  }
+
+  // The table itself.  A row of names along the top -- with each module's
+  // name over its own, where there are modules -- and a row for every
+  // step: the line it was on and what that line says, the new value under
+  // each name it changed, and what it printed.  Nothing wraps.  A name is
+  // as wide as its word, where it was squeezed to a letter a line, and a
+  // long list is one line cut short, the whole of it on hover -- so every
+  // row is one line high and a screen holds thirty steps rather than three.
+  // A click on a row lays its long values out in full, and a second puts
+  // it back.  The heading stays at the top and the line numbers at the
+  // left while the rest scrolls under them.
+  function traceTable(groups) {
+    var table = document.createElement("table");
+    table.className = "trace";
+    var mods = groups.some(function (g) { return g.chart; });
+    var head = table.createTHead();
+    var over = mods ? head.insertRow() : null;
+    var names = head.insertRow();
+    function heading(row, text, cls, cols, rows) {
+      var th = document.createElement("th");
+      th.textContent = text;
+      if (cls) { th.className = cls; }
+      if (cols > 1) { th.colSpan = cols; }
+      if (rows > 1) { th.rowSpan = rows; }
+      row.appendChild(th);
+      return th;
+    }
+    heading(over || names, TXT.trace_line, "trace-at", 1, over ? 2 : 1);
+    if (over) {
+      groups.forEach(function (g) {
+        heading(over, g.chart ? g.chart + "()" : TXT.trace_main, "trace-group trace-first", g.cols.length);
+      });
+    }
+    var numeric = {}, firsts = {};
+    groups.forEach(function (g) {
+      firsts[g.cols[0].key] = true;
+      g.cols.forEach(function (c, k) {
+        numeric[c.key] = traceNumeric(c.key);
+        var th = heading(names, c.name, [k === 0 ? "trace-first" : "", numeric[c.key] ? "num" : ""]
+                                         .join(" ").trim());
+        if (c.key !== c.name) { th.title = c.key; }
+      });
+    });
+    heading(over || names, TXT.trace_out, "trace-said", 1, over ? 2 : 1);
+    var cols = traceOrder();
+    var body = table.createTBody();
+    // A step with no words of its own -- a For's counter going up -- is
+    // shown with the line it is on, as written: For i = 1 To 4.
+    var written = typeof builtText === "string" ? builtText.split("\n") : [];
+    traced.rows.forEach(function (r) {
+      var tr = body.insertRow();
+      var at = tr.insertCell();
+      at.className = "trace-at";
+      var ln = document.createElement("span");
+      ln.className = "trace-ln";
+      ln.textContent = r.line;
+      at.appendChild(ln);
+      var says = r.code || String(written[r.line - 1] || "").trim();
+      if (says) {
+        var code = document.createElement("span");
+        code.className = "trace-code";
+        code.textContent = says;
+        at.appendChild(code);
+        at.title = says;
+      }
+      cols.forEach(function (c) {
+        var td = tr.insertCell();
+        var cls = [firsts[c] ? "trace-first" : "", numeric[c] ? "num" : ""];
+        var v = r.cells[c];
+        if (v !== undefined) {
+          td.textContent = v;
+          cls.push(traceKind(v));
+          if (String(v).length > 16) { td.title = v; }
+        }
+        cls = cls.join(" ").trim();
+        if (cls) { td.className = cls; }
+      });
+      var said = tr.insertCell();
+      said.className = "trace-said";
+      said.textContent = r.out;
+      if (r.out.length > 30) { said.title = r.out; }
+    });
+    body.addEventListener("click", function (ev) {
+      var tr = ev.target && ev.target.closest ? ev.target.closest("tr") : null;
+      if (tr) { tr.classList.toggle("open"); }
+    });
+    return table;
   }
 
   if (el("#trace-open")) { el("#trace-open").onclick = showTrace; }
@@ -773,7 +902,7 @@
     // Dispay, Whlie, Retrun.
     var swap = meant && meant.indexOf(" ") < 0
              ? { how: "change", word: first, instead: meant } : null;
-    sayFault({ at: item, message: TXT.r_no_idea, fix: swap,
+    sayFault({ at: item, message: TXT.r_no_idea, fix: swap, why: "r_no_idea",
                tip: meant ? say("r_mean", { name: meant }) : "" }, "warn");
   }
 
@@ -852,9 +981,13 @@
     // step = 1 -- may be handed fewer.
     var need = list.filter(function (p) { return !p.dflt; }).length;
     if (!kept && (args.length < need || args.length > names.length)) {
-      throw new Error(say("r_args", { name: mod.name + "()",
-                                      want: need === names.length ? need : need + "-" + names.length,
-                                      got: args.length }));
+      var miss = new Error(say("r_args", { name: mod.name + "()",
+                                           want: need === names.length ? need : need + "-" + names.length,
+                                           got: args.length }));
+      // which ones, for asking for them (27-ask.js)
+      miss.why = "r_args"; miss.name = mod.name; miss.params = names.slice();
+      miss.need = need; miss.got = args.length;
+      throw miss;
     }
     var from = doingNow;                 // the statement that called it
     // How it was called, for a save made while the run is inside it.  A
@@ -871,7 +1004,9 @@
     }
     if (++callsDeep > DEEP_CAP) {
       callsDeep--;
-      throw new Error(say("r_too_deep", { name: mod.name + "()" }));
+      var deep = new Error(say("r_too_deep", { name: mod.name + "()" }));
+      deep.why = "r_too_deep"; deep.name = mod.name; deep.params = names.slice();
+      throw deep;
     }
     try {
       await runSteps(mod.body, where);
@@ -1265,7 +1400,11 @@
       return;
     }
     var box = holderOf(where, head[0]);
-    if (!box) { throw wrong(say("r_unknown", { name: head[0] }), { from: 0, to: head[0].length }); }
+    if (!box) {
+      var lost = wrong(say("r_unknown", { name: head[0] }), { from: 0, to: head[0].length });
+      lost.why = "r_unknown"; lost.name = head[0]; lost.listy = true;
+      throw lost;
+    }
     var holder = box[sameName(box, head[0])];
     var i = head[0].length, steps = [];
     while (i < text.length) {
