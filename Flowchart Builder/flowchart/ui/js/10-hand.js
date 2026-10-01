@@ -2062,7 +2062,7 @@
         // diamond -- rather than out on the corner of the box round it.
         // Press and drag from one to draw a line, or just click it and then
         // click where it should go.
-        ports(n).forEach(function (port, side) {
+        (typeof linksWanted !== "function" || linksWanted() ? ports(n) : []).forEach(function (port, side) {
           out.push('<circle class="knob' + (joining ? " lit" : "") +
                    '" data-i="' + n.id + '" data-side="' + side + '" cx="' +
                    (port.x + ox + port.dx * 1.5) + '" cy="' +

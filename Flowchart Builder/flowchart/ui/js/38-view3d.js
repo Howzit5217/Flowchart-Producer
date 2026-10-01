@@ -54,7 +54,8 @@
                   i_cubeshelf: 0.8, i_cornershelf: 1.5, i_shoerack: 0.45, i_coatrack: 1.8, i_pc: 0.45,
                   i_fan: 1.2, i_grill: 1.0, i_pool: 0.02, i_patio: 0.75, i_gardenbench: 0.45, i_hottub: 0.9,
                   i_dogbed: 0.25, i_cattree: 1.5, i_driveway: 0.03, i_path: 0.03, i_deck: 0.15,
-                  i_flowerbed: 0.25, i_hedge: 1.1 };
+                  i_flowerbed: 0.25, i_hedge: 1.1,
+                  i_reachin: 2.4, i_closetrod: 1.8, i_closetshelves: 2.0 };
   var V3_ROUND = { i_plant: true, i_lamp: true, i_shrub: true, i_stool: true, i_trash: true, i_heater: true,
                    i_sidetable: true, i_beanbag: true, i_palm: true, i_cactus: true, i_flowers: true,
                    i_coatrack: true, i_fan: true, i_dogbed: true, i_tablelamp: true, i_vase: true,
@@ -176,12 +177,20 @@
   }
 
   // Where along one of a room's walls something stood in it is: sampled
-  // over its box, the part of it inside the wall's band.
+  // over its box, the part of it inside the wall's band.  Only a wall that
+  // runs along it -- and of a swinging door only its threshold and middle,
+  // not the floor its leaf swings over: a door in one wall, by a corner,
+  // cut a doorway into the wall round the corner too, open to the garden.
   function v3Hole(room, edge, T, n) {
     var a = -(room.turn || 0) * Math.PI / 180, c = Math.cos(a), s = Math.sin(a);
     var hw = room.w / 2, hh = room.h / 2, lo = Infinity, hi = -Infinity, step = 1 / 8;
+    var rel = ((n.turn || 0) - (room.turn || 0)) * Math.PI / 180;
+    var across = Math.abs(Math.cos(rel)) >= Math.abs(Math.sin(rel));
+    if (across !== (edge === "top" || edge === "foot")) { return null; }
+    var swing = SNAP_IN_WALL[n.kind] === "swing";
     for (var i = 0; i <= 8; i++) {
       for (var j = 0; j <= 8; j++) {
+        if (swing && j !== 4 && j !== 8) { continue; }
         var p = v3Local(n, (i * step - 0.5) * n.w, (j * step - 0.5) * n.h);
         var dx = p[0] - room.x, dy = p[1] - room.y;
         var ux = dx * c - dy * s, uy = dx * s + dy * c, inBand, at;
@@ -220,6 +229,13 @@
     else if (n.kind === "i_door2") {
       slab(-hw + 1.3, hh, Math.cos(a), -Math.sin(a), hw - 2, 2.6);
       slab(hw - 1.3, hh, -Math.cos(a), -Math.sin(a), hw - 2, 2.6);
+    } else if (n.kind === "i_bifold") {        // folds: two pairs of panels, to either side
+      var panel = (n.w - 4) / 4, th = (open / 90) * Math.PI / 2 * 0.9;
+      [[-hw + 2, 1], [hw - 2, -1]].forEach(function (side) {
+        var x0 = side[0], dir = side[1];
+        slab(x0, 0, dir * Math.cos(th), -Math.sin(th), panel, 2);
+        slab(x0 + dir * panel * Math.cos(th), -panel * Math.sin(th), dir * Math.cos(th), Math.sin(th), panel, 2);
+      });
     } else if (n.kind === "i_garagedoor") {   // rolls up into the roof
       var lift = (open / 90) * (leaf - 0.15 * FLOOR_PX);
       v3Box(faces, n, -hw, hw, -1.5, 1.5, lift, leaf, look);
@@ -423,11 +439,18 @@
     // the floors up to the one asked for, are put up.
     var floors = floorsOf(), links = floorLinks(floors), endOf = {};
     links.forEach(function (pair) { endOf[pair[0].id] = "low"; endOf[pair[1].id] = "high"; });
+    // Up off the paper the floors are where they are drawn, side by side,
+    // and slide over the ground floor as the walls go up: stacked only once
+    // the house stands, and side by side again laid flat, as on the paper.
+    var stack = inside ? 1 : flat ? 0 : Math.max(0, Math.min(1, V3.rise === undefined ? 1 : V3.rise));
+    if (stack < 1) {
+      floors = floors.map(function (f) { return Object.assign({}, f, { dx: f.dx * stack, dy: f.dy * stack }); });
+    }
     var show = inside ? (indoors ? (V3.myLevel || 0) : null) : V3.upTo;
     function shown(f) {
       if (!f) { return true; }
       if (inside) { return !indoors || f.level === show; }
-      if (flat) { return f.level === (show === null || show === undefined ? 0 : show); }
+      if (flat) { return true; }        // flat, every floor, side by side as drawn
       return show === null || show === undefined || f.level <= show;
     }
     var topLevel = floors.length ? floors[floors.length - 1].level : 0;
@@ -480,7 +503,7 @@
     function under(n) {
       var most = 0;
       hand.nodes.forEach(function (m) {
-        var high = V3_HIGH[m.kind] !== undefined ? V3_HIGH[m.kind] : m.kind === "i_shelf" ? V3_WALL.i_shelf[1] : undefined;
+        var high = V3_HIGH[m.kind] !== undefined ? pieceHigh(m) : m.kind === "i_shelf" ? wallHang(m)[1] : undefined;
         if (m === n || high === undefined || LIES_FLAT[m.kind] || !insideArea(m, n.x, n.y)) { return; }
         most = Math.max(most, high);
       });
@@ -521,13 +544,13 @@
       if (n.kind === "i_floor" || n.kind === "i_zone") { return; }
       if (ON_TOP[n.kind] && V3_ON[n.kind]) {
         var z0 = under(n) * FLOOR_PX;
-        roundOrBox(n, z0, z0 + V3_ON[n.kind] * FLOOR_PX, { piece: true, tex: v3Texture(n), color: look.fill, edge: look.line });
+        roundOrBox(n, z0, z0 + pieceHigh(n) * FLOOR_PX, { piece: true, tex: v3Texture(n), color: look.fill, edge: look.line });
         return;
       }
       if (FROM_CEILING[n.kind]) {
         // hung from the ceiling on its cord (or its pole), as far down as
         // such a thing hangs
-        var hi = ceilAt(n) * FLOOR_PX, drop = V3_DROP[n.kind] || [0.5, 0.25];
+        var hi = ceilAt(n) * FLOOR_PX, drop = hangDrop(n);
         var bottom = Math.min(Math.max(hi - drop[0] * FLOOR_PX, (under(n) + 0.08) * FLOOR_PX), hi - 0.12 * FLOOR_PX);
         var body = Math.min(bottom + drop[1] * FLOOR_PX, hi - 0.03 * FLOOR_PX);
         roundOrBox(n, bottom, body, { piece: true, tex: v3Texture(n), color: look.fill, edge: look.line });
@@ -570,7 +593,7 @@
         var corners = [[-n.w / 2, -n.h / 2], [n.w / 2, -n.h / 2], [n.w / 2, n.h / 2], [-n.w / 2, n.h / 2]];
         if (!hush) {
           faces.push({ pts: corners.map(function (p) { var q = v3Local(n, p[0], p[1]); return [q[0], q[1], 0]; }),
-                       n: [0, 0, 1], how: { floor: true, color: look.fill, edge: look.line }, floor: true });
+                       n: [0, 0, 1], how: { floor: true, color: look.fill, edge: look.line, room: n }, floor: true });
         }
         if (inside) {                    // overhead, seen from under it
           var up = ceilOf(n) * FLOOR_PX;
@@ -598,7 +621,15 @@
         v3Door(faces, n, V3.doorAt[n.id] !== undefined ? V3.doorAt[n.id] : (doorIsOpen(n) ? 90 : 0));
       } else if (V3_WALL[n.kind]) {
         // on the wall: its back to it, its front to the room, at its height
-        var hang = V3_WALL[n.kind], front = v3FrontPic(n, hang);
+        // as high as it was hung -- and over whatever stands against the
+        // wall under it, where that is taller than where it would start
+        var hang = wallHang(n), clear = 0;
+        hand.nodes.forEach(function (m) {
+          if (m === n || V3_HIGH[m.kind] === undefined || LIES_FLAT[m.kind] || !boxesOverlap(m, n)) { return; }
+          clear = Math.max(clear, pieceHigh(m) + 0.06);
+        });
+        if (clear > hang[0] && hang[1] - hang[0] + clear <= ceilAt(n) - 0.02) { hang = [clear, clear + hang[1] - hang[0]]; }
+        var front = v3FrontPic(n, hang);
         // the way its front faces: seen from behind its wall, it is not seen
         var ft = (n.turn || 0) * Math.PI / 180, facing = [-Math.sin(ft), Math.cos(ft), 0];
         if (n.kind === "i_shelf") {
@@ -624,8 +655,41 @@
           var y1 = n.h / 2 - k * n.h / treads, y0 = y1 - n.h / treads;
           v3Box(faces, n, -n.w / 2, n.w / 2, y0, y1, 0, rise * (k + 1), { piece: true, color: look.fill, edge: look.line });
         }
+      } else if (n.kind === "i_closetrod") {
+        // a rail of clothes: its two posts, the rail across, and what
+        // hangs from it, longer and shorter, lighter and darker
+        var railTall = pieceHigh(n) * FLOOR_PX, rw = n.w / 2, rd = n.h / 2;
+        var post = { piece: true, color: look.line, edge: look.line };
+        v3Box(faces, n, -rw, -rw + 2, -1, 1, 0, railTall, post);
+        v3Box(faces, n, rw - 2, rw, -1, 1, 0, railTall, post);
+        v3Box(faces, n, -rw, rw, -0.8, 0.8, railTall - 4, railTall - 2, post);
+        var hung = Math.max(3, Math.floor((n.w - 10) / 9));
+        for (var g = 0; g < hung; g++) {
+          var gx = -rw + 5 + (g + 0.5) * (n.w - 10) / hung, drop = [0.95, 0.7, 1.05, 0.8, 0.6, 1.0][g % 6];
+          v3Box(faces, n, gx - 1.5, gx + 1.5, -rd + 5, rd - 5, Math.max(4, railTall - 5 - drop * FLOOR_PX), railTall - 5,
+                { piece: true, color: v3Mix(look.fill, look.line, [0.1, 0.32, 0.18, 0.45, 0.25, 0.05][g % 6]), edge: look.line });
+        }
+      } else if (n.kind === "i_closetshelves") {
+        // open shelves: the sides, the back against the wall, a shelf every
+        // 40 cm, and piles of folded clothes on them
+        var shTall = pieceHigh(n) * FLOOR_PX, sw = n.w / 2, sd = n.h / 2;
+        var board = { piece: true, color: look.fill, edge: look.line };
+        v3Box(faces, n, -sw, -sw + 1.5, -sd, sd, 0, shTall, board);
+        v3Box(faces, n, sw - 1.5, sw, -sd, sd, 0, shTall, board);
+        v3Box(faces, n, -sw, sw, -sd, -sd + 1.2, 0, shTall, board);
+        for (var lv = 0; lv * 0.4 * FLOOR_PX < shTall - 1.5; lv++) {
+          var sz = lv * 0.4 * FLOOR_PX;
+          v3Box(faces, n, -sw + 1.5, sw - 1.5, -sd + 1.2, sd, sz, sz + 1.5, board);
+          if (sz + 0.3 * FLOOR_PX >= shTall) { continue; }
+          [-0.24, 0.24].forEach(function (at, pi) {
+            var px = at * n.w, high = (0.12 + 0.05 * ((lv + pi) % 3)) * FLOOR_PX;
+            v3Box(faces, n, px - n.w * 0.17, px + n.w * 0.17, -sd + 4, sd - 4, sz + 1.5, sz + 1.5 + high,
+                  { piece: true, color: v3Mix(look.fill, look.line, 0.12 + 0.12 * ((lv + pi) % 3)), edge: look.line });
+          });
+        }
+        v3Box(faces, n, -sw + 1.5, sw - 1.5, -sd + 1.2, sd, shTall - 1.5, shTall, board);
       } else if (V3_HIGH[n.kind] !== undefined) {
-        var tall = V3_HIGH[n.kind] * FLOOR_PX, tex = v3Texture(n);
+        var tall = pieceHigh(n) * FLOOR_PX, tex = v3Texture(n);
         if (V3_ROUND[n.kind]) {
           var base = [];
           for (var r = 0; r < 12; r++) {
@@ -643,7 +707,7 @@
       } else if (isFigure(n.kind) || n.kind === "actor") {
         if (walkAt && simNow && walkAt.id === n.id) { return; }   // out walking
         if (inside && V3.me && V3.me.as === n.id) { return; }     // it is you
-        stand.push({ x: n.x, y: n.y, z: 0, tall: (isPerson(n) ? PERSON_TALL : 1.0) * FLOOR_PX,
+        stand.push({ x: n.x, y: n.y, z: 0, tall: pieceHigh(n) * FLOOR_PX,
                      img: v3Figure(n.kind === "actor" ? "i_person" : n.kind, look) });
       }
     }
@@ -658,6 +722,9 @@
       if (!shown(f)) { return; }
       var f0 = faces.length, s0 = stand.length;
       putNode(n);
+      // what each face is a face of: for what it is covered in, and for
+      // what a body walking round bumps into (v3Solids)
+      for (var t = f0; t < faces.length; t++) { faces[t].node = n; }
       if (!f || (!f.dx && !f.dy && !f.z)) { return; }
       var moved = [];
       for (var i = f0; i < faces.length; i++) {
@@ -677,7 +744,8 @@
       var walking = walkAt.id ? nodeById(walkAt.id) : null, wf = floorAt(floors, walkAt.x, walkAt.y);
       if (shown(wf) && !(hush && roomsHolding(walkAt, 0))) {
         stand.push({ x: walkAt.x + (wf ? wf.dx : 0), y: walkAt.y + (wf ? wf.dy : 0), z: wf ? wf.z : 0,
-                     tall: PERSON_TALL * FLOOR_PX, img: v3Figure(walkAt.kind, walking ? simLook(walking) : null), walker: true });
+                     tall: (walking ? pieceHigh(walking) : PERSON_TALL) * FLOOR_PX,
+                     img: v3Figure(walkAt.kind, walking ? simLook(walking) : null), walker: true });
       }
     }
     // the roof, settling on or lifting off
@@ -710,11 +778,11 @@
           z = hush ? wallTop(n) + 0.6 * FLOOR_PX : 0.15 * FLOOR_PX;
         } else {
           text = String(n.text || "").split("\n")[0].trim() || labelName(n.kind);
-          if (isFigure(n.kind) || n.kind === "actor") { z = (isPerson(n) ? PERSON_TALL : 1.0) + 0.3; }
-          else if (V3_WALL[n.kind]) { z = V3_WALL[n.kind][1] + 0.2; }
-          else if (FROM_CEILING[n.kind]) { z = ceilAt(n) - (V3_DROP[n.kind] || [0.5])[0] - 0.15; }
-          else if (ON_TOP[n.kind]) { z = under(n) + (V3_ON[n.kind] || 0.2) + 0.2; }
-          else if (V3_HIGH[n.kind] !== undefined) { z = V3_HIGH[n.kind] + 0.25; }
+          if (isFigure(n.kind) || n.kind === "actor") { z = pieceHigh(n) + 0.3; }
+          else if (V3_WALL[n.kind]) { z = wallHang(n)[1] + 0.2; }
+          else if (FROM_CEILING[n.kind]) { z = ceilAt(n) - hangDrop(n)[0] - 0.15; }
+          else if (ON_TOP[n.kind]) { z = under(n) + pieceHigh(n) + 0.2; }
+          else if (V3_HIGH[n.kind] !== undefined) { z = pieceHigh(n) + 0.25; }
           else { z = 0.8; }
           z *= FLOOR_PX;
         }
@@ -750,7 +818,7 @@
   function v3Pic(key, svg, w, h) {
     if (v3Pics[key]) { return v3Pics[key]; }
     var img = new Image();
-    var pic = v3Pics[key] = { img: img, ok: false, w: w, h: h };
+    var pic = v3Pics[key] = { img: img, ok: false, w: w, h: h, key: key };
     img.onload = function () { pic.ok = true; if (V3) { V3.dirty = true; } };
     img.src = "data:image/svg+xml;charset=utf-8," + encodeURIComponent(svg);
     return pic;
@@ -1002,8 +1070,17 @@
       V3.inRoom = roomAt(plan, V3.me.x, V3.me.y) || null;   // under a ceiling, or out under the sky
     }
     var model = v3Build();
+    if (inside) { V3.solids = v3Solids(model); }   // what walking bumps into (v3Bumps)
     if (!inside && (V3.fitNext || V3.cx === undefined)) { V3.fitNext = false; v3Fit(model); }
     var toward = inside ? null : v3Toward();
+    // A home, by WebGL wherever the browser has it (38-view3d-gl.js): a
+    // depth buffer, so nothing shows through a wall, pictures that stay on
+    // their faces, the sun and the garden.  Space, and a browser without
+    // it, are painted the way below.
+    if (!sky && typeof v3GlDraw === "function" && v3GlDraw(model, inside)) {
+      v3Over(model, inside, ink, sheet, sky);
+      return;
+    }
     if (inside) {
       // the sky over, and the ground under, the horizon
       var f = (V3.w / 2) / Math.tan(V3_FOV / 2);
@@ -1171,6 +1248,13 @@
         }
       }
     });
+    v3Over(model, inside, ink, sheet, sky);
+  }
+
+  // Over the picture, however it was drawn: the names, the map, and the
+  // picture from before a change fading out.
+  function v3Over(model, inside, ink, sheet, sky) {
+    var ctx = V3.ctx;
     if (!model.faces.length && !model.spheres.length && !model.stand.length) {
       ctx.fillStyle = sky ? sheet : ink;
       ctx.font = "14px " + (FACES[lettersOf().face] || FACES.sans);
@@ -1222,12 +1306,58 @@
     }
     var pts = [[x, y], [x - WALK_BODY, y - WALK_BODY], [x + WALK_BODY, y - WALK_BODY],
                [x - WALK_BODY, y + WALK_BODY], [x + WALK_BODY, y + WALK_BODY]];
-    return pts.some(function (p) {
+    if (pts.some(function (p) {
       var c = Math.floor((p[0] - plan.x0) / WALK_CELL), r = Math.floor((p[1] - plan.y0) / WALK_CELL);
       if (c < 0 || r < 0 || c >= plan.cols || r >= plan.rows) { return false; }   // outdoors
       var i = r * plan.cols + c, cell = plan.cells[i];
       return cell === 1 || cell === 2 || shut[i];
+    })) { return true; }
+    return v3Bumps(x, y);
+  }
+
+  // The squares above are ten pixels across, and a body tested at five
+  // points of them could still come right up to the end of a wall -- a
+  // door's frame, met at a slant -- close enough for the eye to be inside
+  // it, and the wall cut open in front of it (asked for, 2026-10-01: "there
+  // is still the clipping issues in the 3d walking around mode").  So it is
+  // also kept off the walls, the doors and the furniture themselves, as
+  // they were put up last time the view was drawn: their sides, as lines
+  // on the floor, each with the heights it stands between.
+  var V3_CLEAR = WALK_BODY + 3;          // how near the middle of you a wall may come
+  function v3Solids(model) {
+    var out = [];
+    model.faces.forEach(function (f) {
+      var n = f.node;
+      if (!f.side || !n || BETWEEN_FLOORS[n.kind] || FROM_CEILING[n.kind] || LIES_FLAT[n.kind] ||
+          n.kind === "i_rug" || n.kind === "i_lot" || n.kind === "i_floor") { return; }
+      var a = f.pts[0], b = f.pts[1];
+      var z0 = Math.min(a[2], f.pts[2][2], f.pts[3][2]), z1 = Math.max(a[2], f.pts[2][2], f.pts[3][2]);
+      if (Math.hypot(b[0] - a[0], b[1] - a[1]) < 0.01) { return; }
+      out.push([a[0], a[1], b[0], b[1], z0, z1]);
     });
+    return out;
+  }
+  // The nearest any of them comes to a spot on the floor of a storey that
+  // starts at height z, between the knees and the top of the head.
+  function v3Nearest(px, py, z) {
+    var best = Infinity, lo = z + 0.25 * FLOOR_PX, hi = z + 1.8 * FLOOR_PX;
+    (V3.solids || []).forEach(function (s) {
+      if (s[5] < lo || s[4] > hi) { return; }
+      var dx = s[2] - s[0], dy = s[3] - s[1], len = dx * dx + dy * dy;
+      var t = Math.max(0, Math.min(1, ((px - s[0]) * dx + (py - s[1]) * dy) / len));
+      best = Math.min(best, Math.hypot(px - s[0] - dx * t, py - s[1] - dy * t));
+    });
+    return best;
+  }
+  function v3Bumps(x, y) {
+    if (!V3 || !V3.solids || !V3.me) { return false; }
+    var floors = v3Ground().floors || [], f = floorAt(floors, x, y), g = floorAt(floors, V3.me.x, V3.me.y);
+    var to = v3Nearest(x + (f ? f.dx : 0), y + (f ? f.dy : 0), f ? f.z : 0);
+    if (to >= V3_CLEAR) { return false; }
+    // already too near (put there by a door swinging, say): a step that
+    // takes you further off is let through
+    var now = v3Nearest(V3.me.x + (g ? g.dx : 0), V3.me.y + (g ? g.dy : 0), g ? g.z : 0);
+    return to <= now;
   }
 
   // Where you start: as the person drawn in the plan -- in a room, or else
@@ -1257,13 +1387,20 @@
   }
 
   // A step's worth of walking, from the keys held and the pad pressed.
+  // W A S D walk -- ahead, back, and a step to either side -- and the
+  // arrows are the eyes: left and right to turn, up and down to look up
+  // and down (asked for, 2026-10-01: "the arrows are the camera and the
+  // wasd is the movement").  The pad on the screen walks and turns.
   function v3Stride(dt) {
     var k = V3.keys, me = V3.me;
-    var ahead = (k.w || k.arrowup || k.padup ? 1 : 0) - (k.s || k.arrowdown || k.paddown ? 1 : 0);
+    var ahead = (k.w || k.padup ? 1 : 0) - (k.s || k.paddown ? 1 : 0);
     var side = (k.d ? 1 : 0) - (k.a ? 1 : 0);
-    var turn = (k.arrowright || k.e_turn || k.padright ? 1 : 0) - (k.arrowleft || k.q || k.padleft ? 1 : 0);
-    if (!ahead && !side && !turn) { return false; }
+    var turn = (k.arrowright || k.padright ? 1 : 0) - (k.arrowleft || k.padleft ? 1 : 0);
+    var look = (k.arrowup ? 1 : 0) - (k.arrowdown ? 1 : 0);
+    if (!ahead && !side && !turn && !look) { return false; }
     me.head += turn * 1.9 * dt;
+    if (look) { me.pitch = Math.max(-0.9, Math.min(0.9, me.pitch + look * 1.3 * dt)); }
+    if (!ahead && !side) { return true; }
     var pace = WALK_PACE * (k.shift ? 2 : 1) * dt;
     var mx = (Math.cos(me.head) * ahead - Math.sin(me.head) * side) * pace;
     var my = (Math.sin(me.head) * ahead + Math.cos(me.head) * side) * pace;
@@ -1271,6 +1408,17 @@
     if (mx && !v3Blocked(me.x + mx, me.y)) { me.x += mx; }
     if (my && !v3Blocked(me.x, me.y + my)) { me.y += my; }
     v3Stairs();
+    return true;
+  }
+
+  // From above, W A S D move over it the way they walk through it: W
+  // further in, S back, A and D to the sides -- the arrows turn it.
+  function v3Glide(dt) {
+    var k = V3.keys;
+    var x = (k.d ? 1 : 0) - (k.a ? 1 : 0), y = (k.s ? 1 : 0) - (k.w ? 1 : 0);
+    if (!x && !y) { return false; }
+    var step = 520 * dt * (k.shift ? 2 : 1);
+    V3.panX -= x * step; V3.panY -= y * step;
     return true;
   }
 
@@ -1381,7 +1529,8 @@
     ctx.beginPath(); ctx.moveTo(7, 0); ctx.lineTo(-4, -4.5); ctx.lineTo(-2, 0); ctx.lineTo(-4, 4.5); ctx.closePath(); ctx.fill();
     ctx.restore();
     var where = el(".v3-where", V3.box), room = roomAt(plan, me.x, me.y);
-    var said = room ? roomName(plan, room) : TXT.v3_outside;
+    // named as the plan labels it -- "Studio" -- not as a sentence says it
+    var said = room ? roomLabel(room) || roomName(plan, room) : TXT.v3_outside;
     if (mine && (plan.floors || []).length > 1) { said += " \u00b7 " + floorName(mine); }
     if (where) { where.textContent = said; }
   }
@@ -1412,7 +1561,7 @@
         swung = true;
       }
     });
-    var walked = V3.mode === "walk" && v3Stride(dt);
+    var walked = V3.mode === "walk" ? v3Stride(dt) : v3Glide(dt);
     var eased = v3Tweening();
     if (!V3) { return; }                 // eased all the way shut
     var key = moving ? JSON.stringify(walkAt) + "|" + (typeof orbitTick !== "undefined" ? orbitTick : 0) : "";
@@ -1471,6 +1620,13 @@
     V3.scale = aim.scale; V3.panX = aim.panX; V3.panY = aim.panY;
     if (scene.name !== "space") { V3.rise = 0; }
     V3.pitch = Math.PI / 2; V3.yaw = 0;
+    // from exactly where the drawing is on the paper, at the paper's zoom,
+    // so it rises out of the drawing rather than out of somewhere near it
+    var paper = scene.name !== "space" ? v3Paper() : null;
+    if (paper) {
+      V3.scale = paper.scale; V3.panX = paper.panX; V3.panY = paper.panY;
+      ["scale", "panX", "panY"].forEach(function (k) { v3Tween(k, aim[k], 1150); });
+    }
     v3Tween("rise", 1, 950);
     v3Tween("pitch", 1.05, 1150);
     v3Tween("yaw", -0.62, 1150);
@@ -1583,7 +1739,7 @@
     var floors = home ? floorsOf() : [], level = el('[data-v3="level"]', V3.box);
     var upTo = floors.filter(function (f) { return f.level === V3.upTo; })[0];
     if (!upTo) { V3.upTo = null; }
-    level.hidden = inside || floors.length < 2;
+    level.hidden = inside || floors.length < 2 || V3.flat;   // flat, every floor shows
     var ground = floors.filter(function (f) { return f.level === 0; })[0] || floors[0];
     level.textContent = V3.flat ? (upTo || ground ? floorName(upTo || ground) : "")
       : upTo ? say("v3_up_to", { floor: floorName(upTo) }) : TXT.v3_all_floors;
@@ -1653,6 +1809,8 @@
     // the whole of it in view, as it will be looked at
     var aim = v3Aim(v3Build(), on ? { pitch: Math.PI / 2, yaw: 0, rise: 0 }
                                  : { pitch: (V3.was && V3.was.pitch) || 1.05, yaw: V3.was ? V3.was.yaw : -0.62, rise: 1 });
+    // flat, it lies exactly over the drawing on the paper
+    if (on && V3.scene !== "space") { aim = v3Paper() || aim; }
     ["scale", "panX", "panY"].forEach(function (k) { v3Tween(k, aim[k], 750); });
     if (on) {
       v3Tween("roofV", 0, 350);
@@ -1672,6 +1830,21 @@
     v3Words();
   }
 
+  // Where the drawing is on the paper now, as the view looks straight down
+  // (pitch a right angle, turned not at all, walls down): the zoom and the
+  // place that puts each thing exactly over its drawing -- by the paper's
+  // own transform (getScreenCTM) and where by-hand numbers start on it
+  // (handOrigin).  Null when there is no paper to line up with.
+  function v3Paper() {
+    var svg = typeof chart !== "undefined" ? chart : null;
+    var M = svg && svg.getScreenCTM && svg.getScreenCTM();
+    if (!M || !V3 || V3.cx === undefined) { return null; }
+    var r = V3.box.getBoundingClientRect(), ox = handOrigin.x, oy = handOrigin.y;
+    var sx = M.a * (V3.cx + ox) + M.c * (V3.cy + oy) + M.e - r.left;
+    var sy = M.b * (V3.cx + ox) + M.d * (V3.cy + oy) + M.f - r.top;
+    return { scale: Math.hypot(M.a, M.b) || 1, panX: sx - V3.w / 2, panY: sy - V3.h / 2 };
+  }
+
   // Out: back down onto the paper the way it came up off it, then gone.
   function v3Leave() {
     if (!V3 || V3.leaving) { return; }
@@ -1679,6 +1852,8 @@
     V3.leaving = true;
     if (V3.mode !== "walk") {
       V3.yaw = Math.atan2(Math.sin(V3.yaw), Math.cos(V3.yaw));
+      var paper = V3.scene !== "space" ? v3Paper() : null;   // back down onto the drawing itself
+      if (paper) { ["scale", "panX", "panY"].forEach(function (k) { v3Tween(k, paper[k], 420); }); }
       v3Tween("labelV", 0, 200);
       v3Tween("roofV", 0, 250);
       v3Tween("rise", 0, 420);
@@ -1781,7 +1956,8 @@
       V3.scale = to;
       V3.dirty = true;
     }, { passive: false });
-    var WALK_KEYS = { w: 1, a: 1, s: 1, d: 1, q: 1, arrowup: 1, arrowdown: 1, arrowleft: 1, arrowright: 1, shift: 1 };
+    var WALK_KEYS = { w: 1, a: 1, s: 1, d: 1, arrowup: 1, arrowdown: 1, arrowleft: 1, arrowright: 1, shift: 1 };
+    var GLIDE_KEYS = { w: 1, a: 1, s: 1, d: 1, shift: 1 };
     // The letters by where they are on the keyboard, not what is printed on
     // them: W A S D on one is Z Q S D on a French one, in the same place.
     var BY_PLACE = { KeyW: "w", KeyA: "a", KeyS: "s", KeyD: "d", KeyQ: "q", KeyE: "e" };
@@ -1800,6 +1976,12 @@
         if (key === "e" || key === " " || key === "enter") { v3UseDoor(); }
         else if (WALK_KEYS[key]) { V3.keys[key] = true; }
         else { return; }
+        ev.preventDefault();
+        return;
+      }
+      if (GLIDE_KEYS[key]) {             // from above: W A S D move over it (v3Glide)
+        v3Hold();
+        V3.keys[key] = true;
         ev.preventDefault();
         return;
       }

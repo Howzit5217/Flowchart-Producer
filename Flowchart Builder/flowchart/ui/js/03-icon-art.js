@@ -468,6 +468,21 @@
     plan("i_shoerack", 60, 25, ["o " + R(0, 0, 60, 25, 0),
       "o " + R(5, 5, 5, 15, 2.5) + " " + R(11, 5, 5, 15, 2.5) + " " + R(22, 5, 5, 15, 2.5) + " " + R(28, 5, 5, 15, 2.5) + " " +
              R(39, 5, 5, 15, 2.5) + " " + R(45, 5, 5, 15, 2.5)]);
+    // Closets (asked for, 2026-10-01: "to have things for closets"): one
+    // built into the wall with its doors along the front, a rail of
+    // clothes and shelves of folded ones for a walk-in closet, and a door
+    // that folds (i_bifold, a door like any other, 38-walk.js).  Each is
+    // drawn from above with its back to the wall and its front at the foot.
+    plan("i_reachin", 120, 60, ["o " + R(0, 0, 120, 60, 0), "t M3 22 H117",
+      "t " + [10, 19, 28, 37, 46, 55, 64, 73, 82, 91, 100, 109].map(function (x) { return "M" + x + " 11 V33"; }).join(" "),
+      "o " + R(2, 50, 58, 4, 0), "o " + R(60, 54, 58, 4, 0)]);
+    plan("i_closetrod", 100, 55, ["t2 M0 27.5 H100",
+      "o " + [0, 1, 2, 3, 4, 5, 6, 7, 8].map(function (i) { return R(6 + i * 10.5, 7, 5, 41, 2.5); }).join(" "),
+      "k " + R(0, 24, 3, 7, 0) + " " + R(97, 24, 3, 7, 0)]);
+    plan("i_closetshelves", 60, 35, ["o " + R(0, 0, 60, 35, 0), "t " + R(3, 3, 54, 29, 0),
+      "o " + R(8, 9, 18, 17, 2) + " " + R(34, 9, 18, 17, 2), "t M8 17.5 H26 M34 17.5 H52"]);
+    plan("i_bifold", 80, 12, ["g " + R(0, 0, 80, 12, 0), "t M0 0 V12 M80 0 V12",
+      "t2 M2 11 L20 3 L38 11 M42 11 L60 3 L78 11"]);
     plan("i_coatrack", 25, 25, ["t M12.5 12.5 L3 3 M12.5 12.5 L22 3 M12.5 12.5 L3 22 M12.5 12.5 L22 22",
                                 "o " + C(12.5, 12.5, 4), "k " + C(3, 3, 1.6) + " " + C(22, 3, 1.6) + " " + C(3, 22, 1.6) + " " + C(22, 22, 1.6)]);
     plan("i_hood", 30, 25, ["o " + R(0, 0, 30, 25, 1), "t M0 0 L15 13 L30 0 M15 13 V25"]);
@@ -713,13 +728,15 @@
                    "i_office", "i_manager", "i_accountant", "i_receptionist", "i_agent", "i_cashier", "i_customer",
                    "i_police", "i_firefighter", "i_soldier", "i_guard", "i_lawyer", "i_judge",
                    "i_pilot", "i_astronaut", "i_driver", "i_delivery", "i_postman", "i_hairdresser", "i_coach"]],
-    ["ic_rooms", ["i_room", "i_floor", "i_wall", "i_door", "i_door2", "i_slide", "i_garagedoor", "i_window",
+    ["ic_rooms", ["i_room", "i_floor", "i_wall", "i_door", "i_door2", "i_slide", "i_bifold", "i_garagedoor", "i_window",
                   "i_stairs", "i_spiral", "i_elevator"]],
     ["ic_living", ["i_sofa", "i_loveseat", "i_sectional", "i_armchair", "i_recliner", "i_ottoman", "i_beanbag",
                    "i_coffee", "i_sidetable", "i_tvstand", "i_tv", "i_fireplace", "i_piano", "i_bookcase",
                    "i_aquarium", "i_speaker", "i_rug", "i_lamp", "i_arclamp"]],
     ["ic_bedroom", ["i_bed", "i_bedking", "i_bed1", "i_bunkbed", "i_crib", "i_nightstand", "i_wardrobe",
                     "i_dresser", "i_vanitytable", "i_bench", "i_chest", "i_desk", "i_officechair", "i_filing"]],
+    ["ic_closets", ["i_reachin", "i_closetrod", "i_closetshelves", "i_bifold", "i_wardrobe", "i_dresser",
+                    "i_shoerack", "i_hamper", "i_hooks", "i_coatrack"]],
     ["ic_kitchen", ["i_counter", "i_island", "i_stove", "i_fridge", "i_kitchensink", "i_dishwasher", "i_pantry",
                     "i_dining", "i_roundtable", "i_chair", "i_stool", "i_trash", "i_microwave", "i_coffeemaker",
                     "i_toaster", "i_kettle", "i_fruitbowl"]],

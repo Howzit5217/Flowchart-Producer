@@ -253,7 +253,7 @@
       if (at.set === "recent") { add("recent", iconRecent()); }
       else if (at.set) { add(at.set, iconSet(at.set)[1]); }
       else {
-        if (!words.length && iconRecent().length) { add("recent", iconRecent().slice(0, 8)); }
+        if (!words.length && iconRecent().length) { add("recent", iconRecent().slice(0, 10)); }
         ICON_SETS.forEach(function (set) { add(set[0], set[1]); });
       }
       return { words: words, groups: out };

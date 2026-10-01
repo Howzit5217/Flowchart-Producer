@@ -51,6 +51,9 @@
   // What a room is for: what it is called, where it was named, or what is in
   // it (ROOM_FOR, 38-walk.js), in any of the page's languages.
   var ROOM_CALLED = [
+    // a room for several things at once, by its name: a studio, a great room
+    ["multi", /studio|great ?room|open.?plan|multi.?purpose|bedsit|einzimmer|einraum|wohnküche|estudio|monoambiente|polivalente|pièce à vivre|séjour.?cuisine|cuisine ouverte/i],
+    ["closet", /closet|wardrobe|ankleide|kleiderkammer|begehbar|vestidor|armario|dressing|penderie|placard/i],
     ["kitchen", /kitchen|küche|cocina|cuisine/i],
     ["bath", /bath|toilet|\bwc\b|restroom|\bbad\b|badezimmer|baño|aseo|salle de bain|salle d.eau|toilettes/i],
     ["bed", /bed ?room|schlafzimmer|kinderzimmer|dormitorio|habitación|chambre/i],
@@ -62,17 +65,29 @@
     ["hall", /hall|corridor|entry|flur|diele|pasillo|recibidor|couloir|entrée/i]
   ];
   var ROOM_KIND_OF = { fr_kitchen: "kitchen", fr_bath: "bath", fr_bed: "bed", fr_laundry: "laundry",
-                       fr_garage: "garage", fr_office: "office", fr_dining: "dining", fr_living: "living" };
+                       fr_garage: "garage", fr_office: "office", fr_dining: "dining", fr_living: "living",
+                       fr_closet: "closet" };
 
   function roomKind(plan, room) {
     var said = String(room.text || "");
     for (var k = 0; k < ROOM_CALLED.length; k++) { if (ROOM_CALLED[k][1].test(said)) { return ROOM_CALLED[k][0]; } }
     var kinds = plan.pieces.filter(function (p) { return roomAt(plan, p.x, p.y) === room; })
                            .map(function (p) { return p.kind; });
+    if (roomBoth(roomUses(kinds))) { return "multi"; }     // a studio, a great room (38-walk.js)
     for (var i = 0; i < ROOM_FOR.length; i++) {
       if (ROOM_FOR[i][1].some(function (kind) { return kinds.indexOf(kind) >= 0; })) { return ROOM_KIND_OF[ROOM_FOR[i][0]]; }
     }
     return "room";
+  }
+
+  // Everything a room is for -- what is in it, and what it is called -- so
+  // a studio is told what a kitchen and a bedroom are each told.
+  function roomUsesIn(plan, room) {
+    var kinds = plan.pieces.filter(function (p) { return roomAt(plan, p.x, p.y) === room; })
+                           .map(function (p) { return p.kind; });
+    var uses = roomUses(kinds), kind = roomKind(plan, room);
+    if (kind !== "multi" && kind !== "room") { uses[kind] = true; }
+    return uses;
   }
 
   // The walls of a square-standing room: each one's line, its run, the way
@@ -170,8 +185,10 @@
     var plan = walkPlan(), tips = [];
     if (!plan.rooms.length) { return tips; }
     function tip(text, id, fix) { tips.push({ text: text, id: id || null, fix: fix || null, warn: true, key: "s_advice" }); }
-    var kinds = {}, names = {};
-    plan.rooms.forEach(function (room) { kinds[room.id] = roomKind(plan, room); names[room.id] = roomName(plan, room); });
+    var kinds = {}, names = {}, uses = {};
+    plan.rooms.forEach(function (room) {
+      kinds[room.id] = roomKind(plan, room); names[room.id] = roomName(plan, room); uses[room.id] = roomUsesIn(plan, room);
+    });
     function inRoom(room, list) { return plan.pieces.filter(function (p) { return roomAt(plan, p.x, p.y) === room && (!list || list.indexOf(p.kind) >= 0); }); }
     var windows = hand.nodes.filter(function (n) { return n.kind === "i_window"; });
 
@@ -184,14 +201,15 @@
       var kind = kinds[room.id], name = names[room.id];
       var lit = windows.some(function (w) { return doorIn(w, room); });
       // daylight, where people live
-      if (!lit && /^(bed|living|kitchen|office|dining)$/.test(kind)) {
-        tip(say(kind === "bed" ? "ad_window_bed" : "ad_window", { room: name }), room.id,
+      if (!lit && /^(bed|living|kitchen|office|dining|multi)$/.test(kind)) {
+        tip(say(uses[room.id].bed ? "ad_window_bed" : "ad_window", { room: name }), room.id,
             fixed(TXT.ad_fix_window, intoOutsideWall(plan, room, "i_window")));
-      } else if (!lit && !inRoom(room, ["i_lamp", "i_sconce", "i_nightstand"]).length && kind !== "garage") {
+      } else if (!lit && !inRoom(room, ["i_lamp", "i_sconce", "i_nightstand"]).length && kind !== "garage" &&
+                 kind !== "closet") {
         tip(say("ad_dark", { room: name }), room.id, fixed(TXT.ad_fix_light, alongWall(plan, room, "i_sconce")));
       }
       // what a kitchen cannot do without
-      if (kind === "kitchen") {
+      if (uses[room.id].kitchen) {
         [["i_stove"], ["i_fridge"], ["i_kitchensink"]].forEach(function (need) {
           if (inRoom(room, need).length) { return; }
           tip(say("ad_missing", { room: name, what: kindName(need[0]) }), room.id,
@@ -199,7 +217,7 @@
         });
       }
       // somewhere to wash your hands
-      if (kind === "bath") {
+      if (uses[room.id].bath) {
         var loo = inRoom(room, ["i_toilet"])[0];
         if (loo && !inRoom(room, ["i_sink", "i_kitchensink", "i_vanity", "i_utilitysink"]).length) {
           tip(say("ad_bath_sink", { room: name }), room.id,
@@ -229,7 +247,7 @@
     });
     // doors that swing into something
     plan.doors.forEach(function (d) {
-      if (d.kind === "i_slide" || doorLocked(d)) { return; }
+      if (d.kind === "i_slide" || d.kind === "i_bifold" || doorLocked(d)) { return; }
       var hit = plan.pieces.filter(function (p) {
         return !ON_THE_WALL[p.kind] && p.kind !== "i_rug" && boxesTouch(d, p, -3);
       })[0];
@@ -249,7 +267,7 @@
       if (j.rooms.length !== 2) { return; }
       var a = j.rooms[0], b = j.rooms[1];
       var bath = kinds[a.id] === "bath" ? a : kinds[b.id] === "bath" ? b : null;
-      var kitchen = kinds[a.id] === "kitchen" ? a : kinds[b.id] === "kitchen" ? b : null;
+      var kitchen = uses[a.id].kitchen ? a : uses[b.id].kitchen ? b : null;
       if (bath && kitchen) { tip(say("ad_bath_kitchen", { bath: names[bath.id], kitchen: names[kitchen.id] }), j.door.id); }
     });
     // furniture nobody can get to, from the way in

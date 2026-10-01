@@ -1,0 +1,905 @@
+// ---------------------------------------------------------------------------
+//  38-view3d-gl.js -- a home in 3D, drawn with WebGL: a depth buffer, the sun
+//  and its shadows, a sky, grass and trees round it
+//
+//  One part of the studio's script.  The parts run inside one function,
+//  in the order parts.py lists them, and share everything between them.
+// ---------------------------------------------------------------------------
+  // ========================================================== by the GPU ==
+  // 38-view3d.js puts a house up as faces and draws them back to front, the
+  // way a painter does: the furthest first, everything nearer over it.  That
+  // is right for a box seen from above and wrong for a long wall beside a
+  // chair, walked past -- which one is "nearer" depends on the part of each
+  // you look at, so a sofa showed through the wall behind it and a wall
+  // through the door in front of it.  And a picture on a face was laid on
+  // by three of its corners, which is exact seen from above and wrong in
+  // perspective, where a rectangle is no longer a parallelogram: the
+  // pictures on the furniture slid off it as you walked (asked for,
+  // 2026-10-01: "the images of stuff in 3d also warps rather than being on
+  // their objects and there is still the clipping issues in the 3d walking
+  // around mode").
+  //
+  // So a home is drawn here instead, wherever the browser has WebGL: the
+  // same faces, each kept or hidden pixel by pixel by how near it really is
+  // (a depth buffer), pictures carried by the faces themselves, and with the
+  // room that leaves (asked for the same day: "make it so the world looks
+  // better ... and to update the outside scenery too") the sun: a light from
+  // the sky over everything, shadows where the house and the trees stand in
+  // its way, a sky with clouds, grass running off to the hills, trees round
+  // the plot and a road along its front.  The roof is shingled, the floors
+  // are boards -- or tiles, in a kitchen or a bathroom -- and the pool is
+  // water.  Space, and a browser without WebGL, are drawn the old way.
+  //
+  // It draws into a canvas of its own, off the page, and that picture is
+  // laid on the view's canvas first: the names, the map and a fade between
+  // two views go on over it exactly as they did.
+  var GL3_NEAR = 2;                      // px: nothing nearer the eye is drawn (body is 12)
+  var GL3_FAR = 26000;                   // px: the hills are well inside this
+  var GL3_SUN = (function () {           // the way to the sun: up, from the north-west
+    var v = [-0.42, -0.58, 0.7], l = Math.hypot(v[0], v[1], v[2]);
+    return [v[0] / l, v[1] / l, v[2] / l];
+  })();
+  var GL3_SHADOW = 2048;                 // the shadow map's size, in texels a side
+  var GL3_STRIDE = 13;                   // floats a vertex: pos 3, normal 3, color 4, uv 2, pattern 1
+
+  // What a face is covered in, worked out in the shader from where it is.
+  var PAT = { plain: 0, roof: 1, boards: 2, grass: 3, road: 4, walk: 5, lawn: 6, tiles: 7,
+              leaves: 8, water: 9, concrete: 10, bark: 11, hill: 12, siding: 13, line: 99 };
+
+  function gl3Rgb(c) {                   // a color as three numbers 0..1
+    c = String(c || "").trim();
+    var m;
+    if ((m = /^#([0-9a-f]{3})$/i.exec(c))) { c = "#" + m[1][0] + m[1][0] + m[1][1] + m[1][1] + m[1][2] + m[1][2]; }
+    if ((m = /^#([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})/i.exec(c))) {
+      return [parseInt(m[1], 16) / 255, parseInt(m[2], 16) / 255, parseInt(m[3], 16) / 255];
+    }
+    if ((m = /rgba?\(\s*([\d.]+)[\s,]+([\d.]+)[\s,]+([\d.]+)/i.exec(c))) {
+      return [Number(m[1]) / 255, Number(m[2]) / 255, Number(m[3]) / 255];
+    }
+    return [1, 1, 1];
+  }
+  function gl3Mix(a, b, k) { return [a[0] + (b[0] - a[0]) * k, a[1] + (b[1] - a[1]) * k, a[2] + (b[2] - a[2]) * k]; }
+  // Rows of a matrix, as WebGL wants it (a column at a time).
+  function gl3Mat(r0, r1, r2, r3) {
+    return new Float32Array([r0[0], r1[0], r2[0], r3[0], r0[1], r1[1], r2[1], r3[1],
+                             r0[2], r1[2], r2[2], r3[2], r0[3], r1[3], r2[3], r3[3]]);
+  }
+  // The same every time for the same numbers: where the trees stand.
+  function gl3Rand(seed) {
+    var a = seed | 0;
+    return function () {
+      a = (a + 0x6D2B79F5) | 0;
+      var t = Math.imul(a ^ (a >>> 15), 1 | a);
+      t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+  }
+
+  // ---- the programs ------------------------------------------------------------
+  var GL3_VS = [
+    "attribute vec3 aPos; attribute vec3 aNorm; attribute vec4 aColor; attribute vec2 aUv; attribute float aPat;",
+    "uniform mat4 uMvp; uniform mat4 uSunMvp;",
+    "varying vec3 vPos; varying vec3 vNorm; varying vec4 vColor; varying vec2 vUv; varying float vPat; varying vec4 vSun;",
+    "void main() {",
+    "  vPos = aPos; vNorm = aNorm; vColor = aColor; vUv = aUv; vPat = aPat;",
+    "  vSun = uSunMvp * vec4(aPos, 1.0);",
+    "  gl_Position = uMvp * vec4(aPos, 1.0);",
+    "}"].join("\n");
+
+  var GL3_FS = [
+    "#ifdef GL_FRAGMENT_PRECISION_HIGH",
+    "precision highp float;",
+    "#else",
+    "precision mediump float;",
+    "#endif",
+    "uniform vec3 uSunDir; uniform vec3 uSunCol; uniform vec3 uSkyAmb; uniform vec3 uGroundAmb;",
+    "uniform vec3 uEye; uniform vec3 uToward; uniform float uOrtho;",
+    "uniform vec3 uFogCol; uniform float uFogNear; uniform float uFogFar;",
+    "uniform sampler2D uTex; uniform float uUseTex; uniform float uDecal; uniform float uRound; uniform float uBill;",
+    "uniform sampler2D uShadow; uniform float uShadowOn; uniform float uAlpha; uniform float uPx; uniform float uTime;",
+    "uniform vec2 uFade; uniform vec2 uMid; uniform float uIndoor; uniform float uDress;",
+    "varying vec3 vPos; varying vec3 vNorm; varying vec4 vColor; varying vec2 vUv; varying float vPat; varying vec4 vSun;",
+    "float hash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }",
+    "float noise(vec2 p) {",
+    "  vec2 i = floor(p), f = fract(p); vec2 u = f * f * (3.0 - 2.0 * f);",
+    "  return mix(mix(hash(i), hash(i + vec2(1.0, 0.0)), u.x), mix(hash(i + vec2(0.0, 1.0)), hash(i + vec2(1.0, 1.0)), u.x), u.y);",
+    "}",
+    "float unpack(vec4 c) { return dot(c, vec4(1.0, 1.0 / 255.0, 1.0 / 65025.0, 1.0 / 16581375.0)); }",
+    "float lit(vec3 n) {",
+    "  float d = dot(n, uSunDir);",
+    "  if (d <= 0.0 || uShadowOn < 0.5) { return max(d, 0.0); }",
+    "  vec3 s = vSun.xyz / vSun.w * 0.5 + 0.5;",
+    "  if (s.x <= 0.0 || s.x >= 1.0 || s.y <= 0.0 || s.y >= 1.0 || s.z >= 1.0) { return d; }",
+    "  float bias = 0.0015 + 0.004 * (1.0 - d), sum = 0.0, texel = 1.0 / " + GL3_SHADOW + ".0;",
+    "  for (int i = -1; i <= 1; i++) { for (int j = -1; j <= 1; j++) {",
+    "    float near = unpack(texture2D(uShadow, s.xy + vec2(float(i), float(j)) * texel * 1.3));",
+    "    sum += s.z - bias > near ? 0.0 : 1.0;",
+    "  } }",
+    "  return d * sum / 9.0;",
+    "}",
+    "void main() {",
+    "  float k = vPat;",
+    "  if (k > 98.5) {",                                // a line: the edges, as a plan draws them
+    "    float dl = uOrtho > 0.5 ? 0.0 : length(uEye - vPos);",
+    "    float fl = clamp((dl - uFogNear) / (uFogFar - uFogNear), 0.0, 1.0);",
+    "    gl_FragColor = vec4(vColor.rgb, vColor.a * uAlpha * (1.0 - fl)); return;",
+    "  }",
+    "  vec4 tex = vec4(0.0);",
+    "  if (uUseTex > 0.5) {",
+    "    if (uRound > 0.5 && length(vUv - 0.5) > 0.5) { discard; }",
+    "    tex = texture2D(uTex, vUv);",
+    "    if (uBill > 0.5 && tex.a < 0.45) { discard; }",
+    "    if (uDecal > 0.5 && tex.a < 0.04) { discard; }",
+    "  }",
+    "  vec3 n = normalize(vNorm);",
+    "  vec3 toEye = uOrtho > 0.5 ? uToward : normalize(uEye - vPos);",
+    "  if (uBill < 0.5 && dot(n, toEye) < 0.0) { n = -n; }",
+    "  vec3 base = vColor.rgb; float a = vColor.a;",
+    "  vec2 m = vPos.xy / uPx; float h = vPos.z / uPx;",
+    "  if (k > 0.5 && k < 1.5) {",                     // shingles, course over course, joints staggered
+    "    vec2 t = normalize(vec2(-n.y, n.x) + vec2(0.0001, 0.0));",
+    "    float row = h / 0.2, along = dot(m, t) / 0.32 + 0.5 * mod(floor(row), 2.0);",
+    "    float course = smoothstep(0.0, 0.16, fract(row)), joint = smoothstep(0.0, 0.06, fract(along));",
+    "    base *= (0.82 + 0.18 * course) * (0.9 + 0.1 * joint) * (0.93 + 0.12 * hash(floor(vec2(along, row))));",
+    "  } else if (k > 1.5 && k < 2.5) {",              // boards, along the room
+    "    float plank = floor(m.y / 0.16), seam = fract(m.x / 1.4 + hash(vec2(plank, 3.0)));",
+    "    float edge = smoothstep(0.0, 0.05, fract(m.y / 0.16)) * smoothstep(0.0, 0.01, seam);",
+    "    base *= (0.955 + 0.045 * edge) * (0.97 + 0.05 * hash(vec2(plank, floor(m.x / 1.4 + hash(vec2(plank, 3.0))))));",
+    "  } else if (k > 2.5 && k < 3.5) {",              // grass, in patches
+    "    vec2 q = mat2(0.8, -0.6, 0.6, 0.8) * m;",
+    "    base *= 0.93 + 0.05 * noise(q * 0.23) + 0.05 * noise(q * 1.1) + 0.04 * noise(q * 4.7);",
+    "  } else if (k > 3.5 && k < 4.5) {",              // the road, and its middle line
+    "    base *= 0.92 + 0.12 * noise(m * 9.0);",
+    "    if (abs(vUv.y) < 0.09 && fract(vUv.x / 4.0) < 0.5) { base = mix(base, vec3(0.93, 0.86, 0.55), 0.85); }",
+    "  } else if (k > 4.5 && k < 5.5) {",              // the pavement, in slabs
+    "    vec2 slab = fract(vUv / 1.5);",
+    "    base *= 0.94 + 0.06 * smoothstep(0.0, 0.03, min(slab.x, slab.y));",
+    "  } else if (k > 5.5 && k < 6.5) {",              // the lawn, mown in stripes
+    "    float stripe = mod(floor(vUv.x / 1.6), 2.0);",
+    "    base *= (0.94 + 0.06 * stripe) * (0.96 + 0.06 * noise(mat2(0.8, -0.6, 0.6, 0.8) * m * 1.3));",
+    "  } else if (k > 6.5 && k < 7.5) {",              // tiles, a kitchen's or a bathroom's
+    "    vec2 tile = fract(m / 0.3);",
+    "    base *= 0.93 + 0.07 * smoothstep(0.0, 0.04, min(tile.x, tile.y));",
+    "  } else if (k > 7.5 && k < 8.5) {",              // leaves
+    "    base *= 0.85 + 0.25 * noise(vPos.xy / uPx * 3.0 + vPos.z / uPx * 2.0);",
+    "  } else if (k > 8.5 && k < 9.5) {",              // water, moving a little
+    "    float w = noise(m * 3.0 + vec2(uTime * 0.4, uTime * 0.27)) + noise(m * 7.0 - vec2(uTime * 0.3, 0.0));",
+    "    base = mix(base, vec3(0.86, 0.95, 1.0), smoothstep(1.15, 1.6, w) * 0.6);",
+    "  } else if (k > 9.5 && k < 10.5) {",             // concrete
+    "    base *= 0.94 + 0.08 * noise(m * 5.0);",
+    "  } else if (k > 11.5 && k < 12.5) {",            // far hills
+    "    base *= 0.9 + 0.15 * noise(m * 0.05);",
+    "  } else if (k > 12.5 && k < 13.5) {",            // boards along an outside wall
+    "    float row = fract(h / 0.18);",
+    "    base *= 0.9 + 0.1 * smoothstep(0.0, 0.18, row);",
+    "  }",
+    "  base = mix(vColor.rgb, base, uDress);",          // flat on the paper, plain as it is drawn
+    "  if (uUseTex > 0.5 && uBill < 0.5) {",
+    "    if (uDecal > 0.5) { base = tex.rgb; a = tex.a; } else { base = mix(base, tex.rgb, tex.a); }",
+    "  }",
+    "  vec3 col;",
+    "  if (uBill > 0.5) { col = tex.rgb * (0.82 + 0.25 * max(uSunDir.z, 0.0)); a = 1.0; }",
+    "  else {",
+    "    float sun = lit(n);",
+    "    vec3 amb = mix(uGroundAmb, uSkyAmb, n.z * 0.5 + 0.5);",
+    "    if (uIndoor > 0.5) {",                         // indoors: light from every side, a lamp's warmth, and
+    "      amb = mix(vec3(0.74, 0.71, 0.66), vec3(0.88, 0.87, 0.86), n.z * 0.5 + 0.5);",
+    "      amb += vec3(0.16, 0.15, 0.13) * max(dot(n, toEye), 0.0);",   // what faces you a little brighter
+    "    }",
+    "    col = mix(base, base * (amb + uSunCol * sun), uDress);",
+    "    if (k > 8.5 && k < 9.5) {",                     // the sky in the water
+    "      vec3 r = reflect(-toEye, n); col += vec3(0.25) * pow(max(dot(r, uSunDir), 0.0), 60.0);",
+    "    }",
+    "  }",
+    "  float d = uOrtho > 0.5 ? 0.0 : length(uEye - vPos);",
+    "  float fog = clamp((d - uFogNear) / (uFogFar - uFogNear), 0.0, 1.0);",
+    "  col = mix(col, uFogCol, fog * fog * (3.0 - 2.0 * fog));",
+    "  float fade = 1.0;",                              // from above: the ground thins out at its edge
+    "  if (uFade.y > 0.0) { fade = 1.0 - smoothstep(uFade.x, uFade.y, length(vPos.xy - uMid)); }",
+    "  gl_FragColor = vec4(col, a * uAlpha * fade);",
+    "}"].join("\n");
+
+  // The sky: by the way each pixel looks out, light at the horizon and
+  // deeper overhead, the sun's glow, and clouds drifting over.  From above,
+  // where there is no horizon, the same colors top to bottom.
+  var GL3_SKY_VS = "attribute vec2 aXY; varying vec2 vXY; void main() { vXY = aXY; gl_Position = vec4(aXY, 0.9999, 1.0); }";
+  var GL3_SKY_FS = [
+    "#ifdef GL_FRAGMENT_PRECISION_HIGH",
+    "precision highp float;",
+    "#else",
+    "precision mediump float;",
+    "#endif",
+    "uniform vec3 uRight; uniform vec3 uUp; uniform vec3 uAhead; uniform vec2 uTan; uniform float uFlat;",
+    "uniform vec3 uZenith; uniform vec3 uHorizon; uniform vec3 uBelow; uniform vec3 uSunDir; uniform float uTime;",
+    "varying vec2 vXY;",
+    "float hash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }",
+    "float noise(vec2 p) {",
+    "  vec2 i = floor(p), f = fract(p); vec2 u = f * f * (3.0 - 2.0 * f);",
+    "  return mix(mix(hash(i), hash(i + vec2(1.0, 0.0)), u.x), mix(hash(i + vec2(0.0, 1.0)), hash(i + vec2(1.0, 1.0)), u.x), u.y);",
+    "}",
+    "void main() {",
+    "  if (uFlat > 0.5) {",
+    "    float t = vXY.y * 0.5 + 0.5;",
+    "    gl_FragColor = vec4(mix(uBelow, mix(uHorizon, uZenith, 0.5), t), 1.0); return;",
+    "  }",
+    "  vec3 dir = normalize(uAhead + uRight * vXY.x * uTan.x + uUp * vXY.y * uTan.y);",
+    "  float up = dir.z;",
+    "  vec3 col = up < 0.0 ? mix(uHorizon, uBelow, smoothstep(0.0, 0.08, -up))",
+    "                      : mix(uHorizon, uZenith, pow(smoothstep(0.0, 0.6, up), 0.7));",
+    "  float s = max(dot(dir, uSunDir), 0.0);",
+    "  col += vec3(1.0, 0.95, 0.82) * (pow(s, 600.0) * 1.2 + pow(s, 12.0) * 0.18);",
+    "  if (up > 0.01) {",
+    "    vec2 p = dir.xy / up * 1.2 + vec2(uTime * 0.01, 0.0);",
+    "    float c = noise(p) * 0.55 + noise(p * 2.1) * 0.3 + noise(p * 4.3) * 0.15;",
+    "    float cover = smoothstep(0.55, 0.78, c) * smoothstep(0.01, 0.2, up);",
+    "    col = mix(col, vec3(1.0), cover * 0.75);",
+    "  }",
+    "  gl_FragColor = vec4(col, 1.0);",
+    "}"].join("\n");
+
+  // How near the sun each point is, packed into a color (any WebGL has
+  // those; not every one has depth textures).
+  var GL3_DEPTH_VS = "attribute vec3 aPos; uniform mat4 uSunMvp; void main() { gl_Position = uSunMvp * vec4(aPos, 1.0); }";
+  var GL3_DEPTH_FS = [
+    "precision highp float;",
+    "vec4 pack(float d) {",
+    "  vec4 e = fract(vec4(1.0, 255.0, 65025.0, 16581375.0) * d);",
+    "  return e - e.yzww * vec4(1.0 / 255.0, 1.0 / 255.0, 1.0 / 255.0, 0.0);",
+    "}",
+    "void main() { gl_FragColor = pack(gl_FragCoord.z); }"].join("\n");
+
+  function gl3Program(gl, vs, fs) {
+    function one(type, src) {
+      var s = gl.createShader(type);
+      gl.shaderSource(s, src);
+      gl.compileShader(s);
+      if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) { throw new Error(gl.getShaderInfoLog(s)); }
+      return s;
+    }
+    var p = gl.createProgram();
+    gl.attachShader(p, one(gl.VERTEX_SHADER, vs));
+    gl.attachShader(p, one(gl.FRAGMENT_SHADER, fs));
+    gl.linkProgram(p);
+    if (!gl.getProgramParameter(p, gl.LINK_STATUS)) { throw new Error(gl.getProgramInfoLog(p)); }
+    var at = {};
+    var na = gl.getProgramParameter(p, gl.ACTIVE_ATTRIBUTES), nu = gl.getProgramParameter(p, gl.ACTIVE_UNIFORMS);
+    for (var i = 0; i < na; i++) { var a = gl.getActiveAttrib(p, i); at[a.name] = gl.getAttribLocation(p, a.name); }
+    for (var j = 0; j < nu; j++) { var u = gl.getActiveUniform(p, j); at[u.name] = gl.getUniformLocation(p, u.name); }
+    return { p: p, at: at };
+  }
+
+  // The view's own WebGL, made the first time a home is drawn in it -- or
+  // `false`, for a browser without it, and the view is drawn the old way.
+  function gl3Ready() {
+    if (!V3) { return null; }
+    if (V3.gl !== undefined) { return V3.gl; }
+    V3.gl = false;
+    try {
+      var canvas = document.createElement("canvas");
+      var opts = { antialias: true, alpha: false, depth: true, premultipliedAlpha: false, preserveDrawingBuffer: false };
+      var gl = canvas.getContext("webgl2", opts) || canvas.getContext("webgl", opts) ||
+               canvas.getContext("experimental-webgl", opts);
+      if (!gl) { return false; }
+      var G = { canvas: canvas, gl: gl, tex: new Map(), buf: gl.createBuffer(), skyBuf: gl.createBuffer(), scenery: null,
+                main: gl3Program(gl, GL3_VS, GL3_FS), sky: gl3Program(gl, GL3_SKY_VS, GL3_SKY_FS),
+                depth: gl3Program(gl, GL3_DEPTH_VS, GL3_DEPTH_FS), t0: performance.now() };
+      gl.bindBuffer(gl.ARRAY_BUFFER, G.skyBuf);
+      gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 1, -1, -1, 1, -1, 1, 1, -1, 1, 1]), gl.STATIC_DRAW);
+      // the shadow map: a color target the sun's view is packed into
+      G.shadowTex = gl.createTexture();
+      gl.bindTexture(gl.TEXTURE_2D, G.shadowTex);
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, GL3_SHADOW, GL3_SHADOW, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+      G.shadowDepth = gl.createRenderbuffer();
+      gl.bindRenderbuffer(gl.RENDERBUFFER, G.shadowDepth);
+      gl.renderbufferStorage(gl.RENDERBUFFER, gl.DEPTH_COMPONENT16, GL3_SHADOW, GL3_SHADOW);
+      G.shadowFb = gl.createFramebuffer();
+      gl.bindFramebuffer(gl.FRAMEBUFFER, G.shadowFb);
+      gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, G.shadowTex, 0);
+      gl.framebufferRenderbuffer(gl.FRAMEBUFFER, gl.DEPTH_ATTACHMENT, gl.RENDERBUFFER, G.shadowDepth);
+      G.shadowOk = gl.checkFramebufferStatus(gl.FRAMEBUFFER) === gl.FRAMEBUFFER_COMPLETE;
+      gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+      // a white texel, for the draws that take no picture
+      G.white = gl.createTexture();
+      gl.bindTexture(gl.TEXTURE_2D, G.white);
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 1, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, new Uint8Array([255, 255, 255, 255]));
+      canvas.addEventListener("webglcontextlost", function (ev) { ev.preventDefault(); if (V3 && V3.gl === G) { V3.gl = false; V3.dirty = true; } });
+      V3.gl = G;
+    } catch (e) {
+      V3.gl = false;
+    }
+    return V3.gl;
+  }
+
+  // A picture (v3Pic, 38-view3d.js), as a texture -- once it has arrived.
+  function gl3Texture(G, pic) {
+    if (!pic || !pic.ok) { return null; }
+    var have = G.tex.get(pic);
+    if (have !== undefined) { return have; }
+    var gl = G.gl, t = null;
+    try {
+      var w = Math.max(2, pic.img.naturalWidth || pic.w * 2), h = Math.max(2, pic.img.naturalHeight || pic.h * 2);
+      var c = document.createElement("canvas");
+      c.width = w; c.height = h;
+      c.getContext("2d").drawImage(pic.img, 0, 0, w, h);
+      t = gl.createTexture();
+      gl.bindTexture(gl.TEXTURE_2D, t);
+      gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, false);
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, c);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    } catch (e) { t = null; }
+    G.tex.set(pic, t);
+    return t;
+  }
+
+  // ---- what is drawn, in batches -----------------------------------------------
+  // Each batch is one draw: the same way of drawing, the same picture.
+  function gl3Batches() {
+    var list = {}, order = [];
+    return {
+      get: function (key, how) {
+        if (!list[key]) { list[key] = { key: key, v: [], how: how || {} }; order.push(list[key]); }
+        return list[key];
+      },
+      all: order
+    };
+  }
+  function gl3Vert(v, p, n, c, a, uv, pat) {
+    v.push(p[0], p[1], p[2], n[0], n[1], n[2], c[0], c[1], c[2], a, uv[0], uv[1], pat);
+  }
+  // A flat many-sided face, as a fan of triangles from its first corner.
+  function gl3Poly(v, pts, n, c, a, uvs, pat) {
+    for (var i = 1; i + 1 < pts.length; i++) {
+      gl3Vert(v, pts[0], n, c, a, uvs ? uvs[0] : [0, 0], pat);
+      gl3Vert(v, pts[i], n, c, a, uvs ? uvs[i] : [0, 0], pat);
+      gl3Vert(v, pts[i + 1], n, c, a, uvs ? uvs[i + 1] : [0, 0], pat);
+    }
+  }
+  function gl3Lines(v, pts, c, a) {
+    for (var i = 0; i < pts.length; i++) {
+      var p = pts[i], q = pts[(i + 1) % pts.length];
+      gl3Vert(v, p, [0, 0, 1], c, a, [0, 0], PAT.line);
+      gl3Vert(v, q, [0, 0, 1], c, a, [0, 0], PAT.line);
+    }
+  }
+  // Where on a face's picture each corner is: the three corners the face
+  // names at (0,0), (1,0) and (0,1), and the fourth across from the first.
+  function gl3Uvs(f) {
+    var uvs = f.pts.map(function () { return [0.5, 0.5]; });
+    uvs[f.texAt[0]] = [0, 0]; uvs[f.texAt[1]] = [1, 0]; uvs[f.texAt[2]] = [0, 1];
+    for (var i = 0; i < f.pts.length; i++) {
+      if (i !== f.texAt[0] && i !== f.texAt[1] && i !== f.texAt[2]) { uvs[i] = [1, 1]; }
+    }
+    return uvs;
+  }
+
+  // What a room's floor is laid with: tiles where there is water, concrete
+  // in a garage, and boards everywhere else.
+  function gl3FloorPat(room) {
+    if (!room) { return PAT.boards; }
+    var kind = "room";
+    try { kind = typeof roomKind === "function" ? roomKind(v3Ground(), room) : "room"; } catch (e) { kind = "room"; }
+    if (kind === "bath" || kind === "kitchen" || kind === "laundry") { return PAT.tiles; }
+    if (kind === "garage") { return PAT.concrete; }
+    return PAT.boards;
+  }
+
+  // Whether a wall's face looks out on the garden: nothing but outdoors
+  // just beyond it.
+  function gl3Outside(f, rooms) {
+    var cx = 0, cy = 0;
+    f.pts.forEach(function (p) { cx += p[0] / f.pts.length; cy += p[1] / f.pts.length; });
+    var x = cx + f.n[0] * 9, y = cy + f.n[1] * 9;
+    return !rooms.some(function (r) { return insideArea(r.n, x - r.dx, y - r.dy); });
+  }
+
+  // The model's faces, sorted into batches.
+  function gl3Faces(G, model, B, ink, sheet, dress) {
+    var inkC = gl3Rgb(ink), sheetC = gl3Rgb(sheet), floorPats = new Map();
+    // each room with how far its floor is moved to stand over the ground floor
+    var floors = typeof floorsOf === "function" ? floorsOf() : [];
+    var rooms = hand.nodes.filter(function (r) { return r.kind === "i_room"; }).map(function (r) {
+      var fl = floors.length ? floorAt(floors, r.x, r.y) : null;
+      return { n: r, dx: fl ? fl.dx : 0, dy: fl ? fl.dy : 0 };
+    });
+    model.faces.forEach(function (f) {
+      var how = f.how || {};
+      var base = gl3Rgb(how.color || sheet), edge = how.edge ? gl3Rgb(how.edge) : inkC, a = 1, pat = PAT.plain;
+      if (how.wall && f.top) { base = edge; }
+      else if (how.wall && f.side && f.node && f.node.kind === "i_room") {
+        // painted walls: a warm white, tinted by the room's own outline;
+        // the side that faces the garden boarded
+        base = gl3Mix(base, [0.97, 0.95, 0.91], 0.55 * dress);
+        if (gl3Outside(f, rooms)) { pat = PAT.siding; base = gl3Mix(base, [0.93, 0.9, 0.84], 0.4 * dress); }
+      }
+      else if (how.dark) { base = gl3Mix(edge, [0, 0, 0], 0.15); }
+      else if (how.roof) { pat = PAT.roof; }
+      else if (f.ground) {
+        pat = PAT.lawn;
+        base = gl3Mix(base, gl3Mix(gl3Mix(base, [0.42, 0.62, 0.3], 0.55), sheetC, 0.15), dress);
+      } else if (how.floor) {
+        if (how.room && !floorPats.has(how.room)) { floorPats.set(how.room, gl3FloorPat(how.room)); }
+        pat = how.room ? floorPats.get(how.room) : PAT.boards;
+        // what the floor is made of shows through the room's own color
+        base = gl3Mix(base, pat === PAT.tiles ? [0.86, 0.88, 0.9] : pat === PAT.concrete ? [0.68, 0.68, 0.66]
+                                                                   : [0.78, 0.62, 0.45], 0.45 * dress);
+      }
+      var seen = how.alpha === undefined ? 1 : how.alpha;
+      var pic = f.tex && f.texAt ? gl3Texture(G, f.tex) : null;
+      if (pic && f.tex.key && /^t\|i_pool\|/.test(f.tex.key) && dress > 0.5) {
+        pic = null; pat = PAT.water; base = gl3Mix(base, [0.36, 0.66, 0.86], 0.75);
+      }
+      var batch;
+      if (how.glass) {
+        batch = B.get("glass", { blend: true, late: true });
+        base = gl3Mix(sheetC, [0.62, 0.78, 0.9], 0.6); a = 0.32;
+      } else if (seen < 0.999 || how.late) {
+        batch = B.get("fading", { blend: true, late: true });
+        a = seen;
+      } else if (how.decal) {
+        if (!pic) { return; }
+        batch = B.get("decal|" + (f.tex.key || "?") + (f.clipRound ? "|round" : ""),
+                      { tex: pic, decal: true, round: !!f.clipRound, blend: true });
+      } else if (pic) {
+        batch = B.get("tex|" + (f.tex.key || "?"), { tex: pic });
+      } else {
+        batch = B.get("plain", {});
+      }
+      var uvs = pic ? gl3Uvs(f) : null;
+      if (f.ground && f.pts.length === 4) {      // the lawn's own numbers, in metres, for its stripes
+        var lx = Math.hypot(f.pts[1][0] - f.pts[0][0], f.pts[1][1] - f.pts[0][1]) / FLOOR_PX;
+        var ly = Math.hypot(f.pts[3][0] - f.pts[0][0], f.pts[3][1] - f.pts[0][1]) / FLOOR_PX;
+        uvs = [[0, 0], [lx, 0], [lx, ly], [0, ly]];
+      }
+      gl3Poly(batch.v, f.pts, f.n, base, a, uvs, pat);
+      // its edges, the way a plan draws them -- not round the glass, a
+      // picture laid on top, or the lawn
+      if (!how.glass && !how.decal && !f.ground) {
+        var line = B.get("lines", { lines: true });
+        gl3Lines(line.v, f.pts, edge, (how.floor || how.ceiling ? 0.22 : how.roof ? 0.3 : 0.42) * seen);
+      }
+    });
+  }
+
+  // Those standing -- people, the one walking -- a picture turned to face
+  // you, and a soft shadow at their feet.
+  function gl3Stand(G, model, B, right) {
+    model.stand.forEach(function (s) {
+      var pic = gl3Texture(G, s.img);
+      if (!pic) { return; }
+      var tall = s.tall, wide = tall * s.img.w / s.img.h;
+      var rx = right[0] * wide / 2, ry = right[1] * wide / 2;
+      var pts = [[s.x - rx, s.y - ry, s.z + tall], [s.x + rx, s.y + ry, s.z + tall],
+                 [s.x + rx, s.y + ry, s.z], [s.x - rx, s.y - ry, s.z]];
+      var b = B.get("bill|" + (s.img.key || "?"), { tex: pic, bill: true });
+      gl3Poly(b.v, pts, [-right[1], right[0], 0], [1, 1, 1], 1, [[0, 0], [1, 0], [1, 1], [0, 1]], PAT.plain);
+      var sh = B.get("shade", { blend: true, late: true, noDepthWrite: true });
+      var ring = [], r = wide * 0.3;
+      for (var k = 0; k < 14; k++) {
+        var t = k / 14 * Math.PI * 2;
+        ring.push([s.x + Math.cos(t) * r, s.y + Math.sin(t) * r * 0.75, s.z + 0.6]);
+      }
+      gl3Poly(sh.v, ring, [0, 0, 1], s.walker ? [0.07, 0.38, 0.29] : [0, 0, 0], s.walker ? 0.45 : 0.22, null, PAT.plain);
+    });
+  }
+
+  // ---- out of doors ------------------------------------------------------------
+  // Grass to the horizon, hills along it, trees round the plot, and a road
+  // along its front.  Made once for where the house is and how big it is,
+  // and kept while that stays the same.
+  function gl3Scenery(G, model, walk, sheet) {
+    var x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity;
+    model.faces.forEach(function (f) {
+      f.pts.forEach(function (p) {
+        x0 = Math.min(x0, p[0]); x1 = Math.max(x1, p[0]); y0 = Math.min(y0, p[1]); y1 = Math.max(y1, p[1]);
+      });
+    });
+    if (x0 === Infinity) { x0 = y0 = -200; x1 = y1 = 200; }
+    var mid = [(x0 + x1) / 2, (y0 + y1) / 2], radius = Math.max(150, Math.hypot(x1 - x0, y1 - y0) / 2);
+    var lot = hand.nodes.filter(function (n) { return n.kind === "i_lot"; })[0] || null;
+    var key = [walk ? 1 : 0, Math.round(mid[0] / 20), Math.round(mid[1] / 20), Math.round(radius / 20), sheet,
+               lot ? [lot.x, lot.y, lot.w, lot.h, lot.turn || 0].join(",") : ""].join("|");
+    if (G.scenery && G.scenery.key === key) { return G.scenery; }
+    var sheetC = gl3Rgb(sheet), rnd = gl3Rand(Math.round(mid[0] * 7 + mid[1] * 13 + radius));
+    var grass = gl3Mix([0.45, 0.63, 0.32], sheetC, 0.12), v = [], late = [];
+    var groundR = walk ? GL3_FAR * 0.9 : radius * 2.3 + 600;
+    // the ground, a wide disc
+    var ring = [];
+    for (var k = 0; k < 64; k++) {
+      var t = k / 64 * Math.PI * 2;
+      ring.push([mid[0] + Math.cos(t) * groundR, mid[1] + Math.sin(t) * groundR, -3]);
+    }
+    gl3Poly(v, ring, [0, 0, 1], grass, 1, null, PAT.grass);
+    // which spots are taken: the plot, the house, the road
+    var keepOff = [];
+    function lotLocal(p) {
+      var a = -(lot.turn || 0) * Math.PI / 180, dx = p[0] - lot.x, dy = p[1] - lot.y;
+      return [dx * Math.cos(a) - dy * Math.sin(a), dx * Math.sin(a) + dy * Math.cos(a)];
+    }
+    function lotWorld(lx, ly, z) {
+      var a = (lot.turn || 0) * Math.PI / 180;
+      return [lot.x + lx * Math.cos(a) - ly * Math.sin(a), lot.y + lx * Math.sin(a) + ly * Math.cos(a), z];
+    }
+    var walkW = 1.6 * FLOOR_PX, roadW = 7 * FLOOR_PX;
+    if (lot) {
+      // the road along the plot's front (its foot edge), and the pavement
+      // between the two, as far as can be seen each way
+      var reach = walk ? GL3_FAR * 0.8 : groundR, hy = lot.h / 2;
+      var pave = [lotWorld(-reach, hy, -1.5), lotWorld(reach, hy, -1.5), lotWorld(reach, hy + walkW, -1.5), lotWorld(-reach, hy + walkW, -1.5)];
+      gl3Poly(v, pave, [0, 0, 1], gl3Mix([0.8, 0.79, 0.76], sheetC, 0.2), 1,
+              [[-reach / FLOOR_PX, 0], [reach / FLOOR_PX, 0], [reach / FLOOR_PX, 1.6], [-reach / FLOOR_PX, 1.6]], PAT.walk);
+      var road = [lotWorld(-reach, hy + walkW, -2), lotWorld(reach, hy + walkW, -2),
+                  lotWorld(reach, hy + walkW + roadW, -2), lotWorld(-reach, hy + walkW + roadW, -2)];
+      gl3Poly(v, road, [0, 0, 1], gl3Mix([0.3, 0.31, 0.33], sheetC, 0.08), 1,
+              [[-reach / FLOOR_PX, -3.5], [reach / FLOOR_PX, -3.5], [reach / FLOOR_PX, 3.5], [-reach / FLOOR_PX, 3.5]], PAT.road);
+      keepOff.push(function (p) {
+        var q = lotLocal(p);
+        return Math.abs(q[0]) < lot.w / 2 + 60 && q[1] > -lot.h / 2 - 60 && q[1] < hy + walkW + roadW + 90;
+      });
+    }
+    keepOff.push(function (p) { return p[0] > x0 - 120 && p[0] < x1 + 120 && p[1] > y0 - 120 && p[1] < y1 + 120; });
+    // trees, round about, and a few bushes nearer
+    var inner = Math.max(x1 - x0, y1 - y0) / 2 + 200, outer = walk ? radius + 4400 : Math.max(inner + 200, groundR - 160);
+    var count = walk ? 70 : Math.round(Math.min(46, 14 + (outer - inner) / 60));
+    for (var i = 0, tries = 0; i < count && tries < count * 12; tries++) {
+      var ang = rnd() * Math.PI * 2, far = inner + Math.pow(rnd(), 0.8) * (outer - inner);
+      var at = [mid[0] + Math.cos(ang) * far, mid[1] + Math.sin(ang) * far];
+      if (keepOff.some(function (off) { return off(at); })) { continue; }
+      gl3Tree(v, at, rnd, sheetC, rnd() < 0.3);
+      i++;
+    }
+    if (walk) {
+      // hills, far off, all the way round
+      var hills = [], n = 72, rIn = GL3_FAR * 0.3, rOut = GL3_FAR * 0.5;
+      for (var h = 0; h <= n; h++) {
+        var th = h / n * Math.PI * 2;
+        var rise = (0.5 + 0.5 * Math.sin(th * 3 + 1.3)) * 0.6 + (0.5 + 0.5 * Math.sin(th * 7 + 0.4)) * 0.4;
+        hills.push([th, (380 + 1500 * rise * (0.6 + 0.4 * rnd()))]);
+      }
+      var hillC = gl3Mix([0.5, 0.62, 0.48], sheetC, 0.2);
+      for (var q = 0; q < n; q++) {
+        var A = hills[q], C = hills[q + 1];
+        var a0 = [mid[0] + Math.cos(A[0]) * rIn, mid[1] + Math.sin(A[0]) * rIn, -3];
+        var a1 = [mid[0] + Math.cos(C[0]) * rIn, mid[1] + Math.sin(C[0]) * rIn, -3];
+        var b0 = [mid[0] + Math.cos(A[0]) * rOut, mid[1] + Math.sin(A[0]) * rOut, A[1]];
+        var b1 = [mid[0] + Math.cos(C[0]) * rOut, mid[1] + Math.sin(C[0]) * rOut, C[1]];
+        var nx = -Math.cos((A[0] + C[0]) / 2), ny = -Math.sin((A[0] + C[0]) / 2);
+        gl3Poly(v, [a0, a1, b1, b0], [nx * 0.6, ny * 0.6, 0.8], hillC, 1, null, PAT.hill);
+      }
+    }
+    G.scenery = { key: key, verts: new Float32Array(v), late: late, mid: mid, radius: radius, groundR: groundR,
+                  bounds: [x0, x1, y0, y1] };
+    return G.scenery;
+  }
+
+  // One tree: a trunk, and leaves in a few round lumps -- or, a third of
+  // the time, a fir, in tiers.
+  function gl3Tree(v, at, rnd, sheetC, fir) {
+    var trunkH = (1.4 + rnd() * 1.4) * FLOOR_PX, trunkR = (0.14 + rnd() * 0.08) * FLOOR_PX;
+    var bark = gl3Mix([0.42, 0.32, 0.24], sheetC, 0.1);
+    var leaf = gl3Mix(fir ? [0.2, 0.42, 0.28] : [0.3 + rnd() * 0.12, 0.52 + rnd() * 0.12, 0.25], sheetC, 0.08);
+    gl3Prism(v, at, trunkR, trunkR * 0.75, 0, trunkH + (fir ? 0 : 0.5 * FLOOR_PX), 6, bark, PAT.bark);
+    if (fir) {
+      var w = (1.3 + rnd() * 0.7) * FLOOR_PX, z = trunkH * 0.45;
+      for (var t = 0; t < 3; t++) {
+        gl3Cone(v, at, w * (1 - t * 0.25), z, z + w * 1.15, 9, leaf);
+        z += w * 0.62;
+      }
+      return;
+    }
+    var R = (1.2 + rnd() * 0.9) * FLOOR_PX;
+    gl3Blob(v, [at[0], at[1], trunkH + R * 0.75], R, leaf);
+    gl3Blob(v, [at[0] + R * 0.5, at[1] - R * 0.2, trunkH + R * 0.5], R * 0.68, gl3Mix(leaf, [0, 0, 0], 0.06));
+    gl3Blob(v, [at[0] - R * 0.45, at[1] + R * 0.3, trunkH + R * 0.55], R * 0.62, gl3Mix(leaf, [1, 1, 1], 0.05));
+  }
+  function gl3Prism(v, at, r0, r1, z0, z1, sides, c, pat) {
+    for (var i = 0; i < sides; i++) {
+      var a = i / sides * Math.PI * 2, b = (i + 1) / sides * Math.PI * 2, m = (a + b) / 2;
+      var p = [[at[0] + Math.cos(a) * r0, at[1] + Math.sin(a) * r0, z0], [at[0] + Math.cos(b) * r0, at[1] + Math.sin(b) * r0, z0],
+               [at[0] + Math.cos(b) * r1, at[1] + Math.sin(b) * r1, z1], [at[0] + Math.cos(a) * r1, at[1] + Math.sin(a) * r1, z1]];
+      gl3Poly(v, p, [Math.cos(m), Math.sin(m), 0], c, 1, null, pat);
+    }
+  }
+  function gl3Cone(v, at, r, z0, z1, sides, c) {
+    var tip = [at[0], at[1], z1], slope = r / (z1 - z0);
+    for (var i = 0; i < sides; i++) {
+      var a = i / sides * Math.PI * 2, b = (i + 1) / sides * Math.PI * 2, m = (a + b) / 2;
+      var n = [Math.cos(m), Math.sin(m), slope], l = Math.hypot(n[0], n[1], n[2]);
+      gl3Poly(v, [[at[0] + Math.cos(a) * r, at[1] + Math.sin(a) * r, z0], [at[0] + Math.cos(b) * r, at[1] + Math.sin(b) * r, z0], tip],
+              [n[0] / l, n[1] / l, n[2] / l], c, 1, null, PAT.leaves);
+      gl3Poly(v, [[at[0] + Math.cos(b) * r, at[1] + Math.sin(b) * r, z0], [at[0] + Math.cos(a) * r, at[1] + Math.sin(a) * r, z0], [at[0], at[1], z0]],
+              [0, 0, -1], gl3Mix(c, [0, 0, 0], 0.3), 1, null, PAT.leaves);
+    }
+  }
+  // A round lump: an octahedron, split twice and pushed out round.
+  var GL3_BLOB = (function () {
+    var tri = [[[0, 0, 1], [1, 0, 0], [0, 1, 0]], [[0, 0, 1], [0, 1, 0], [-1, 0, 0]], [[0, 0, 1], [-1, 0, 0], [0, -1, 0]],
+               [[0, 0, 1], [0, -1, 0], [1, 0, 0]], [[0, 0, -1], [0, 1, 0], [1, 0, 0]], [[0, 0, -1], [-1, 0, 0], [0, 1, 0]],
+               [[0, 0, -1], [0, -1, 0], [-1, 0, 0]], [[0, 0, -1], [1, 0, 0], [0, -1, 0]]];
+    function unit(p) { var l = Math.hypot(p[0], p[1], p[2]); return [p[0] / l, p[1] / l, p[2] / l]; }
+    for (var r = 0; r < 2; r++) {
+      var next = [];
+      tri.forEach(function (t) {
+        var ab = unit([(t[0][0] + t[1][0]) / 2, (t[0][1] + t[1][1]) / 2, (t[0][2] + t[1][2]) / 2]);
+        var bc = unit([(t[1][0] + t[2][0]) / 2, (t[1][1] + t[2][1]) / 2, (t[1][2] + t[2][2]) / 2]);
+        var ca = unit([(t[2][0] + t[0][0]) / 2, (t[2][1] + t[0][1]) / 2, (t[2][2] + t[0][2]) / 2]);
+        next.push([t[0], ab, ca], [ab, t[1], bc], [ca, bc, t[2]], [ab, bc, ca]);
+      });
+      tri = next;
+    }
+    return tri;
+  })();
+  function gl3Blob(v, at, R, c) {
+    GL3_BLOB.forEach(function (t) {
+      var n = [(t[0][0] + t[1][0] + t[2][0]) / 3, (t[0][1] + t[1][1] + t[2][1]) / 3, (t[0][2] + t[1][2] + t[2][2]) / 3];
+      var l = Math.hypot(n[0], n[1], n[2]);
+      gl3Poly(v, t.map(function (p) { return [at[0] + p[0] * R, at[1] + p[1] * R, at[2] + p[2] * R * 0.85]; }),
+              [n[0] / l, n[1] / l, n[2] / l], c, 1, null, PAT.leaves);
+    });
+  }
+
+  // ---- the cameras ---------------------------------------------------------------
+  // The same two 38-view3d.js draws with -- from above (v3Project) and from
+  // the eye (v3EyeOf, v3Screen) -- as matrices, so the names it puts on
+  // over the picture land on the things they name.
+  function gl3Above(lo, hi) {
+    var cy = Math.cos(V3.yaw), sy = Math.sin(V3.yaw), cp = Math.cos(V3.pitch), sp = Math.sin(V3.pitch);
+    var rise = V3.rise === undefined ? 1 : V3.rise, s = V3.scale, w = V3.w, h = V3.h, cx = V3.cx, cyy = V3.cy;
+    var lean = 0.03;                     // flattened, the higher of two things still wins
+    var R = Math.max(1, hi - lo);
+    var depthOff = cp * (-sy * cx - cy * cyy);
+    return gl3Mat(
+      [2 * s * cy / w, -2 * s * sy / w, 0, (2 / w) * (V3.panX + s * (-cy * cx + sy * cyy))],
+      [-(2 / h) * s * sp * sy, -(2 / h) * s * sp * cy, (2 / h) * s * cp * rise, -(2 / h) * (V3.panY - s * sp * (sy * cx + cy * cyy))],
+      [-2 * cp * sy / R, -2 * cp * cy / R, -2 * (sp * rise + lean) / R, 1 - 2 * (depthOff - lo) / R],
+      [0, 0, 0, 1]);
+  }
+  function gl3Depth(p) {                 // the depth gl3Above sorts by, for its range
+    var cy = Math.cos(V3.yaw), sy = Math.sin(V3.yaw), cp = Math.cos(V3.pitch), sp = Math.sin(V3.pitch);
+    var rise = V3.rise === undefined ? 1 : V3.rise;
+    var px = p[0] - V3.cx, py = p[1] - V3.cy;
+    return cp * (px * sy + py * cy) + (sp * rise + 0.03) * (p[2] || 0);
+  }
+  function gl3Eye() {
+    var m = V3.me, e = V3.eye, ch = Math.cos(m.head), sh = Math.sin(m.head), cp = Math.cos(m.pitch), sp = Math.sin(m.pitch);
+    var f = (V3.w / 2) / Math.tan(V3_FOV / 2);
+    var across = [-sh, ch, 0, sh * e.x - ch * e.y];
+    var aheadFlat = ch * e.x + sh * e.y;
+    var up = [-sp * ch, -sp * sh, cp, sp * aheadFlat - cp * e.z];
+    var ahead = [cp * ch, cp * sh, sp, -cp * aheadFlat - sp * e.z];
+    var A = (GL3_FAR + GL3_NEAR) / (GL3_FAR - GL3_NEAR), Bz = -2 * GL3_FAR * GL3_NEAR / (GL3_FAR - GL3_NEAR);
+    return {
+      mvp: gl3Mat(across.map(function (q) { return q * f / (V3.w / 2); }),
+                  up.map(function (q) { return q * f / (V3.h / 2); }),
+                  [A * ahead[0], A * ahead[1], A * ahead[2], A * ahead[3] + Bz],
+                  ahead),
+      right: [-sh, ch, 0], upv: [-sp * ch, -sp * sh, cp], ahead: [cp * ch, cp * sh, sp],
+      tan: [Math.tan(V3_FOV / 2), Math.tan(V3_FOV / 2) * V3.h / V3.w]
+    };
+  }
+  // The sun's own view, a box round everything that can throw a shadow.
+  function gl3SunView(b) {
+    var L = GL3_SUN, f = [-L[0], -L[1], -L[2]];
+    var r = [f[1], -f[0], 0], rl = Math.hypot(r[0], r[1]) || 1;
+    r = [r[0] / rl, r[1] / rl, 0];
+    var u = [r[1] * f[2] - r[2] * f[1], r[2] * f[0] - r[0] * f[2], r[0] * f[1] - r[1] * f[0]];
+    var lo = [Infinity, Infinity, Infinity], hi = [-Infinity, -Infinity, -Infinity];
+    [b.x0, b.x1].forEach(function (x) {
+      [b.y0, b.y1].forEach(function (y) {
+        [b.z0, b.z1].forEach(function (z) {
+          var q = [x * r[0] + y * r[1] + z * r[2], x * u[0] + y * u[1] + z * u[2], x * f[0] + y * f[1] + z * f[2]];
+          for (var i = 0; i < 3; i++) { lo[i] = Math.min(lo[i], q[i]); hi[i] = Math.max(hi[i], q[i]); }
+        });
+      });
+    });
+    function row(axis, i) {
+      var span = Math.max(1, hi[i] - lo[i]);
+      return [2 * axis[0] / span, 2 * axis[1] / span, 2 * axis[2] / span, -1 - 2 * lo[i] / span];
+    }
+    return gl3Mat(row(r, 0), row(u, 1), row(f, 2), [0, 0, 0, 1]);
+  }
+
+  // ---- drawing -----------------------------------------------------------------------
+  function gl3Bind(gl, prog, stride) {
+    var at = prog.at, F = 4;
+    [["aPos", 3, 0], ["aNorm", 3, 3], ["aColor", 4, 6], ["aUv", 2, 10], ["aPat", 1, 12]].forEach(function (a) {
+      var loc = at[a[0]];
+      if (loc === undefined || loc < 0) { return; }
+      gl.enableVertexAttribArray(loc);
+      gl.vertexAttribPointer(loc, a[1], gl.FLOAT, false, stride * F, a[2] * F);
+    });
+  }
+
+  // Draws a home into the view; false if it cannot, and the old way is used.
+  function v3GlDraw(model, inside) {
+    var G = gl3Ready();
+    if (!G) { return false; }
+    var gl = G.gl, dpr = window.devicePixelRatio || 1;
+    var W = Math.max(1, Math.round(V3.w * dpr)), H = Math.max(1, Math.round(V3.h * dpr));
+    if (G.canvas.width !== W || G.canvas.height !== H) { G.canvas.width = W; G.canvas.height = H; }
+    var ink = simInk(), sheet = simSheet(), sheetC = gl3Rgb(sheet);
+    var time = (performance.now() - G.t0) / 1000;
+    // how far it is dressed as a house -- materials, sky, garden -- rather
+    // than drawn as a plan: all the way walking round, and from above as
+    // far as its walls are up, so it rises out of the drawing and lies
+    // back down into it
+    var dress = inside ? 1 : Math.max(0, Math.min(1, V3.rise === undefined ? 1 : V3.rise));
+    try {
+      var scenery = gl3Scenery(G, model, inside, sheet);
+      var B = gl3Batches();
+      gl3Faces(G, model, B, ink, sheet, dress);
+      // which way is "across" for those standing: across the screen
+      var right = inside ? [-Math.sin(V3.me.head), Math.cos(V3.me.head)] : [Math.cos(V3.yaw), -Math.sin(V3.yaw)];
+      gl3Stand(G, model, B, right);
+      // the camera
+      var mvp, eye = null, toward = [0, 0, 1], cam = null;
+      if (inside) {
+        cam = gl3Eye();
+        mvp = cam.mvp;
+        eye = [V3.eye.x, V3.eye.y, V3.eye.z];
+      } else {
+        toward = v3Toward();
+        var lo = Infinity, hi = -Infinity, sb = scenery.bounds, R = scenery.groundR, m = scenery.mid;
+        [[m[0] - R, m[1] - R], [m[0] + R, m[1] - R], [m[0] + R, m[1] + R], [m[0] - R, m[1] + R]].forEach(function (c) {
+          [-10, 1600].forEach(function (z) { var d = gl3Depth([c[0], c[1], z]); lo = Math.min(lo, d); hi = Math.max(hi, d); });
+        });
+        model.faces.forEach(function (f) {
+          f.pts.forEach(function (p) { var d = gl3Depth(p); lo = Math.min(lo, d); hi = Math.max(hi, d); });
+        });
+        var pad = (hi - lo) * 0.05 + 10;
+        mvp = gl3Above(lo - pad, hi + pad);
+        void sb;
+      }
+      // where the sun can throw a shadow from: the house and what is near it
+      var b = { x0: Infinity, x1: -Infinity, y0: Infinity, y1: -Infinity, z0: 0, z1: 0 };
+      model.faces.forEach(function (f) {
+        f.pts.forEach(function (p) {
+          b.x0 = Math.min(b.x0, p[0]); b.x1 = Math.max(b.x1, p[0]); b.y0 = Math.min(b.y0, p[1]); b.y1 = Math.max(b.y1, p[1]);
+          b.z1 = Math.max(b.z1, p[2]);
+        });
+      });
+      var flatish = !inside && (V3.rise === undefined ? 1 : V3.rise) < 0.98;
+      var shadows = G.shadowOk && b.x0 !== Infinity && !flatish && !(inside && V3.inRoom);
+      var sunMvp = gl3Mat([1, 0, 0, 0], [0, 1, 0, 0], [0, 0, 1, 0], [0, 0, 0, 1]);
+      if (shadows) {
+        var grow = 500;
+        sunMvp = gl3SunView({ x0: b.x0 - grow, x1: b.x1 + grow, y0: b.y0 - grow, y1: b.y1 + grow, z0: -10, z1: b.z1 + 50 });
+      }
+
+      // the batches as arrays, once
+      var batches = B.all.filter(function (x) { return x.v.length; });
+      batches.forEach(function (x) { x.data = new Float32Array(x.v); });
+
+      // ---- the sun's view: everything solid, how near the sun ----------------
+      if (shadows) {
+        gl.bindFramebuffer(gl.FRAMEBUFFER, G.shadowFb);
+        gl.viewport(0, 0, GL3_SHADOW, GL3_SHADOW);
+        gl.clearColor(1, 1, 1, 1);
+        gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+        gl.enable(gl.DEPTH_TEST); gl.depthFunc(gl.LESS); gl.depthMask(true); gl.disable(gl.BLEND);
+        gl.useProgram(G.depth.p);
+        gl.uniformMatrix4fv(G.depth.at.uSunMvp, false, sunMvp);
+        function cast(data) {
+          gl.bindBuffer(gl.ARRAY_BUFFER, G.buf);
+          gl.bufferData(gl.ARRAY_BUFFER, data, gl.DYNAMIC_DRAW);
+          var loc = G.depth.at.aPos;
+          gl.enableVertexAttribArray(loc);
+          gl.vertexAttribPointer(loc, 3, gl.FLOAT, false, GL3_STRIDE * 4, 0);
+          gl.drawArrays(gl.TRIANGLES, 0, data.length / GL3_STRIDE);
+        }
+        batches.forEach(function (x) { if (!x.how.lines && !x.how.blend && !x.how.bill) { cast(x.data); } });
+        cast(scenery.verts);
+        gl.disableVertexAttribArray(G.depth.at.aPos);
+        gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+      }
+
+      // ---- the picture ------------------------------------------------------------
+      gl.viewport(0, 0, W, H);
+      var zenith = gl3Mix(sheetC, gl3Mix([0.36, 0.58, 0.86], sheetC, 0.18), dress);
+      var horizon = gl3Mix(sheetC, gl3Mix([0.82, 0.88, 0.93], sheetC, 0.25), dress);
+      var below = gl3Mix([0.46, 0.6, 0.38], sheetC, 0.2);
+      gl.clearColor(horizon[0], horizon[1], horizon[2], 1);
+      gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+      // the sky
+      gl.disable(gl.DEPTH_TEST); gl.depthMask(false); gl.disable(gl.BLEND);
+      gl.useProgram(G.sky.p);
+      var sk = G.sky.at;
+      if (cam) {
+        gl.uniform3fv(sk.uRight, cam.right); gl.uniform3fv(sk.uUp, cam.upv); gl.uniform3fv(sk.uAhead, cam.ahead);
+        gl.uniform2fv(sk.uTan, cam.tan); gl.uniform1f(sk.uFlat, 0);
+      } else {
+        gl.uniform1f(sk.uFlat, 1);
+      }
+      gl.uniform3fv(sk.uZenith, zenith); gl.uniform3fv(sk.uHorizon, horizon);
+      gl.uniform3fv(sk.uBelow, inside ? below : gl3Mix(horizon, gl3Mix(horizon, [0.55, 0.6, 0.62], 0.3), dress));
+      gl.uniform3fv(sk.uSunDir, GL3_SUN); gl.uniform1f(sk.uTime, time);
+      gl.bindBuffer(gl.ARRAY_BUFFER, G.skyBuf);
+      gl.enableVertexAttribArray(sk.aXY);
+      gl.vertexAttribPointer(sk.aXY, 2, gl.FLOAT, false, 8, 0);
+      gl.drawArrays(gl.TRIANGLES, 0, 6);
+      gl.disableVertexAttribArray(sk.aXY);
+
+      // everything else, in the one program
+      var P = G.main, U = P.at;
+      gl.useProgram(P.p);
+      gl.uniformMatrix4fv(U.uMvp, false, mvp);
+      gl.uniformMatrix4fv(U.uSunMvp, false, sunMvp);
+      gl.uniform3fv(U.uSunDir, GL3_SUN);
+      var indoorDim = inside && V3.inRoom ? 0.3 : 1;
+      gl.uniform3fv(U.uSunCol, [0.62 * indoorDim, 0.6 * indoorDim, 0.55 * indoorDim]);
+      gl.uniform3fv(U.uSkyAmb, inside && V3.inRoom ? [0.78, 0.78, 0.8] : [0.58, 0.62, 0.68]);
+      gl.uniform3fv(U.uGroundAmb, [0.42, 0.42, 0.4]);
+      gl.uniform3fv(U.uEye, eye || [0, 0, 0]);
+      gl.uniform3fv(U.uToward, toward);
+      gl.uniform1f(U.uOrtho, inside ? 0 : 1);
+      gl.uniform3fv(U.uFogCol, horizon);
+      gl.uniform1f(U.uFogNear, inside ? GL3_FAR * 0.18 : 1e9);
+      gl.uniform1f(U.uFogFar, inside ? GL3_FAR * 0.8 : 2e9);
+      gl.uniform1f(U.uPx, FLOOR_PX);
+      gl.uniform1f(U.uTime, time);
+      gl.uniform1f(U.uShadowOn, shadows ? 1 : 0);
+      gl.uniform1f(U.uIndoor, inside && V3.inRoom ? 1 : 0);
+      gl.uniform1f(U.uDress, dress);
+      gl.uniform2fv(U.uMid, scenery.mid);
+      gl.activeTexture(gl.TEXTURE1); gl.bindTexture(gl.TEXTURE_2D, G.shadowTex); gl.uniform1i(U.uShadow, 1);
+      gl.activeTexture(gl.TEXTURE0); gl.uniform1i(U.uTex, 0);
+      gl.enable(gl.DEPTH_TEST); gl.depthFunc(gl.LEQUAL);
+      gl.enable(gl.POLYGON_OFFSET_FILL); gl.polygonOffset(1, 2);
+      function draw(data, how, mode) {
+        gl.bindBuffer(gl.ARRAY_BUFFER, G.buf);
+        gl.bufferData(gl.ARRAY_BUFFER, data, gl.DYNAMIC_DRAW);
+        gl3Bind(gl, P, GL3_STRIDE);
+        gl.bindTexture(gl.TEXTURE_2D, how.tex || G.white);
+        gl.uniform1f(U.uUseTex, how.tex ? 1 : 0);
+        gl.uniform1f(U.uDecal, how.decal ? 1 : 0);
+        gl.uniform1f(U.uRound, how.round ? 1 : 0);
+        gl.uniform1f(U.uBill, how.bill ? 1 : 0);
+        gl.uniform1f(U.uAlpha, how.alpha === undefined ? 1 : how.alpha);
+        gl.uniform2fv(U.uFade, how.fade || [0, 0]);
+        if (how.blend) { gl.enable(gl.BLEND); gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA); } else { gl.disable(gl.BLEND); }
+        gl.depthMask(!how.noDepthWrite);
+        gl.drawArrays(mode, 0, data.length / GL3_STRIDE);
+      }
+      // the ground and what grows on it; from above, it thins out at the edge
+      if (dress > 0.01) {
+        draw(scenery.verts, { blend: !inside, alpha: dress,
+                              fade: inside ? [0, 0] : [scenery.groundR * 0.72, scenery.groundR] }, gl.TRIANGLES);
+      }
+      // the house: solid, then pictures, then those standing
+      batches.forEach(function (x) { if (!x.how.lines && !x.how.blend) { draw(x.data, x.how, gl.TRIANGLES); } });
+      batches.forEach(function (x) { if (x.how.decal) { draw(x.data, x.how, gl.TRIANGLES); } });
+      // the lines, on top of the faces they edge
+      gl.disable(gl.POLYGON_OFFSET_FILL);
+      batches.forEach(function (x) { if (x.how.lines) { draw(x.data, { blend: true, noDepthWrite: true }, gl.LINES); } });
+      // and what can be seen through, last
+      batches.forEach(function (x) {
+        if (x.how.blend && !x.how.decal) { draw(x.data, { blend: true, noDepthWrite: true }, gl.TRIANGLES); }
+      });
+      gl.depthMask(true);
+      [0, 1, 2, 3, 4].forEach(function (i) { gl.disableVertexAttribArray(i); });
+    } catch (e) {
+      if (window.console && console.warn) { console.warn("3D view: drawing it the old way --", e && e.message); }
+      V3.gl = false;
+      return false;
+    }
+    // onto the view's canvas, under the names and the map
+    V3.ctx.drawImage(G.canvas, 0, 0, V3.w, V3.h);
+    return true;
+  }
+
+  // Shut, the GPU's memory goes back at once rather than when it is swept up.
+  var v3CloseNoGl = v3Close;
+  v3Close = function () {
+    var G = V3 && V3.gl;
+    if (G && G.gl) {
+      var lose = G.gl.getExtension("WEBGL_lose_context");
+      if (lose) { try { lose.loseContext(); } catch (e) { /* fine */ } }
+    }
+    return v3CloseNoGl.apply(this, arguments);
+  };

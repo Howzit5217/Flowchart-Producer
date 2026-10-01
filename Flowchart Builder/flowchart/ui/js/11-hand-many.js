@@ -885,10 +885,12 @@
           var g = el('.node[data-i="h' + lot[0] + '"]', el("#chart"));
           if (g) { typeInto(g); }
         });
-        add("join", TXT.connect, function () {
-          joining = true; joinFrom = null;
-          drawHand(); drawHandPanel();
-        });
+        if (linksWanted()) {             // not in a floor plan or a sky (39-design.js)
+          add("join", TXT.connect, function () {
+            joining = true; joinFrom = null;
+            drawHand(); drawHandPanel();
+          });
+        }
       }
       add("copy", TXT.m_clip_copy, function () { copyShapes(lot); });
       add("cut", TXT.m_clip_cut, function () { copyShapes(lot, true); });

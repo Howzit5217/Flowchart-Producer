@@ -194,6 +194,7 @@
     [[["drag"]], "hm_door"],                 // into the wall it is put by (snapToWalls)
     [[["drag"]], "hm_floors"],               // a storey to a Floor, stairs between (38-walk.js)
     [[["click"]], "hm_lot"],                 // a lot's size and setbacks (lotMeasure, 03-icons.js)
+    [[["click"]], "hm_dims"],                // a size on the paper, typed over (39-design.js)
     [[["click"]], "hm_run_as"]               // Run, as what the drawing is (37-board.js)
   ];
 
@@ -219,7 +220,16 @@
       if (note) { box.appendChild(said(note, "help-note")); }
       return box;
     }
-    var mouse = HAND_HOW.map(function (row) {
+    // only what this drawing is for (39-design.js): a program's arrows and
+    // next steps, or a design's rooms, walls, floors, lot and sizes
+    var FLOW_ONLY = { hm_join: 1, hp_next: 1, hm_rule: 1 };
+    var DESIGN_ONLY = { hm_room: 1, hm_door: 1, hm_floors: 1, hm_lot: 1, hm_run_as: 1, hm_dims: 1 };
+    var designing = typeof designMode === "function" && designMode();
+    var mouse = HAND_HOW.filter(function (row) {
+      var key = typeof row === "string" ? row : row[1];
+      if (designing) { return !FLOW_ONLY[key] || (key === "hm_join" && linksWanted()); }
+      return !DESIGN_ONLY[key];
+    }).map(function (row) {
       return typeof row === "string" ? listed[row] : row;
     });
     // Undo is not a drawing key, but it is the one a drawing wants most.
@@ -263,7 +273,7 @@
     openMenu(side ? card.right + 8 : room.left,
              side ? Math.max(8, room.top - 10) : room.bottom + 6, [
       { bit: top },
-      { bit: said(TXT.h_add_how, "help-say") },
+      { bit: said(designing ? TXT.dz_add_how : TXT.h_add_how, "help-say") },
       { bit: both },
       "-",
       { name: TXT.h_all_keys, go: function () { showKeys(true); } }

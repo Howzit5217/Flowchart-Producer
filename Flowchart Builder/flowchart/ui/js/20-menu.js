@@ -672,11 +672,12 @@
           var g = el('.node[data-i="h' + node.id + '"]', chart);
           if (g) { typeInto(g); }
         } },
-      { icon: "join", name: TXT.connect, go: function () {
+      // joined to others only where arrows mean something (39-design.js)
+      linksWanted() ? { icon: "join", name: TXT.connect, go: function () {
           joining = true; joinFrom = null; drawHandPanel();
-        } },
-      // what the + under it does (13-hand-more.js)
-      { icon: "next", name: TXT.hp_next,
+        } } : null,
+      // what the + under it does (13-hand-more.js) -- a program's
+      designMode() ? null : { icon: "next", name: TXT.hp_next,
         sub: function () { return nextRows(node.id, "foot"); } },
       "-",
       // Another like it -- colors and all, which it used to leave behind.
@@ -686,7 +687,7 @@
       plainRow(which, mine),
       { icon: "format", name: TXT.m_format, go: formatPicked },  // 07-sides.js
       "-"
-    ].concat(pauseRows(el('.node[data-i="h' + node.id + '"]', chart))), "word");
+    ].concat(pauseRows(el('.node[data-i="h' + node.id + '"]', chart))).filter(function (row) { return row; }), "word");
     openMiniBar(el(".menu.word:not(.out)"), function (bar) {
       shapeBar(bar, node, which, mine);
     });

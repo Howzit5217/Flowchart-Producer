@@ -27,7 +27,7 @@
   // `at` is where the shape stands on the paper and `about` how much room
   // it takes up once turned.
   function plusMarks(n, at, about) {
-    if (joining || many.length > 1) { return ""; }
+    if (joining || many.length > 1 || (typeof designMode === "function" && designMode())) { return ""; }
     var ways = [["foot", at.x, at.y + about.h / 2 + PLUS_OFF]];
     if (asksKind(n.kind) && outOf(n.id).length < 2) {
       ways.push(["right", at.x + about.w / 2 + PLUS_OFF, at.y]);

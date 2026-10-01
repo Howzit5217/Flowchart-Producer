@@ -504,6 +504,10 @@
           node.h = Math.max(least[1] * 0.5,
                             Math.round((wasH + ay * alongY) / STEP) * STEP);
           if (node.kind === "circle") { node.w = node.h = Math.max(node.w, node.h); }
+          if (typeof sizeLimited === "function") {   // 39-design.js
+            sizeLimited(node, node.turn ? null : { ax: ax, ay: ay, fx: wasX - ax * wasW / 2, fy: wasY - ay * wasH / 2,
+                                                   was: { x: wasX, y: wasY, w: wasW, h: wasH } });
+          }
           var grewX = ax * (node.w - wasW) / 2, grewY = ay * (node.h - wasH) / 2;
           node.x = wasX + grewX * cos - grewY * sin;
           node.y = wasY + grewX * sin + grewY * cos;

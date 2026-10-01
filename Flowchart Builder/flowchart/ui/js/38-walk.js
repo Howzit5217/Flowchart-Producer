@@ -20,7 +20,7 @@
   // a door is drawn standing in its wall, so its box opens the wall.
   var WALK_CELL = 10;
   var WALK_SPEED = 150;                  // pixels a second: a brisk walk
-  var WALK_DOORS = { i_door: true, i_door2: true, i_slide: true, i_garagedoor: true };
+  var WALK_DOORS = { i_door: true, i_door2: true, i_slide: true, i_bifold: true, i_garagedoor: true };
   // What is done at each piece, and for how long (ms, at the walking pace).
   var WALK_DO = {
     i_bed: 1500, i_bed1: 1500, i_crib: 900, i_nightstand: 600, i_wardrobe: 800, i_dresser: 700,
@@ -47,7 +47,8 @@
     i_soundbar: 600, i_console: 1200, i_pc: 1000, i_proscreen: 1000, i_recordplayer: 1000, i_fan: 500,
     i_ac: 500,
     i_grill: 1000, i_pool: 1300, i_patio: 900, i_gardenbench: 800, i_hottub: 1200, i_dogbed: 700,
-    i_cattree: 600, i_hedge: 500, i_flowerbed: 600
+    i_cattree: 600, i_hedge: 500, i_flowerbed: 600,
+    i_reachin: 800, i_closetrod: 900, i_closetshelves: 700
   };
 
   // ---- doors: open, shut, locked -------------------------------------------
@@ -75,8 +76,42 @@
     ["fr_office", ["i_desk", "i_officechair", "i_filing", "i_pc"]],
     ["fr_dining", ["i_dining", "i_roundtable"]],
     ["fr_living", ["i_sofa", "i_loveseat", "i_sectional", "i_armchair", "i_recliner", "i_tv", "i_tvstand",
-                   "i_fireplace", "i_piano"]]
+                   "i_fireplace", "i_piano"]],
+    // last: a room with nothing in it but clothes is a closet to walk into
+    ["fr_closet", ["i_closetrod", "i_closetshelves", "i_reachin", "i_wardrobe", "i_shoerack"]]
   ];
+
+  // ---- a room for more than one thing ------------------------------------------
+  // (asked for, 2026-10-01: "multipurpose rooms too for like one room
+  // homes")  A room with a bed and a stove in it is not a kitchen with a
+  // bed in it, which is all the first of the list above could say: it is a
+  // studio.  So what a room is for is everything in it says it is for, and
+  // a room for two things at once is named the way people name it -- a
+  // studio (somewhere to sleep, and to cook or sit), a great room (kitchen
+  // and living room in one), an eat-in kitchen, a living and dining room.
+  // Anything else is named for the first thing it is for, as it was.
+  var ROOM_BOTH = [
+    ["studio", ["bed"], ["kitchen", "living", "dining"]],
+    ["great", ["kitchen"], ["living"]],
+    ["eatin", ["kitchen"], ["dining"]],
+    ["livdine", ["living"], ["dining"]]
+  ];
+  // Everything a room is for, from the kinds of thing in it: { bed: true, ... }
+  function roomUses(kinds) {
+    var uses = {};
+    ROOM_FOR.forEach(function (r) {
+      if (r[1].some(function (k) { return kinds.indexOf(k) >= 0; })) { uses[r[0].slice(3)] = true; }
+    });
+    return uses;
+  }
+  // The name of a room for two things at once, or null.
+  function roomBoth(uses) {
+    for (var i = 0; i < ROOM_BOTH.length; i++) {
+      var b = ROOM_BOTH[i];
+      if (b[1].some(function (u) { return uses[u]; }) && b[2].some(function (u) { return uses[u]; })) { return b[0]; }
+    }
+    return null;
+  }
 
   // ---- floors of a house ------------------------------------------------------
   // A house of more than one storey is drawn a storey at a time, each in a
@@ -319,6 +354,8 @@
     if (said && said !== kindName("i_room")) { return said; }
     var kinds = plan.pieces.filter(function (p) { return insideArea(room, p.x, p.y); })
                            .map(function (p) { return p.kind; });
+    var both = roomBoth(roomUses(kinds));
+    if (both && TXT["fr_" + both]) { return TXT["fr_" + both]; }
     for (var k = 0; k < ROOM_FOR.length; k++) {
       if (ROOM_FOR[k][1].some(function (kind) { return kinds.indexOf(kind) >= 0; })) {
         return TXT[ROOM_FOR[k][0]];
@@ -337,6 +374,8 @@
     hand.nodes.forEach(function (n) {
       if (n !== room && ICONS[n.kind] && !isArea(n.kind) && insideArea(room, n.x, n.y)) { kinds[n.kind] = true; }
     });
+    var both = roomBoth(roomUses(Object.keys(kinds)));
+    if (both && TXT["rl_" + both]) { return TXT["rl_" + both]; }
     for (var k = 0; k < ROOM_FOR.length; k++) {
       if (ROOM_FOR[k][1].some(function (kind) { return kinds[kind]; })) {
         return TXT["rl_" + ROOM_FOR[k][0].slice(3)] || null;

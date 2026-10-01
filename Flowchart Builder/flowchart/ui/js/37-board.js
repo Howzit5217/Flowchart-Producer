@@ -97,10 +97,14 @@
   // what it reads as.  "program" is the program, as before.
   function boardName() {
     if (!byHand || !hand.nodes.length) { return "program"; }
-    var key = boardChoice + "|" + hand.links.length + "|" +
+    // a flowchart is a program, whatever pictures are beside it; a design
+    // is never one (39-design.js)
+    var made = typeof makingNow === "function" ? makingNow() : "";
+    var key = made + "|" + boardChoice + "|" + hand.links.length + "|" +
               hand.nodes.map(function (n) { return n.kind; }).join(",");
     if (boardSeen.key !== key) {
-      var name = boardChoice !== "auto" ? boardChoice : boardGuess();
+      var name = made === "flowchart" ? "program" : boardChoice !== "auto" ? boardChoice : boardGuess();
+      if (made === "design" && (name === "program" || !SCENES[name])) { name = "flow"; }
       boardSeen = { key: key, name: SCENES[name] || name === "program" ? name : "program" };
     }
     return boardSeen.name;

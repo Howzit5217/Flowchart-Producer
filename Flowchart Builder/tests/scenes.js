@@ -36,6 +36,9 @@ var stand = [
   "var window = { addEventListener: function () {} }, walkAt = null, simNow = null;",
   "function el() { return null; }",
   "function dressBoard() {}",
+  "function drawAdders() {} function drawHandPanel() {} function drawHand() {} function setMode() {}",
+  "function handRecall() { return false; } function boardName() { return 'home'; }",
+  "var document = { addEventListener: function () {}, body: { classList: { toggle: function () {} } } };",
   "var SCENES = {};"
 ].join("\n");
 
@@ -232,6 +235,42 @@ var tests = function () {
         "still one in the other");
   said.push("nothing in anything else");
 
+  // ---- sizes typed, and nothing bigger than what holds it (39-design.js)
+  function near(a, b) { return Math.abs(a - b) < 1e-6; }
+  check(near(lenRead("1.2 m"), 1.2) && near(lenRead("120 cm"), 1.2) && near(lenRead("2,5"), 2.5) &&
+        near(lenRead("3'4\""), 40 * 0.0254) && near(lenRead("3 ft 4 in"), 40 * 0.0254) &&
+        near(lenRead("40\""), 40 * 0.0254) && near(lenRead("6 ft"), 6 * 0.3048) && isNaN(lenRead("big")),
+        "lengths read wrong");
+  check(makingOf({ nodes: [{ kind: "i_sofa" }] }) === "design" && makingOf({ nodes: [{ kind: "oval" }] }) === "flowchart" &&
+        makingOf({ making: "flowchart", nodes: [{ kind: "i_sofa" }] }) === "flowchart" && makingOf({ nodes: [] }) === "",
+        "what a paper is for, told wrong");
+  hand.links = [];
+  hand.nodes = [{ id: 1, kind: "i_room", x: 0, y: 0, w: 300, h: 200, text: "" },
+                { id: 2, kind: "i_sofa", x: 0, y: 40, text: "" },
+                { id: 3, kind: "i_tablelamp", x: 0, y: 40, text: "" },
+                { id: 4, kind: "i_wardrobe", x: -100, y: -60, text: "" }];
+  hand.nodes.forEach(function (n) { if (!n.w) { measure(n); } });
+  var wall = roomWallOf(nodeById(1)), sofa = nodeById(2), lims = limitsOf(sofa);
+  check(near(lims.w[1] * FLOOR_PX, 300 - 2 * wall) && near(lims.h[1] * FLOOR_PX, 200 - 2 * wall), "a sofa may outgrow its room");
+  check(near(lims.tall[1], ceilOf(nodeById(1))), "a sofa may go through the ceiling");
+  check(near(limitsOf(nodeById(3)).w[1] * FLOOR_PX, sofa.w), "a lamp may outgrow what it stands on");
+  var roomLims = limitsOf(nodeById(1));
+  check(roomLims.w[0] * FLOOR_PX >= sofa.w + 2 * wall - 0.01 && near(roomLims.ceil[0], pieceHigh(nodeById(4)) + 0.02),
+        "a room may be made too small, or too low, for what is in it");
+  sofa.tall = 1.1;
+  check(near(pieceHigh(sofa), 1.1) && near(wallHang({ kind: "i_picture", lift: 1.5, tall: 0.4 })[1], 1.9), "heights typed not kept");
+  sofa.x = 140;
+  check(keepIn(sofa) && sofa.x + sofa.w / 2 <= 150 - wall + 0.5, "not brought back inside its walls");
+  sofa.x = 0; sofa.w = 1000;
+  sizeLimited(sofa, { ax: 1, ay: 1, fx: -140, fy: 20 });
+  check(sofa.w <= 150 - wall + 140 + 0.01, "grown from a corner through the wall: " + sofa.w);
+  // a door in the right wall, by the corner: no doorway round the corner
+  var byCorner = { id: 5, kind: "i_door", x: 125, y: -75, w: 50, h: 50, turn: 270 };
+  var own = v3Hole(nodeById(1), "right", wall, byCorner);
+  check(!v3Hole(nodeById(1), "top", wall, byCorner) && own && own.a < 5 && own.b > 45,
+        "a door by a corner cut the wall round it: " + JSON.stringify(own));
+  said.push("sizes typed and kept to what holds them");
+
   // ---- circuits, worked out
   function circuit(nodes, links) {
     hand.nodes = nodes; hand.links = links;
@@ -264,7 +303,7 @@ var tests = function () {
   return { bad: bad, said: said };
 };
 
-var src = stand + "\n" + ["03-icon-art.js", "03-icons.js", "13-hand-apart.js", "38-walk.js", "38-advice.js", "38-view3d.js", "39-flows.js", "39-circuit.js"]
+var src = stand + "\n" + ["03-icon-art.js", "03-icons.js", "13-hand-apart.js", "38-walk.js", "38-advice.js", "38-view3d.js", "39-flows.js", "39-circuit.js", "39-design.js"]
   .map(part).join("\n") + "\nreturn (" + tests.toString() + ")();";
 var out;
 try { out = new Function(src)(); }                 // eslint-disable-line no-new-func

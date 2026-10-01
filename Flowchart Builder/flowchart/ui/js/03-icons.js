@@ -181,7 +181,7 @@
   // a rim of the paper's color so it reads over the drawing under it.  The
   // Labels switch on the Style side (11-hand-icons.js) takes them all off.
   // Doors, windows and walls say what they are by being where they are.
-  var NO_LABEL = { i_door: true, i_door2: true, i_slide: true, i_window: true, i_wall: true, i_garagedoor: true };
+  var NO_LABEL = { i_door: true, i_door2: true, i_slide: true, i_bifold: true, i_window: true, i_wall: true, i_garagedoor: true };
 
   function planLabelsOn() { return !(style && style.noLabels); }
 
@@ -403,7 +403,7 @@
   // put down in (or out of it, put down outside).  A window or a sliding
   // door sits in the middle of the wall's thickness.  Only rooms standing
   // square are walls to snap to; a door nowhere near one is left be.
-  var SNAP_IN_WALL = { i_door: "swing", i_door2: "swing", i_slide: "in", i_window: "in", i_garagedoor: "in",
+  var SNAP_IN_WALL = { i_door: "swing", i_door2: "swing", i_slide: "in", i_bifold: "in", i_window: "in", i_garagedoor: "in",
                        i_picture: "face", i_mirror: "face", i_shelf: "face", i_walltv: "face",
                        i_wallclock: "face", i_sconce: "face", i_cabinet: "face", i_hooks: "face",
                        i_radiator: "face", i_hood: "face", i_towelrail: "face", i_medicine: "face",
@@ -424,6 +424,44 @@
   var LIES_FLAT = { i_rug: true, i_bathmat: true, i_driveway: true, i_path: true, i_deck: true, i_flowerbed: true };
   // Ways from one floor of a house to another (38-walk.js).
   var BETWEEN_FLOORS = { i_stairs: true, i_spiral: true, i_elevator: true };
+
+  // ---- how tall, and how high up ---------------------------------------------
+  // (asked for, 2026-10-02: "a way to edit the heights of things")  A thing
+  // is as tall as it was made (`n.tall`, metres), or else as such a thing
+  // usually is (the tables in 38-view3d.js); something hung on a wall
+  // starts `n.lift` metres up; something hung from the ceiling hangs
+  // `n.drop` metres down from it.  Both ways of drawing in 3D read heights
+  // through these, so a height typed in is the height drawn.
+  function pieceHigh(n) {
+    if (!n) { return 0; }
+    if (n.tall > 0) { return +n.tall; }
+    var k = n.kind;
+    if (typeof V3_ON === "object" && ON_TOP[k] && V3_ON[k]) { return V3_ON[k]; }
+    if (typeof V3_DROP === "object" && FROM_CEILING[k]) { return (V3_DROP[k] || [0.5, 0.25])[1]; }
+    if (typeof V3_WALL === "object" && V3_WALL[k]) { return V3_WALL[k][1] - V3_WALL[k][0]; }
+    if (typeof V3_HIGH === "object" && V3_HIGH[k] !== undefined) { return V3_HIGH[k]; }
+    if (ICONS[k] && ICONS[k].fig) { return ICON_SET_OF[k] === "ic_people" ? 1.7 : 1.0; }
+    if (k === "actor") { return 1.7; }
+    return 0.8;
+  }
+  // Whether two things' boxes (upright, or a quarter round) cover any of
+  // the same floor.
+  function boxesOverlap(a, b) {
+    var p = turned(a), q = turned(b);
+    return Math.abs(a.x - b.x) * 2 < p.w + q.w - 1 && Math.abs(a.y - b.y) * 2 < p.h + q.h - 1;
+  }
+  // [from, to] metres up the wall, for what hangs on one
+  function wallHang(n) {
+    var base = (typeof V3_WALL === "object" && V3_WALL[n.kind]) || [1.2, 1.8];
+    var lift = n.lift >= 0 && n.lift !== null && n.lift !== "" ? +n.lift : base[0];
+    return [lift, lift + (n.tall > 0 ? +n.tall : base[1] - base[0])];
+  }
+  // [down from the ceiling to its foot, its own height], for what hangs from it
+  function hangDrop(n) {
+    var base = (typeof V3_DROP === "object" && V3_DROP[n.kind]) || [0.5, 0.25];
+    var tall = n.tall > 0 ? +n.tall : base[1];
+    return [Math.max(tall, n.drop > 0 ? +n.drop : base[0]), tall];
+  }
 
   function roomWallOf(room) {
     return Math.max(1, Math.min(6, Math.min(room.w, room.h) * 0.06));
