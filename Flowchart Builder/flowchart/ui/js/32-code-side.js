@@ -298,31 +298,363 @@
     });
   }
 
-  // Why the code could not be read, on which line -- chosen in the box --
-  // and, where the reading knows what would put it right (a ; or a bracket
-  // left out, one too many, a quote never closed, a line not lined up, a
-  // word written wrong), a button that does it.  The fixes the reading came
-  // with are tried first (codeToPseudo.tryMend), and the one offered is one
-  // after which the code reads further.  Typed in, so Ctrl+Z takes it back
-  // out, and read again the way it was just read: `again`.  Where putting
-  // that right still leaves more that can be, Fix all does the lot.
-  function langTrouble(err, again) {
-    var text = err.line ? say("lang_line", { n: err.line, said: err.message }) : err.message;
-    var parts = [err.line ? inFile(err.file, text) : text], got = null;
-    var files = langAll(), lang = langNow();
-    try { got = err.fixes && err.fixes.length ? codeToPseudo.tryMend(files, lang, err) : null; }
-    catch (e) { got = null; }
-    if (got) {
-      parts.push(langMend(err, got, again));
-      // and more after it?
-      var next = null;
+  // ------------------------------------------------ putting it right --
+  // Working out what would put the code right means reading it again for
+  // every fix tried, and Fix all does that for one problem after another:
+  // on a long program with a lot wrong, a great many readings.  Done on the
+  // page's own thread, the page stood still until it was over -- nothing
+  // painted, no button answered -- and Fix all gave up part way.  So it is
+  // done on a thread of its own, as Python's drawing is (09-build.js): the
+  // reader handed whole to a worker (codeReader, 18-from-code.js), and the
+  // page told how far through the code it has got, on a bar like the
+  // chart's.  Where a browser will not give a worker, it is done here, a
+  // little at a time, the page painting in between.
+  var fixHand = null;                    // null: not made yet.  false: none to be had
+  var fixJobs = {}, fixNext = 1;
+
+  // A stop, as plain words and numbers, to go between threads.
+  function fixPlain(err) {
+    return err ? { message: err.message, line: err.line || 0, file: err.file || 0, said: err.said || "" } : null;
+  }
+  // The quick job, the same in the worker and out of it: the name each call
+  // that can't be run was most likely meant to have.
+  function fixOnce(read, ask) {
+    return { names: ask.notes.map(function (n) {
+      try { return read.tryRename(ask.files, ask.lang, n); } catch (e) { return null; }
+    }) };
+  }
+
+  // What runs in the worker, after the reader and say().
+  function fixerBody() {
+    self.onmessage = function (ev) {
+      var ask = ev.data, out;
+      TXT = ask.words || TXT;
       try {
-        codeToPseudo(files.map(function (one, k) { return k === got.file ? { name: one.name, text: got.text } : one; }), lang);
-      } catch (e2) { next = e2; }
-      if (next && next.fixes && next.fixes.length) { parts.push(langMendAll(again)); }
+        if (ask.kind === "all") {
+          var m = codeToPseudo.mender(ask.files, ask.lang), until = Date.now() + 60000, said = 0;
+          while (!m.step() && Date.now() < until) {
+            if (Date.now() - said > 80) {
+              said = Date.now();
+              self.postMessage({ id: ask.id, at: m.reach() });
+            }
+          }
+          var all = m.result();
+          out = { files: all.files, n: all.n, err: fixPlain(all.err), fixes: all.fixes };
+        } else {
+          out = fixOnce(codeToPseudo, ask);
+        }
+      } catch (e) {
+        out = { failed: String(e && e.message || e) };
+      }
+      out.id = ask.id;
+      out.done = true;
+      self.postMessage(out);
+    };
+  }
+
+  function fixWorker() {
+    if (fixHand !== null) { return fixHand; }
+    fixHand = false;
+    try {
+      var head = "var TXT = {};\n" +
+        "function say(key, fill) { var out = TXT[key] || key; for (var n in (fill || {})) " +
+        "{ out = out.split('{' + n + '}').join(fill[n]); } return out; }\n";
+      var blob = new Blob([head, "var codeToPseudo = (" + codeReader.toString() + ")();\n",
+                           fixPlain.toString(), "\n", fixOnce.toString(), "\n",
+                           "(" + fixerBody.toString() + ")();\n"], { type: "text/javascript" });
+      var hand = new Worker(URL.createObjectURL(blob));
+      hand.onmessage = function (ev) {
+        var job = fixJobs[ev.data.id];
+        if (!job) { return; }
+        if (!ev.data.done) {
+          if (job.step) { job.step(ev.data.at); }
+          return;
+        }
+        delete fixJobs[ev.data.id];
+        if (ev.data.failed) { job.fail(); } else { job.done(ev.data); }
+      };
+      // A worker that cannot run the reader: everything done here instead.
+      hand.onerror = function (ev) {
+        if (ev && ev.preventDefault) { ev.preventDefault(); }
+        var waiting = fixJobs;
+        fixJobs = {};
+        try { hand.terminate(); } catch (e) { /* gone already */ }
+        fixHand = false;
+        Object.keys(waiting).forEach(function (id) { waiting[id].fail(); });
+      };
+      fixHand = hand;
+    } catch (e) { fixHand = false; }
+    return fixHand;
+  }
+
+  // Fix all no longer wanted -- the code changed under it -- and still
+  // going: the worker put down, and a fresh one made when next it is asked.
+  function fixQuit() {
+    var busy = Object.keys(fixJobs).some(function (id) { return fixJobs[id].all; });
+    if (!busy || !fixHand) { return; }
+    try { fixHand.terminate(); } catch (e) { /* gone already */ }
+    fixHand = null;
+    fixJobs = {};
+  }
+
+  // A job for the fixer -- {kind, files, lang, notes} -- and a promise of
+  // what it made of it.  `step(at)` hears how far through the code Fix all
+  // has got, 0 to 1.
+  function fixAsk(ask, step) {
+    ask.words = {};
+    Object.keys(TXT).forEach(function (key) { if (/^cm_/.test(key)) { ask.words[key] = TXT[key]; } });
+    return new Promise(function (done) {
+      function here() { fixHere(ask, step, done); }
+      var hand = fixWorker();
+      if (!hand) { setTimeout(here, 0); return; }
+      var id = fixNext++;
+      ask.id = id;
+      fixJobs[id] = { step: step, done: done, fail: here, all: ask.kind === "all" };
+      hand.postMessage(ask);
+    });
+  }
+
+  // The same, on the page's own thread: Fix all a few fixes at a time,
+  // with the page let get on between them.
+  function fixHere(ask, step, done) {
+    if (ask.kind !== "all") {
+      var out;
+      try { out = fixOnce(codeToPseudo, ask); } catch (e) { out = null; }
+      done(out);
+      return;
     }
-    langSays("bad", parts);
+    var m;
+    try { m = codeToPseudo.mender(ask.files, ask.lang); } catch (e) { done(null); return; }
+    var until = Date.now() + 60000;
+    (function slice() {
+      var stop = Date.now() + 40, over = false;
+      try {
+        while (!(over = m.step()) && Date.now() < stop) { /* on to the next */ }
+      } catch (e) { done(null); return; }
+      if (!over && Date.now() < until) {
+        if (step) { step(m.reach()); }
+        setTimeout(slice, 0);
+        return;
+      }
+      var all = m.result();
+      done({ files: all.files, n: all.n, err: fixPlain(all.err), fixes: all.fixes });
+    })();
+  }
+
+  // ---- what the buttons go in --
+  // A place in what is said under the box, filled once the fixer has
+  // answered.  The words go there at once; the buttons follow, and there is
+  // a copy of each over the box filling the screen (langSays), so each copy
+  // gets buttons of its own.  What is said again before the answer comes --
+  // the code changed, read again -- has no such place, and the answer goes
+  // nowhere.
+  var slotNext = 1;
+  function fixSlot() {
+    var slot = document.createElement("div");
+    slot.className = "fix-slot";
+    slot.setAttribute("data-slot", "s" + slotNext++);
+    return slot;
+  }
+  function fillSlot(slot, make) {
+    var id = typeof slot === "string" ? slot : slot.getAttribute("data-slot");
+    all('[data-slot="' + id + '"]').forEach(function (one) {
+      one.innerHTML = "";
+      make().forEach(function (part) { one.appendChild(part); });
+    });
+  }
+
+  // ---------------------------------------- put right, and said so --
+  // Build reads the code in, and where it will not read -- a ; or a bracket
+  // left out, one too many, a quote never closed, a line not lined up, a
+  // word written wrong -- everything the reading knows how to put right is
+  // put right first, in the fixer's own time with the bar showing under
+  // the box, and the chart is drawn from the code as it then is.  A call
+  // whose name was written wrong (pritn, Sytem.out) is put right the same
+  // way.  What was put right is a button under the box, opening on the
+  // list of it -- each mistake, the line it was on, and what was done --
+  // to see and learn from; it is all typed in, so Ctrl+Z takes it back
+  // out, and the list can put it all back too.  Check, over the code
+  // filling the screen, does the same, short of drawing.  Only when asked:
+  // a drawing the page asks for itself (a reload) says what is wrong and
+  // leaves the code alone.
+  var fixTried = null;                   // the code last put right, not tried twice
+  var renameTried = null;                // and the code last looked at for names written wrong
+  var fixReport = null;                  // what was put right (fixReportShow)
+  var fixTyping = false;                 // the fixes going in, which is not somebody typing
+  var fixOpen = false;                   // the list open under its button
+
+  // What could not be put right, said the way it always was.
+  function langStop(err) {
+    var text = err.line ? say("lang_line", { n: err.line, said: err.message }) : err.message;
+    langSays("bad", [err.line ? inFile(err.file, text) : text]);
     if (err.line) { langPickLine(err.line, err.file || 0); }
+  }
+
+  // The fixes typed in, a file at a time.
+  function langPutIn(files) {
+    var shown = langAt;
+    fixTyping = true;
+    try {
+      files.forEach(function (one, k) {
+        if (langFiles[k] && one.text !== langAll()[k].text) { langTypeIn(k, one.text); }
+      });
+    } finally { fixTyping = false; }
+    if (langAt !== shown && langFiles[shown]) { showFile(shown); }
+  }
+
+  // The code would not read.  True where it has gone off to put it right,
+  // and `again` is called once it has -- to draw, or to check, the code as
+  // it then is.
+  function langAutoFix(err, asked, again) {
+    var key = langKey();
+    if (!asked || !err.fixes || !err.fixes.length || fixTried === key) { langStop(err); return false; }
+    fixTried = key;
+    var before = langAll(), slot = fixSlot(), id = slot.getAttribute("data-slot"), began = Date.now();
+    langSays("", [slot]);
+    fillSlot(slot, function () { return [fixBar()]; });
+    fixBarTo(id, 0);
+    fixAsk({ kind: "all", files: before, lang: langNow() }, function (at) {
+      fixBarTo(id, at);
+    }).then(function (got) {
+      if (langKey() !== key) { return; }  // changed while it worked: that code is gone
+      if (!got || !got.n) { langStop(err); return; }
+      try {
+        langPutIn(got.files);
+        fixTried = langKey();             // what is left, if anything, is said, not tried again
+        fixReportAdd(before, got.fixes || [], key);
+        fixBarTo(id, 1, true);
+      } catch (e) {
+        // never a bar left standing: what is wrong said instead
+        langStop(err);
+        setTimeout(function () { throw e; }, 0);
+        return;
+      }
+      // full, a moment to be seen -- and not a flash where it was quick
+      setTimeout(again, Date.now() - began < 300 ? 120 : 360);
+    });
+    return true;
+  }
+
+  // The code read, and calls in it can't be run: where that is a name
+  // written wrong, it is put right, and the code read again.  True where it
+  // has gone off to look.
+  function langAutoRename(notes, asked, again) {
+    var key = langKey(), calls = notes.filter(function (n) { return n.call; });
+    if (!asked || !calls.length || renameTried === key) { return false; }
+    renameTried = key;
+    var before = langAll();
+    fixAsk({ kind: "rename", files: before, lang: langNow(), notes: calls }).then(function (got) {
+      if (langKey() !== key) { return; }
+      var found = [];
+      ((got && got.names) || []).forEach(function (one, i) {
+        if (one) { found.push({ file: one.file, fix: one.fix, stop: { line: calls[i].line, file: calls[i].file || 0, text: calls[i].text } }); }
+      });
+      if (found.length) {
+        var now = langAll();
+        found.forEach(function (one) {
+          now[one.file].text = codeToPseudo.mended(now[one.file].text, one.fix);
+        });
+        langPutIn(now);
+        renameTried = langKey();
+        fixReportAdd(before, found, key);
+      }
+      again();
+    });
+    return true;
+  }
+
+  // ---- the list of what was put right --
+  // Each fix, said where it ended up: a line put in above a mistake moves
+  // the mistakes below it down one.
+  function fixReportAdd(before, fixes, key) {
+    var items = fixes.map(function (one) {
+      var at = (one.fix.edits[0] || {}).line || one.stop.line || 0;
+      return { file: one.file || 0, line: at, said: one.stop.message, note: one.stop.text, fix: one.fix };
+    });
+    items.forEach(function (item, i) {
+      fixes.slice(i + 1).forEach(function (later) {
+        if ((later.file || 0) !== item.file) { return; }
+        later.fix.edits.forEach(function (e) {
+          if (e.col === undefined && e.indent === undefined && e.line && e.line <= item.line) { item.line++; }
+        });
+      });
+    });
+    // more put right straight after -- a name, once the code read -- is
+    // more of the same list
+    if (fixReport && fixReport.after === key) {
+      fixReport.items = fixReport.items.concat(items);
+    } else {
+      fixReport = { before: before, items: items };
+      fixOpen = false;
+    }
+    fixReport.after = langKey();
+    fixReportShow();
+  }
+
+  // Gone, once the code has moved on from what it was put right to: the
+  // lines it names are not where they were.
+  function fixReportDrop() {
+    if (!fixReport || langKey() === fixReport.after) { return; }
+    fixReport = null;
+    fixReportShow();
+  }
+
+  function fixReportShow() {
+    ["#lang-fixed", "#lang-full-fixed"].forEach(function (where) {
+      var box = el(where);
+      if (!box) { return; }
+      box.innerHTML = "";
+      box.hidden = !fixReport || !fixReport.items.length;
+      if (box.hidden) { return; }
+      var n = fixReport.items.length;
+      var head = document.createElement("button");
+      head.type = "button";
+      head.className = "fixed-head";
+      head.setAttribute("aria-expanded", fixOpen ? "true" : "false");
+      head.title = TXT.lang_fixed_tip || "";
+      head.innerHTML = '<svg viewBox="0 0 20 20" aria-hidden="true"><path d="M4.5 10.5l3.5 3.5 7.5-8"/></svg><span></span>' +
+                       '<svg class="fixed-turn" viewBox="0 0 20 20" aria-hidden="true"><path d="M6 8l4 4 4-4"/></svg>';
+      el("span", head).textContent = n === 1 ? (TXT.lang_fixed_one || "") : say("lang_fixed_many", { n: n });
+      head.onclick = function () { fixOpen = !fixOpen; fixReportShow(); };
+      box.appendChild(head);
+      if (!fixOpen) { return; }
+      var list = document.createElement("div");
+      list.className = "fixed-list";
+      // down the code, the way it is read
+      fixReport.items.slice().sort(function (a, b) {
+        return (a.file - b.file) || (a.line - b.line);
+      }).forEach(function (item) {
+        var row = document.createElement("button");
+        row.type = "button";
+        row.className = "fixed-item";
+        row.title = TXT.r_show_line || "";
+        var what = document.createElement("span");
+        what.className = "fixed-what";
+        what.textContent = inFile(item.file, item.note ||
+          (item.line ? say("lang_line", { n: item.line, said: item.said }) : item.said));
+        var did = document.createElement("span");
+        did.className = "fixed-did";
+        did.textContent = fixLabel(item.fix, item.line);
+        row.appendChild(what);
+        row.appendChild(did);
+        row.onclick = function () { langPickLine(item.line, item.file); };
+        list.appendChild(row);
+      });
+      var back = document.createElement("button");
+      back.type = "button";
+      back.className = "btn small fixed-back";
+      back.textContent = TXT.lang_fixed_undo || "";
+      back.onclick = function () {
+        var was = fixReport && fixReport.before;
+        if (!was) { return; }
+        if (was.length === langFiles.length) { langPutIn(was); }
+        fixTried = renameTried = langKey();   // as it was, and not put right again unasked for
+        fixReport = null;
+        fixReportShow();
+      };
+      list.appendChild(back);
+      box.appendChild(list);
+    });
   }
 
   // What a fix's button says: the fix's own words, with the line it is on
@@ -354,59 +686,31 @@
     box.setSelectionRange(a + lead, Math.max(a + lead, a + put.length - tail));
   }
 
-  function langMend(err, got, again) {
-    var button = document.createElement("button");
-    button.type = "button";
-    button.className = "mend";
-    button.textContent = fixLabel(got.fix, err.line);
-    button.title = TXT.lang_fix_tip || "";
-    var from = (langAll()[got.file] || {}).text;
-    button.onclick = function (ev) {
-      ev.stopPropagation();
-      if (!langFiles[got.file]) { return; }
-      if (langAll()[got.file].text !== from) { again(); return; }   // changed since: read it as it is
-      langTypeIn(got.file, got.text);
-      again();
-    };
-    return button;
+  // The bar: the chart's own (09-build.js), in the place of the buttons.
+  function fixBar() {
+    var box = document.createElement("div");
+    box.className = "fix-bar";
+    box.setAttribute("role", "progressbar");
+    box.setAttribute("aria-valuemin", "0");
+    box.setAttribute("aria-valuemax", "100");
+    box.setAttribute("aria-label", TXT.lang_fixing || "");
+    box.innerHTML = '<div class="bb-top"><span class="bb-said"></span><span class="bb-pct"></span></div>' +
+                    '<div class="bb-track"><div class="bb-fill"></div><div class="bb-shine"></div></div>';
+    el(".bb-said", box).textContent = TXT.lang_fixing || "";
+    return box;
   }
-
-  // What was read but can't be run, said -- and where that is a name written
-  // wrong (pritn, Sytem.out), the button that puts it right
-  // (codeToPseudo.tryRename); and where there are several, Fix all.
-  function noteParts(notes, again) {
-    var parts = [], files = langAll(), lang = langNow(), fixes = [], until = Date.now() + 1500;
-    notes.forEach(function (n) {
-      parts.push(inFile(n.file, n.text));
-      if (!n.call || Date.now() > until) { return; }
-      var got = null;
-      try { got = codeToPseudo.tryRename(files, lang, n); } catch (e) { got = null; }
-      if (got) {
-        parts.push(langMend({ line: n.line }, got, again));
-        fixes.push(got);
-      }
+  // How far through the code it has got, on every copy of the bar; never
+  // backwards.
+  function fixBarTo(slot, at, full) {
+    all('[data-slot="' + slot + '"] .fix-bar').forEach(function (box) {
+      var was = +(box.getAttribute("aria-valuenow") || 0) / 100;
+      var now = Math.max(was, Math.min(full ? 1 : 0.99, at || 0));
+      el(".bb-pct", box).textContent = Math.floor(now * 100) + "%";
+      el(".bb-fill", box).style.transform = "scaleX(" + now.toFixed(3) + ")";
+      el(".bb-shine", box).style.clipPath = "inset(0 " + ((1 - now) * 100).toFixed(1) + "% 0 0)";
+      box.setAttribute("aria-valuenow", String(Math.floor(now * 100)));
+      if (full) { box.classList.add("full"); }
     });
-    if (fixes.length > 1) {
-      var every = document.createElement("button");
-      every.type = "button";
-      every.className = "mend mend-all";
-      every.textContent = TXT.lang_fix_all || "";
-      every.title = TXT.lang_fix_all_tip || "";
-      every.onclick = function (ev) {
-        ev.stopPropagation();
-        var now = langAll(), shown = langAt;
-        fixes.forEach(function (got) {
-          now[got.file].text = codeToPseudo.mended(now[got.file].text, got.fix);
-        });
-        now.forEach(function (one, k) {
-          if (langFiles[k] && one.text !== langAll()[k].text) { langTypeIn(k, one.text); }
-        });
-        if (langAt !== shown && langFiles[shown]) { showFile(shown); }
-        again();
-      };
-      parts.push(every);
-    }
-    return parts;
   }
 
   // A name swapped for another in code -- whole words only, and outside its
@@ -482,30 +786,6 @@
     return button;
   }
 
-  // Everything the reading can put right, one after another, each file
-  // typed in once -- and so taken back out with a Ctrl+Z a file.
-  function langMendAll(again) {
-    var button = document.createElement("button");
-    button.type = "button";
-    button.className = "mend mend-all";
-    button.textContent = TXT.lang_fix_all || "";
-    button.title = TXT.lang_fix_all_tip || "";
-    button.onclick = function (ev) {
-      ev.stopPropagation();
-      var all;
-      try { all = codeToPseudo.mendAll(langAll(), langNow()); } catch (e) { all = null; }
-      if (all) {
-        var shown = langAt;
-        all.files.forEach(function (one, k) {
-          if (langFiles[k] && one.text !== langAll()[k].text) { langTypeIn(k, one.text); }
-        });
-        if (langAt !== shown && langFiles[shown] && !all.err) { showFile(shown); }
-      }
-      again();
-    };
-    return button;
-  }
-
   // The line a problem is on, chosen in the box -- in the file it is in,
   // which is put on show -- where anybody fixing it is going to look next.
   function langPickLine(line, file) {
@@ -535,19 +815,24 @@
   var langHint = "";
   function langTitle() { return byLang ? langHint : ""; }
 
-  function readLangIn() {
+  // `asked`: Build pressed, or asked for by its keys -- where what is wrong
+  // with the code is put right (langAutoFix).
+  function readLangIn(asked) {
     if (!langBox() || !el("#code")) { return false; }
     langDetect();
+    fixReportDrop();
+    function again() {
+      langAsked = true;
+      el("#build").click();
+    }
     var said;
     try {
       said = codeToPseudo(langAll(), langNow());
     } catch (err) {
-      langTrouble(err, function () {
-        langAsked = true;
-        el("#build").click();
-      });
+      langAutoFix(err, asked, again);
       return false;
     }
+    if (langAutoRename(said.notes, asked, again)) { return false; }
     langFrom = langKey();
     langMade = said.text;
     langHint = said.title || "";
@@ -557,10 +842,7 @@
       showStarts();
       countLines();
     }
-    langSays("warn", noteParts(said.notes, function () {
-      langAsked = true;
-      el("#build").click();
-    }));
+    langSays("warn", said.notes.map(function (n) { return inFile(n.file, n.text); }));
     return true;
   }
 
@@ -579,7 +861,7 @@
       langAsked = false;
       if (byLang && langBox() &&
           ((ev && ev.isTrusted) || asked || langKey() !== langFrom)) {
-        if (!readLangIn()) {
+        if (!readLangIn((ev && ev.isTrusted) || asked)) {
           langTranslating = null;        // nothing to translate from, as it stands
           return;
         }
@@ -801,8 +1083,10 @@
     langBox().addEventListener("input", function () {
       // what was wrong -- or that nothing was -- is about code that is not
       // there any more
+      if (fixTyping) { return; }         // the fixes going in: not somebody typing
       var note = el("#lang-note");
-      if (note && el(".bad, .good", note)) { langSays("", []); }
+      if (note && el(".bad, .good, .fix-bar", note)) { langSays("", []); }
+      fixQuit();                         // putting right code that has gone
       langKeep();
       translateReady();
       detectSoon();
@@ -945,11 +1229,14 @@
   function langTest() {
     if (!langBox()) { return; }
     langDetect();
+    fixReportDrop();
     var said;
     try { said = codeToPseudo(langAll(), langNow()); }
-    catch (err) { langTrouble(err, langTest); return; }
+    catch (err) { langAutoFix(err, true, langTest); return; }
+    if (langAutoRename(said.notes, true, langTest)) { return; }
     langSays(said.notes.length ? "warn" : "good",
-             said.notes.length ? noteParts(said.notes, langTest) : [TXT.checked_good]);
+             said.notes.length ? said.notes.map(function (n) { return inFile(n.file, n.text); })
+                               : [TXT.checked_good]);
   }
 
   if (el("#lang-over")) {

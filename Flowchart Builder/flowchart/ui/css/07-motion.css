@@ -609,6 +609,7 @@
     transition: opacity .24s var(--ease-soft), transform .24s var(--ease-soft);
   }
   #build-bar.going { opacity: 0; transform: translateY(-6px); }
+  .fix-bar { animation: bar-drop var(--move) var(--ease) backwards; }
   .bb-fill {
     transition: transform .32s linear, background-color var(--quick) var(--ease-soft);
   }

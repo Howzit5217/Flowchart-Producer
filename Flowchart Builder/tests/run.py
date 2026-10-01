@@ -2291,7 +2291,7 @@ def _():
         "" if not wrong else "\n       " + "\n       ".join(wrong[:6]))
 
 
-# Code with something wrong, and what the Code tab's Fix button makes of it:
+# Code with something wrong, and what Build makes of it before drawing it:
 # a ; or bracket put in where the reading stopped, the } a block never got
 # where its indenting says it ends, one too many taken out, a quote shut, a
 # line lined up, a word written wrong put right -- or no button at all,
@@ -2355,12 +2355,12 @@ RENAMED = [
 ]
 
 
-@check("code with something wrong is put right by its Fix button")
+@check("code with something wrong is put right when it is built")
 def _():
-    """Each broken program read: it fails, a fix is offered where one should
+    """Each broken program read: it fails, a fix is found where one should
     be and not where one should not, and the fixed code is exactly what was
-    wanted -- and reads.  Fix all puts several right at once, and a call
-    written wrong is renamed."""
+    wanted -- and reads.  Several are put right one after another, and a
+    call written wrong is renamed."""
     if not node_there():
         return None, "node is not installed -- skipped"
     folder = tempfile.mkdtemp(prefix="_out-mend-", dir=HERE)

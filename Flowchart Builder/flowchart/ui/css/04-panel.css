@@ -802,6 +802,42 @@
   }
   .mend-all:hover, .mend-all:focus-visible { filter: brightness(1.1); }
   #lang-note .mend-all { margin: 0 6px 4px 0; }
+  /* Fix all at work: the chart's bar (05-chart.css), in the place of the
+     buttons under the code and over it, and as wide as the words. */
+  .fix-bar {
+    margin: 4px 0 8px; padding: 9px 12px 11px; border-radius: 10px;
+    background: var(--panel); border: 1px solid var(--line);
+  }
+  .fix-bar.full .bb-fill { background: var(--good); }
+  .fix-bar.full .bb-shine { opacity: 0; }
+  /* What Build put right in the code: a button under the box, in the green
+     of things that work, opening on the list -- each mistake, where it
+     was, and what was done -- to see and to learn from. */
+  #lang-fixed:not([hidden]) { margin-top: 8px; }
+  .fixed-head {
+    display: inline-flex; align-items: center; gap: 6px; padding: 3px 10px 3px 7px;
+    border: 1px solid var(--good); border-radius: 999px; background: transparent;
+    color: var(--good); font: inherit; font-size: 12px; line-height: 1.4; cursor: pointer;
+  }
+  .fixed-head:hover, .fixed-head:focus-visible { background: var(--good); color: #fff; }
+  .fixed-head svg { width: 14px; height: 14px; fill: none; stroke: currentColor;
+                    stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; flex: none; }
+  .fixed-head .fixed-turn { width: 12px; height: 12px; transition: transform .2s; }
+  .fixed-head[aria-expanded="true"] .fixed-turn { transform: rotate(180deg); }
+  .fixed-list {
+    margin-top: 6px; padding: 4px; border: 1px solid var(--line); border-radius: 10px;
+    background: var(--panel); max-height: 260px; overflow: auto;
+  }
+  .fixed-item {
+    display: block; width: 100%; padding: 6px 8px; border: 0; border-radius: 7px;
+    background: none; color: var(--ink); font: inherit; font-size: 12px; text-align: left;
+    cursor: pointer; line-height: 1.4;
+  }
+  .fixed-item:hover, .fixed-item:focus-visible { background: var(--line-soft); }
+  .fixed-what { display: block; }
+  .fixed-did { display: block; margin-top: 1px; color: var(--muted); font-size: 11.5px; }
+  .fixed-did::before { content: "\2192\00a0"; }
+  .fixed-back { margin: 4px 8px 6px; }
   .tape .asking { display: flex; gap: 6px; margin: 4px 0; }
   .tape .asking .field { flex: 1; padding: 4px 7px; font-family: inherit; }
   .tape .code { margin: 0; white-space: pre; overflow-x: auto; }

@@ -26,7 +26,11 @@
   // One entry, and everything else inside it, so none of its many small
   // names can take the name of a function in another part: the parts share
   // one scope, and a later part's function quietly replaces an earlier one.
-  var codeToPseudo = (function () {
+  // A function with a name rather than one run where it stands, so that it
+  // can be handed whole to a worker of its own (32-code-side.js: Fix all
+  // reads the code over and over, and does it off the page's thread).  It
+  // needs nothing from the page but say() and the words it says.
+  function codeReader() {
 
     // The helpers the page writes into the code it writes out (18-code.js):
     // asking in C++ and JavaScript, money and naps in C++.  Code that came
@@ -343,6 +347,7 @@
       function unclosed(from, inside, closer, ln, runsOn) {
         var err = oops("cm_open", ln), kit = fixKit(s, base), fixes = [];
         err.at = from;
+        err.lexing = true;               // found going through the text, before reading it
         var eol = s.indexOf("\n", from);
         if (eol < 0) { eol = n; }
         var end = eol;
@@ -584,6 +589,7 @@
             // nearer of them, the line and the lines that go with it
             var err = oops("cm_indent", line), kit = fixKit(s, base), lower = indents[indents.length - 1];
             err.at = i;
+            err.lexing = true;
             var ways = [];
             (popped !== null && popped - col < col - lower ? [popped, lower] : [lower, popped])
               .forEach(function (to) {
@@ -861,7 +867,7 @@
         } else {
           var bit = t.t === "str" ? '"' + t.v + '"' : t.t === "nl" ? "↵" : String(t.v);
           err = oops("cm_odd", t.line, { bit: bit.slice(0, 24) });
-          err.fixes = oddFixes(k);
+          err.fixes = some(softFixes(t).concat(oddFixes(k)));
         }
         err.at = t.at;
         return err;
@@ -871,6 +877,12 @@
       // The fixes each way the reading can stop comes with (fixKit, above),
       // likeliest first: tryMend tries them in that order.
       var kit = fixKit(lexed.src, lexed.base);
+      var softStop = null;               // a reading given up for another (Python's match)
+      var matchHeadRead = false;         // match x: read that far, so it is one
+      // its fixes, where the stop now is on the same line
+      function softFixes(t) {
+        return softStop && softStop.fixes && t && softStop.line === t.line ? softStop.fixes : [];
+      }
       var SHUT = { "(": ")", "[": "]", "{": "}" };
       // the languages whose statements end with a ;
       var SEMIS = !py && !kt && !sw && !go;
@@ -900,6 +912,21 @@
         }
         return open;
       }
+      // Python: a ( or [ left open on a line above, and the reading gone on
+      // through a line no further in than that one -- a statement of its own
+      // (return ..., class Dog(...):), read as though it were inside the
+      // bracket.  The bracket, where that is so.
+      function openAbove(k) {
+        if (!py) { return null; }
+        var open = openAt(k), inner = open[open.length - 1];
+        if (!inner) { return null; }
+        var from = toks.indexOf(inner), lead = kit.lead(kit.spot(inner.at).line);
+        for (var j = k; j > from; j--) {
+          var t = toks[j];
+          if (t.first && solid(t) && t.line > inner.line && kit.spot(t.at).col <= lead) { return inner; }
+        }
+        return null;
+      }
       function endsValue(t) {
         return !!t && (/^(name|num|str|fstr|regex)$/.test(t.t) || (t.t === "op" && /^[)\]]$/.test(t.v)));
       }
@@ -911,6 +938,11 @@
       // a piece taken out, and a space beside it that would be left doubled
       function cutTok(t) {
         if (!oneLine(t)) { return null; }
+        // A word the language keeps for itself, or one a line of the code
+        // starts with and the code uses elsewhere, is not one written in by
+        // mistake: taken out, the reading only goes on the further, the
+        // line it began made into something else.
+        if (t.t === "name" && (KEY_WORDS[t.v] || (t.first && factsOf().names[t.v] > 1))) { return null; }
         var src = lexed.src, from = t.at, to = t.end;
         if (src[from - 1] === " " && (src[to] === " " || /[)\];,\n]/.test(src[to] || "\n"))) { from--; }
         return kit.cut(kit.make("lang_fix_cut", { what: tokText(t) }), from, to);
@@ -1019,6 +1051,18 @@
         var open = openAt(k), o = open[open.length - 1], out = [];
         if (!o || o.v === "{") { return out; }
         var j0 = toks.indexOf(o), index = o.v === "[" && endsValue(lastSolid(j0)), depth = 0;
+        // sorted([5, 3, 9, 1, reverse=True): what is handed over by name
+        // comes after the list, so the list is shut before it
+        for (var q = j0 + 1, d = 0; q < k + 3 && q + 3 < toks.length; q++) {
+          var x = toks[q];
+          if (x.t === "op" && SHUT[x.v]) { d++; }
+          else if (x.t === "op" && /^[)\]}]$/.test(x.v)) { if (--d < 0) { break; } }
+          else if (!d && x.t === "op" && x.v === "," && toks[q + 1].t === "name" &&
+                   toks[q + 2].t === "op" && toks[q + 2].v === "=" && toks[q - 1].end !== undefined) {
+            out.push(kit.put(kit.make("lang_fix", { what: SHUT[o.v] }), toks[q - 1].end, SHUT[o.v]));
+            break;
+          }
+        }
         for (var j = j0 + 1; j < k && out.length < 6; j++) {
           var a = toks[j], b = toks[j + 1];
           if (a.t === "op" && SHUT[a.v]) { depth++; continue; }
@@ -1101,6 +1145,10 @@
         }
         var twice = what === ")" ? doubledOpen(k, "(") : what === "]" ? doubledOpen(k, "[")
                   : what === "}" ? doubledOpen(k, "{") : [];
+        // Python: a bracket left open on a line above, read on into this one
+        // -- a statement of its own: shut where the bracket's own lines end
+        var open = openAt(k), inner = open[open.length - 1];
+        if (openAbove(k)) { twice = [pyShut(openAbove(k), k)].concat(twice); }
         var shut = what === ")" || what === "]" ? wantedFixes(what, k).concat(shutWithin(k)) : wantedFixes(what, k);
         // the bracket shut further along the line all the same: what is wrong
         // is more likely something left out inside it -- [60 81] wants a ,
@@ -1115,7 +1163,8 @@
             }
           }
         }
-        err.fixes = some(unopened().concat(lonely, twice, later ? oddFixes(k).concat(shut) : shut.concat(oddFixes(k))));
+        err.fixes = some(softFixes(cur).concat(unopened(), lonely, twice,
+                                               later ? oddFixes(k).concat(shut) : shut.concat(oddFixes(k))));
         return err;
       }
       // Where `what` goes: a closing mark or a ; straight after the last
@@ -1125,7 +1174,7 @@
       function wantedFixes(what, k) {
         var cur = toks[k], prev = lastSolid(k);
         if (py && cur.t === "eof" && SHUT[openAt(k).slice(-1).map(function (o) { return o.v; })[0]] === what) {
-          return [pyShut(openAt(k).pop())];
+          return [pyShut(openAt(k).pop(), k)];
         }
         if (what === "}" && cur.t === "eof") { return [unshut()]; }
         if (!prev || what === "↵") { return []; }
@@ -1165,6 +1214,13 @@
       // line in a language of ;s has one before it; and anything else, the
       // piece taken out.  A line that stops at an operator -- x = , total + --
       // loses the operator.
+      // A test being written at k: on a line that opens with if, elif,
+      // while, until, return or assert -- where an = is most likely an ==
+      function testing(k) {
+        var j = k;
+        while (j > 0 && !toks[j].first) { j--; }
+        return /^(if|elif|while|until|return|assert|when)$/.test(String(toks[j].v));
+      }
       function oddFixes(k) {
         var t = toks[k], prev = lastSolid(k), out = unopened();
         if (!solid(t) || t.end === undefined) {
@@ -1185,7 +1241,12 @@
         }
         // = and == mixed up
         if (t.t === "op" && (t.v === "==" || t.v === "===")) { out.push(swapTok(t, "=")); }
-        if (t.t === "op" && t.v === "=") { out.push(swapTok(t, js ? "===" : "==")); }
+        if (t.t === "op" && t.v === "=" && testing(k)) { out.push(swapTok(t, js ? "===" : "==")); }
+        // Python: a ( or [ left open on a line above, and this line no
+        // further in than that one -- a statement of its own, read on into
+        // the bracket: the bracket shut where its own lines end
+        var above = openAbove(k), newLine = !!above;
+        if (above) { out.push(pyShut(above, k)); }
         if (prev && endsValue(prev) && opensValue(t)) {
           // a word written wrong, or one that should not be there at all
           [t, prev].forEach(function (w) {
@@ -1199,7 +1260,7 @@
           if (inner && inner.v === "{" && (prev.t === "name" || prev.t === "str") && (js || py || kt || sw || go || rs)) {
             out.push(kit.put(kit.make("lang_fix", { what: ":" }), prev.end, ":" + (t.at > prev.end ? "" : " ")));
           }
-          if (inner && inner.v !== "{") {
+          if (inner && inner.v !== "{" && !newLine) {
             out.push(kit.put(kit.make("lang_fix", { what: "," }), prev.end, t.at > prev.end ? "," : ", "));
           }
           if (py && !inner && prev.t === "name" && /^(print|exec)$/.test(prev.v)) { out.push(callFix(prev, k)); }
@@ -1217,7 +1278,7 @@
       // hanging at the end taken out.
       function endedFixes(k) {
         var out = [], prev = lastSolid(k), open = openAt(k);
-        if (py && open.length) { out.push(pyShut(open[open.length - 1])); }
+        if (py && open.length) { out.push(pyShut(open[open.length - 1], k)); }
         if (open.length && open.every(function (o) { return o.v === "{"; })) { out.push(unshut()); }
         else if (open.length) { out.push(shutAll(open, prev)); }
         if (py && prev && prev.t === "op" && prev.v === ":") {
@@ -1229,7 +1290,15 @@
       // Python: a bracket left open at the end, shut where the lines inside it
       // end -- after the last line further in than the line it opens on, or
       // on that line itself if none is: memo = { is memo = {}
-      function pyShut(o) {
+      // Every bracket opened on that line and still open at k is shut there,
+      // the innermost first: print(len(seen is print(len(seen)).
+      function pyShut(o, k) {
+        var open = k === undefined ? [o] : openAt(k), shut = "";
+        for (var j = open.length - 1; j >= 0; j--) {
+          if (open[j].line === o.line) { shut += SHUT[open[j].v]; }
+          else if (shut) { break; }
+        }
+        shut = shut || SHUT[o.v];
         var row = kit.spot(o.at).line, col = kit.lead(row), last = row;
         for (var ln = row + 1; ln <= kit.last(); ln++) {
           if (kit.blank(ln)) { continue; }
@@ -1237,7 +1306,10 @@
           last = ln;
         }
         var text = kit.textOf(last).replace(/\s*#[^"']*$/, "").replace(/\s+$/, "");
-        return kit.put(kit.make("lang_fix", { what: SHUT[o.v] }), kit.startOf(last) + text.length, SHUT[o.v]);
+        var same = shut.split("").every(function (ch) { return ch === shut[0]; });
+        var m = shut.length > 1 && same ? kit.make("lang_fix_many", { what: shut[0], n: shut.length })
+                                        : kit.make("lang_fix", { what: shut });
+        return kit.put(m, kit.startOf(last) + text.length, shut);
       }
       // Every bracket still open, shut at the end, the innermost first: ) and
       // ] after the last thing written, each } on a line of its own --
@@ -2894,7 +2966,15 @@
               if (peek(1).t !== "op" || peek(1).v === "(" || peek(1).v === "[" ||
                   peek(1).v === "-" || peek(1).v === "{") {
                 var save = pos;
-                try { return [pyMatch()]; } catch (e) { pos = save; if (e.said !== "cm_expected") { throw e; } }
+                matchHeadRead = false;
+                try { return [pyMatch()]; } catch (e) {
+                  pos = save;
+                  if (e.said !== "cm_expected" || matchHeadRead) { throw e; }
+                  // read as a name after all; but if that goes wrong on this
+                  // line too, what would have put the match right is offered
+                  // first -- match choice with its : left out
+                  softStop = e;
+                }
               }
               break;
             case "elif": case "else": case "except": case "finally":
@@ -3064,6 +3144,7 @@
         var t = next();
         var subject = exprList();
         expect(":");
+        matchHeadRead = true;            // a match statement, whatever goes wrong in it
         if (peek().t !== "nl") { throw wanted("↵"); }
         next();
         if (peek().t !== "indent") { throw noBlock(peek()); }
@@ -9192,7 +9273,10 @@
     // The files are numbered straight through while they are read, and
     // every line number that comes back -- in a note, or on an error -- is
     // turned back into the file it is in and the line of that file.
-    function translate(src, lang) {
+    // A program in one piece of text or in several files, numbered
+    // straight through: the files, the lines each runs over, and a line
+    // number turned back into the file it is in and the line of that file.
+    function laidOut(src) {
       var files = typeof src === "string" ? [{ name: "", text: src }] : (src || []);
       var spans = [], base = 0;
       files.forEach(function (one, k) {
@@ -9208,26 +9292,58 @@
         }
         return { file: 0, line: line };
       }
+      return { files: files, spans: spans, where: where };
+    }
+    // A stop said of the lines as numbered straight through, said of the
+    // file it is in -- and the lines its fixes would go in at, too.
+    function placedErr(err, where) {
+      if (err.line) {
+        var at = where(err.line);
+        err.file = at.file;
+        err.line = at.line;
+      }
+      (err.fixes || []).forEach(function (fix) {
+        fix.edits.forEach(function (one) {
+          if (one.line) { one.line = where(one.line).line; }
+          if (one.like) { one.like = where(one.like).line; }
+        });
+      });
+      return err;
+    }
+
+    function translate(src, lang) {
+      var laid = laidOut(src);
       knownRecords = Object.create(null);
       try {
-        return translateFiles(files, spans, where, lang);
+        return translateFiles(laid.files, laid.spans, laid.where, lang);
       } catch (err) {
-        if (err.line) {
-          var at = where(err.line);
-          err.file = at.file;
-          err.line = at.line;
-        }
-        // and the lines its fixes would go in at, in that file too
-        (err.fixes || []).forEach(function (fix) {
-          fix.edits.forEach(function (one) {
-            if (one.line) { one.line = where(one.line).line; }
-            if (one.like) { one.like = where(one.like).line; }
-          });
-        });
-        throw err;
+        throw placedErr(err, laid.where);
       } finally {
         knownRecords = Object.create(null);
       }
+    }
+
+    // Only reading the code into trees -- not working out what it does, or
+    // writing the pseudocode: whether it reads, and if not where it stops,
+    // just as translate would say it.  It is what a fix is tried by, over
+    // and over, and it is a small part of the whole.  From file `from` on
+    // (the ones before it read already); null where every one reads.
+    function parsedStop(src, lang, from) {
+      var laid = laidOut(src);
+      for (var k = from || 0; k < laid.files.length; k++) {
+        var one = laid.files[k];
+        if (!String(one.text || "").trim()) { continue; }
+        var parser = null;
+        try {
+          parser = parserFor(lexCode(one.text, lang, laid.spans[k].from - 1), lang);
+          parser.program();
+        } catch (err) {
+          err.reading = true;
+          if (err.at === undefined && parser) { err.at = parser.here(); }
+          return placedErr(err, laid.where);
+        }
+      }
+      return null;
     }
 
     function translateFiles(files, spans, where, lang) {
@@ -14175,7 +14291,7 @@
           if (m.index > at) { out.push({ k: "str", v: f.slice(at, m.index) }); }
           var arg = m[1] === "" ? pos[auto++] : /^\d+$/.test(m[1]) ? pos[parseInt(m[1], 10)] : kws[m[1]];
           var wanted = arg || { k: "str", v: "" };
-          out.push(shown(/!r/.test(m[0]) ? builtinCall("repr", [wanted]) : described(wanted), m[2]));
+          out.push(shown(/!r\b/.test(m[0]) ? builtinCall("repr", [wanted]) : described(wanted), m[2]));
           at = re.lastIndex;
         }
         if (at < f.length) { out.push({ k: "str", v: f.slice(at) }); }
@@ -18851,20 +18967,22 @@
       return lines.join("\n");
     }
 
-    // The fixes a stop came with, tried before one is offered: {file, text,
-    // fix} for the first after which the reading gets further than it did
-    // -- all the way, or stuck later on -- and null if none does.  None, for
-    // print(a) b): "expected ) here" in print(a b) is no help there.  One
-    // that does not get further by itself may be the first of two that do:
-    // the = taken out of int x =, and then the ; it wants.
-    function tryMend(src, lang, err) {
+    // The fixes a stop came with, tried before one is offered -- each put in
+    // and the code read again, only into trees (parsedStop), which is a
+    // small part of reading it all -- and those after which the reading gets
+    // further than it did, best first, as {file, text, fix}: first the ones
+    // after which all of it reads, in the order the stop gave them, then
+    // the rest, furthest first.  Where none gets further by itself, one may
+    // still be the first of two that do: the = taken out of int x =, and
+    // then the ; it wants.  None, for print(a) b): "expected ) here" in
+    // print(a b) is no help there.  `want` is how many are enough.
+    function mendsFor(src, lang, err, want, budget) {
       var files = typeof src === "string" ? [{ name: "", text: src }] : (src || []);
       var k = err && err.fixes && err.fixes.length ? err.file || 0 : -1;
-      if (!files[k]) { return null; }
-      var until = Date.now() + 1500, tried = [];
-      function readOf(list) {
-        try { translate(list, lang); return null; } catch (e) { return e; }
-      }
+      if (!files[k]) { return []; }
+      var until = Date.now() + (budget || 1500), tried = [], whole = [], part = [], seen = {};
+      want = want || 1;
+      function readOf(list) { return parsedStop(list, lang, k); }
       function put(list, fix) {
         var text = mended(list[k].text, fix);
         return text === list[k].text ? null
@@ -18886,6 +19004,12 @@
       // an earlier one
       function reach(res, chain) {
         if (!res || !res.reading) { return Infinity; }
+        // The whole text is gone through for its quotes and its indenting
+        // before any of it is read: a quote put right lets the reading begin,
+        // and where it stops then -- even higher up -- is further on than it
+        // got.  And a fix that leaves a quote open where none was is no fix.
+        if (err.lexing && !res.lexing) { return Infinity; }
+        if (!err.lexing && res.lexing && (res.file || 0) === k) { return -Infinity; }
         var at = res.file || 0;
         if (at !== k) { return at > k ? Infinity : -Infinity; }
         if (res.at === undefined || err.at === undefined) { return -Infinity; }
@@ -18893,33 +19017,141 @@
         for (var c = chain.length - 1; c >= 0; c--) { q = back(q, chain[c].ops); }
         return q;
       }
-      function further(res, chain) { return reach(res, chain) > err.at; }
-      // the first fix after which the whole of it reads; failing that, the
-      // one after which the reading gets furthest
-      var best = null;
-      for (var i = 0; i < err.fixes.length; i++) {
+      // Good: the reading gets past the line after the stop's, or reads to
+      // the end.  A fix that only gets it to the very next line has most
+      // likely put right the wrong line -- a line lined up on its own, when
+      // the one above it was the one out of place.  But going furthest is
+      // no better than going far enough: a , put between two lines of
+      // Python with a bracket left open above them reads on, a statement at
+      // a time, to the end of the file.  So the good ones in the order the
+      // stop gave them, which is how likely each is, and then the rest.
+      var far = Infinity, src0 = String(files[k].text).replace(/\r\n?/g, "\n").replace(/\t/g, "    ");
+      for (var row = 1, nl = 0; row < (err.line || 0) + 2 && nl >= 0; row++) {
+        nl = src0.indexOf("\n", nl);
+        if (nl >= 0) { nl++; }
+      }
+      if (nl >= 0) { far = nl; }
+      for (var i = 0; i < err.fixes.length && whole.length < want; i++) {
         var list = put(files, err.fixes[i]);
-        if (!list) { continue; }
+        if (!list || seen[list[k].text]) { continue; }
+        seen[list[k].text] = true;
         var res = readOf(list), got = reach(res, [err.fixes[i]]);
-        if (got === Infinity) { return { file: k, text: list[k].text, fix: err.fixes[i] }; }
-        if (got > err.at && (!best || got > best.got)) { best = { got: got, text: list[k].text, fix: err.fixes[i] }; }
-        tried.push({ list: list, res: res, fix: err.fixes[i] });
+        var one = { file: k, text: list[k].text, fix: err.fixes[i] };
+        if (got === Infinity || got >= far) { whole.push(one); }
+        else if (got > err.at) { part.push(one); }
+        else { tried.push({ list: list, res: res, one: one }); }
         if (Date.now() > until) { break; }
       }
-      if (best) { return { file: k, text: best.text, fix: best.fix }; }
-      if (Date.now() > until) { return null; }
-      for (var t = 0; t < tried.length; t++) {
+      var out = whole.concat(part);
+      if (out.length >= want || Date.now() > until) { return out; }
+      for (var t = 0; t < tried.length && out.length < want; t++) {
         var r = tried[t].res;
         if (!r || !r.reading || (r.file || 0) !== k || !r.fixes) { continue; }
         for (var j = 0; j < r.fixes.length; j++) {
           var list2 = put(tried[t].list, r.fixes[j]);
-          if (list2 && further(readOf(list2), [tried[t].fix, r.fixes[j]])) {
-            return { file: k, text: tried[t].list[k].text, fix: tried[t].fix };
+          if (list2 && reach(readOf(list2), [tried[t].one.fix, r.fixes[j]]) > err.at) {
+            out.push(tried[t].one);
+            break;
           }
-          if (Date.now() > until) { return null; }
+          if (Date.now() > until) { return out; }
         }
       }
-      return null;
+      return out;
+    }
+    function tryMend(src, lang, err) { return mendsFor(src, lang, err, 1)[0] || null; }
+
+    // Everything that can be put right, one fix after another: read, put
+    // right what stops the reading, read again -- until it reads, or stops
+    // where nothing helps.  Where the fix taken leads only to a stop nothing
+    // puts right, it is taken back and the next best one tried in its place,
+    // a few dozen times at most; and where nothing does, what is handed back
+    // is the code as far as it was put right.  A step at a time (step() is
+    // true when it is over), so that a worker can say how far through the
+    // code it has got between steps (reach(), 0 to 1), and the page's own
+    // thread, where there is no worker, can get on with things between them.
+    function mender(src, lang) {
+      var files = (typeof src === "string" ? [{ name: "", text: src }] : (src || []))
+        .map(function (one) { return { name: one.name || "", text: String(one.text || "") }; });
+      var rows = files.map(function (one) { return one.text.split("\n").length; });
+      var total = rows.reduce(function (a, b) { return a + b; }, 0) || 1;
+      var steps = [], backs = 0, stop = null, over = false, best = null, been = {}, count = 0;
+      function key(list) { return list.map(function (one) { return one.text; }).join("\u0000"); }
+      function put(list, way) {
+        return list.map(function (one, j) { return j === way.file ? { name: one.name, text: way.text } : one; });
+      }
+      // how far down the code a stop is, counted in lines
+      function lineOf(err) {
+        var before = 0;
+        for (var j = 0; j < (err.file || 0); j++) { before += rows[j]; }
+        return before + (err.line || 0);
+      }
+      function next() {
+        while (steps.length && backs < 40) {
+          var last = steps[steps.length - 1];
+          while (last.others.length) {
+            var way = last.others.shift(), tryNext = put(last.files, way);
+            if (!been[key(tryNext)]) { backs++; last.way = way; files = tryNext; return true; }
+          }
+          steps.pop();
+        }
+        return false;
+      }
+      // What was put right, in order: each fix, and what stopped the reading
+      // that it put right -- said the way the reading said it.
+      function done() {
+        return steps.map(function (st) {
+          return { file: st.way.file, fix: st.way.fix,
+                   stop: { line: st.stop.line || 0, file: st.stop.file || 0,
+                           message: st.stop.message, said: st.stop.said || "" } };
+        });
+      }
+      return {
+        step: function () {
+          if (over) { return true; }
+          if (++count > 3000) { over = true; return true; }
+          been[key(files)] = true;
+          stop = parsedStop(files, lang);
+          if (!stop) { over = true; return true; }
+          var here = lineOf(stop);
+          if (!best || here > best.here || (here === best.here && steps.length < best.n)) {
+            best = { here: here, files: files, n: steps.length, stop: stop, fixes: done() };
+          }
+          var ways = mendsFor(files, lang, stop, 3).filter(function (way) {
+            return !been[key(put(files, way))];
+          });
+          if (ways.length) {
+            steps.push({ files: files, others: ways.slice(1), way: ways[0], stop: stop });
+            files = put(files, ways[0]);
+            return false;
+          }
+          // nothing puts this one right: back to the last fix that had
+          // another way, and that way instead
+          if (next()) { return false; }
+          over = true;
+          return true;
+        },
+        reach: function () {
+          if (over && !stop) { return 1; }
+          return best ? Math.min(0.99, best.here / total) : 0;
+        },
+        // {files, n, err, fixes}: the code as it would be, how many fixes
+        // went in, what still stops it (null if nothing), and what each fix
+        // was (done, above)
+        result: function () {
+          if (!stop) {
+            var err = null;
+            try { translate(files, lang); } catch (e) { err = e; }
+            return { files: files, n: steps.length, err: err, fixes: done() };
+          }
+          var got = best || { files: files, n: steps.length, stop: stop, fixes: done() };
+          return { files: got.files, n: got.n, err: got.stop, fixes: got.fixes };
+        }
+      };
+    }
+    function mendAll(src, lang, most) {
+      var m = mender(src, lang), until = Date.now() + (most || 6000);
+      while (!m.step() && Date.now() < until) { /* on to the next */ }
+      return m.result();
     }
 
     // The names the languages' own libraries are called by, for telling what
@@ -18996,31 +19228,16 @@
       return null;
     }
 
-    // Everything that can be put right, one after another: read, put right
-    // what stops the reading, read again -- until it reads, or stops where
-    // nothing helps, or has taken long enough.  {files, n, err}: the files as
-    // they would be, how many fixes went in, and what still stops it.
-    function mendAll(src, lang) {
-      var files = (typeof src === "string" ? [{ name: "", text: src }] : (src || []))
-        .map(function (one) { return { name: one.name || "", text: String(one.text || "") }; });
-      var n = 0, err = null, until = Date.now() + 6000;
-      for (;;) {
-        try { translate(files, lang); err = null; break; } catch (e) { err = e; }
-        if (n >= 200 || Date.now() > until) { break; }
-        var got = tryMend(files, lang, err);
-        if (!got) { break; }
-        files[got.file] = { name: files[got.file].name, text: got.text };
-        n++;
-      }
-      return { files: files, n: n, err: err };
-    }
-
     translate.detect = detect;
     translate.dialects = DIALECTS;
     translate.tryMend = tryMend;
     translate.mendAll = mendAll;
+    translate.mender = mender;
+    translate.mendsFor = mendsFor;
+    translate.stopOf = parsedStop;
     translate.tryRename = tryRename;
     translate.mended = mended;
 
     return translate;
-  })();
+  }
+  var codeToPseudo = codeReader();
