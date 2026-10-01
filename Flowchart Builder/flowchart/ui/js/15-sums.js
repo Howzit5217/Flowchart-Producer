@@ -151,6 +151,16 @@
     function shutAtEnd(text, rest) {
       return { how: "close", bit: String(src), text: text, rest: !!rest };
     }
+    // A piece where it makes no sense, taken out; or one put in in front of
+    // a piece -- what puts right a stray bracket, or two values with nothing
+    // between them
+    function cutOut(tok) {
+      return { how: "cut", bit: String(src), from: tok.from, to: tok.to,
+               what: String(src).slice(tok.from, tok.to) };
+    }
+    function putAfter(tok, text) {
+      return { how: "put", bit: String(src), from: tok.to, text: text };
+    }
     function bracketsOpen() {
       var deep = 0;
       ts.forEach(function (t) {
@@ -209,14 +219,14 @@
         var op = take();
         if (op.v === "[") {
           var pick = await expr(0);
-          if (!isOp("]")) { throw wrong(TXT.r_open_square, op); }
+          if (!isOp("]")) { throw wrong(TXT.r_open_square, op, "", shutAtEnd("]", !!peek())); }
           take();
           if (dry) { continue; }
           try { v = itemOf(v, pick); } catch (bad) { throw spotIn(bad, src, op); }
           continue;
         }
         var nm = take();
-        if (!nm || nm.t !== "name") { throw wrong(say("r_odd_here", { bit: "." }), op); }
+        if (!nm || nm.t !== "name") { throw wrong(say("r_odd_here", { bit: "." }), op, "", cutOut(op)); }
         if (isOp("(")) {
           var opened = take();
           var got = await handed(opened, v);
@@ -235,7 +245,12 @@
     }
     async function atom() {
       var tok = take();
-      if (!tok) { throw wrong(say("r_half", { bit: src }), ended()); }
+      if (!tok) {
+        // an operator with nothing after it: taken off
+        var hanging = ts[ts.length - 1];
+        throw wrong(say("r_half", { bit: src }), ended(), "",
+                    hanging && hanging.t === "op" ? cutOut(hanging) : null);
+      }
       if (tok.t === "str" && tok.open) {
         throw wrong(TXT.r_open_quote, tok, "", shutAtEnd(String(src).charAt(tok.from)));
       }
@@ -270,7 +285,7 @@
           if (!isOp(",")) { break; }
           take();
         }
-        if (!isOp("]")) { throw wrong(TXT.r_open_square, tok); }
+        if (!isOp("]")) { throw wrong(TXT.r_open_square, tok, "", shutAtEnd("]", !!peek())); }
         take();
         return items;
       }
@@ -287,7 +302,7 @@
           if (!isOp(",")) { break; }
           take();
         }
-        if (!isOp("}")) { throw wrong(say("r_odd_here", { bit: "{" }), tok); }
+        if (!isOp("}")) { throw wrong(say("r_odd_here", { bit: "{" }), tok, "", shutAtEnd("}", !!peek())); }
         take();
         return keyed || !loose.length ? made : loose;
       }
@@ -339,8 +354,8 @@
                     meant ? say("r_mean", { name: meant }) : "",
                     meant ? { how: "change", word: name, instead: meant } : null);
       }
-      if (tok.v === ")") { throw wrong(TXT.r_shut_bracket, tok); }
-      throw wrong(say("r_odd_here", { bit: tok.v }), tok);
+      if (tok.v === ")") { throw wrong(TXT.r_shut_bracket, tok, "", cutOut(tok)); }
+      throw wrong(say("r_odd_here", { bit: tok.v }), tok, "", cutOut(tok));
     }
     async function expr(least) {
       var left = await primary();
@@ -377,8 +392,13 @@
       // something nobody can use: a stray bracket, a second equals sign, a
       // word with no operator in front of it.  It used to be dropped
       // without a word, so "Set n = 5 6" quietly meant five.
+      // Words and then a value with nothing between them -- "Total:" total --
+      // want the , that lists them; anything else left over is taken out.
       if (peek()) {
-        throw wrong(say("r_left_over", { bit: String(peek().v) }), peek());
+        var over = peek(), last = ts[at - 1];
+        var listed = last && last.t === "str" && (over.t === "name" || over.t === "num" || over.t === "str");
+        throw wrong(say("r_left_over", { bit: String(over.v) }), over, "",
+                    listed ? putAfter(last, ",") : cutOut(over));
       }
       return got;
     } catch (bad) {

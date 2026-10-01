@@ -166,6 +166,24 @@
     // belongs at the end of the line it was left open on -- as long as
     // that line is exactly one close short, and does not end in a comma or
     // an operator, which would say it was meant to go on.
+    // A piece taken out of the piece of the line the reading was working
+    // out (`bit`), or one put into it -- a stray bracket, a , between two
+    // things listed.  Only where that piece is on the line as it is now.
+    if (fix.how === "cut" || fix.how === "put") {
+      if (!here || !fix.bit || fix.from === undefined) { return null; }
+      var whole = String(fix.bit), found = here.text.lastIndexOf(whole);
+      if (found < 0) { return null; }
+      var from = here.from + found + fix.from;
+      if (fix.how === "put") {
+        return fix.text ? { from: from, to: from, text: fix.text, back: at } : null;
+      }
+      var to = here.from + found + fix.to;
+      if (to <= from) { return null; }
+      // and the space it leaves doubled
+      if (text[from - 1] === " " && (text[to] === " " || to === here.to)) { from--; }
+      return { from: from, to: to, text: "", back: at };
+    }
+
     if (fix.how === "close") {
       if (!here || !fix.bit || !fix.text) { return null; }
       var bit = String(fix.bit).replace(/\s+$/, "");
@@ -241,12 +259,22 @@
     if (fix.how === "close" && fix.text) {
       return say("w_mend_close", { text: fix.text });
     }
+    if (fix.how === "cut" && fix.what) {
+      return say("w_mend_cut", { text: fix.what });
+    }
+    if (fix.how === "put" && fix.text) {
+      return say("w_mend_put", { text: fix.text.trim() });
+    }
     return "";
   }
 
   // The button, where there is anything to press it for -- and nothing at
   // all where there is not, which is most of the time.
   function mendable(fix, line) {
+    // In Code the name is changed in the code the pseudocode was read from
+    // (codeMend, 32-code-side.js) -- not in the pseudocode, which would be
+    // made again from the code as it was.
+    if (byLang && fix && fix.how === "change") { return codeMend(fix); }
     if (mendsOff() || !el("#code") || !fixSays(fix, line) || !planRight(fix, line)) {
       return null;
     }
@@ -284,7 +312,7 @@
     var button = mendable(fix, line);
     if (!button) { return null; }
     (into || row).appendChild(button);
-    row.ondblclick = function () { mendNow(fix, line); };
+    row.ondblclick = function () { if (byLang) { button.click(); } else { mendNow(fix, line); } };
     row.title = [row.title, TXT.w_mend_tip].filter(Boolean).join(" · ");
     return button;
   }

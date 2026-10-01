@@ -2291,10 +2291,11 @@ def _():
         "" if not wrong else "\n       " + "\n       ".join(wrong[:6]))
 
 
-# Code with a piece left out, and what the Code tab's Fix button puts in:
-# the ; or bracket where the reading stopped, the } a block never got where
-# its indenting says it ends -- or no button at all, where what is wrong is
-# not a piece left out (print(a b) is "expected ) here" too).
+# Code with something wrong, and what the Code tab's Fix button makes of it:
+# a ; or bracket put in where the reading stopped, the } a block never got
+# where its indenting says it ends, one too many taken out, a quote shut, a
+# line lined up, a word written wrong put right -- or no button at all,
+# where nothing would do (`def` and no more).
 MENDED = [
     ("a ; after a declaration", "java",
      "class M {\n    static void main(String[] a) {\n        int t = 0\n        System.out.println(t);\n    }\n}",
@@ -2319,26 +2320,56 @@ MENDED = [
     ("Go's { where the line ended", "go",
      "package main\nimport \"fmt\"\nfunc main() {\n    x := 3\n    if x > 2\n        fmt.Println(x)\n    }\n}",
      "package main\nimport \"fmt\"\nfunc main() {\n    x := 3\n    if x > 2 {\n        fmt.Println(x)\n    }\n}"),
-    ("a word too many has no fix", "java",
-     "class M {\n    static void main(String[] a) {\n        System.out.println(a b);\n    }\n}",
-     None),
+    ("a ) with nothing to close taken out", "python",
+     "x = 3\nprint(x))", "x = 3\nprint(x)"),
+    ("a quote never closed, shut before the ,", "python",
+     "n = 2\nprint(\"Total: , n)", "n = 2\nprint(\"Total: \", n)"),
+    ("a line lined up with the ones round it", "python",
+     "for i in range(3):\n    x = i\n  print(x)", "for i in range(3):\n    x = i\nprint(x)"),
+    ("a word written wrong", "python",
+     "def half(x):\n    retrun x / 2\nprint(half(4))", "def half(x):\n    return x / 2\nprint(half(4))"),
+    ("a ) put in where the test ends", "javascript",
+     "let x = 5;\nif (x > 2 {\n  console.log(x);\n}\n", "let x = 5;\nif (x > 2) {\n  console.log(x);\n}\n"),
+    ("nothing that would do", "python", "def", None),
+]
+# Several things wrong at once, and Fix all: every one put right in turn.
+MENDED_ALL = [
+    ("a : , the indenting and a quote", "python",
+     "total = 0\nfor i in range(5)\n    total += i\n  print(\"Total: , total)",
+     "total = 0\nfor i in range(5):\n    total += i\nprint(\"Total: \", total)"),
+    ("a ; and a }", "java",
+     "class M {\n    static void main(String[] a) {\n        int t = 0\n        for (int i = 0; i < 3; i++) {\n"
+     "            t += i;\n        System.out.println(t);\n    }\n}",
+     "class M {\n    static void main(String[] a) {\n        int t = 0;\n        for (int i = 0; i < 3; i++) {\n"
+     "            t += i;\n        }\n        System.out.println(t);\n    }\n}"),
+]
+# A call the reading does not know, said as one that can't be run -- and the
+# name written wrong it most likely is, changed.
+RENAMED = [
+    ("pritn", "python", "name = \"Ada\"\npritn(\"Hello\", name)\n", "name = \"Ada\"\nprint(\"Hello\", name)\n"),
+    ("Sytem.out", "java",
+     "public class Main {\n    public static void main(String[] a) {\n        Sytem.out.println(\"hi\");\n    }\n}\n",
+     "public class Main {\n    public static void main(String[] a) {\n        System.out.println(\"hi\");\n    }\n}\n"),
+    ("the program's own greet", "python",
+     "def greet(n):\n    print(\"hi\", n)\n\ngreeet(\"Ada\")\n", "def greet(n):\n    print(\"hi\", n)\n\ngreet(\"Ada\")\n"),
 ]
 
 
-@check("code with a piece left out is put right by its Fix button")
+@check("code with something wrong is put right by its Fix button")
 def _():
     """Each broken program read: it fails, a fix is offered where one should
     be and not where one should not, and the fixed code is exactly what was
-    wanted -- and reads."""
+    wanted -- and reads.  Fix all puts several right at once, and a call
+    written wrong is renamed."""
     if not node_there():
         return None, "node is not installed -- skipped"
     folder = tempfile.mkdtemp(prefix="_out-mend-", dir=HERE)
     wrong = []
     try:
-        back = read_code_in([{"lang": lang, "code": code} for name, lang, code, want in MENDED], folder)
+        cases = MENDED + MENDED_ALL + RENAMED
+        back = read_code_in([{"lang": lang, "code": code, "mend": True} for name, lang, code, want in cases], folder)
         fixed = [(name, lang, got.get("mended")) for (name, lang, code, want), got in zip(MENDED, back)]
-        again = read_code_in([{"lang": lang, "code": text} for name, lang, text in fixed if text], folder)
-        again = iter(again)
+        again = iter(read_code_in([{"lang": lang, "code": text} for name, lang, text in fixed if text], folder))
         for (name, lang, code, want), got in zip(MENDED, back):
             if "error" not in got:
                 wrong.append("%s (%s): read without a fault" % (name, lang))
@@ -2350,12 +2381,20 @@ def _():
                 after = next(again)
                 if "error" in after:
                     wrong.append("%s (%s): fixed, still %s" % (name, lang, after["error"]))
+        for (name, lang, code, want), got in zip(MENDED_ALL, back[len(MENDED):]):
+            all_of = got.get("all") or {}
+            if all_of.get("text") != want or not all_of.get("reads"):
+                wrong.append("%s (%s), Fix all:\n      wanted %r\n      got    %r" % (name, lang, want, all_of))
+        for (name, lang, code, want), got in zip(RENAMED, back[len(MENDED) + len(MENDED_ALL):]):
+            if (got.get("renamed") or [None])[0] != want:
+                wrong.append("%s (%s), renamed:\n      wanted %r\n      got    %r"
+                             % (name, lang, want, got.get("renamed") or got.get("error")))
     except RuntimeError as e:
         return False, str(e)
     finally:
         shutil.rmtree(folder, ignore_errors=True)
-    return not wrong, "%d programs, %d offered a fix%s" % (
-        len(MENDED), len([m for m in MENDED if m[3]]),
+    return not wrong, "%d programs, %d offered a fix, %d put right all at once, %d renamed%s" % (
+        len(MENDED), len([m for m in MENDED if m[3]]), len(MENDED_ALL), len(RENAMED),
         "" if not wrong else "\n       " + "\n       ".join(wrong[:6]))
 
 

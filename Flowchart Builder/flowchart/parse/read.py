@@ -440,7 +440,17 @@ def parse_program(text, story=True):
         m = R_UNTIL.match(s)
         if m:
             if not close(is_post, cond=unwrap(m.group(1)), until=True):
-                trouble("w_until_alone", at_line, s)
+                # The lines set in further just above it are the loop it ends:
+                # its Repeat goes in over the first of them.  With none, the
+                # Until is the thing out of place, and comes out.
+                first_inside = idx
+                while first_inside > 0 and lines[first_inside - 1][0] > indent:
+                    first_inside -= 1
+                if first_inside < idx:
+                    fix = {"how": "insert", "text": "Repeat", "at": lines[first_inside][2], "like": at_line}
+                else:
+                    fix = {"how": "drop", "at": at_line}
+                trouble("w_until_alone", at_line, s, fix)
                 add(simple_node(s))
             continue
         if R_ENDANY.match(s):                      # some "End Xyz" we don't know

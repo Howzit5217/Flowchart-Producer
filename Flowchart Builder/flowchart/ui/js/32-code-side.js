@@ -299,47 +299,208 @@
   }
 
   // Why the code could not be read, on which line -- chosen in the box --
-  // and, where the reading found a piece left out (a ;, a closing bracket,
-  // the } a block never got) and putting it in gets the reading further
-  // (codeToPseudo.tryMend), a button that puts it in.  Typed in, so Ctrl+Z
-  // takes it back out, and read again the way it was just read: `again`.
+  // and, where the reading knows what would put it right (a ; or a bracket
+  // left out, one too many, a quote never closed, a line not lined up, a
+  // word written wrong), a button that does it.  The fixes the reading came
+  // with are tried first (codeToPseudo.tryMend), and the one offered is one
+  // after which the code reads further.  Typed in, so Ctrl+Z takes it back
+  // out, and read again the way it was just read: `again`.  Where putting
+  // that right still leaves more that can be, Fix all does the lot.
   function langTrouble(err, again) {
     var text = err.line ? say("lang_line", { n: err.line, said: err.message }) : err.message;
     var parts = [err.line ? inFile(err.file, text) : text], got = null;
-    try { got = err.fix ? codeToPseudo.tryMend(langAll(), langNow(), err) : null; }
+    var files = langAll(), lang = langNow();
+    try { got = err.fixes && err.fixes.length ? codeToPseudo.tryMend(files, lang, err) : null; }
     catch (e) { got = null; }
-    if (got) { parts.push(langMend(err, got, again)); }
+    if (got) {
+      parts.push(langMend(err, got, again));
+      // and more after it?
+      var next = null;
+      try {
+        codeToPseudo(files.map(function (one, k) { return k === got.file ? { name: one.name, text: got.text } : one; }), lang);
+      } catch (e2) { next = e2; }
+      if (next && next.fixes && next.fixes.length) { parts.push(langMendAll(again)); }
+    }
     langSays("bad", parts);
     if (err.line) { langPickLine(err.line, err.file || 0); }
   }
 
+  // What a fix's button says: the fix's own words, with the line it is on
+  // where that is not the line the problem was said on.
+  function fixLabel(fix, line) {
+    var at = (fix.edits[0] || {}).line, key = fix.says;
+    var fill = {};
+    Object.keys(fix.fill || {}).forEach(function (name) { fill[name] = fix.fill[name]; });
+    fill.line = at;
+    if (key !== "lang_fix_many" && key !== "lang_fix_indent" && at && at !== line && TXT[key + "_at"]) { key += "_at"; }
+    return say(key, fill);
+  }
+
+  // A file of the program made to say `now`: only the part that changes
+  // typed in, so that Ctrl+Z takes it back out, and that part chosen so it
+  // can be seen -- without the space around it.
+  function langTypeIn(file, now) {
+    if (!langFiles[file]) { return; }
+    if (file !== langAt) { showFile(file); }
+    var box = langBox(), was = box.value;
+    if (was === now) { return; }
+    var a = 0, b = 0;
+    while (a < was.length && a < now.length && was[a] === now[a]) { a++; }
+    while (b < was.length - a && b < now.length - a &&
+           was[was.length - 1 - b] === now[now.length - 1 - b]) { b++; }
+    var put = now.slice(a, now.length - b);
+    typeOver(box, a, was.length - b, put);
+    var lead = /^\s*/.exec(put)[0].length, tail = /\s*$/.exec(put)[0].length;
+    box.setSelectionRange(a + lead, Math.max(a + lead, a + put.length - tail));
+  }
+
   function langMend(err, got, again) {
-    var edits = err.fix.edits, what = err.fix.what;
-    var first = edits[0].line;
     var button = document.createElement("button");
     button.type = "button";
     button.className = "mend";
-    button.textContent = edits.length > 1 ? say("lang_fix_many", { n: edits.length, what: what })
-      : first && first !== err.line ? say("lang_fix_at", { what: what, line: first })
-      : say("lang_fix", { what: what });
+    button.textContent = fixLabel(got.fix, err.line);
     button.title = TXT.lang_fix_tip || "";
     var from = (langAll()[got.file] || {}).text;
     button.onclick = function (ev) {
       ev.stopPropagation();
       if (!langFiles[got.file]) { return; }
-      if (got.file !== langAt) { showFile(got.file); }
-      var box = langBox(), was = box.value, now = got.text;
-      if (was !== from) { again(); return; }   // changed since: read it as it is
-      // only the part that changes is typed in
-      var a = 0, b = 0;
-      while (a < was.length && a < now.length && was[a] === now[a]) { a++; }
-      while (b < was.length - a && b < now.length - a &&
-             was[was.length - 1 - b] === now[now.length - 1 - b]) { b++; }
-      var put = now.slice(a, now.length - b);
-      typeOver(box, a, was.length - b, put);
-      // what went in, chosen, so it can be seen -- without the space around it
-      var lead = /^\s*/.exec(put)[0].length, tail = /\s*$/.exec(put)[0].length;
-      box.setSelectionRange(a + lead, Math.max(a + lead, a + put.length - tail));
+      if (langAll()[got.file].text !== from) { again(); return; }   // changed since: read it as it is
+      langTypeIn(got.file, got.text);
+      again();
+    };
+    return button;
+  }
+
+  // What was read but can't be run, said -- and where that is a name written
+  // wrong (pritn, Sytem.out), the button that puts it right
+  // (codeToPseudo.tryRename); and where there are several, Fix all.
+  function noteParts(notes, again) {
+    var parts = [], files = langAll(), lang = langNow(), fixes = [], until = Date.now() + 1500;
+    notes.forEach(function (n) {
+      parts.push(inFile(n.file, n.text));
+      if (!n.call || Date.now() > until) { return; }
+      var got = null;
+      try { got = codeToPseudo.tryRename(files, lang, n); } catch (e) { got = null; }
+      if (got) {
+        parts.push(langMend({ line: n.line }, got, again));
+        fixes.push(got);
+      }
+    });
+    if (fixes.length > 1) {
+      var every = document.createElement("button");
+      every.type = "button";
+      every.className = "mend mend-all";
+      every.textContent = TXT.lang_fix_all || "";
+      every.title = TXT.lang_fix_all_tip || "";
+      every.onclick = function (ev) {
+        ev.stopPropagation();
+        var now = langAll(), shown = langAt;
+        fixes.forEach(function (got) {
+          now[got.file].text = codeToPseudo.mended(now[got.file].text, got.fix);
+        });
+        now.forEach(function (one, k) {
+          if (langFiles[k] && one.text !== langAll()[k].text) { langTypeIn(k, one.text); }
+        });
+        if (langAt !== shown && langFiles[shown]) { showFile(shown); }
+        again();
+      };
+      parts.push(every);
+    }
+    return parts;
+  }
+
+  // A name swapped for another in code -- whole words only, and outside its
+  // quotes and comments, so the words a program prints stay as they are.
+  // (A backquote and what opens a block comment are spelt out: written
+  // plainly, the website's page could not tell them from the real thing,
+  // and would keep every comment in this part.)
+  var BACKQUOTE = String.fromCharCode(96), NOTE_OPENS = "/" + "*";
+  function swapCodeWord(text, word, instead, lang) {
+    var out = "", i = 0, n = text.length, hash = lang === "python";
+    while (i < n) {
+      var c = text[i], two = text.substr(i, 2);
+      if (c === '"' || c === "'" || c === BACKQUOTE) {
+        var j = i + 1;
+        while (j < n && text[j] !== c && text[j] !== "\n") { j += text[j] === "\\" ? 2 : 1; }
+        out += text.slice(i, j + 1);
+        i = j + 1;
+      } else if ((hash && c === "#") || two === "//") {
+        var eol = text.indexOf("\n", i);
+        if (eol < 0) { eol = n; }
+        out += text.slice(i, eol);
+        i = eol;
+      } else if (two === NOTE_OPENS) {
+        var shut = text.indexOf("*/", i + 2);
+        shut = shut < 0 ? n : shut + 2;
+        out += text.slice(i, shut);
+        i = shut;
+      } else if (/[A-Za-z_]/.test(c) && (i === 0 || !/\w/.test(text[i - 1]))) {
+        var w = /^\w+/.exec(text.slice(i, i + 256))[0];
+        out += w === word ? instead : w;
+        i += w.length;
+      } else {
+        out += c;
+        i++;
+      }
+    }
+    return out;
+  }
+
+  // A run's "did you mean total?", in Code: the name changed in the code
+  // the pseudocode was read from, every use of it -- where the code then
+  // still reads, and the pseudocode made from it no longer has the name.
+  function codeMend(fix) {
+    if (!langBox() || !fix.word || !fix.instead || !langHasCode()) { return null; }
+    var lang = langNow(), changed = false;
+    var now = langAll().map(function (one) {
+      var text = swapCodeWord(one.text, fix.word, fix.instead, lang);
+      if (text !== one.text) { changed = true; }
+      return { name: one.name, text: text };
+    });
+    if (!changed) { return null; }
+    try {
+      var said = codeToPseudo(now, lang);
+      var plain = said.text.replace(/"[^"\n]*"/g, "");
+      if (new RegExp("\\b" + fix.word.replace(/[^\w]/g, "") + "\\b").test(plain)) { return null; }
+    } catch (e) { return null; }
+    var button = document.createElement("button");
+    button.className = "mend";
+    button.type = "button";
+    button.textContent = say("w_mend_change", { word: fix.word, instead: fix.instead });
+    button.title = TXT.lang_fix_tip || "";
+    button.onclick = function (ev) {
+      ev.stopPropagation();              // not the "show me the line" underneath
+      var shown = langAt;
+      now.forEach(function (one, k) {
+        if (langFiles[k] && one.text !== langAll()[k].text) { langTypeIn(k, one.text); }
+      });
+      if (langAt !== shown && langFiles[shown]) { showFile(shown); }
+      tapeFull(false);
+      langAsked = true;
+      el("#build").click();
+    };
+    return button;
+  }
+
+  // Everything the reading can put right, one after another, each file
+  // typed in once -- and so taken back out with a Ctrl+Z a file.
+  function langMendAll(again) {
+    var button = document.createElement("button");
+    button.type = "button";
+    button.className = "mend mend-all";
+    button.textContent = TXT.lang_fix_all || "";
+    button.title = TXT.lang_fix_all_tip || "";
+    button.onclick = function (ev) {
+      ev.stopPropagation();
+      var all;
+      try { all = codeToPseudo.mendAll(langAll(), langNow()); } catch (e) { all = null; }
+      if (all) {
+        var shown = langAt;
+        all.files.forEach(function (one, k) {
+          if (langFiles[k] && one.text !== langAll()[k].text) { langTypeIn(k, one.text); }
+        });
+        if (langAt !== shown && langFiles[shown] && !all.err) { showFile(shown); }
+      }
       again();
     };
     return button;
@@ -396,7 +557,10 @@
       showStarts();
       countLines();
     }
-    langSays("warn", said.notes.map(function (n) { return inFile(n.file, n.text); }));
+    langSays("warn", noteParts(said.notes, function () {
+      langAsked = true;
+      el("#build").click();
+    }));
     return true;
   }
 
@@ -784,8 +948,8 @@
     var said;
     try { said = codeToPseudo(langAll(), langNow()); }
     catch (err) { langTrouble(err, langTest); return; }
-    var notes = said.notes.map(function (n) { return inFile(n.file, n.text); });
-    langSays(notes.length ? "warn" : "good", notes.length ? notes : [TXT.checked_good]);
+    langSays(said.notes.length ? "warn" : "good",
+             said.notes.length ? noteParts(said.notes, langTest) : [TXT.checked_good]);
   }
 
   if (el("#lang-over")) {

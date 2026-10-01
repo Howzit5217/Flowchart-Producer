@@ -102,6 +102,165 @@
       return err;
     }
 
+    // ------------------------------------------- what would put it right --
+    // The words the languages keep for themselves, and the functions every
+    // program calls: what a word written wrong was most likely meant to be
+    // (loneWord), and names that are not a function run into what it is
+    // handed (lostOpener).
+    var KEY_WORDS = {};
+    ("and as assert async auto await bool boolean break byte case catch char class const continue " +
+     "def default defer del do double elif else enum except extends false False final finally float " +
+     "fn for foreach from fun func function global go if impl implements import in int interface is " +
+     "lambda let long loop match mod mut namespace new nil None nonlocal not null or override package " +
+     "pass private protected pub public raise return self short signed static string String struct " +
+     "super switch this throw throws true True try type typeof unsigned use using val var void when " +
+     "where while with yield").split(" ").forEach(function (w) { KEY_WORDS[w] = true; });
+    var CALLED_WORDS = {};
+    ("print println printf input len range str int float abs max min sum sorted round append super " +
+     "format readLine scanf puts").split(" ").forEach(function (w) { CALLED_WORDS[w] = true; });
+    // How many letters apart two words are -- one put in, taken out, changed,
+    // or two swapped round -- up to `most`, and most + 1 for any further.
+    function wordGap(a, b, most) {
+      if (Math.abs(a.length - b.length) > most) { return most + 1; }
+      var rows = [], i, j;
+      for (i = 0; i <= a.length; i++) { rows.push([i]); }
+      for (j = 1; j <= b.length; j++) { rows[0][j] = j; }
+      for (i = 1; i <= a.length; i++) {
+        var low = Infinity;
+        for (j = 1; j <= b.length; j++) {
+          var d = Math.min(rows[i - 1][j] + 1, rows[i][j - 1] + 1,
+                           rows[i - 1][j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
+          if (i > 1 && j > 1 && a[i - 1] === b[j - 2] && a[i - 2] === b[j - 1]) { d = Math.min(d, rows[i - 2][j - 2] + 1); }
+          rows[i][j] = d;
+          low = Math.min(low, d);
+        }
+        if (low > most) { return most + 1; }
+      }
+      return rows[a.length][b.length];
+    }
+
+    // Every way the reading can stop comes with the fixes that might put it
+    // right, likeliest first (err.fixes): tryMend, further down, tries each
+    // and offers the first after which the reading gets further.  A fix is
+    // what its button says (`says`, a word, and `fill`) and its edits, each
+    // kept twice: as a line and column for the box (`edits`), and as an
+    // offset into the text that was read (`ops`), for telling where in the
+    // code as it was a reading of the code as it would be got stuck.
+    // `src` is that text -- tabs as the four spaces they are read as -- and
+    // `base` how many lines of other files come before it.
+    function fixKit(src, base) {
+      var starts = null;
+      function lineStarts() {
+        if (!starts) {
+          starts = [0];
+          for (var k = src.indexOf("\n"); k >= 0; k = src.indexOf("\n", k + 1)) { starts.push(k + 1); }
+        }
+        return starts;
+      }
+      // an offset as a line, numbered along with the files before, and a column
+      function spot(off) {
+        var all = lineStarts(), lo = 0, hi = all.length - 1;
+        while (lo < hi) { var mid = (lo + hi + 1) >> 1; if (all[mid] <= off) { lo = mid; } else { hi = mid - 1; } }
+        return { line: lo + 1 + (base || 0), col: off - all[lo] };
+      }
+      function startOf(line) {
+        var all = lineStarts(), k = line - 1 - (base || 0);
+        return k < 0 ? 0 : k >= all.length ? src.length : all[k];
+      }
+      function textOf(line) {
+        var from = startOf(line), to = src.indexOf("\n", from);
+        return src.slice(from, to < 0 ? src.length : to);
+      }
+      function lead(line) { return /^ */.exec(textOf(line))[0].length; }
+      function blank(line) { return !textOf(line).trim(); }
+      function lines() { return lineStarts().length; }
+      return {
+        spot: spot, startOf: startOf, textOf: textOf, lead: lead, blank: blank,
+        last: function () { return lines() + (base || 0); },
+        make: function (says, fill) { return { says: says, fill: fill || {}, edits: [], ops: [] }; },
+        // `text` put in at an offset
+        put: function (m, off, text) {
+          var p = spot(off);
+          m.edits.push({ line: p.line, col: p.col, text: text });
+          m.ops.push({ at: off, cut: 0, ins: text.length });
+          return m;
+        },
+        // what is between two offsets on one line, taken out
+        cut: function (m, from, to) {
+          if (to <= from) { return m; }
+          var p = spot(from);
+          m.edits.push({ line: p.line, col: p.col, cut: to - from });
+          m.ops.push({ at: from, cut: to - from, ins: 0 });
+          return m;
+        },
+        // a line of its own above `line` -- after the last, for 0 -- indented
+        // like the line `like`, and a step further in for `deeper`
+        line: function (m, line, text, like, deeper) {
+          var at = line ? startOf(line) : src.length;
+          var width = lead(like) + (deeper ? 4 : 0) + text.length + 1;
+          m.edits.push({ line: line, text: text, like: like, deeper: !!deeper });
+          m.ops.push({ at: at, cut: 0, ins: width });
+          return m;
+        },
+        // the line made to start `col` spaces in
+        indent: function (m, line, col) {
+          m.edits.push({ line: line, indent: col });
+          m.ops.push({ at: startOf(line), cut: lead(line), ins: col });
+          return m;
+        },
+        // the last of the lines after `line` that go with it: as far in as it
+        // or further, blank lines passed over
+        runEnd: function (line) {
+          var from = lead(line), end = line, last = lines() + (base || 0);
+          for (var k = line + 1; k <= last; k++) {
+            if (blank(k)) { continue; }
+            if (lead(k) < from) { break; }
+            end = k;
+          }
+          return end;
+        },
+        // Fixes to the indenting put in order: first those that leave the
+        // lines from `from` to `to` on the code's own step -- four spaces,
+        // mostly -- the way the rest of it is written
+        onGrid: function (fixes, from, to) {
+          var steps = {}, was = null, unit = 4;
+          for (var k = 1 + (base || 0); k <= lines() + (base || 0); k++) {
+            if (blank(k)) { continue; }
+            var here = lead(k);
+            if (was !== null && here > was) { steps[here - was] = (steps[here - was] || 0) + 1; }
+            was = here;
+          }
+          Object.keys(steps).forEach(function (st) { if (steps[st] > (steps[unit] || 0)) { unit = +st; } });
+          function off(fix) {
+            var cols = {}, bad = 0;
+            fix.edits.forEach(function (e) { if (e.indent !== undefined) { cols[e.line] = e.indent; } });
+            for (var k = from; k <= to; k++) {
+              if (blank(k)) { continue; }
+              if ((cols[k] !== undefined ? cols[k] : lead(k)) % unit) { bad++; }
+            }
+            return bad;
+          }
+          return fixes.map(function (f, i) { return { f: f, i: i, bad: off(f) }; })
+            .sort(function (a, b) { return a.bad - b.bad || a.i - b.i; })
+            .map(function (x) { return x.f; });
+        },
+        // the line, and the lines after it that go with it, moved `col`
+        // across: those as far in (`same`) or only further in, to the first
+        // that is not -- blank lines passed over
+        shift: function (m, line, col, same) {
+          var from = lead(line), by = col - from, last = lines() + (base || 0);
+          this.indent(m, line, col);
+          for (var k = line + 1; k <= last; k++) {
+            if (blank(k)) { continue; }
+            var here = lead(k);
+            if (same ? here < from : here <= from) { break; }
+            this.indent(m, k, Math.max(0, here + by));
+          }
+          return m;
+        }
+      };
+    }
+
     // ================================================== into tokens ==
     // One reader for all five.  What differs -- # or // for a comment,
     // indenting or braces for a block, the kinds of string -- is asked of
@@ -175,6 +334,79 @@
       }
       function newline() { line++; col0 = i; codeOnLine = false; }
 
+      // A quote or a comment never closed, opened at `from` (its words from
+      // `inside`) on line `ln`, and where it might be shut with `closer`:
+      // where its line ends, before the brackets and marks that close the
+      // code around it -- print("hi) is print("hi") -- or at the very end of
+      // the line; a comment written as a block of * lines, after the last of
+      // them; and one that may run on over lines (`runsOn`), at the foot.
+      function unclosed(from, inside, closer, ln, runsOn) {
+        var err = oops("cm_open", ln), kit = fixKit(s, base), fixes = [];
+        err.at = from;
+        var eol = s.indexOf("\n", from);
+        if (eol < 0) { eol = n; }
+        var end = eol;
+        while (end > inside && /\s/.test(s[end - 1])) { end--; }
+        var before = end;
+        while (before > inside && /[\s)\]};:,{]/.test(s[before - 1])) { before--; }
+        function at(off) {
+          if (fixes.some(function (f) { return f.ops[0].at === off; })) { return; }
+          var text = closer === "*/" && off > 0 && !/\s/.test(s[off - 1]) ? " */" : closer;
+          fixes.push(kit.put(kit.make("lang_fix", { what: closer }), off, text));
+        }
+        var bol = s.lastIndexOf("\n", from - 1) + 1;
+        // the names written in the code, for telling words from code
+        var named = null;
+        function known(word) {
+          if (/^\d/.test(word)) { return true; }
+          if (!named) {
+            named = {};
+            (s.match(/[A-Za-z_]\w*/g) || []).forEach(function (w) { named[w] = (named[w] || 0) + 1; });
+          }
+          return named[word] > 1;
+        }
+        // where words could end and code go on: before a , a + or a <<
+        // (and the spaces in front of it) followed by a name the code uses
+        // elsewhere -- "You are  + word); is "You are " + word);
+        function splits(a, b, any) {
+          var out = [], re = /(\s*)(,|\+|<<)\s*([A-Za-z_]\w*|\d)?/g, m, text = s.slice(a, b);
+          while ((m = re.exec(text)) && out.length < 4) {
+            if (!any && !(m[3] && known(m[3]))) { continue; }
+            // "Total: ", total -- the space kept in the words before a , and
+            // one left either side of a + or a <<: "You are " + word
+            out.push(a + m.index + (m[2] === "," ? m[1].length : m[1].length > 1 ? m[1].length - 1 : 0));
+          }
+          return out;
+        }
+        if (closer.length === 1 && /^\s*([,+;:)\]]|<<)/.test(s.slice(inside, eol))) {
+          // A quote that reads on as code -- ", total) -- is more likely the
+          // closing quote of words whose own closing quote is missing
+          // earlier on the line -- print("a =, a, "b =", b) -- or whose
+          // opening one is: print(Total: ", total), case a":.  Each place
+          // tried, nearest first.
+          splits(bol, from, true).forEach(at);
+          for (var back = from - 1, tries = 0; back >= bol && tries < 4; back--) {
+            if (/\w/.test(s[back]) && (back === bol || !/\w/.test(s[back - 1]))) { at(back); tries++; }
+          }
+        } else if (closer.length === 1) {
+          splits(inside, before, false).forEach(at);
+        }
+        if (closer === "*/") {
+          var row = kit.spot(from).line, last = 0;
+          while (row + 1 <= kit.last() && /^\s*\*(?!\/)/.test(kit.textOf(row + 1))) { row++; last = row; }
+          if (last) { at(kit.startOf(last) + kit.textOf(last).replace(/\s+$/, "").length); }
+        }
+        if (before > inside && before < end) { at(before); }
+        at(end);
+        if (runsOn) {
+          var foot = n;
+          while (foot > eol && /\s/.test(s[foot - 1])) { foot--; }
+          if (foot > end) { at(foot); }
+        }
+        err.fixes = fixes;
+        return err;
+      }
+
       // Escapes, the way all five spell the common ones.
       function unescape(ch) {
         var at = { n: "\n", t: "\t", r: "", "0": "", a: "", b: "", f: "", v: "" };
@@ -188,9 +420,13 @@
       // Swift's "\(expr)".
       function readString(quote, triple, raw, braces, verbatim, dollars) {
         var parts = [], text = "", startLine = line;
+        var opened = i, closer = triple ? quote + quote + quote : quote;
         i += triple ? 3 : 1;
+        function neverShut() {
+          return unclosed(opened, opened + closer.length, closer, startLine, triple || verbatim || quote === TICK);
+        }
         for (;;) {
-          if (i >= n) { throw oops("cm_open", startLine); }
+          if (i >= n) { throw neverShut(); }
           var c = s[i];
           if (triple ? s.substr(i, 3) === quote + quote + quote : c === quote) {
             if (verbatim && s[i + 1] === quote) { text += quote; i += 2; continue; }
@@ -198,7 +434,7 @@
             break;
           }
           if (c === "\n") {
-            if (!triple && !verbatim && quote !== TICK) { throw oops("cm_open", startLine); }
+            if (!triple && !verbatim && quote !== TICK) { throw neverShut(); }
             text += "\n";
             i++;
             newline();
@@ -216,7 +452,7 @@
               else if (d1 === ")") { if (!deep1) { break; } deep1--; }
               i++;
             }
-            if (i >= n) { throw oops("cm_open", startLine); }
+            if (i >= n) { throw unclosed(opened, from1, ")" + closer, startLine, triple); }
             if (text) { parts.push(text); text = ""; }
             parts.push({ code: s.slice(from1, i).trim(), spec: "", conv: "", line: line });
             i++;
@@ -263,7 +499,21 @@
                 else if (d === "}") { if (!deep) { break; } deep--; }
                 i++;
               }
-              if (i >= n) { throw oops("cm_open", startLine); }
+              if (i >= n) {
+                // a { in the words never closed -- {f:.1f F" -- shut where
+                // its expression and format end: before a space, or the quote
+                var shutErr = unclosed(opened, from, "}" + closer, startLine, triple);
+                var kitIn = fixKit(s, base), stop = s.indexOf("\n", from), inner = [];
+                if (stop < 0) { stop = n; }
+                for (var sp = from; sp < stop && inner.length < 3; sp++) {
+                  if (s[sp] === " " || s[sp] === quote) {
+                    inner.push(kitIn.put(kitIn.make("lang_fix", { what: "}" }), sp, "}"));
+                    if (s[sp] === quote) { break; }
+                  }
+                }
+                shutErr.fixes = inner.concat(shutErr.fixes);
+                throw shutErr;
+              }
               var inside = s.slice(from, i), spec = "";
               i++;
               // what comes after a colon (Python, C#) or a comma (C#) is
@@ -326,10 +576,24 @@
             continue;
           }
           if (s[i] === "\\" && s[i + 1] === "\n") { i += 2; newline(); continue; }
-          var top = indents[indents.length - 1];
-          if (col > top) { indents.push(col); push("indent", col); }
-          while (col < indents[indents.length - 1]) { indents.pop(); push("dedent", col); }
-          if (col !== indents[indents.length - 1]) { throw oops("cm_indent", line); }
+          var top = indents[indents.length - 1], popped = null;
+          if (col > top) { indents.push(col); push("indent", col, { was: top }); }
+          while (col < indents[indents.length - 1]) { popped = indents.pop(); push("dedent", col); }
+          if (col !== indents[indents.length - 1]) {
+            // between two of the ways in that are open: lined up with the
+            // nearer of them, the line and the lines that go with it
+            var err = oops("cm_indent", line), kit = fixKit(s, base), lower = indents[indents.length - 1];
+            err.at = i;
+            var ways = [];
+            (popped !== null && popped - col < col - lower ? [popped, lower] : [lower, popped])
+              .forEach(function (to) {
+                if (to === null) { return; }
+                ways.push(kit.indent(kit.make("lang_fix_indent"), line, to));
+                ways.push(kit.shift(kit.make("lang_fix_indent"), line, to, true));
+              });
+            err.fixes = kit.onGrid(ways, line, kit.runEnd(line));
+            throw err;
+          }
           atStart = false;
         }
         tokAt = i;
@@ -392,7 +656,7 @@
         }
         if (!py && s.substr(i, 2) === OPEN_NOTE) {
           var shut = s.indexOf("*/", i + 2);
-          if (shut < 0) { throw oops("cm_open", line); }
+          if (shut < 0) { throw unclosed(i, i + 2, "*/", line, true); }
           var alone = !codeOnLine, body = s.slice(i + 2, shut), at = line;
           body.split("\n").forEach(function (row, k) {
             var said = row.replace(/^\s*\*+/, "").replace(/^\*+/, "").trim();
@@ -436,7 +700,7 @@
         // Kotlin and Swift: `in`, a name written in backquotes
         if ((kt || sw) && c === TICK) {
           var bq = s.indexOf(TICK, i + 1);
-          if (bq < 0) { throw oops("cm_open", line); }
+          if (bq < 0) { throw unclosed(i, i + 1, TICK, line, false); }
           push("name", s.slice(i + 1, bq));
           i = bq + 1;
           continue;
@@ -445,7 +709,7 @@
         var rawRs = rs ? /^b?r(#*)"/.exec(s.substr(i, 16)) : null;
         if (rawRs) {
           var shutRs = '"' + rawRs[1], fromRs = i + rawRs[0].length, endRs = s.indexOf(shutRs, fromRs);
-          if (endRs < 0) { throw oops("cm_open", line); }
+          if (endRs < 0) { throw unclosed(i, fromRs, shutRs, line, true); }
           push("str", s.slice(fromRs, endRs));
           for (var rq = fromRs; rq < endRs; rq++) { if (s[rq] === "\n") { line++; } }
           i = endRs + shutRs.length;
@@ -466,7 +730,7 @@
         }
         if (!py && c === "R" && s[i + 1] === '"' && s[i + 2] === "(") {   // C++ raw
           var close = s.indexOf(')"', i + 3);
-          if (close < 0) { throw oops("cm_open", line); }
+          if (close < 0) { throw unclosed(i, i + 3, ')"', line, true); }
           push("str", s.slice(i + 3, close));
           for (var r = i; r < close; r++) { if (s[r] === "\n") { line++; } }
           i = close + 2;
@@ -587,50 +851,294 @@
       }
       function odd(t) {
         t = t || peek();
-        var err;
-        if (t.t === "eof") { err = oops("cm_ended", t.line); }
-        else if (t.t === "indent" || t.t === "dedent") { err = oops("cm_indent", t.line); }
-        else {
+        var err, k = tokIndex(t);
+        if (t.t === "eof") {
+          err = oops("cm_ended", t.line);
+          err.fixes = endedFixes(k);
+        } else if (t.t === "indent" || t.t === "dedent") {
+          err = oops("cm_indent", t.line);
+          err.fixes = t.t === "indent" ? [backIn(t)] : [];
+        } else {
           var bit = t.t === "str" ? '"' + t.v + '"' : t.t === "nl" ? "↵" : String(t.v);
           err = oops("cm_odd", t.line, { bit: bit.slice(0, 24) });
+          err.fixes = oddFixes(k);
         }
         err.at = t.at;
         return err;
       }
 
-      // ---------------------------------------------- what is missing --
+      // ------------------------------------------- what would put it right --
+      // The fixes each way the reading can stop comes with (fixKit, above),
+      // likeliest first: tryMend tries them in that order.
+      var kit = fixKit(lexed.src, lexed.base);
+      var SHUT = { "(": ")", "[": "]", "{": "}" };
+      // the languages whose statements end with a ;
+      var SEMIS = !py && !kt && !sw && !go;
+      function solid(t) {
+        return t.t !== "nl" && t.t !== "indent" && t.t !== "dedent" && t.t !== "eof" && !t.auto;
+      }
+      function tokIndex(t) {
+        var k = Math.min(pos, toks.length - 1);
+        return toks[k] === t ? k : Math.max(0, toks.indexOf(t));
+      }
+      function lastSolid(k) {
+        for (var b = k - 1; b >= 0; b--) { if (solid(toks[b]) && toks[b].end !== undefined) { return toks[b]; } }
+        return null;
+      }
+      // the brackets still open where the reading stopped, outermost first
+      function openAt(k) {
+        var open = [];
+        for (var j = 0; j < k; j++) {
+          var t = toks[j];
+          if (t.t !== "op") { continue; }
+          if (SHUT[t.v]) { open.push(t); continue; }
+          if (t.v === ")" || t.v === "]" || t.v === "}") {
+            var m = open.length - 1;
+            while (m >= 0 && SHUT[open[m].v] !== t.v) { m--; }
+            if (m >= 0) { open.length = m; }
+          }
+        }
+        return open;
+      }
+      function endsValue(t) {
+        return !!t && (/^(name|num|str|fstr|regex)$/.test(t.t) || (t.t === "op" && /^[)\]]$/.test(t.v)));
+      }
+      function opensValue(t) {
+        return !!t && (/^(name|num|str|fstr|regex)$/.test(t.t) || (t.t === "op" && /^[(\[!~]$/.test(t.v)));
+      }
+      function oneLine(t) { return t.end !== undefined && kit.spot(t.at).line === kit.spot(t.end).line; }
+      function tokText(t) { return lexed.src.slice(t.at, t.end).slice(0, 24); }
+      // a piece taken out, and a space beside it that would be left doubled
+      function cutTok(t) {
+        if (!oneLine(t)) { return null; }
+        var src = lexed.src, from = t.at, to = t.end;
+        if (src[from - 1] === " " && (src[to] === " " || /[)\];,\n]/.test(src[to] || "\n"))) { from--; }
+        return kit.cut(kit.make("lang_fix_cut", { what: tokText(t) }), from, to);
+      }
+      // a piece put in the place of another
+      function swapTok(t, v) {
+        if (!oneLine(t)) { return null; }
+        var m = kit.make("lang_fix_change", { word: tokText(t), instead: v });
+        kit.cut(m, t.at, t.end);
+        return kit.put(m, t.at, v);
+      }
+      // Python 2's print "hi", x: print("hi", x)
+      function callFix(name, k) {
+        var j = k, last = null, depth = 0, shut = false;
+        while (j < toks.length && toks[j].t !== "nl" && toks[j].t !== "eof") {
+          if (solid(toks[j]) && toks[j].end !== undefined) { last = toks[j]; }
+          if (toks[j].t === "op" && toks[j].v === "(") { depth++; }
+          if (toks[j].t === "op" && toks[j].v === ")" && --depth < 0) { shut = true; }
+          j++;
+        }
+        if (!last) { return null; }
+        var m = kit.make("lang_fix_call", { name: name.v });
+        kit.cut(m, name.end, toks[k].at);
+        kit.put(m, name.end, "(");
+        return shut ? m : kit.put(m, last.end, ")");
+      }
+      function some(list) {
+        var seen = {};
+        return list.filter(function (f) {
+          if (!f || !f.edits.length) { return false; }
+          var key = JSON.stringify(f.edits);
+          if (seen[key]) { return false; }
+          seen[key] = true;
+          return true;
+        });
+      }
+      // What the whole file says, for the fixes that go by it: how often each
+      // name is used, which are called, and how many { and } there are -- and
+      // whether its {s go on lines of their own
+      var facts = null;
+      function factsOf() {
+        if (facts) { return facts; }
+        facts = { names: {}, called: {}, opens: 0, shuts: 0, alone: 0, after: 0 };
+        for (var j = 0; j < toks.length; j++) {
+          var t = toks[j], nx = toks[j + 1];
+          if (t.t === "name") {
+            facts.names[t.v] = (facts.names[t.v] || 0) + 1;
+            if (nx && nx.t === "op" && nx.v === "(") { facts.called[t.v] = true; }
+          } else if (t.t === "op" && t.v === "{") {
+            facts.opens++;
+            if (t.first) { facts.alone++; } else { facts.after++; }
+          } else if (t.t === "op" && t.v === "}") {
+            facts.shuts++;
+          }
+        }
+        return facts;
+      }
+      // A ) with nothing to close: the ( it lost put back -- after a name
+      // followed straight by what it is handed (print "hi", x) and
+      // find"Hop")), or inside a name that is a function's name run into what
+      // it is handed: printtotal) is print(total), where print is called
+      // somewhere and total is a name in the code too
+      function lostOpener(k) {
+        var t = toks[k], f = factsOf(), out = [], from = k;
+        var opener = t.v === "]" ? "[" : "(";
+        while (from > 0 && toks[from - 1].line === t.line && solid(toks[from - 1])) { from--; }
+        for (var a = from; a < k; a++) {
+          var x = toks[a], y = toks[a + 1];
+          if (x.t !== "name" || KEY_WORDS[x.v] || x.end === undefined) { continue; }
+          if (y && y !== t && /^(name|num|str|fstr)$/.test(y.t) && !KEY_WORDS[y.v] && y.at !== undefined) {
+            var m = kit.make("lang_fix", { what: opener });
+            kit.cut(m, x.end, y.at);
+            out.push(kit.put(m, x.end, opener));
+          }
+          if (opener === "(") {
+            for (var cut = 1; cut < x.v.length; cut++) {
+              var left = x.v.slice(0, cut), right = x.v.slice(cut);
+              if ((f.called[left] || CALLED_WORDS[left]) && (f.names[right] || /^\d+$/.test(right))) {
+                out.push(kit.put(kit.make("lang_fix", { what: "(" }), x.at + cut, "("));
+              }
+            }
+          }
+        }
+        return out;
+      }
+      // A ( [ or { written twice where one was meant -- print((x) -- and so
+      // one short of what shuts them: the second taken out.  Brackets on the
+      // line the reading stopped on; {s anywhere, where there are more of
+      // them than }s.
+      function doubledOpen(k, v) {
+        var out = [], row = toks[k].line, f = factsOf(), open = openAt(k), top = row;
+        if (v === "{" && f.opens <= f.shuts) { return out; }
+        open.forEach(function (o) { if (o.v === v) { top = Math.min(top, o.line); } });
+        for (var j = 1; j < toks.length && out.length < 3; j++) {
+          var a = toks[j - 1], b = toks[j];
+          if (v !== "{" && (b.line > row || a.line < top)) { continue; }
+          if (a.t === "op" && b.t === "op" && a.v === v && b.v === v && a.end === b.at) { out.push(cutTok(b)); }
+        }
+        return out;
+      }
+      // A ( or [ left open: shut after each whole thing inside it, nearest
+      // first -- len(left and j < 2) is len(left) and j < 2 -- but not where
+      // more of that thing follows (a . or brackets on it), nor before a ,
+      // inside a call's brackets, which only hands it one thing more
+      function shutWithin(k) {
+        var open = openAt(k), o = open[open.length - 1], out = [];
+        if (!o || o.v === "{") { return out; }
+        var j0 = toks.indexOf(o), index = o.v === "[" && endsValue(lastSolid(j0)), depth = 0;
+        for (var j = j0 + 1; j < k && out.length < 6; j++) {
+          var a = toks[j], b = toks[j + 1];
+          if (a.t === "op" && SHUT[a.v]) { depth++; continue; }
+          if (a.t === "op" && /^[)\]}]$/.test(a.v)) {
+            depth--;
+            if (depth < 0) { break; }
+            if (depth > 0) { continue; }
+          }
+          if (depth || !solid(a) || !endsValue(a) || a.end === undefined || !b) { continue; }
+          if (b.t === "op" && /^(\(|\.|\?\.|::|->|\+\+|--|=)$/.test(b.v)) { continue; }
+          if (b.t === "op" && ((b.v === "[" && o.v === "(") || (b.v === "," && !index))) { continue; }
+          if (/^(str|fstr|num)$/.test(b.t)) { continue; }
+          out.push(kit.put(kit.make("lang_fix", { what: SHUT[o.v] }), a.end, SHUT[o.v]));
+        }
+        return out;
+      }
+      // More }s than {s: the { lost put back on the line that opens the block
+      // the indenting shows -- a line with lines further in under it, shut by
+      // a } as far in as itself, and no { of its own -- at its end, or on a
+      // line of its own under it, as this code writes its {s
+      function unopened() {
+        var f = factsOf(), out = [];
+        if (f.shuts <= f.opens) { return out; }
+        for (var j = 0; j < toks.length && out.length < 4; j++) {
+          var t = toks[j];
+          if (!(t.t === "op" && t.v === "}" && t.first)) { continue; }
+          var at = kit.spot(t.at);
+          for (var ln = at.line - 1; ln > (lexed.base || 0); ln--) {
+            if (kit.blank(ln)) { continue; }
+            var lead = kit.lead(ln);
+            if (lead < at.col) { break; }
+            if (lead > at.col) { continue; }
+            var text = kit.textOf(ln).replace(/\s*\/\/.*$/, "").replace(/\s+$/, "");
+            if (/[{;]$/.test(text) || /^\s*[{}]/.test(text)) { break; }
+            var nx = ln + 1;
+            while (nx < at.line && kit.blank(nx)) { nx++; }
+            if (nx < at.line && kit.lead(nx) > at.col) {
+              var after = kit.put(kit.make("lang_fix", { what: "{" }), kit.startOf(ln) + text.length, " {");
+              var alone = kit.line(kit.make("lang_fix", { what: "{" }), ln + 1, "{", ln);
+              out.push.apply(out, f.alone > f.after ? [alone, after] : [after, alone]);
+            }
+            break;
+          }
+        }
+        return out;
+      }
+      // A name the code uses nowhere else, side by side with another: made
+      // the word it is a letter or two from -- retrun is return -- where
+      // there is one
+      function loneWord(t) {
+        var f = factsOf();
+        if (!t || t.t !== "name" || f.names[t.v] > 1 || KEY_WORDS[t.v]) { return []; }
+        var near = [];
+        function weigh(w, keyWord) {
+          if (w === t.v) { return; }
+          var d = w.toLowerCase() === t.v.toLowerCase() ? 0 : wordGap(w, t.v, 2);
+          if (d <= (t.v.length >= 5 ? 2 : 1)) { near.push({ w: w, d: d - (keyWord ? 0.5 : 0) }); }
+        }
+        Object.keys(KEY_WORDS).forEach(function (w) { weigh(w, true); });
+        Object.keys(CALLED_WORDS).forEach(function (w) { weigh(w, true); });
+        Object.keys(f.names).forEach(function (w) { if (f.names[w] > 1) { weigh(w, false); } });
+        near.sort(function (a, b) { return a.d - b.d; });
+        return near.slice(0, 2).map(function (n) { return swapTok(t, n.w); });
+      }
+
       // "Line 12: expected ; here" -- said on the line of `said` (where the
-      // reading stopped, unless it names another) -- and with it, where the
-      // missing piece would go, for the Code tab to offer to put it in
-      // (32-code-side.js).  err.at is how far the reading got, so a fix can
-      // be tried first and offered only if the reading then gets further.
+      // reading stopped, unless it names another) -- with what is missing put
+      // in where it goes first, and then what an unexpected piece there is
+      // put right with (oddFixes): print(a b) is "expected )" too.
       function wanted(what, said) {
         var k = Math.min(pos, toks.length - 1), cur = toks[k];
         var err = oops("cm_expected", (said || cur).line, { what: what });
         err.at = cur.at;
-        var edits = wantedAt(what, k);
-        if (edits && edits.length) { err.fix = { what: what, edits: edits }; }
+        var prev = lastSolid(k), lonely = [];
+        // a word the code uses nowhere else, just before: more likely the
+        // thing wrong than a ; or a ) left out after it
+        if (prev && prev.t === "name" && endsValue(prev) && opensValue(cur) &&
+            factsOf().names[prev.v] === 1 && !KEY_WORDS[prev.v]) {
+          lonely = loneWord(prev).concat([cutTok(prev)]);
+        }
+        var twice = what === ")" ? doubledOpen(k, "(") : what === "]" ? doubledOpen(k, "[")
+                  : what === "}" ? doubledOpen(k, "{") : [];
+        var shut = what === ")" || what === "]" ? wantedFixes(what, k).concat(shutWithin(k)) : wantedFixes(what, k);
+        // the bracket shut further along the line all the same: what is wrong
+        // is more likely something left out inside it -- [60 81] wants a ,
+        var later = false;
+        if (what === ")" || what === "]") {
+          for (var j = k, depth = 0; j < toks.length && toks[j].line === cur.line; j++) {
+            var x = toks[j];
+            if (x.t === "op" && SHUT[x.v]) { depth++; }
+            else if (x.t === "op" && /^[)\]}]$/.test(x.v)) {
+              if (!depth) { later = x.v === what; break; }
+              depth--;
+            }
+          }
+        }
+        err.fixes = some(unopened().concat(lonely, twice, later ? oddFixes(k).concat(shut) : shut.concat(oddFixes(k))));
         return err;
-      }
-      function solid(t) {
-        return t.t !== "nl" && t.t !== "indent" && t.t !== "dedent" && t.t !== "eof" && !t.auto;
-      }
-      // An offset in the file as a line (numbered along with the files
-      // before it) and a column, tabs counted as the four spaces they are read as.
-      function spotOf(off) {
-        var src = lexed.src, ln = 1 + (lexed.base || 0), from = 0;
-        for (var k = src.indexOf("\n"); k >= 0 && k < off; k = src.indexOf("\n", k + 1)) { ln++; from = k + 1; }
-        return { line: ln, col: off - from };
       }
       // Where `what` goes: a closing mark or a ; straight after the last
       // thing read; ( and [ in front of what they open; a word, an arrow or
       // a { after a space; and a } the code ended without, where the
       // indenting says each block ends.
-      function wantedAt(what, k) {
-        var cur = toks[k], prev = null;
-        if (what === "}" && cur.t === "eof") { return unshut(); }
-        for (var b = k - 1; b >= 0 && !prev; b--) { if (solid(toks[b])) { prev = toks[b]; } }
-        if (!prev || prev.end === undefined || what === "↵") { return null; }
+      function wantedFixes(what, k) {
+        var cur = toks[k], prev = lastSolid(k);
+        if (py && cur.t === "eof" && SHUT[openAt(k).slice(-1).map(function (o) { return o.v; })[0]] === what) {
+          return [pyShut(openAt(k).pop())];
+        }
+        if (what === "}" && cur.t === "eof") { return [unshut()]; }
+        if (!prev || what === "↵") { return []; }
+        // def greetname, ...): the name and what it is handed run together
+        var glued = [];
+        if (what === "(" && prev.t === "name") {
+          var f = factsOf();
+          for (var cut = 2; cut < prev.v.length - 1; cut++) {
+            if (f.names[prev.v.slice(cut)] || f.called[prev.v.slice(0, cut)]) {
+              glued.push(kit.put(kit.make("lang_fix", { what: "(" }), prev.at + cut, "("));
+            }
+          }
+        }
         // Go ends the line an if or a for is written on itself, without its
         // { -- if x > 2 (;) -- and the reading carries on into the next
         // line as though that were the test: the { goes where the line ended
@@ -641,25 +1149,124 @@
             if (toks[g].auto) { prev = toks[g]; break; }
           }
         }
-        var at = spotOf(prev.end);
+        var make = kit.make("lang_fix", { what: what });
         if (what === "(" || what === "[") {
-          if (!solid(cur) || spotOf(cur.at).line !== at.line) { return null; }
-          at = spotOf(cur.at);
-          return [{ line: at.line, col: at.col, text: what }];
+          if (!solid(cur) || kit.spot(cur.at).line !== kit.spot(prev.end).line) { return glued; }
+          return glued.concat([kit.put(make, cur.at, what)]);
         }
-        var text = /^[;,)\]:.]$/.test(what) ? what
-                 : " " + what + (solid(cur) && cur.at === prev.end ? " " : "");
-        return [{ line: at.line, col: at.col, text: text }];
+        var tight = /^[;,)\]:.]$/.test(what) || (what === "}" && cur.t === "op" && /^[)\],;]$/.test(cur.v));
+        var text = tight ? what : " " + what + (solid(cur) && cur.at === prev.end ? " " : "");
+        return [kit.put(make, prev.end, text)];
+      }
+      // A piece where it makes no sense.  A closing bracket with nothing open
+      // to close is taken out -- or, closing the wrong kind, made the right
+      // kind; a mark written twice loses the second; two values side by side
+      // are a , apart inside brackets, Python 2's print is called, and a new
+      // line in a language of ;s has one before it; and anything else, the
+      // piece taken out.  A line that stops at an operator -- x = , total + --
+      // loses the operator.
+      function oddFixes(k) {
+        var t = toks[k], prev = lastSolid(k), out = unopened();
+        if (!solid(t) || t.end === undefined) {
+          if (prev && prev.t === "op" && !/^[)\]};:]$/.test(prev.v)) { out.push(cutTok(prev)); }
+          return some(out);
+        }
+        var open = openAt(k), inner = open[open.length - 1];
+        if (t.t === "op" && /^[)\]}]$/.test(t.v) && (!inner || SHUT[inner.v] !== t.v)) {
+          if (prev && prev.t === "op" && prev.v === t.v && prev.end === t.at) { out.push(cutTok(t)); }
+          if (t.v !== "}") { out = out.concat(lostOpener(k)); }
+          if (inner && inner.v !== "{" && t.v !== "}") { out.push(swapTok(t, SHUT[inner.v])); }
+          out.push(cutTok(t));
+        }
+        if (prev && t.t === "op" && prev.t === "op" && prev.v === t.v && !/^[)\]}]$/.test(t.v)) { out.push(cutTok(t)); }
+        // an operator with nothing after it -- i++ +; -- loses it
+        if (prev && prev.t === "op" && t.t === "op" && /^[;,)\]]$/.test(t.v) && !/^([)\]};:,]|\+\+|--)$/.test(prev.v)) {
+          out.push(cutTok(prev));
+        }
+        // = and == mixed up
+        if (t.t === "op" && (t.v === "==" || t.v === "===")) { out.push(swapTok(t, "=")); }
+        if (t.t === "op" && t.v === "=") { out.push(swapTok(t, js ? "===" : "==")); }
+        if (prev && endsValue(prev) && opensValue(t)) {
+          // a word written wrong, or one that should not be there at all
+          [t, prev].forEach(function (w) {
+            var nx = toks[toks.indexOf(w) + 1];
+            if (nx && nx.t === "op" && (nx.v === "=" || nx.v === ":")) { return; }
+            if (w.t === "name" && factsOf().names[w.v] === 1 && !KEY_WORDS[w.v]) {
+              out = out.concat(loneWord(w));
+              out.push(cutTok(w));
+            }
+          });
+          if (inner && inner.v === "{" && (prev.t === "name" || prev.t === "str") && (js || py || kt || sw || go || rs)) {
+            out.push(kit.put(kit.make("lang_fix", { what: ":" }), prev.end, ":" + (t.at > prev.end ? "" : " ")));
+          }
+          if (inner && inner.v !== "{") {
+            out.push(kit.put(kit.make("lang_fix", { what: "," }), prev.end, t.at > prev.end ? "," : ", "));
+          }
+          if (py && !inner && prev.t === "name" && /^(print|exec)$/.test(prev.v)) { out.push(callFix(prev, k)); }
+          if (SEMIS && t.first) { out.push(kit.put(kit.make("lang_fix", { what: ";" }), prev.end, ";")); }
+        } else if (t.t === "name") {
+          out = out.concat(loneWord(t));
+        }
+        out.push(cutTok(t));
+        if (prev && prev.t === "op" && !/^[)\]};:]$/.test(prev.v) && t.first) { out.push(cutTok(prev)); }
+        return some(out);
+      }
+      // The code ends with something still to come: the brackets still open
+      // shut -- each } where the indenting says its block ends (unshut) --
+      // Python's block with nothing in it given a pass, and an operator left
+      // hanging at the end taken out.
+      function endedFixes(k) {
+        var out = [], prev = lastSolid(k), open = openAt(k);
+        if (py && open.length) { out.push(pyShut(open[open.length - 1])); }
+        if (open.length && open.every(function (o) { return o.v === "{"; })) { out.push(unshut()); }
+        else if (open.length) { out.push(shutAll(open, prev)); }
+        if (py && prev && prev.t === "op" && prev.v === ":") {
+          out.push(kit.line(kit.make("lang_fix", { what: "pass" }), 0, "pass", kit.spot(prev.at).line, true));
+        }
+        if (prev && prev.t === "op" && !/^[)\]};:]$/.test(prev.v)) { out.push(cutTok(prev)); }
+        return some(out);
+      }
+      // Python: a bracket left open at the end, shut where the lines inside it
+      // end -- after the last line further in than the line it opens on, or
+      // on that line itself if none is: memo = { is memo = {}
+      function pyShut(o) {
+        var row = kit.spot(o.at).line, col = kit.lead(row), last = row;
+        for (var ln = row + 1; ln <= kit.last(); ln++) {
+          if (kit.blank(ln)) { continue; }
+          if (kit.lead(ln) <= col) { break; }
+          last = ln;
+        }
+        var text = kit.textOf(last).replace(/\s*#[^"']*$/, "").replace(/\s+$/, "");
+        return kit.put(kit.make("lang_fix", { what: SHUT[o.v] }), kit.startOf(last) + text.length, SHUT[o.v]);
+      }
+      // Every bracket still open, shut at the end, the innermost first: ) and
+      // ] after the last thing written, each } on a line of its own --
+      // foo(function () { ... gets its }) there.
+      function shutAll(open, prev) {
+        var j = open.length - 1, inline = "", rows = [];
+        while (j >= 0 && open[j].v !== "{") { inline += SHUT[open[j].v]; j--; }
+        while (j >= 0) {
+          var row = { text: "}", like: kit.spot(open[j].at).line };
+          j--;
+          while (j >= 0 && open[j].v !== "{") { row.text += SHUT[open[j].v]; j--; }
+          rows.push(row);
+        }
+        var all = inline + rows.map(function (r) { return r.text; }).join("");
+        var same = all.split("").every(function (ch) { return ch === all[0]; });
+        var m = all.length > 1 && same ? kit.make("lang_fix_many", { what: all[0], n: all.length })
+                                       : kit.make("lang_fix", { what: all });
+        if (inline && prev) { kit.put(m, prev.end, inline); }
+        rows.forEach(function (r) { kit.line(m, 0, r.text, r.like); });
+        return m;
       }
       // The } each block never got.  A block ends before the first line after
       // it that is no further in than the line that opened it -- if its lines
       // were indented at all; those that were not, and any still open at the
       // foot of the file, are shut there, the innermost first.  Each is a
-      // line of its own, indented like the line its block opened on (`like`);
-      // line 0 is after the last.
+      // line of its own, indented like the line its block opened on.
       function unshut() {
-        var open = [], out = [], head = null, last = null;
-        function colOf(t) { return t.at - (lexed.src.lastIndexOf("\n", t.at - 1) + 1); }
+        var open = [], rows = [], head = null, last = null;
+        function colOf(t) { return kit.spot(t.at).col; }
         for (var k = 0; k < toks.length; k++) {
           var t = toks[k];
           if (!solid(t) || t.at === undefined) { continue; }
@@ -672,8 +1279,8 @@
               if (top.body === null || top.body <= top.ind || ind > top.ind) { break; }
               if (t.t === "op" && t.v === "}" && ind === top.ind) { break; }
               // under the block's last line, not after the blank ones below it
-              var under = last ? spotOf(last.end).line + 1 : t.line;
-              out.push({ line: Math.min(under, t.line), text: "}", like: top.like });
+              var under = last ? kit.spot(last.end).line + 1 : t.line;
+              rows.push({ line: Math.min(under, t.line), like: top.like });
               open.pop();
             }
           }
@@ -684,8 +1291,51 @@
             open.pop();
           }
         }
-        for (var j = open.length - 1; j >= 0; j--) { out.push({ line: 0, text: "}", like: open[j].like }); }
-        return out;
+        for (var j = open.length - 1; j >= 0; j--) { rows.push({ line: 0, like: open[j].like }); }
+        var m = rows.length > 1 ? kit.make("lang_fix_many", { what: "}", n: rows.length })
+                                : kit.make("lang_fix", { what: "}" });
+        rows.forEach(function (r) { kit.line(m, r.line, "}", r.like); });
+        return m;
+      }
+      // Python: where a statement starts, the line it is on, and how far in
+      function statementAt(k) {
+        var j = k;
+        while (j > 0 && !/^(nl|indent|dedent)$/.test(toks[j - 1].t)) { j--; }
+        return toks[j];
+      }
+      // a line further in than the one before it, for no reason: moved back
+      // out to where the lines around it are, with the ones that go with it
+      function backIn(t) {
+        return kit.shift(kit.make("lang_fix_indent"), t.line, t.was || 0, true);
+      }
+      // -- or that line alone moved back, or the line before it moved in to
+      // it, where that is the one out of place: whichever leaves the lines
+      // about them on the code's own step
+      function strayIndent(t) {
+        var err = oops("cm_indent", t.line), up = t.line - 1;
+        err.at = t.at;
+        while (up > (lexed.base || 0) && kit.blank(up)) { up--; }
+        var fixes = [kit.indent(kit.make("lang_fix_indent"), t.line, t.was || 0), backIn(t)];
+        if (up > (lexed.base || 0) && !/:\s*(#.*)?$/.test(kit.textOf(up))) {
+          fixes.push(kit.indent(kit.make("lang_fix_indent"), up, t.v));
+        }
+        err.fixes = some(kit.onGrid(fixes, Math.max(up, 1 + (lexed.base || 0)), kit.runEnd(t.line)));
+        return err;
+      }
+      // a block opened (if x:) with nothing indented under it: the line
+      // after it moved in a step, with the lines that go with it, or a pass
+      // put in under it
+      function noBlock(t) {
+        var err = oops("cm_indent", t.line), k = tokIndex(t), colon = lastSolid(k);
+        err.at = t.at;
+        var head = colon ? statementAt(toks.indexOf(colon)) : null;
+        var headLine = head ? kit.spot(head.at).line : t.line, col = head ? kit.spot(head.at).col : 0;
+        var fixes = [];
+        if (t.t !== "eof") { fixes.push(kit.shift(kit.make("lang_fix_indent"), t.line, col + 4, false)); }
+        var under = kit.spot(colon ? colon.end : t.at).line + 1;
+        fixes.push(kit.line(kit.make("lang_fix", { what: "pass" }), under > kit.last() ? 0 : under, "pass", headLine, true));
+        err.fixes = some(fixes);
+        return err;
       }
 
       // The comments written above a statement, put back in front of it.
@@ -2177,7 +2827,7 @@
         if (peek().t !== "nl") { return pySimpleLine(); }
         next();
         var ind = peek();
-        if (ind.t !== "indent") { throw oops("cm_indent", ind.line); }
+        if (ind.t !== "indent") { throw noBlock(ind); }
         next();
         var body = [];
         while (peek().t !== "dedent" && peek().t !== "eof") {
@@ -2201,7 +2851,7 @@
       }
       function pyStatement(col) {
         var t = peek();
-        if (t.t === "indent") { throw oops("cm_indent", t.line); }
+        if (t.t === "indent") { throw strayIndent(t); }
         if (t.t === "op" && t.v === "@") {
           // @staticmethod, @property, @dataclass: kept on what they mark
           var marks = [];
@@ -2416,7 +3066,7 @@
         expect(":");
         if (peek().t !== "nl") { throw wanted("↵"); }
         next();
-        if (peek().t !== "indent") { throw oops("cm_indent", peek().line); }
+        if (peek().t !== "indent") { throw noBlock(peek()); }
         var ind = next();
         var cases = [];
         while (peek().t !== "dedent" && peek().t !== "eof") {
@@ -3141,7 +3791,12 @@
           }
           var nm = peek().t === "name" ? next() : null;
           if (!nm) {
-            if (js) { throw oops("cm_other", peek().line, { bit: String(peek().v) }); }
+            if (js) {
+              var other = oops("cm_other", peek().line, { bit: String(peek().v) });
+              other.at = peek().at;
+              other.fixes = oddFixes(pos);
+              throw other;
+            }
             nm = { v: "arg" + (params.length + 1), line: p.line };        // int f(int, int)
           }
           var dims = type ? type.dims : 0;
@@ -8382,7 +9037,9 @@
           var e = expr();
           if (peek().t !== "eof") { throw odd(); }
           return e;
-        }
+        },
+        // where the reading has got to: for a stop that did not say
+        here: function () { return toks[Math.min(pos, toks.length - 1)].at; }
       };
     }
 
@@ -8560,10 +9217,12 @@
           err.file = at.file;
           err.line = at.line;
         }
-        // and the lines a fix would go in at, in that file too
-        (err.fix ? err.fix.edits : []).forEach(function (one) {
-          if (one.line) { one.line = where(one.line).line; }
-          if (one.like) { one.like = where(one.like).line; }
+        // and the lines its fixes would go in at, in that file too
+        (err.fixes || []).forEach(function (fix) {
+          fix.edits.forEach(function (one) {
+            if (one.line) { one.line = where(one.line).line; }
+            if (one.like) { one.like = where(one.like).line; }
+          });
         });
         throw err;
       } finally {
@@ -8582,15 +9241,16 @@
                       .filter(function (x) { return String(x.one.text || "").trim(); });
       if (!some.length) { throw oops("cm_empty", 0); }
       var tops = some.map(function (x) {
-        var lexed = null, read;
+        var lexed = null, parser = null, read;
         try {
           lexed = lexCode(x.one.text, dialect, spans[x.k].from - 1);
-          read = parserFor(lexed, dialect).program();
+          parser = parserFor(lexed, dialect);
+          read = parser.program();
         } catch (err) {
-          // stuck reading this file, and how much of it was left unread: a
-          // fix that leaves less has helped (32-code-side.js)
+          // stuck reading this file, and where: a fix that gets the reading
+          // further than that has helped (tryMend)
           err.reading = true;
-          if (lexed && err.at !== undefined) { err.left = lexed.src.length - err.at; }
+          if (err.at === undefined && parser) { err.at = parser.here(); }
           throw err;
         }
         read.name = String(x.one.name || "").replace(/^.*[\\/]/, "").replace(/\.\w+$/, "");
@@ -8602,10 +9262,12 @@
       var viaModule = Object.create(null);
       var top = oneProgram(tops);
       var notes = [];                        // said beside the pseudocode
-      function note(line, bit) {
+      // `call`: said of a call to something the reading does not know --
+      // which may be a name written wrong (tryRename)
+      function note(line, bit, call) {
         if (notes.length < 6 && !notes.some(function (n) { return n.line === line; })) {
           var at = where(line);
-          notes.push({ line: at.line, file: at.file,
+          notes.push({ line: at.line, file: at.file, call: !!call,
                        text: say("cm_wont_run", { n: at.line, bit: bit }) });
         }
       }
@@ -13027,7 +13689,7 @@
         var heldFn = (e.fn.k === "name" && (ch.names[e.fn.v] || ch.params[e.fn.v] || globalChart.names[e.fn.v])) ||
                      // counter.inc(), where counter is a table holding functions
                      (e.fn.k === "member" && stripParens(e.fn.obj).k === "name" && kindOf(e.fn.obj, ch) === "map");
-        if (!got && !heldFn) { note(line, (dot || p || "…") + "()"); }
+        if (!got && !heldFn) { note(line, (dot || p || "…") + "()", true); }
         out.push({ k: "call", e: got || r.e, line: line });
         lowerPost(r.post, ch, out);
       }
@@ -17697,9 +18359,9 @@
         if (asked) { note(s.line, "input"); return { t: '""', r: 9 }; }
         var p = bare(pathOf(s.fn) || "");
         if (s.fn.k === "name" && !(ch && (ch.names[s.fn.v] || ch.params[s.fn.v])) && !globalChart.names[s.fn.v] && !s.dispatched) {
-          note(s.line, (p || "…") + "()");
+          note(s.line, (p || "…") + "()", true);
         } else if (s.fn.k !== "name") {
-          note(s.line, (s.fn.k === "member" ? s.fn.name : p || "…") + "()");
+          note(s.line, (s.fn.k === "member" ? s.fn.name : p || "…") + "()", true);
         }
         var head = s.fn.k === "member" ? wrapAt(s.fn.obj, 9, ch) + "." + s.fn.name
                  : s.fn.k === "name" ? nameOf(s.fn.v) : wrapAt(s.fn, 9, ch);
@@ -18131,26 +18793,55 @@
       });
       return best;
     }
-    // ------------------------------------------------- putting it in --
-    // A file with the fix an "expected ; here" came with put in (err.fix,
-    // from wanted): a piece put in at a line and a column -- a tab counted
-    // as the four spaces it is read as -- or a line of its own put in above
-    // a line, or after the last (line 0), indented like the line `like`.
-    // Done from the foot of the file up, so the lines above each one are
-    // still where they were; and the ones after the last line in the order
-    // given, the innermost block's first.
+    // ------------------------------------------------- putting it right --
+    // A file with a fix put in (fixKit's edits): a piece put in, or taken
+    // out, at a line and a column -- a tab counted as the four spaces it is
+    // read as; a line started further in or out; or a line of its own put
+    // in above a line, or after the last (line 0), indented like the line
+    // `like` (a step further for `deeper`).  Within a line from its end
+    // back, so the columns before each edit are still where they were; and
+    // the new lines from the foot of the file up, so the lines above each
+    // are too -- those after the last in the order given, the innermost
+    // block's first.
     function mended(text, fix) {
-      var lines = String(text).split("\n"), was = lines.slice(), tail = [];
+      var lines = String(text).split("\n"), was = lines.slice(), tail = [], rows = {};
       function lead(n) { return /^[ \t]*/.exec(was[n - 1] || "")[0]; }
+      function place(row, col) {
+        var at = 0, c = 0;
+        while (at < row.length && c < col) { c += row[at] === "\t" ? 4 : 1; at++; }
+        return at;
+      }
+      function spaces(n) { return new Array(n + 1).join(" "); }
+      fix.edits.forEach(function (one) {
+        if (one.col === undefined && one.indent === undefined) { return; }
+        (rows[one.line] = rows[one.line] || []).push(one);
+      });
+      Object.keys(rows).forEach(function (ln) {
+        var row = lines[ln - 1];
+        if (row === undefined) { return; }
+        function key(one) { return one.indent !== undefined ? -1 : one.col; }
+        rows[ln].sort(function (a, b) { return key(b) - key(a) || (a.cut !== undefined ? -1 : 0) - (b.cut !== undefined ? -1 : 0); })
+          .forEach(function (one) {
+            if (one.indent !== undefined) {
+              var ws = /^[ \t]*/.exec(row)[0];
+              var tabs = ws.indexOf("\t") >= 0 && one.indent % 4 === 0;
+              row = (tabs ? new Array(one.indent / 4 + 1).join("\t") : spaces(one.indent)) + row.slice(ws.length);
+            } else if (one.cut !== undefined) {
+              row = row.slice(0, place(row, one.col)) + row.slice(place(row, one.col + one.cut));
+            } else {
+              var at = place(row, one.col);
+              row = row.slice(0, at) + one.text + row.slice(at);
+            }
+          });
+        lines[ln - 1] = row;
+      });
       for (var k = fix.edits.length - 1; k >= 0; k--) {
         var one = fix.edits[k];
-        if (!one.line || one.line > lines.length) { tail.unshift(lead(one.like) + one.text); }
-        else if (one.col === undefined) { lines.splice(one.line - 1, 0, lead(one.like) + one.text); }
-        else {
-          var row = lines[one.line - 1], at = 0, col = 0;
-          while (at < row.length && col < one.col) { col += row[at] === "\t" ? 4 : 1; at++; }
-          lines[one.line - 1] = row.slice(0, at) + one.text + row.slice(at);
-        }
+        if (one.col !== undefined || one.indent !== undefined) { continue; }
+        var ws = lead(one.like);
+        var made = ws + (one.deeper ? (ws.indexOf("\t") >= 0 ? "\t" : "    ") : "") + one.text;
+        if (!one.line || one.line > lines.length) { tail.unshift(made); }
+        else { lines.splice(one.line - 1, 0, made); }
       }
       if (tail.length) {
         var after = lines.length;
@@ -18159,28 +18850,177 @@
       }
       return lines.join("\n");
     }
-    // The fix, tried before it is offered: {file, text} with it put in, if
-    // the reading then gets further than it did -- all the way, or stuck
-    // later on -- and null if not.  Not, where what is wrong is not a piece
-    // left out: print(a b) is "expected ) here" too, and print(a) b) is no
-    // better.
+
+    // The fixes a stop came with, tried before one is offered: {file, text,
+    // fix} for the first after which the reading gets further than it did
+    // -- all the way, or stuck later on -- and null if none does.  None, for
+    // print(a) b): "expected ) here" in print(a b) is no help there.  One
+    // that does not get further by itself may be the first of two that do:
+    // the = taken out of int x =, and then the ; it wants.
     function tryMend(src, lang, err) {
       var files = typeof src === "string" ? [{ name: "", text: src }] : (src || []);
-      var k = err && err.fix ? err.file || 0 : -1;
+      var k = err && err.fixes && err.fixes.length ? err.file || 0 : -1;
       if (!files[k]) { return null; }
-      var text = mended(files[k].text, err.fix);
-      var fixed = files.map(function (one, j) { return j === k ? { name: one.name, text: text } : one; });
-      try { translate(fixed, lang); }
-      catch (again) {
-        var at = again.file || 0;
-        if (again.reading && (at < k || (at === k && !(again.left < err.left)))) { return null; }
+      var until = Date.now() + 1500, tried = [];
+      function readOf(list) {
+        try { translate(list, lang); return null; } catch (e) { return e; }
       }
-      return { file: k, text: text };
+      function put(list, fix) {
+        var text = mended(list[k].text, fix);
+        return text === list[k].text ? null
+          : list.map(function (one, j) { return j === k ? { name: one.name, text: text } : one; });
+      }
+      // a place in the code as it would be, as the place in the code as it is
+      function back(q, ops) {
+        var sorted = ops.slice().sort(function (a, b) { return a.at - b.at; }), shift = 0;
+        for (var i = 0; i < sorted.length; i++) {
+          var op = sorted[i], p = op.at + shift;
+          if (q < p) { break; }
+          if (q < p + op.ins) { return op.at; }          // in what was put in
+          shift += op.ins - op.cut;
+        }
+        return q - shift;
+      }
+      // how far the reading got, as a place in the code as it is: past the
+      // end of the file for a later file or no stop at all, before it for
+      // an earlier one
+      function reach(res, chain) {
+        if (!res || !res.reading) { return Infinity; }
+        var at = res.file || 0;
+        if (at !== k) { return at > k ? Infinity : -Infinity; }
+        if (res.at === undefined || err.at === undefined) { return -Infinity; }
+        var q = res.at;
+        for (var c = chain.length - 1; c >= 0; c--) { q = back(q, chain[c].ops); }
+        return q;
+      }
+      function further(res, chain) { return reach(res, chain) > err.at; }
+      // the first fix after which the whole of it reads; failing that, the
+      // one after which the reading gets furthest
+      var best = null;
+      for (var i = 0; i < err.fixes.length; i++) {
+        var list = put(files, err.fixes[i]);
+        if (!list) { continue; }
+        var res = readOf(list), got = reach(res, [err.fixes[i]]);
+        if (got === Infinity) { return { file: k, text: list[k].text, fix: err.fixes[i] }; }
+        if (got > err.at && (!best || got > best.got)) { best = { got: got, text: list[k].text, fix: err.fixes[i] }; }
+        tried.push({ list: list, res: res, fix: err.fixes[i] });
+        if (Date.now() > until) { break; }
+      }
+      if (best) { return { file: k, text: best.text, fix: best.fix }; }
+      if (Date.now() > until) { return null; }
+      for (var t = 0; t < tried.length; t++) {
+        var r = tried[t].res;
+        if (!r || !r.reading || (r.file || 0) !== k || !r.fixes) { continue; }
+        for (var j = 0; j < r.fixes.length; j++) {
+          var list2 = put(tried[t].list, r.fixes[j]);
+          if (list2 && further(readOf(list2), [tried[t].fix, r.fixes[j]])) {
+            return { file: k, text: tried[t].list[k].text, fix: tried[t].fix };
+          }
+          if (Date.now() > until) { return null; }
+        }
+      }
+      return null;
+    }
+
+    // The names the languages' own libraries are called by, for telling what
+    // a name written wrong was meant to be (tryRename) -- with the program's
+    // own names, and KEY_WORDS and CALLED_WORDS.
+    var LIB_WORDS = {};
+    ("System out err in println print printf format Console WriteLine Write ReadLine ReadKey " +
+     "console log error warn info alert prompt Math sqrt pow abs round floor ceil max min random " +
+     "PI len length size count append push add remove pop insert sort sorted reverse reversed split " +
+     "join strip trim upper lower toUpperCase toLowerCase ToUpper ToLower substring Substring " +
+     "indexOf IndexOf contains Contains includes startsWith endsWith StartsWith EndsWith replace " +
+     "Replace input range enumerate zip map filter reduce keys values items get put set has " +
+     "parseInt parseFloat Number String Integer Double parseDouble toString ToString Parse " +
+     "TryParse Convert ToInt32 ToDouble Scanner nextLine nextInt nextDouble next hasNext close " +
+     "cout cin endl getline std vector push_back begin end fmt Println Printf Sprintf Scan Scanln " +
+     "strconv Atoi Itoa strings readLine readln listOf mutableListOf arrayOf mapOf mutableMapOf " +
+     "forEach sum average first last isEmpty List ArrayList HashMap Map Arrays asList Collections " +
+     "Random nextInt randint choice shuffle time sleep str int float bool list dict set tuple " +
+     "type isinstance open read write exit main args Dictionary Add Remove Count Keys Values " +
+     "toFixed slice splice concat find findIndex some every Object entries Array from").split(" ")
+      .forEach(function (w) { LIB_WORDS[w] = true; });
+
+    // A note that a call can't be run (`note.call`) may be a name written
+    // wrong -- pritn(), Sytem.out.println(), greeet() for the program's own
+    // greet().  Each word on that line a letter or two from a name the
+    // language or the program knows, put right in turn: {file, text, fix}
+    // for the first after which the note has gone and nothing new is said
+    // about the line, and null if none.
+    function tryRename(src, lang, note) {
+      var files = typeof src === "string" ? [{ name: "", text: src }] : (src || []);
+      var k = note && note.call ? note.file || 0 : -1;
+      if (!files[k] || !note.line) { return null; }
+      var lines = String(files[k].text).split("\n"), row = lines[note.line - 1];
+      if (row === undefined) { return null; }
+      var until = Date.now() + 800;
+      // the names written anywhere but this line
+      var known = {};
+      files.forEach(function (one, j) {
+        String(one.text).split("\n").forEach(function (text, n) {
+          if (j === k && n === note.line - 1) { return; }
+          (text.match(/[A-Za-z_]\w*/g) || []).forEach(function (w) { known[w] = true; });
+        });
+      });
+      [LIB_WORDS, KEY_WORDS, CALLED_WORDS].forEach(function (set) {
+        Object.keys(set).forEach(function (w) { known[w] = true; });
+      });
+      // the words on the line, outside its quotes
+      var plain = row.replace(/"(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'/g, function (q) { return new Array(q.length + 1).join(" "); });
+      var tries = [], re = /[A-Za-z_]\w*/g, m;
+      while ((m = re.exec(plain))) {
+        var w = m[0];
+        if (known[w]) { continue; }
+        Object.keys(known).forEach(function (v) {
+          var gap = v.toLowerCase() === w.toLowerCase() ? 0 : wordGap(v, w, 2);
+          if (gap <= (w.length >= 5 ? 2 : 1)) { tries.push({ at: m.index, w: w, v: v, gap: gap + (LIB_WORDS[v] || CALLED_WORDS[v] ? 0 : 0.5) }); }
+        });
+      }
+      tries.sort(function (a, b) { return a.gap - b.gap; });
+      for (var t = 0; t < tries.length && t < 8 && Date.now() < until; t++) {
+        var one = tries[t], fixed = lines.slice();
+        fixed[note.line - 1] = row.slice(0, one.at) + one.v + row.slice(one.at + one.w.length);
+        var text = fixed.join("\n");
+        var list = files.map(function (f, j) { return j === k ? { name: f.name, text: text } : f; });
+        try {
+          var said = translate(list, lang);
+          if (said.notes.some(function (n) { return (n.file || 0) === k && n.line === note.line; })) { continue; }
+        } catch (e) { continue; }
+        var col = 0;
+        for (var c = 0; c < one.at; c++) { col += row[c] === "\t" ? 4 : 1; }
+        return { file: k, text: text, fix: { says: "lang_fix_change", fill: { word: one.w, instead: one.v },
+                                             edits: [{ line: note.line, col: col, cut: one.w.length },
+                                                     { line: note.line, col: col, text: one.v }], ops: [] } };
+      }
+      return null;
+    }
+
+    // Everything that can be put right, one after another: read, put right
+    // what stops the reading, read again -- until it reads, or stops where
+    // nothing helps, or has taken long enough.  {files, n, err}: the files as
+    // they would be, how many fixes went in, and what still stops it.
+    function mendAll(src, lang) {
+      var files = (typeof src === "string" ? [{ name: "", text: src }] : (src || []))
+        .map(function (one) { return { name: one.name || "", text: String(one.text || "") }; });
+      var n = 0, err = null, until = Date.now() + 6000;
+      for (;;) {
+        try { translate(files, lang); err = null; break; } catch (e) { err = e; }
+        if (n >= 200 || Date.now() > until) { break; }
+        var got = tryMend(files, lang, err);
+        if (!got) { break; }
+        files[got.file] = { name: files[got.file].name, text: got.text };
+        n++;
+      }
+      return { files: files, n: n, err: err };
     }
 
     translate.detect = detect;
     translate.dialects = DIALECTS;
     translate.tryMend = tryMend;
+    translate.mendAll = mendAll;
+    translate.tryRename = tryRename;
+    translate.mended = mended;
 
     return translate;
   })();

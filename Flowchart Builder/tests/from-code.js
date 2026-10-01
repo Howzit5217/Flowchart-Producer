@@ -57,15 +57,28 @@ var out = asked.cases.map(function (one) {
   var src = one.files || one.code;
   var lang = one.lang || read.detect(src);
   try {
-    var got = read(src, lang);
-    return { text: got.text, notes: got.notes, detected: read.detect(src) };
+    var got = read(src, lang), renamed = [];
+    // a call that can't be run, and the name the Code tab would change it to
+    if (one.mend) {
+      got.notes.forEach(function (n) {
+        var r = null;
+        try { r = read.tryRename(src, lang, n); } catch (e3) { r = null; }
+        renamed.push(r ? r.text : null);
+      });
+    }
+    return { text: got.text, notes: got.notes, detected: read.detect(src), renamed: renamed };
   } catch (e) {
-    // and what the Code tab's Fix button would make of it, if it offers one
-    var mended = null;
+    // and what the Code tab's Fix button would make of it, if it offers one,
+    // and what Fix all would
+    var mended = null, all = null;
     try { mended = read.tryMend(src, lang, e); } catch (e2) { mended = null; }
+    if (one.mend) {
+      try { all = read.mendAll(src, lang); } catch (e4) { all = null; }
+    }
     return { error: e.message, line: e.line || 0, file: e.file || 0, said: e.said || "",
              detected: read.detect(src), stack: e.said ? "" : String(e.stack || e),
-             mended: mended ? mended.text : null };
+             mended: mended ? mended.text : null,
+             all: all ? { text: all.files[0].text, reads: !all.err } : null };
   }
 });
 fs.writeFileSync(process.argv[3], JSON.stringify(out));

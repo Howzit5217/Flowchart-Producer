@@ -518,7 +518,8 @@
     border-top: 1px solid var(--line-soft);
   }
   #lang-full-note .hint { margin: 0 0 4px; }
-  #lang-full-note .mend { margin: 0 0 8px; }
+  #lang-full-note .mend { margin: 0 6px 8px 0; }
+  #lang-full-note .mend-all { margin: 0 6px 8px 0; }
   #lang-full-note:not(:empty) + #lang-full { border-top: 0; }
 
   /* ---------------------------- a story, and what it was read as, side by side -- */

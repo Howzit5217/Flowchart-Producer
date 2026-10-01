@@ -350,7 +350,7 @@
   body.by-lang .not-lang, body:not(.by-lang) .only-lang { display: none; }
   #lang-note .hint { margin: 0 0 4px; }
   #lang-note .btn { margin-top: 4px; }
-  #lang-note .mend { margin: 0 0 4px; }
+  #lang-note .mend { margin: 0 6px 4px 0; }
   /* What the code was read into.  It is the chart's program still --
      the run lights its lines, a click on a shape finds its line -- but
      it is written from the code, so it is read here, not typed in. */
@@ -797,10 +797,11 @@
   #build-faults .mend, #report .mend { margin: 5px 0 2px 13px; }
   /* Putting every one of them right at once: the same button filled in,
      first under the heading, as the one press that does the most. */
-  #build-faults .mend-all, #report .mend-all {
+  #build-faults .mend-all, #report .mend-all, #lang-note .mend-all, #lang-full-note .mend-all {
     margin: 6px 0 2px; background: var(--accent); color: #fff; font-weight: 600;
   }
   .mend-all:hover, .mend-all:focus-visible { filter: brightness(1.1); }
+  #lang-note .mend-all { margin: 0 6px 4px 0; }
   .tape .asking { display: flex; gap: 6px; margin: 4px 0; }
   .tape .asking .field { flex: 1; padding: 4px 7px; font-family: inherit; }
   .tape .code { margin: 0; white-space: pre; overflow-x: auto; }

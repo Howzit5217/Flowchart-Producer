@@ -38,8 +38,13 @@
     // one program can have as many of those as it likes -- but only the
     // one place where the program itself starts.
     var mains = heads.filter(function (n) { return !(modHead(n) && outOf(n.id).length); });
-    if (!heads.length) { fault("p_no_start", null); }
-    else if (mains.length > 1) { fault("p_many_starts", null, { n: mains.length }); }
+    if (!heads.length) {
+      // every shape has an arrow in: the flow is a ring -- a Start above
+      // the highest shape of it
+      var highest = hand.nodes.reduce(function (a, b) { return b.y < a.y ? b : a; });
+      fault("p_no_start", null, null, startAbove(highest));
+    }
+    else if (mains.length > 1) { fault("p_many_starts", null, { n: mains.length }, joinStarts(mains)); }
     else if (mains.length === 1 && !endsKind(mains[0].kind)) {
       fault("p_start_kind", mains[0], endShape, startAbove(mains[0]));
     }
@@ -63,20 +68,20 @@
         fault("p_dead_end", n, null, ends.length ? toEnd(n) : endFix);
       }
       if (asks && outs.length < 2) {
-        fault("p_decision_out", n, { n: outs.length });
+        fault("p_decision_out", n, { n: outs.length }, wayOut(n));
       }
       // three ways out and more: a Case, each way the value it answers to
       if (asks && outs.length > 2) {
         var said = {};
         outs.forEach(function (l) {
           var word = String(l.label || "").trim().toLowerCase();
-          if (!word) { fault("p_no_label", n); }
-          else if (said[word]) { fault("p_same_labels", n); }
+          if (!word) { fault("p_no_label", n, null, nameWay(outs)); }
+          else if (said[word]) { fault("p_same_labels", n, null, nameWay([l])); }
           said[word] = true;
         });
       }
       if (!asks && outs.length > 1) {
-        fault("p_one_out", n, { n: outs.length });
+        fault("p_one_out", n, { n: outs.length }, oneWay(n, outs));
       }
       if (asks && outs.length === 2) {
         var one = (outs[0].label || "").trim(), two = (outs[1].label || "").trim();
@@ -129,7 +134,7 @@
         outOf(id).forEach(function (l) { stack.push(l.to); });
       }
       hand.nodes.forEach(function (n) {
-        if (!seen[n.id]) { fault("p_unreached", n); }
+        if (!seen[n.id]) { fault("p_unreached", n, null, joinFromAbove(n, seen)); }
       });
     }
     // ...and from everything, an End has to be reachable, or the flow is
@@ -146,7 +151,7 @@
         });
       }
       hand.nodes.forEach(function (n) {
-        if (!safe[n.id] && outOf(n.id).length) { fault("p_trapped", n); }
+        if (!safe[n.id] && outOf(n.id).length) { fault("p_trapped", n, null, asksKind(n.kind) ? wayOut(n) : null); }
       });
     }
     return found;
@@ -386,6 +391,110 @@
     return { auto: false, says: TXT.hf_arrow, go: function () {
       picked = id; chosen = null; joining = true; joinFrom = null;
       drawHand(); drawHandPanel();
+    } };
+  }
+
+  // A decision short of a way out: where the other way goes is yours to say,
+  // so this starts its arrow, as a shape on its own does.
+  function wayOut(node) {
+    var fix = arrowFrom(node);
+    fix.says = TXT.hf_out;
+    return fix;
+  }
+
+  // The shape above a part of the chart nothing leads into, that it was
+  // most likely meant to come after: one with a way out still to give -- a
+  // shape with none yet, or a decision with one -- that is not an End, and
+  // is itself reached from the start (`reached`, by id) -- nearest first,
+  // and straight above before off to the side.
+  function feederFor(node, reached) {
+    var best = null, score = Infinity;
+    hand.nodes.forEach(function (m) {
+      if (m.id === node.id || m.y >= node.y || (reached && !reached[m.id])) { return; }
+      var outs = outOf(m.id).length;
+      var free = asksKind(m.kind) ? outs < 2 : outs === 0 && !(endsKind(m.kind) && intoOf(m.id).length);
+      if (!free) { return; }
+      var far = (node.y - m.y) + 2 * Math.abs(node.x - m.x);
+      if (far < score) { best = m; score = far; }
+    });
+    return best;
+  }
+  // What the flow reaches from a shape, by id.
+  function reachedFrom(id) {
+    var seen = {}, todo = [id];
+    while (todo.length) {
+      var at = todo.pop();
+      if (seen[at]) { continue; }
+      seen[at] = true;
+      outOf(at).forEach(function (l) { todo.push(l.to); });
+    }
+    return seen;
+  }
+  // A shape nothing leads to: joined on from the shape above it.
+  function joinFromAbove(node, reached) {
+    var id = node.id, from = feederFor(node, reached);
+    if (!from) { return null; }
+    var fromId = from.id;
+    return { auto: true, says: TXT.hf_join, go: function () {
+      var a = nodeById(fromId), b = nodeById(id);
+      if (a && b && !outOf(a.id).some(function (l) { return l.to === id; })) { joinOn(a, b); }
+    } };
+  }
+  // More than one place the flow starts: the Start -- the oval that leads
+  // somewhere, highest up -- kept, and every other one joined on from the
+  // shape above it, among those the Start reaches.
+  function joinStarts(heads) {
+    function main() {
+      var now = hand.nodes.filter(function (n) { return !intoOf(n.id).length && outOf(n.id).length && !modHead(n); });
+      var ovals = now.filter(function (n) { return endsKind(n.kind); });
+      var pool = ovals.length ? ovals : now;
+      return pool.length ? pool.reduce(function (a, b) { return b.y < a.y ? b : a; }) : null;
+    }
+    var first = main();
+    if (!first) { return null; }
+    var reached = reachedFrom(first.id);
+    if (!heads.some(function (h) { return h.id !== first.id && feederFor(h, reached); })) { return null; }
+    return { auto: true, says: TXT.hf_join_all, go: function () {
+      var top = main();
+      if (!top) { return; }
+      hand.nodes.filter(function (n) { return !intoOf(n.id).length && !modHead(n) && n.id !== top.id; })
+        .sort(function (a, b) { return a.y - b.y; })
+        .forEach(function (h) {
+          var from = feederFor(h, reachedFrom(top.id));
+          if (from) { joinOn(from, h); }
+        });
+    } };
+  }
+  // A shape that is not a decision with more than one way out: where the
+  // ways are worded, or it asks a question, it was meant to be one; and
+  // otherwise the arrows after the first are the ones drawn by mistake.
+  function oneWay(node, outs) {
+    var id = node.id, worded = outs.some(function (l) { return String(l.label || "").trim(); });
+    if (outs.length === 2 && (worded || /\?\s*$/.test(String(node.text || "")))) {
+      return { auto: true, says: TXT.hf_decide, go: function () {
+        var n = nodeById(id);
+        if (n) { n.kind = ruleShape("diamond"); }
+      } };
+    }
+    return { auto: true, says: TXT.hf_drop_way, go: function () {
+      var seen = false;
+      hand.links = hand.links.filter(function (l) {
+        if (l.from !== id) { return true; }
+        if (!seen) { seen = true; return true; }
+        return false;
+      });
+    } };
+  }
+  // A way out of a Case with no words on it, or the same words as another:
+  // the arrow picked, for its words to be written in.
+  function nameWay(outs) {
+    var bare = outs.length === 1 ? outs[0] : outs.filter(function (l) { return !String(l.label || "").trim(); })[0];
+    if (!bare || bare.id === undefined) { return null; }
+    var id = bare.id;
+    return { auto: false, says: TXT.hf_name_way, go: function () {
+      pickLink(id);
+      var field = el("#hand-sel input.field");
+      if (field) { field.focus(); }
     } };
   }
 

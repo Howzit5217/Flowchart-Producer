@@ -112,7 +112,13 @@ def sum_reads(text):
             else:
                 return False               # two things side by side: words, not a sum
         prev = tok
-    return not want and deep == 0
+    # A bracket too many or too few, or a sign with nothing after it, is a
+    # sum written wrong -- (x + 2)) -- not words: words fail above, two of
+    # them side by side.  Read as one, the line is pseudocode, and the run
+    # says what is wrong with it and puts it right (15-sums.js); read as a
+    # story, it was retold as something else altogether, and the whole of
+    # the program with it.
+    return not want or prev in BIN_OPS
 
 
 def reads_as_pseudocode(line):
