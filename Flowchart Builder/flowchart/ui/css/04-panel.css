@@ -634,6 +634,55 @@
   }
   #puzzles.some::after { opacity: 1; transform: scale(1); }
   #puzzles.won { border-color: var(--good); color: var(--good); }
+  /* Puzzles and Games are words in the bar, and on a phone held upright a
+     picture each: with both as words there, Files was squeezed down to
+     "Fi".  The word is still there for a screen reader, only not seen. */
+  #games { position: relative; }
+  .bar-art {
+    display: none; flex: none; width: 18px; height: 18px; fill: none;
+    stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round;
+  }
+  #games .bar-art circle { fill: currentColor; stroke: none; }
+  /* and it is the chart's name that gives way to them, not their words */
+  @media (max-width: 599px) {
+    #puzzles, #games, #save-open { flex-shrink: 0; }
+  }
+  @media (max-width: 479px) {
+    #puzzles, #games { padding-left: 9px; padding-right: 9px; }
+    #puzzles .bar-art, #games .bar-art { display: block; }
+    #puzzles > span, #games > span {
+      position: absolute; width: 1px; height: 1px; overflow: hidden;
+      clip-path: inset(50%); white-space: nowrap;
+    }
+  }
+  /* The smallest phones have no room left even then, and the bar ran off
+     the right-hand edge, Settings and all.  The little mark at its head is
+     the one thing in it that does nothing, so it goes. */
+  @media (max-width: 359px) {
+    header.bar > .mark { display: none; }
+  }
+  /* The game being played, carded the way a puzzle is (37-games.js): its
+     name, how to play it, which way it is drawn, and Play.  Only while
+     the pseudocode is what is being worked in -- drawn by hand, or read
+     from code, the program on the page is somebody's own. */
+  #gm-card { box-shadow: inset 3px 0 0 var(--accent); }
+  body:is(.by-hand, .by-lang) #gm-card { display: none; }
+  #gm-card .pz-top { display: flex; align-items: center; gap: 8px; min-height: 26px; }
+  #gm-card .pz-top strong { flex: 1; min-width: 0; font-size: 14px; line-height: 1.3; }
+  #gm-card .icon.small { width: 26px; height: 26px; flex: none; margin-right: -4px; }
+  #gm-card .icon.small svg { width: 15px; height: 15px; }
+  #gm-card .pz-head {
+    margin: 12px 0 3px; font-size: 11px; letter-spacing: .07em;
+    text-transform: uppercase; color: var(--muted); font-weight: 650;
+  }
+  #gm-card .pz-text { margin: 0; font-size: 13px; line-height: 1.5; color: var(--ink); }
+  /* which way it is drawn: the name, and the switch filling the rest */
+  #gm-card .gm-row { display: flex; align-items: center; gap: 10px; margin-top: 14px; }
+  #gm-card .gm-row-name { flex: none; font-size: 12.5px; color: var(--muted); }
+  #gm-card .gm-row .seg { flex: 1; min-width: 0; }
+  #gm-card .gm-row .seg-btn { flex: 1; padding-left: 6px; padding-right: 6px; }
+  #gm-card .pz-ways { margin-top: 12px; gap: 8px; }
+  #gm-card .pz-ways .btn { width: 100%; }
   :is(#source, #lang-src) .build-row { margin-top: 12px; }
   /* The two things to do with a finished drawing, in a row of their own
      above the one that says whether it works.  Plain buttons, because
@@ -878,6 +927,21 @@
   }
   .fix-bar.full .bb-fill { background: var(--good); }
   .fix-bar.full .bb-shine { opacity: 0; }
+  /* Stop, after how far it has got: what it is doing takes the room
+     there is, and the number and the button keep to the right */
+  .fix-bar .bb-said { flex: 1 1 auto; }
+  .fix-stop {
+    flex: none; align-self: center; padding: 1px 9px; border: 1px solid var(--line);
+    border-radius: 999px; background: transparent; color: var(--muted);
+    font: inherit; font-size: 11.5px; line-height: 1.4; cursor: pointer;
+  }
+  .fix-stop:hover, .fix-stop:focus-visible { border-color: var(--bad); color: var(--bad); }
+  .fix-bar.full .fix-stop { visibility: hidden; }
+  /* Everything still wrong, file by file, after putting right all it
+     could -- or with too much wrong to put right at all: the same list as
+     what was put right, each row picking its line. */
+  .left-list { margin: 2px 0 8px; }
+  .left-more { margin: 4px 8px 6px; font-size: 11.5px; color: var(--muted); }
   /* What Build put right in the code: a button under the box, in the green
      of things that work, opening on the list -- each mistake, where it
      was, and what was done -- to see and to learn from. */

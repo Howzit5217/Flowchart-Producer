@@ -66,6 +66,7 @@ Each folder is one stage of the job.
 | `make/fit.py` | Fitting a chart to the shape you asked for |
 | `make/shake.py` | The seeded shake, so two charts differ |
 | `make/legend.py` | The key beside the chart |
+| `make/inline.py` | Every module drawn where it is called, so a program is one chart |
 | `make/options.py` | Everything the command line answers to |
 | `make/command.py` | And what it does with the answers |
 
@@ -86,10 +87,14 @@ the `@@CSS@@` and `@@JS@@` marks in `studio.html` and hands back the page.
 | `ui/css/05-chart.css` | The chart, the menu, the shapes and arrows |
 | `ui/css/06-screens.css` | Fitting the screen it is on, whatever size that is |
 | `ui/css/07-motion.css` | How it moves, and how it does not |
+| `ui/css/08-icons.css` | The icon library, a drawing run as what it is, and the 3D view |
 | `ui/js/01-start.js` | The bits everything else uses |
 | `ui/js/02-paint.js` | Painting the colors on, and how the words and borders look |
 | `ui/js/02-read.js` | Colors kept readable on what they are on, and the mark that says so |
+| `ui/js/02-depth.js` | Depth: every shape shaded in its own color and casting a shadow |
 | `ui/js/03-shapes.js` | The shape catalog, in the browser, and where each shape holds its words |
+| `ui/js/03-icon-art.js` | Every icon, drawn in black and white: people at work; a home from above, room by room, with its electronics, lights, decor and what hangs on its walls; its lot, driveway and garden; computers, circuits, travel, space and things |
+| `ui/js/03-icons.js` | Icons drawn at any size, their words, rooms that hold what stands in them, doors, windows and pictures fitted into walls, labels on a plan's furniture and rooms, and a lot: its setbacks, the room to build on and the yard |
 | `ui/js/04-panel.js` | The Style side: palette, words, shapes, the picked shape |
 | `ui/js/05-keep.js` | Remembering what you chose |
 | `ui/js/06-chart.js` | Showing a chart, and moving about it |
@@ -98,6 +103,7 @@ the `@@CSS@@` and `@@JS@@` marks in `studio.html` and hands back the page.
 | `ui/js/09-build.js` | Building from pseudocode, off the page's own thread |
 | `ui/js/10-hand.js` | By hand: placing, dragging, joining |
 | `ui/js/11-hand-panel.js` | What the panel shows for a shape or arrow |
+| `ui/js/11-hand-icons.js` | The library of icons: searched, sorted into sets, pressed or carried onto the paper; a plan piece's real size, a room's ceiling height and a lot's setbacks in the panel; the Labels switch |
 | `ui/js/12-check.js` | Checking a design makes sense |
 | `ui/js/13-hand-keep.js` | Remembering a design |
 | `ui/js/13-hand-apart.js` | Shapes kept off one another: carried, added, pasted, grown or turned |
@@ -130,6 +136,13 @@ the `@@CSS@@` and `@@JS@@` marks in `studio.html` and hands back the page.
 | `ui/js/31-app.js` | Installing the website as an app, and keeping it for offline |
 | `ui/js/32-code-side.js` | The Code tab: the box code is written in (a tab per file), its language found from the code, read into the pseudocode on Build, filling the screen, and translated into the other languages |
 | `ui/js/33-told.js` | A story in the pseudocode box, and the pseudocode it was read as beside it |
+| `ui/js/37-board.js` | What a drawing is -- a program, a home, people at work, a network, a circuit, space, travel -- and Run running it as that |
+| `ui/js/38-walk.js` | A floor plan walked through, room by room and door by door, and floor by floor up and down the stairs; doors open, shut and locked |
+| `ui/js/38-advice.js` | Suggestions for a home (its lot, garage and stairs too), a network, a circuit or a team, with the fix for each where there is one |
+| `ui/js/38-view3d.js` | A home or a sky in 3D or flat in 2D: roofed, labeled, looked round from above a floor at a time or all stacked, or walked round inside under its ceilings and up the stairs; every change eased or faded |
+| `ui/js/39-flows.js` | Work passed from hand to hand, data sent round a network, vehicles on their routes, any arrows followed |
+| `ui/js/39-circuit.js` | A circuit worked out by nodal analysis and switched on |
+| `ui/js/39-orbit.js` | Space set going: orbits by Kepler's law, and a rocket's trip |
 | `ui/js/99-go.js` | Starting it all up |
 | `ui/app/sw.js` | The service worker `--site` writes beside the page, so the app opens and draws offline |
 | `ui/app/*.png` | The app's icons, named by the manifest `--site` writes |

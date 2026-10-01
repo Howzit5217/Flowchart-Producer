@@ -307,7 +307,8 @@
         if (last.t === "op") { return !/^[)\]}]$/.test(last.v); }
         return last.t === "name" && /^(return|typeof|case|in|of|new|delete|void|throw|else|do)$/.test(last.v);
       }
-      var depth = 0, indents = [0], atStart = true, codeOnLine = false;
+      // `opened`: the line each of Python's ways in was opened on
+      var depth = 0, indents = [0], opened = [0], atStart = true, codeOnLine = false;
 
       function colOf(at) { return at - col0; }
       // Go puts in the ; that ends a line's statement itself: after a name,
@@ -360,13 +361,22 @@
           fixes.push(kit.put(kit.make("lang_fix", { what: closer }), off, text));
         }
         var bol = s.lastIndexOf("\n", from - 1) + 1;
+        // A quote written twice -- "the screen"", x -- the second one opening
+        // words that never end: that second one taken out, first.
+        if (closer.length === 1 && from > bol && s[from - 1] === closer) {
+          fixes.push(kit.cut(kit.make("lang_fix_cut", { what: closer }), from, from + 1));
+        }
         // the names written in the code, for telling words from code
         var named = null;
         function known(word) {
           if (/^\d/.test(word)) { return true; }
           if (!named) {
             named = {};
-            (s.match(/[A-Za-z_]\w*/g) || []).forEach(function (w) { named[w] = (named[w] || 0) + 1; });
+            // the code's own words, not those of what it says: a sentence
+            // printed a hundred times made its words look like names, and a
+            // quote was shut after its first word, the rest read as code
+            (s.replace(/"(?:[^"\\\n]|\\.)*"|'(?:[^'\\\n]|\\.)*'/g, " ").match(/[A-Za-z_]\w*/g) || [])
+              .forEach(function (w) { named[w] = (named[w] || 0) + 1; });
           }
           return named[word] > 1;
         }
@@ -582,22 +592,49 @@
           }
           if (s[i] === "\\" && s[i + 1] === "\n") { i += 2; newline(); continue; }
           var top = indents[indents.length - 1], popped = null;
-          if (col > top) { indents.push(col); push("indent", col, { was: top }); }
-          while (col < indents[indents.length - 1]) { popped = indents.pop(); push("dedent", col); }
+          if (col > top) { indents.push(col); opened.push(line); push("indent", col, { was: top }); }
+          while (col < indents[indents.length - 1]) { popped = indents.pop(); opened.pop(); push("dedent", col); }
           if (col !== indents[indents.length - 1]) {
             // between two of the ways in that are open: lined up with the
             // nearer of them, the line and the lines that go with it
             var err = oops("cm_indent", line), kit = fixKit(s, base), lower = indents[indents.length - 1];
             err.at = i;
             err.lexing = true;
-            var ways = [];
-            (popped !== null && popped - col < col - lower ? [popped, lower] : [lower, popped])
+            var ways = [], from = opened[opened.length - 1];
+            // or the way in it falls short of, lined up with it: an if moved
+            // two spaces out, and its else, where it always was, belonging
+            // to nothing -- the lines on that step from where it opened
+            if (from && lower > 0) {
+              var up = kit.make("lang_fix_indent");
+              for (var ln = from; ln < line; ln++) {
+                if (!kit.blank(ln) && kit.lead(ln) === lower) { kit.indent(up, ln, col); }
+              }
+              if (up.edits.length) { ways.push(up); }
+            }
+            // the nearer first -- and, as near either way, out to the block
+            // around it: a line after a loop's body is mostly after the loop.
+            // But a return or a yield cannot stand outside every function,
+            // and two spaces short of its own it goes back in.
+            // And an else (elif, except, finally) goes in to where there is
+            // an if (a try) for it to belong to, rather than out to a for.
+            var head = s.slice(i, i + 8), inside = lower === 0 && /^(return|yield)\b/.test(head);
+            var pair = /^(else|elif)\b/.test(head) ? /^(if|elif)\b/ : /^(except|finally)\b/.test(head) ? /^(try|except)\b/ : null;
+            if (pair && popped !== null) {
+              for (var up = s.lastIndexOf("\n", i - 1), seen = 0; up > 0 && seen < 400; seen++) {
+                var from = s.lastIndexOf("\n", up - 1) + 1, row = s.slice(from, up);
+                var lead = /^ */.exec(row)[0].length;
+                if (row.trim() && lead <= popped) { inside = lead === popped && pair.test(row.trim()); break; }
+                up = from - 1;
+              }
+            }
+            (popped !== null && (popped - col < col - lower || (popped - col === col - lower && inside))
+              ? [popped, lower] : [lower, popped])
               .forEach(function (to) {
                 if (to === null) { return; }
                 ways.push(kit.indent(kit.make("lang_fix_indent"), line, to));
                 ways.push(kit.shift(kit.make("lang_fix_indent"), line, to, true));
               });
-            err.fixes = kit.onGrid(ways, line, kit.runEnd(line));
+            err.fixes = kit.onGrid(ways, from && lower > 0 ? Math.min(from, line) : line, kit.runEnd(line));
             throw err;
           }
           atStart = false;
@@ -867,7 +904,7 @@
         } else {
           var bit = t.t === "str" ? '"' + t.v + '"' : t.t === "nl" ? "↵" : String(t.v);
           err = oops("cm_odd", t.line, { bit: bit.slice(0, 24) });
-          err.fixes = some(softFixes(t).concat(oddFixes(k)));
+          err.fixes = some([shutAbove(k)].concat(extraShut(k), openedHere(k), lostOnLine(k), firstWord(k), pyRunOn(k), pyElse(t), softFixes(t), oddFixes(k)));
         }
         err.at = t.at;
         return err;
@@ -926,6 +963,185 @@
           if (t.first && solid(t) && t.line > inner.line && kit.spot(t.at).col <= lead) { return inner; }
         }
         return null;
+      }
+      // The languages of braces: a block whose } was left out, and the
+      // reading gone on into the next thing the indenting says comes after
+      // it -- a method's } lost, and the next method read as though it were
+      // a statement inside it, wanting a ; after its name.  Every block still
+      // open that the line stopped on is no further in than shut above that
+      // line, under the block's last line, each } as far in as the line its
+      // block opened on.  Null where the indenting says nothing of the sort:
+      // the line further in than the block it is in, or code not indented.
+      function shutAbove(k) {
+        if (py || k <= 0) { return null; }
+        var j = k;
+        while (j > 0 && !(toks[j].first && solid(toks[j]))) { j--; }
+        var head = toks[j];
+        if (!head || !head.first || !solid(head) || head.at === undefined) { return null; }
+        if (head.t === "op" && head.v === "}") { return null; }
+        var col = kit.spot(head.at).col, row = kit.spot(head.at).line;
+        var open = openAt(j), shut = [];
+        for (var m = open.length - 1; m >= 0; m--) {
+          var o = open[m];
+          if (o.v !== "{") { return null; }
+          var opened = kit.spot(o.at).line, ind = kit.lead(opened);
+          if (ind < col) { break; }
+          // the block was written with its lines further in than itself
+          var body = null;
+          for (var ln = opened + 1; ln < row; ln++) {
+            if (!kit.blank(ln)) { body = kit.lead(ln); break; }
+          }
+          if (body === null || body <= ind) { return null; }
+          shut.push(opened);
+        }
+        if (!shut.length) { return null; }
+        var under = row;
+        while (under - 1 > (lexed.base || 0) && kit.blank(under - 1)) { under--; }
+        var mk = shut.length > 1 ? kit.make("lang_fix_many", { what: "}", n: shut.length })
+                                 : kit.make("lang_fix", { what: "}" });
+        // One } lost from a line of its own leaves the line, blank but for
+        // the spaces it began with: the } goes back on it.
+        var gap = kit.textOf(under);
+        if (shut.length === 1 && under < row && gap.length && !gap.trim() && gap.length === kit.lead(shut[0])) {
+          return kit.put(mk, kit.startOf(under) + gap.length, "}");
+        }
+        shut.forEach(function (opened) { kit.line(mk, under, "}", opened); });
+        return mk;
+      }
+      // And the other way round: a } too many above, shutting a block early,
+      // and the reading gone on into a line further in than any block still
+      // open -- the rest of a method read as though it stood in the class.
+      // The }s that stand out, nearest first: one starting a line not as far
+      // in as the line its block opened on, or one written straight after
+      // another (}}) where the line is further in than that block's.
+      function extraShut(k) {
+        if (py || k <= 0) { return []; }
+        var j = k;
+        while (j > 0 && !(toks[j].first && solid(toks[j]))) { j--; }
+        var head = toks[j];
+        if (!head || !head.first || !solid(head) || head.at === undefined) { return []; }
+        var col = kit.spot(head.at).col, stack = [], pairs = [];
+        for (var q = 0; q < j; q++) {
+          var t = toks[q];
+          if (t.t !== "op") { continue; }
+          if (t.v === "{") { stack.push(t); }
+          else if (t.v === "}" && stack.length) { pairs.push({ open: stack.pop(), shut: t, prev: lastSolid(q) }); }
+        }
+        // further in than the innermost block still open holds its lines
+        var inner = stack[stack.length - 1], room = 0;
+        if (inner) {
+          var from = kit.spot(inner.at).line;
+          room = null;
+          for (var ln = from + 1; ln < kit.spot(head.at).line; ln++) {
+            if (!kit.blank(ln)) { room = kit.lead(ln); break; }
+          }
+          if (room === null) { return []; }
+        }
+        if (col <= room) { return []; }
+        // a } written straight after another first, nearest first -- it is
+        // what the ones after it then shut the wrong block with, so they
+        // stand out too -- then the rest, nearest first
+        var twice = [], apart = [];
+        for (var p = pairs.length - 1; p >= 0 && twice.length + apart.length < 4; p--) {
+          var pair = pairs[p], at = kit.spot(pair.shut.at), ind = kit.lead(kit.spot(pair.open.at).line);
+          if (!pair.shut.first) {
+            if (pair.prev && pair.prev.t === "op" && pair.prev.v === "}" &&
+                pair.prev.line === pair.shut.line && ind < kit.lead(at.line)) { twice.push(pair); }
+          } else if (at.col !== ind) {
+            apart.push(pair);
+          }
+        }
+        var out = [];
+        twice.concat(apart).forEach(function (pair) {
+          // the { its block lost, if the indenting shows where, before the
+          // } is given up as one too many
+          out = out.concat(pair.shut.first ? openerFor(pair.shut) : [], [cutTok(pair.shut)]);
+        });
+        return out;
+      }
+      // A } with nothing left to shut, at k: where a } was written twice above
+      // it (}}) on a line no further out than the block it shuts, that second
+      // one is likelier the one too many than this -- nearest first.
+      function doubledShut(k) {
+        if (py) { return []; }
+        var stack = [], out = [];
+        for (var q = 0; q < k; q++) {
+          var t = toks[q];
+          if (t.t !== "op") { continue; }
+          if (t.v === "{") { stack.push(t); continue; }
+          if (t.v !== "}" || !stack.length) { continue; }
+          var o = stack.pop(), prev = lastSolid(q);
+          if (!t.first && prev && prev.t === "op" && prev.v === "}" && prev.line === t.line &&
+              kit.lead(kit.spot(o.at).line) < kit.lead(kit.spot(t.at).line)) {
+            out.unshift(cutTok(t));
+          }
+        }
+        return out.slice(0, 3);
+      }
+      // The word the line the reading stopped on starts with, where the
+      // code uses it nowhere else and it is a letter or two from one the
+      // language keeps for itself -- elsee:, whlie x < 3 -- made that word
+      function firstWord(k) {
+        // the first real word on the line: Python's way in or out of a
+        // block comes before it, and counts as the line's first piece
+        var row = toks[k] && toks[k].line, j = k;
+        if (!row) { return []; }
+        while (j > 0 && toks[j - 1].line === row) { j--; }
+        while (j < k && !solid(toks[j])) { j++; }
+        var head = toks[j];
+        if (!head || head.line !== row || head.t !== "name" || KEY_WORDS[head.v] || factsOf().names[head.v] > 1) { return []; }
+        return loneWord(head).filter(function (f) { return f && KEY_WORDS[f.fill.instead]; });
+      }
+      // Python: two lines run into one -- for x in items:  if x > limit: --
+      // where a statement of its own starts after the : on the same line.
+      // What follows the : goes on a line of its own, a step further in.
+      var STARTS = { "if": 1, "for": 1, "while": 1, "def": 1, "class": 1, "try": 1, "with": 1,
+                     "return": 1, "elif": 1, "else": 1, "print": 1 };
+      function pyRunOn(k) {
+        if (!py) { return []; }
+        var row = toks[k] && toks[k].line, j = k;
+        if (!row) { return []; }
+        while (j > 0 && toks[j - 1].line === row) { j--; }
+        for (; j < toks.length && toks[j].line === row; j++) {
+          var t = toks[j], prev = lastSolid(j);
+          if (t.first || t.t !== "name" || !STARTS[t.v] || !prev || prev.t !== "op" || prev.v !== ":" ||
+              prev.line !== row || t.at === undefined || prev.end === undefined) { continue; }
+          var at = kit.spot(t.at), text = kit.textOf(at.line).slice(at.col).replace(/\s+$/, "");
+          var m = kit.make("lang_fix_split");
+          kit.cut(m, prev.end, kit.startOf(at.line) + kit.textOf(at.line).length);
+          kit.line(m, at.line + 1, text, at.line, true);
+          return [m];
+        }
+        return [];
+      }
+      // Python: an else (an elif, an except, a finally) lined up with
+      // nothing it could belong to -- the if above it moved in or out of
+      // line, or the else itself.  The if lined up with the else, that line
+      // alone or with the lines under it; or the else, and the lines under
+      // it, lined up with the if.  Whichever leaves the lines about them on
+      // the code's own step comes first.
+      function pyElse(t) {
+        if (!py || !t || t.t !== "name" || !t.first) { return []; }
+        var opens = { "else": /^(if|elif|for|while|try|except)\b/, "elif": /^(if|elif)\b/,
+                      "except": /^(try|except)\b/, "finally": /^(try|except|else)\b/ }[t.v];
+        if (!opens) { return []; }
+        var at = kit.spot(t.at), row = at.line, col = at.col, low = col;
+        for (var ln = row - 1; ln > (lexed.base || 0); ln--) {
+          if (kit.blank(ln)) { continue; }
+          var lead = kit.lead(ln);
+          if (lead === col) { return []; }               // lined up already: not this
+          if (opens.test(kit.textOf(ln).trim()) && lead < low + 8 && lead !== col &&
+              Math.abs(lead - col) <= 8) {
+            var fixes = [kit.indent(kit.make("lang_fix_indent"), ln, col),
+                         kit.shift(kit.make("lang_fix_indent"), ln, col, false),
+                         kit.shift(kit.make("lang_fix_indent"), row, lead, false)];
+            return kit.onGrid(fixes, ln, kit.runEnd(row));
+          }
+          // a line no further in than both: a block of its own, above them
+          if (lead < Math.min(col, low)) { return []; }
+          low = Math.min(low, lead);
+        }
+        return [];
       }
       function endsValue(t) {
         return !!t && (/^(name|num|str|fstr|regex)$/.test(t.t) || (t.t === "op" && /^[)\]]$/.test(t.v)));
@@ -1012,11 +1228,9 @@
         for (var a = from; a < k; a++) {
           var x = toks[a], y = toks[a + 1];
           if (x.t !== "name" || KEY_WORDS[x.v] || x.end === undefined) { continue; }
-          if (y && y !== t && /^(name|num|str|fstr)$/.test(y.t) && !KEY_WORDS[y.v] && y.at !== undefined) {
-            var m = kit.make("lang_fix", { what: opener });
-            kit.cut(m, x.end, y.at);
-            out.push(kit.put(m, x.end, opener));
-          }
+          // a name the code calls run into what it is handed first --
+          // add3int a, int b) is add3(int a, ... where add3 is called
+          // elsewhere -- and then the ( between two words
           if (opener === "(") {
             for (var cut = 1; cut < x.v.length; cut++) {
               var left = x.v.slice(0, cut), right = x.v.slice(cut);
@@ -1024,6 +1238,11 @@
                 out.push(kit.put(kit.make("lang_fix", { what: "(" }), x.at + cut, "("));
               }
             }
+          }
+          if (y && y !== t && /^(name|num|str|fstr)$/.test(y.t) && !KEY_WORDS[y.v] && y.at !== undefined) {
+            var m = kit.make("lang_fix", { what: opener });
+            kit.cut(m, x.end, y.at);
+            out.push(kit.put(m, x.end, opener));
           }
         }
         return out;
@@ -1089,25 +1308,61 @@
         for (var j = 0; j < toks.length && out.length < 4; j++) {
           var t = toks[j];
           if (!(t.t === "op" && t.v === "}" && t.first)) { continue; }
-          var at = kit.spot(t.at);
-          for (var ln = at.line - 1; ln > (lexed.base || 0); ln--) {
-            if (kit.blank(ln)) { continue; }
-            var lead = kit.lead(ln);
-            if (lead < at.col) { break; }
-            if (lead > at.col) { continue; }
-            var text = kit.textOf(ln).replace(/\s*\/\/.*$/, "").replace(/\s+$/, "");
-            if (/[{;]$/.test(text) || /^\s*[{}]/.test(text)) { break; }
-            var nx = ln + 1;
-            while (nx < at.line && kit.blank(nx)) { nx++; }
-            if (nx < at.line && kit.lead(nx) > at.col) {
-              var after = kit.put(kit.make("lang_fix", { what: "{" }), kit.startOf(ln) + text.length, " {");
-              var alone = kit.line(kit.make("lang_fix", { what: "{" }), ln + 1, "{", ln);
-              out.push.apply(out, f.alone > f.after ? [alone, after] : [after, alone]);
-            }
-            break;
-          }
+          out.push.apply(out, openerFor(t));
         }
         return out;
+      }
+      // The { the block a } shuts never got, by the indenting: the line as
+      // far in as the }, with lines further in under it and no { of its own
+      function openerFor(t) {
+        var f = factsOf(), out = [], at = kit.spot(t.at);
+        for (var ln = at.line - 1; ln > (lexed.base || 0); ln--) {
+          if (kit.blank(ln)) { continue; }
+          var lead = kit.lead(ln);
+          if (lead < at.col) { break; }
+          if (lead > at.col) { continue; }
+          var text = kit.textOf(ln).replace(/\s*\/\/.*$/, "").replace(/\s+$/, "");
+          // } else, } catch (...), } finally: a block shut and the next one
+          // opened on the one line, which may have lost its {
+          if (/[{;]$/.test(text) || (/^\s*[{}]/.test(text) && !/^\s*}\s*(else|catch|finally)\b/.test(text))) { break; }
+          var nx = ln + 1;
+          while (nx < at.line && kit.blank(nx)) { nx++; }
+          if (nx < at.line && kit.lead(nx) > at.col) {
+            // a space left where the { was is where it goes back
+            var spaced = kit.textOf(ln).charAt(text.length) === " ";
+            var after = kit.put(kit.make("lang_fix", { what: "{" }), kit.startOf(ln) + text.length + (spaced ? 1 : 0),
+                                spaced ? "{" : " {");
+            var alone = kit.line(kit.make("lang_fix", { what: "{" }), ln + 1, "{", ln);
+            out.push.apply(out, f.alone > f.after ? [alone, after] : [after, alone]);
+          }
+          break;
+        }
+        return out;
+      }
+      // A ) further along the line the reading stopped on with nothing on
+      // the line to shut: the ( it lost put back (lostOpener) -- reading
+      // stops before it gets there, at a name it took for something else:
+      // static int work34int[] items, int limit) is work34(int[] items, ...
+      function lostOnLine(k) {
+        var row = toks[k] && toks[k].line, j = k, depth = 0;
+        if (!row) { return []; }
+        while (j > 0 && toks[j - 1].line === row) { j--; }
+        for (; j < toks.length && toks[j].line === row; j++) {
+          var t = toks[j];
+          if (t.t !== "op") { continue; }
+          if (t.v === "(") { depth++; }
+          else if (t.v === ")" && --depth < 0) { return j > k ? lostOpener(j) : []; }
+        }
+        return [];
+      }
+      // The } that starts the line the reading stopped on, if one does: its
+      // block's { lost, wherever else in the code {s and }s are out
+      function openedHere(k) {
+        if (py || k <= 0) { return []; }
+        var j = k;
+        while (j > 0 && !(toks[j].first && solid(toks[j]))) { j--; }
+        var t = toks[j];
+        return t && t.first && t.t === "op" && t.v === "}" ? openerFor(t) : [];
       }
       // A name the code uses nowhere else, side by side with another: made
       // the word it is a letter or two from -- retrun is return -- where
@@ -1163,7 +1418,7 @@
             }
           }
         }
-        err.fixes = some(softFixes(cur).concat(unopened(), lonely, twice,
+        err.fixes = some([shutAbove(k)].concat(extraShut(k), openedHere(k), lostOnLine(k), firstWord(k), pyRunOn(k), softFixes(cur), unopened(), lonely, twice,
                                                later ? oddFixes(k).concat(shut) : shut.concat(oddFixes(k))));
         return err;
       }
@@ -1232,6 +1487,7 @@
           if (prev && prev.t === "op" && prev.v === t.v && prev.end === t.at) { out.push(cutTok(t)); }
           if (t.v !== "}") { out = out.concat(lostOpener(k)); }
           if (inner && inner.v !== "{" && t.v !== "}") { out.push(swapTok(t, SHUT[inner.v])); }
+          if (t.v === "}" && !inner) { out = out.concat(doubledShut(k)); }
           out.push(cutTok(t));
         }
         if (prev && t.t === "op" && prev.t === "op" && prev.v === t.v && !/^[)\]}]$/.test(t.v)) { out.push(cutTok(t)); }
@@ -9276,11 +9532,35 @@
     // A program in one piece of text or in several files, numbered
     // straight through: the files, the lines each runs over, and a line
     // number turned back into the file it is in and the line of that file.
+    // How many lines a text has, kept for the texts asked about lately: the
+    // fixer lays the same files out over and over, one of them changed, and
+    // splitting every one of them into lines each time was most of the work
+    // on a program of many files.
+    // Kept by the file, not by its text: a Map keyed by long texts is slow,
+    // the browser telling one long text from another of the same length by
+    // reading both.  A file whose text has changed since is counted again.
+    var rowsKept = new WeakMap();
+    function rowsOf(text) {
+      var rows = 1;
+      for (var at = text.indexOf("\n"); at >= 0; at = text.indexOf("\n", at + 1)) { rows++; }
+      // a lone \r ends a line too, as the reading counts them
+      if (/\r(?!\n)/.test(text)) { rows = text.split(/\r\n?|\n/).length; }
+      return rows;
+    }
+    function rowsIn(one) {
+      var text = String(one.text || "");
+      if (typeof one !== "object") { return rowsOf(text); }
+      var got = rowsKept.get(one);
+      if (got && got.text === text) { return got.rows; }
+      got = { text: text, rows: rowsOf(text) };
+      rowsKept.set(one, got);
+      return got.rows;
+    }
     function laidOut(src) {
       var files = typeof src === "string" ? [{ name: "", text: src }] : (src || []);
       var spans = [], base = 0;
       files.forEach(function (one, k) {
-        var rows = String(one.text || "").split(/\r\n?|\n/).length;
+        var rows = rowsIn(one);
         spans.push({ file: k, from: base + 1, to: base + rows });
         base += rows + 1;
       });
@@ -9327,10 +9607,12 @@
     // writing the pseudocode: whether it reads, and if not where it stops,
     // just as translate would say it.  It is what a fix is tried by, over
     // and over, and it is a small part of the whole.  From file `from` on
-    // (the ones before it read already); null where every one reads.
-    function parsedStop(src, lang, from) {
+    // (the ones before it read already), up to but not taking in file `to`
+    // where that is given; null where every one reads.
+    function parsedStop(src, lang, from, to) {
       var laid = laidOut(src);
-      for (var k = from || 0; k < laid.files.length; k++) {
+      var end = to === undefined ? laid.files.length : Math.min(to, laid.files.length);
+      for (var k = from || 0; k < end; k++) {
         var one = laid.files[k];
         if (!String(one.text || "").trim()) { continue; }
         var parser = null;
@@ -18976,13 +19258,17 @@
     // still be the first of two that do: the = taken out of int x =, and
     // then the ; it wants.  None, for print(a) b): "expected ) here" in
     // print(a b) is no help there.  `want` is how many are enough.
-    function mendsFor(src, lang, err, want, budget) {
+    // Only the file the fix is in is read again: the others are as they
+    // were, and whether this one now reads to its end is all that is asked
+    // -- `reader(list, k)`, where the fixer has one that remembers the
+    // files it has read already.
+    function mendsFor(src, lang, err, want, budget, reader) {
       var files = typeof src === "string" ? [{ name: "", text: src }] : (src || []);
       var k = err && err.fixes && err.fixes.length ? err.file || 0 : -1;
       if (!files[k]) { return []; }
-      var until = Date.now() + (budget || 1500), tried = [], whole = [], part = [], seen = {};
+      var until = Date.now() + (budget || 1500), tried = [], whole = [], part = [], seen = new Map();
       want = want || 1;
-      function readOf(list) { return parsedStop(list, lang, k); }
+      function readOf(list) { return reader ? reader(list, k) : parsedStop(list, lang, k, k + 1); }
       function put(list, fix) {
         var text = mended(list[k].text, fix);
         return text === list[k].text ? null
@@ -19009,7 +19295,10 @@
         // and where it stops then -- even higher up -- is further on than it
         // got.  And a fix that leaves a quote open where none was is no fix.
         if (err.lexing && !res.lexing) { return Infinity; }
-        if (!err.lexing && res.lexing && (res.file || 0) === k) { return -Infinity; }
+        // A quote left open where none was is no fix.  A line out of line
+        // is another matter: inside a bracket left open the indenting is not
+        // looked at, and the bracket shut lets it be seen -- further on.
+        if (!err.lexing && res.lexing && (res.file || 0) === k && res.said !== "cm_indent") { return -Infinity; }
         var at = res.file || 0;
         if (at !== k) { return at > k ? Infinity : -Infinity; }
         if (res.at === undefined || err.at === undefined) { return -Infinity; }
@@ -19031,13 +19320,27 @@
         if (nl >= 0) { nl++; }
       }
       if (nl >= 0) { far = nl; }
+      // A quote or a line's indenting is the line's own business: going
+      // through the text for those, a stop on any later line means this one
+      // is put right -- and the fix that shows the next of them is as good
+      // as one that lets the reading begin.  Shutting a quote at the end of
+      // the line left a bracket open over the lines below, which hid their
+      // indenting, and so it looked like getting further.
+      var next = Infinity;
+      if (err.lexing) {
+        for (var r = 1, at = 0; r <= (err.line || 0) && at >= 0; r++) {
+          at = src0.indexOf("\n", at);
+          if (at >= 0) { at++; }
+        }
+        if (at >= 0) { next = at; }
+      }
       for (var i = 0; i < err.fixes.length && whole.length < want; i++) {
         var list = put(files, err.fixes[i]);
-        if (!list || seen[list[k].text]) { continue; }
-        seen[list[k].text] = true;
+        if (!list || seen.has(list[k].text)) { continue; }
+        seen.set(list[k].text, true);
         var res = readOf(list), got = reach(res, [err.fixes[i]]);
         var one = { file: k, text: list[k].text, fix: err.fixes[i] };
-        if (got === Infinity || got >= far) { whole.push(one); }
+        if (got === Infinity || got >= far || (res && res.lexing && got >= next)) { whole.push(one); }
         else if (got > err.at) { part.push(one); }
         else { tried.push({ list: list, res: res, one: one }); }
         if (Date.now() > until) { break; }
@@ -19060,98 +19363,563 @@
     }
     function tryMend(src, lang, err) { return mendsFor(src, lang, err, 1)[0] || null; }
 
+    // A stop as the fixer keeps it: what it says, and the fixes it came with,
+    // as plain data.  The stop itself is an Error, and an Error holds on to
+    // where it was thrown from -- the reading's whole state, every token of
+    // the file -- so a few hundred of them kept, on a long file, was the
+    // whole of the memory there was.
+    function plainStop(err) {
+      if (!err) { return null; }
+      return { message: err.message, line: err.line || 0, file: err.file || 0, said: err.said || "",
+               at: err.at, lexing: !!err.lexing, reading: !!err.reading, fixes: err.fixes || [] };
+    }
+
+    // A text's fingerprint: the fixer tells the code as it has been from
+    // the code as it is by these rather than by the code itself, which on a
+    // big program was a copy of all of it kept for every step.  Two hashes
+    // of the characters, run together -- 53 bits, so two texts the same by
+    // chance is not a thing that happens.  Worked out each time it is asked
+    // for -- a tenth of a millisecond for a long file -- and never kept in a
+    // Map by the text itself: the browser tells long texts of one length
+    // apart by reading them, and a few hundred of them made every look-up
+    // a read of all of them.
+    function printOf(text) {
+      var a = 0x811c9dc5, b = 5381;
+      for (var i = 0; i < text.length; i++) {
+        var c = text.charCodeAt(i);
+        a = Math.imul(a ^ c, 0x01000193);
+        b = (Math.imul(b, 33) + c) | 0;
+      }
+      return ((a >>> 0) * 2097152 + ((b >>> 0) & 0x1fffff)).toString(36) + ":" + text.length;
+    }
+
+    // ------------------------------------------------- every problem in it --
+    // Every place the code will not read, in every file, found by reading it
+    // to where it stops, taking the line it stopped on out of the way, and
+    // reading on.  Out of the way is not out: the line is left standing, as
+    // what holds the code's shape and nothing else -- its braces, in the
+    // languages of braces; in Python, a block opened (if True:) where it
+    // opened one, and pass where it did not -- so the lines keep their
+    // numbers and the blocks around it still close where they did.  A quote
+    // left open, or Python's indenting, is put right the way the reading
+    // says, which moves nothing either.  What it tells is how much is wrong
+    // and where: the fixer goes by it, and what nothing puts right is shown
+    // from it, all at once.
+    //
+    // A step at a time (step() true when it is done): `opts.most` problems
+    // in all, `opts.each` in a file, `opts.until` a time to be done by.
+    function scanner(src, lang, opts) {
+      opts = opts || {};
+      var files = (typeof src === "string" ? [{ name: "", text: src }] : (src || []))
+        .map(function (one) { return { name: one.name || "", text: String(one.text || "") }; });
+      var py = baseOf(lang) === "python";
+      var began = Date.now(), most = opts.most || 400, each = opts.each || 150, until = opts.until || began + 4000;
+      var found = files.map(function () { return []; }), total = 0, more = false, work = 0;
+      var states = files.map(function () { return { list: null, map: null, at: 0, n: 0, done: false, met: {} }; });
+      var k = 0, over = false;
+      function readOf(list, f) {
+        if (!/\S/.test(list[f].text)) { return null; }
+        work += list[f].text.length;
+        return parsedStop(list, lang, f, f + 1);
+      }
+      // the line, holding the code's shape and nothing more
+      function neutral(row) {
+        var lead = /^[ \t]*/.exec(row)[0], body = row.slice(lead.length);
+        if (py) { return lead + (/:\s*(#.*)?$/.test(body) ? "if True:" : "pass"); }
+        return lead + body.replace(/"(?:[^"\\]|\\.)*"?|'(?:[^'\\]|\\.)*'?/g, "").replace(/\/\/.*$/, "")
+          .replace(/[^{}]/g, "");
+      }
+      // What each line of the code being read on through was in the code as
+      // given (0 for a line put in), once a fix has put lines in.
+      function origin(st, line) {
+        var m = st.map;
+        if (!m) { return line; }
+        for (var r = Math.max(0, line - 1); r < m.length; r++) { if (m[r]) { return m[r]; } }
+        for (var q = Math.min(m.length, line) - 1; q >= 0; q--) { if (m[q]) { return m[q]; } }
+        return line;
+      }
+      function putLines(st, text, fix) {
+        var inserts = fix.edits.filter(function (e) { return e.col === undefined && e.indent === undefined; });
+        if (!inserts.length) { return st.map; }
+        var map = st.map ? st.map.slice() : null;
+        if (!map) {
+          var rows = rowsOf(text);
+          map = new Array(rows);
+          for (var r = 0; r < rows; r++) { map[r] = r + 1; }
+        }
+        for (var e = fix.edits.length - 1; e >= 0; e--) {
+          var one = fix.edits[e];
+          if (one.col !== undefined || one.indent !== undefined) { continue; }
+          if (one.line && one.line <= map.length) { map.splice(one.line - 1, 0, 0); } else { map.push(0); }
+        }
+        return map;
+      }
+      function stepOne() {
+        if (k >= files.length) { return true; }
+        var st = states[k];
+        if (!st.list) { st.list = files; }
+        if (st.done) { k++; return false; }
+        if (Date.now() > until || total >= most) { more = true; return true; }
+        var stop = readOf(st.list, k);
+        if (!stop) { st.done = true; st.at = 1; k++; return false; }
+        var line = stop.line || 0, here = origin(st, line), text = st.list[k].text;
+        // The ways past a stop, one each time it is met: what the reading
+        // says would put it right, then the line it stopped on held to its
+        // shape, then the line made blank -- and met again after all three,
+        // the file is left as far as it was read.  A stop is the line and
+        // what was said of it; met the first time, it is one more problem.
+        var key = (stop.lexing ? "x" : "r") + here + ":" + stop.said;
+        var met = st.met[key] = (st.met[key] || 0) + 1;
+        if (met === 1) {
+          found[k].push({ file: k, line: here, message: stop.message, said: stop.said || "" });
+          total++;
+          st.n++;
+          // how far through the file that is, for the bar: the reading's own
+          // place once it has begun, which a line out of line turned up
+          // ahead of it (a bracket shut lets its indenting be looked at)
+          // does not move
+          var p = Math.min(1, (stop.at || 0) / Math.max(1, text.length));
+          if (!stop.lexing) { st.parsed = true; st.at = Math.max(st.at, 0.2 + 0.8 * p); }
+          else if (!st.parsed) { st.at = Math.max(st.at, 0.2 * p); }
+          if (st.n >= each) { st.done = true; more = true; k++; return false; }
+        }
+        var ways = [];
+        if (stop.fixes && stop.fixes.length) { ways.push(stop.fixes[0]); }
+        if (!stop.lexing) { ways.push("shape"); }
+        ways.push("blank");
+        var next = null, map = st.map;
+        for (var w = met - 1; w < ways.length; w++) {
+          var how = ways[w];
+          map = st.map;
+          if (typeof how === "object") {
+            next = mended(text, how);
+            if (next !== text) { map = putLines(st, text, how); }
+          } else {
+            var rows = text.split("\n");
+            if (line >= 1 && line <= rows.length) {
+              rows[line - 1] = how === "shape" ? neutral(rows[line - 1]) : "";
+              next = rows.join("\n");
+            }
+          }
+          if (next !== null && next !== text) { st.met[key] = w + 1; break; }
+          next = null;
+        }
+        // nothing more to try: the file left as far as it was read
+        if (next === null) { st.done = true; k++; return false; }
+        st.map = map;
+        st.list = st.list.map(function (one, j) { return j === k ? { name: one.name, text: next } : one; });
+        return false;
+      }
+      return {
+        step: function () { if (over) { return true; } over = stepOne(); return over; },
+        // the stops in file f so far, and how far through it the reading has got
+        state: function (f) { return { n: found[f].length, at: states[f].at, done: states[f].done || f < k, started: f <= k }; },
+        work: function () { return work; },
+        // how far through: the files gone all through, and how far into
+        // the one it is in, by their size -- or the time it has, if further
+        reach: function () {
+          var all = 0, got = 0;
+          files.forEach(function (one, f) {
+            var n = Math.max(1, one.text.length);
+            all += n;
+            got += f < k || states[f].done ? n : f === k ? n * states[f].at : 0;
+          });
+          return Math.min(0.99, Math.max(got / Math.max(1, all), (Date.now() - began) / Math.max(1, until - began)));
+        },
+        // down each file in turn, a line said once: two stops on one line
+        // are one line to go and look at, said the first way it was found
+        list: function () {
+          var out = [];
+          found.forEach(function (one) {
+            var said = {};
+            one.slice().sort(function (a, b) { return a.line - b.line; }).forEach(function (p) {
+              if (!said[p.line]) { said[p.line] = true; out.push(p); }
+            });
+          });
+          return { list: out, more: more || (over && k < files.length) };
+        }
+      };
+    }
+    function problemsIn(src, lang, opts) {
+      var s = scanner(src, lang, opts), said = 0;
+      while (!s.step()) {
+        if (opts && opts.step && Date.now() - said > 60) { said = Date.now(); opts.step(s.reach()); }
+      }
+      return s.list();
+    }
+
+    // ----------------------------------------------------- putting it right --
     // Everything that can be put right, one fix after another: read, put
     // right what stops the reading, read again -- until it reads, or stops
     // where nothing helps.  Where the fix taken leads only to a stop nothing
     // puts right, it is taken back and the next best one tried in its place,
-    // a few dozen times at most; and where nothing does, what is handed back
-    // is the code as far as it was put right.  A step at a time (step() is
-    // true when it is over), so that a worker can say how far through the
-    // code it has got between steps (reach(), 0 to 1), and the page's own
-    // thread, where there is no worker, can get on with things between them.
-    function mender(src, lang) {
+    // a few dozen times at most; and where nothing does, that file is left as
+    // far as it was put right, and the next one gone on to.  A step at a time
+    // (step() is true when it is over), so that a worker can say how far it
+    // has got between steps (reach(), 0 to 1), and the page's own thread,
+    // where there is no worker, can get on with things between them.
+    //
+    // It starts by finding everything wrong (scanner, above), which is what
+    // says how much there is to do; then each file that has anything wrong
+    // with it is put right in turn, and only that file read again.
+    //
+    // `opts.until` is when to give up by, and `opts.slow` how long to try
+    // before giving up early on code that plainly cannot be put right by
+    // then -- more wrong with it than there is time for.  Either way it says
+    // so (result().gaveUp), with how much it reckons it had left.
+    function mender(src, lang, opts) {
+      opts = opts || {};
       var files = (typeof src === "string" ? [{ name: "", text: src }] : (src || []))
         .map(function (one) { return { name: one.name || "", text: String(one.text || "") }; });
-      var rows = files.map(function (one) { return one.text.split("\n").length; });
-      var total = rows.reduce(function (a, b) { return a + b; }, 0) || 1;
-      var steps = [], backs = 0, stop = null, over = false, best = null, been = {}, count = 0;
-      function key(list) { return list.map(function (one) { return one.text; }).join("\u0000"); }
-      function put(list, way) {
-        return list.map(function (one, j) { return j === way.file ? { name: one.name, text: way.text } : one; });
+      var size = files.map(function (one) { return Math.max(1, one.text.length); });
+      var began = Date.now(), until = opts.until || began + 60000, slow = opts.slow || 2500;
+      var scan = scanner(files, lang, { until: began + Math.min(4000, (until - began) * 0.2), most: opts.most || 3000 });
+      var scanned = false, todo = [], at = 0, over = false, gaveUp = "", count = 0, work = 0;
+      var per = files.map(function (one) {
+        return { text: one.text, steps: [], chain: null, best: null, backs: 0, been: new Set(),
+                 sites: {}, fixed: 0, stuck: false, done: false, holds: [] };
+      });
+
+      // ---- reading, remembered: a file read once, as it is now, is not
+      // read again -- kept by its fingerprint (printOf), not by the text
+      var reads = new Map();
+      function readOne(list, k) {
+        var text = list[k].text;
+        if (!/\S/.test(text)) { return null; }
+        var print = printOf(text), known = reads.get(print);
+        if (known !== undefined) { return known; }
+        work += text.length;
+        var st = plainStop(parsedStop(list, lang, k, k + 1));
+        if (reads.size > 256) { reads.clear(); }
+        reads.set(print, st);
+        return st;
       }
-      // how far down the code a stop is, counted in lines
-      function lineOf(err) {
-        var before = 0;
-        for (var j = 0; j < (err.file || 0); j++) { before += rows[j]; }
-        return before + (err.line || 0);
+      function listWith(k, text) {
+        return files.map(function (one, j) { return j === k ? { name: one.name, text: text } : one; });
       }
-      function next() {
-        while (steps.length && backs < 40) {
-          var last = steps[steps.length - 1];
-          while (last.others.length) {
-            var way = last.others.shift(), tryNext = put(last.files, way);
-            if (!been[key(tryNext)]) { backs++; last.way = way; files = tryNext; return true; }
+      // what a stop is kept as: what it said, not every fix it came with
+      function kept(st) {
+        return { line: st.line || 0, file: st.file || 0, message: st.message, said: st.said || "",
+                 at: st.at, lexing: !!st.lexing };
+      }
+      // how far into its file a stop is: the text is gone through for its
+      // quotes (and Python's indenting) before it is read, so a stop found
+      // then is a little way in, and one found reading is the rest
+      // (once a file has been read into, a line out of line found after a
+      // bracket shut is further on by where it is: `reading`)
+      function inFile(st, reading) {
+        var p = Math.max(0, Math.min(1, (st.at || 0) / size[st.file || 0]));
+        return st.lexing && !reading ? 0.2 * p : 0.2 + 0.8 * p;
+      }
+
+      // ---- how much is left: the problems found in each file not yet put
+      // right, each costing about as much reading of its file as the fixes
+      // so far have; and while still finding them, the rest of each file
+      // reckoned at the rate they have been turning up
+      var fixWork = 0, fixSize = 0;
+      function left() {
+        // (about one and a half readings of a file a fix, measured, until it is known)
+        var each = fixSize ? Math.max(1, fixWork / fixSize) : 1.5, rest = 0, errors = 0;
+        var seenChars = 0, seenErrors = 0;
+        files.forEach(function (one, k) {
+          var s = scan.state(k);
+          if (s.started) { seenChars += size[k] * (s.done ? 1 : Math.max(s.at, 0.02)); seenErrors += s.n; }
+        });
+        var thick = seenErrors / Math.max(seenChars, 4000);
+        files.forEach(function (one, k) {
+          var s = scan.state(k), p = per[k], n;
+          // a file not gone all through, reckoned at the rate so far
+          n = s.done ? s.n : s.started ? s.n + thick * size[k] * (1 - s.at) : thick * size[k];
+          if (!scanned && !s.done) { rest += size[k] * (1 + (s.started ? thick * size[k] * (1 - s.at) : thick * size[k])); }
+          if (p.done || p.stuck) { return; }
+          var still = Math.max(n - Object.keys(p.sites).length, p.steps.length || at < todo.length && todo[at] === k ? 1 : 0);
+          // and once it is far enough into the reading of it to tell, at the
+          // rate fixes have been wanted since: what was found first (quotes,
+          // Python's indenting) comes thinner than the rest, and a reckoning
+          // from that alone said a program wrong in thousands of places was a
+          // few hundred fixes from reading
+          if (p.reading && p.since >= 5 && p.place - p.from >= 0.01) {
+            still = Math.max(still, 1 + p.since / (p.place - p.from) * (1 - p.place));
           }
-          steps.pop();
+          errors += still;
+          rest += still * each * size[k];
+        });
+        return { work: rest, errors: errors };
+      }
+      function time() { return Date.now() - began; }
+      // When it looks like being done: the reading still to do at the pace
+      // it has read so far -- or, once it has been putting it right a
+      // while, the time that has taken over how far down the code it has
+      // got, if that is later.  The first can only go by what was found
+      // before it began, and on code wrong from end to end that was a
+      // small part of it.
+      var scanEnd = 0;
+      function endAt() {
+        var t = Math.max(1, time()), rate = Math.max(read(), 1) / t, end = t + left().work / rate;
+        if (scanned && t - scanEnd > 1500) {
+          var all = 0, got = 0;
+          todo.forEach(function (k, i) {
+            var p = per[k];
+            all += size[k];
+            got += p.done || p.stuck || i < at ? size[k]
+              : i === at && p.best ? size[k] * Math.min(1, p.best.here) : 0;
+          });
+          var share = got / Math.max(1, all);
+          if (share > 0) { end = Math.max(end, scanEnd + (t - scanEnd) / share); }
+        }
+        return end;
+      }
+      // everything read so far, finding what is wrong and putting it right
+      function read() { return work + scan.work(); }
+
+      // back to the last fix in this file that had another way, and that
+      // way instead.  The other ways are only looked for now: taking the
+      // first good one, and looking no further, is most of the time all it
+      // ever needs, and each way looked at is the file read once more.
+      function next(p, k) {
+        while (p.steps.length && p.backs < 40) {
+          var last = p.steps[p.steps.length - 1];
+          // too far back to go: the file as it was then is not kept
+          if (last.text === null) { return false; }
+          if (!last.others) {
+            var list = listWith(k, last.text), again = readOne(list, k), taken = printOf(last.way.text);
+            last.others = again ? mendsFor(list, lang, again, 4, 1500, readOne).filter(function (w) {
+              return printOf(w.text) !== taken;
+            }) : [];
+          }
+          while (last.others.length) {
+            var way = last.others.shift();
+            if (!p.been.has(printOf(way.text))) {
+              p.backs++;
+              last.way = way;
+              p.chain = { way: way, stop: last.stop, prev: p.chain.prev,
+                          line: last.stop.line, before: lineAt(last.text, last.stop.line) };
+              p.text = way.text;
+              return true;
+            }
+          }
+          // the file as it was before that fix, and further back still
+          p.steps.pop();
+          p.chain = p.chain.prev;
+          p.text = last.text;
         }
         return false;
       }
       // What was put right, in order: each fix, and what stopped the reading
       // that it put right -- said the way the reading said it.
-      function done() {
-        return steps.map(function (st) {
-          return { file: st.way.file, fix: st.way.fix,
-                   stop: { line: st.stop.line || 0, file: st.stop.file || 0,
-                           message: st.stop.message, said: st.stop.said || "" } };
-        });
+      function done(link) {
+        var out = [];
+        for (; link; link = link.prev) {
+          if (link.hold) { continue; }          // a line held out of the way: no fix
+          out.push({ file: link.way.file, fix: link.way.fix,
+                     stop: { line: link.stop.line, file: link.stop.file, message: link.stop.message, said: link.stop.said } });
+        }
+        return out.reverse();
+      }
+      function finish(p, k, stuck) {
+        p[stuck ? "stuck" : "done"] = true;
+        at++;
+      }
+      function mendStep() {
+        if (at >= todo.length) { return true; }
+        var k = todo[at], p = per[k];
+        p.been.add(printOf(p.text));
+        var list = listWith(k, p.text), found = readOne(list, k);
+        if (!found) {
+          p.best = { here: Infinity, text: p.text, chain: p.chain, n: p.steps.length, stop: null };
+          finish(p, k, false);
+          return false;
+        }
+        // how far on: the reading's own place once it has begun, which a
+        // line out of line found ahead of it does not move
+        var stop = kept(found);
+        if (!stop.lexing) {
+          // where the reading began, for how thick the fixes have come since
+          if (!p.reading) { p.from = inFile(stop, true); p.since = 0; }
+          p.reading = true;
+          p.place = inFile(stop, true);
+        }
+        var here = stop.lexing && p.reading ? p.place : inFile(stop, false);
+        if (!p.best || here > p.best.here || (here === p.best.here && p.steps.length < p.best.n)) {
+          p.best = { here: here, text: p.text, chain: p.chain, n: p.steps.length, stop: stop };
+        }
+        var before = work;
+        function fresh(way) { return !p.been.has(printOf(way.text)); }
+        var ways = mendsFor(list, lang, found, 1, 1500, readOne).filter(fresh);
+        // the first good one leads back where it has been: the others
+        if (!ways.length) { ways = mendsFor(list, lang, found, 4, 1500, readOne).filter(fresh); }
+        fixWork += work - before;
+        fixSize += size[k];
+        if (ways.length) {
+          p.steps.push({ text: p.text, others: null, way: ways[0], stop: stop });
+          // only the last few can be gone back to: the file as it was before
+          // every fix, kept, was the whole file over again for each
+          if (p.steps.length > 24) {
+            var old = p.steps[p.steps.length - 25];
+            old.others = [];
+            old.text = null;
+          }
+          // (and the line it stopped on as it was, should that line be
+          // held out of the way after all: hold)
+          p.chain = { way: ways[0], stop: stop, prev: p.chain, line: stop.line, before: lineAt(p.text, stop.line) };
+          p.sites[stop.line] = true;
+          if (p.reading) { p.since++; }
+          p.text = ways[0].text;
+          return false;
+        }
+        if (next(p, k)) { return false; }
+        // Nothing puts it right.  One line nothing can be done with, part
+        // way down a long file, was the end of putting right everything
+        // after it; so the line is held out of the way -- kept to the shape
+        // of the code about it, and marked -- and the rest gone on with.  It
+        // goes back exactly as it was written at the end (result), to be
+        // said, with whatever else is left.
+        if (p.best && p.best.stop && hold(p, p.best, k)) { return false; }
+        // as far as it got, and on to the next file
+        finish(p, k, true);
+        return false;
+      }
+      var py = baseOf(lang) === "python", holdBase = Date.now().toString(36);
+      // line `n` of a text, without splitting all of it
+      function lineAt(text, n) {
+        var from = 0;
+        for (var i = 1; i < n && from >= 0; i++) { from = text.indexOf("\n", from); if (from >= 0) { from++; } }
+        if (from < 0) { return ""; }
+        var to = text.indexOf("\n", from);
+        return text.slice(from, to < 0 ? text.length : to);
+      }
+      // From the furthest the reading got (`b`, the file's best): what was
+      // tried once it had got to about there taken back -- each of those got
+      // it a word further and no more, and some took the line apart -- and
+      // the file made again from the code as it was given, with what is
+      // kept put back in, in order.  The line it first stopped on there is
+      // the one held.  Held is a step of its own among the fixes (`hold`),
+      // which says nothing in the list of what was put right.
+      function hold(p, b, k) {
+        var stop = b.stop, near = (stop.line || 0) - 2, chain = b.chain, first = null;
+        if (p.holds.length >= 25 || !stop.line) { return false; }
+        while (chain && !chain.hold && (chain.line || 0) >= near) { first = chain; chain = chain.prev; }
+        var kept = [];
+        for (var c = chain; c; c = c.prev) { kept.push(c); }
+        var text = files[k].text;
+        for (var i = kept.length - 1; i >= 0; i--) { text = mended(text, kept[i].way.fix); }
+        var line = first ? first.stop.line : stop.line, was = lineAt(text, line);
+        if (line > rowsOf(text) || was.indexOf("flowchart-held-") >= 0) { return false; }
+        var mark = "flowchart-held-" + holdBase + "-" + p.holds.length;
+        var lead = /^[ \t]*/.exec(was)[0], body = was.slice(lead.length), held;
+        if (py) {
+          // a block opened, where it opened one; anything else, nothing but
+          // the mark, which the reading passes over wherever it stands
+          held = /:\s*(#.*)?$/.test(body) ? lead + "if True:  # " + mark : lead + "# " + mark;
+        } else {
+          // its braces, and nothing else of it
+          held = lead + body.replace(/"(?:[^"\\]|\\.)*"?|'(?:[^'\\]|\\.)*'?/g, "").replace(/\/\/.*$/, "")
+            .replace(/[^{}]/g, "") + " // " + mark;
+        }
+        var fix = { says: "hold", fill: {}, ops: [],
+                    edits: [{ line: line, col: 0, cut: 1e9 }, { line: line, col: 0, text: held }] };
+        p.holds.push({ mark: mark, was: was, stop: stop });
+        p.text = mended(text, fix);
+        p.chain = { way: { file: k, fix: fix, text: p.text }, stop: stop, prev: chain, line: line, hold: true };
+        // no going back past it, and the best so far is from here on: what
+        // it got to before was a line taken apart
+        p.steps = [];
+        p.best = { here: -1, text: p.text, chain: p.chain, n: 0, stop: stop };
+        return true;
+      }
+      // the lines held out of the way, put back as they were written
+      function unhold(p, text) {
+        if (!p.holds.length) { return text; }
+        return text.split("\n").map(function (row) {
+          for (var h = 0; h < p.holds.length; h++) {
+            if (row.indexOf(p.holds[h].mark) >= 0) { return p.holds[h].was; }
+          }
+          return row;
+        }).join("\n");
       }
       return {
         step: function () {
           if (over) { return true; }
-          if (++count > 3000) { over = true; return true; }
-          been[key(files)] = true;
-          stop = parsedStop(files, lang);
-          if (!stop) { over = true; return true; }
-          var here = lineOf(stop);
-          if (!best || here > best.here || (here === best.here && steps.length < best.n)) {
-            best = { here: here, files: files, n: steps.length, stop: stop, fixes: done() };
-          }
-          var ways = mendsFor(files, lang, stop, 3).filter(function (way) {
-            return !been[key(put(files, way))];
-          });
-          if (ways.length) {
-            steps.push({ files: files, others: ways.slice(1), way: ways[0], stop: stop });
-            files = put(files, ways[0]);
+          if (!scanned) {
+            if (scan.step()) {
+              scanned = true;
+              scanEnd = time();
+              // every file with something wrong, and any the finding never
+              // got all through (it ran out of time): those are read again
+              files.forEach(function (one, k) {
+                var s = scan.state(k);
+                if (s.n || !s.done) { todo.push(k); }
+              });
+              if (!todo.length) { over = true; return true; }
+              // far too much wrong to be put right in the time there is,
+              // going by how long finding it all took: said now
+              var still = left(), rate = Math.max(read(), 1) / Math.max(1, time());
+              if (time() + still.work / rate > 2 * (until - began)) {
+                gaveUp = "big"; over = true; return true;
+              }
+            }
             return false;
           }
-          // nothing puts this one right: back to the last fix that had
-          // another way, and that way instead
-          if (next()) { return false; }
-          over = true;
-          return true;
-        },
-        reach: function () {
-          if (over && !stop) { return 1; }
-          return best ? Math.min(0.99, best.here / total) : 0;
-        },
-        // {files, n, err, fixes}: the code as it would be, how many fixes
-        // went in, what still stops it (null if nothing), and what each fix
-        // was (done, above)
-        result: function () {
-          if (!stop) {
-            var err = null;
-            try { translate(files, lang); } catch (e) { err = e; }
-            return { files: files, n: steps.length, err: err, fixes: done() };
+          if (++count > 4000) { gaveUp = "steps"; over = true; return true; }
+          if (Date.now() > until) { gaveUp = "time"; over = true; return true; }
+          if (time() > slow) {
+            if (endAt() > 2 * (until - began)) {
+              gaveUp = "big"; over = true; return true;
+            }
           }
-          var got = best || { files: files, n: steps.length, stop: stop, fixes: done() };
-          return { files: got.files, n: got.n, err: got.stop, fixes: got.fixes };
+          over = mendStep();
+          return over;
+        },
+        // what it is doing: finding what is wrong, or putting it right
+        stage: function () { return scanned ? "fix" : "find"; },
+        // How far it has got, 0 to 1: the time gone, of the time it looks
+        // like taking -- the reading still to do at the pace it has read so
+        // far -- or of the time there is, where that is less.
+        reach: function () {
+          if (over && !gaveUp && per.every(function (p) { return !p.stuck; })) { return 1; }
+          var t = Math.max(1, time());
+          return Math.max(0, Math.min(0.99, t / Math.min(endAt(), until - began)));
+        },
+        // {files, n, err, fixes, gaveUp, left, problems}: the code as it
+        // would be, how many fixes went in, what still stops it (null if
+        // nothing), what each fix was (done, above), why it stopped short of
+        // the end ("time", "big", "steps", or "" where it did not), how many
+        // more it reckons there were to put right, and every problem found
+        // in the code as it was given (scanner)
+        result: function () {
+          var out = files.map(function (one) { return { name: one.name, text: one.text }; });
+          var fixes = [], err = null, n = 0, still = 0;
+          per.forEach(function (p, k) {
+            var b = p.best;
+            if (!b) {
+              if (scan.state(k).n) { still += scan.state(k).n; }
+              return;
+            }
+            var mine = done(b.chain);
+            out[k].text = unhold(p, b.text);
+            fixes = fixes.concat(mine);
+            n += mine.length;
+            // a line held out of the way, put back, is still wrong
+            var stuck = b.stop || (p.holds.length ? p.holds[0].stop : null);
+            if (stuck) {
+              still += Math.max(1, scan.state(k).n - Object.keys(p.sites).length, p.holds.length);
+              if (!err) { err = stuck; }
+            }
+          });
+          if (!err && todo.length > at) { still += 1; }
+          return { files: out, n: n, err: err, fixes: fixes, gaveUp: gaveUp,
+                   left: gaveUp ? Math.max(1, Math.round(left().errors)) : still,
+                   problems: scan.list() };
         }
       };
     }
     function mendAll(src, lang, most) {
-      var m = mender(src, lang), until = Date.now() + (most || 6000);
-      while (!m.step() && Date.now() < until) { /* on to the next */ }
-      return m.result();
+      var m = mender(src, lang, { until: Date.now() + (most || 6000) });
+      while (!m.step()) { /* on to the next */ }
+      var all = m.result();
+      // read right through: what reads may still say why it will not run
+      if (!all.err) { try { translate(all.files, lang); } catch (e) { all.err = e; } }
+      return all;
     }
 
     // The names the languages' own libraries are called by, for telling what
@@ -19233,6 +20001,7 @@
     translate.tryMend = tryMend;
     translate.mendAll = mendAll;
     translate.mender = mender;
+    translate.problemsIn = problemsIn;
     translate.mendsFor = mendsFor;
     translate.stopOf = parsedStop;
     translate.tryRename = tryRename;

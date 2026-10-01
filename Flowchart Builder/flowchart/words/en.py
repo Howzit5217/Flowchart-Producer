@@ -335,7 +335,7 @@ EN = {
     "h_tidied": "Tidied up: {n} shapes moved.",
     "h_tidy_none": "Nothing to tidy yet.",
     "h_tidy_done": "Already tidy.",
-    "h_write": "As pseudocode",
+    "h_write": "As text",
     "h_write_tip": "Show the pseudocode this drawing makes",
     "h_into_box": "Put it in the box",
     "h_into_box_tip": "Put this in the pseudocode box, replacing what's there. The drawing stays.",
@@ -374,8 +374,8 @@ EN = {
     "fit_words": "Fit the words",
     "colors_here": "Colors",
     "odd_shape": "Cannot draw {pair} -- see --help.",
-    "mode_code": "Pseudocode",
-    "mode_hand": "Flowchart",
+    "mode_code": "Text",
+    "mode_hand": "Drawing",
     "mode_lang": "Code",
     # ---- a program told in plain words, and the pseudocode it was read as
     "told_head": "Updated pseudocode",
@@ -405,7 +405,7 @@ EN = {
     "lang_stale": "The pseudocode has changed since.",
     "lang_rewrite": "Rewrite as {lang}",
     "lang_rewrite_tip": "Replace the code with the pseudocode, written in {lang}",
-    "lang_made": "Made from your code. Edit it under Pseudocode.",
+    "lang_made": "Made from your code. Edit it under Text.",
     "lang_line": "Line {n}: {said}",
     "lang_check": "Check",
     "lang_check_tip": "Read the code and say if anything's wrong with it",
@@ -419,11 +419,21 @@ EN = {
     "lang_fix_change_at": "Change {word} to {instead} on line {line}",
     "lang_fix_indent": "Line up line {line}",
     "lang_fix_call": "Make it {name}(…)",
+    "lang_fix_split": "Put the rest of the line on a line of its own",
+    "lang_fix_split_at": "Put the rest of line {line} on a line of its own",
     "lang_fixing": "Fixing bugs and issues",
     "lang_fixed_one": "Fixed 1 mistake",
     "lang_fixed_many": "Fixed {n} mistakes",
     "lang_fixed_tip": "See what was wrong, and what was done about it",
     "lang_fixed_undo": "Put it back as it was",
+    "lang_reading": "Reading the code",
+    "lang_finding": "Finding bugs and issues",
+    "lang_listing": "Listing what is left",
+    "lang_too_big": "This is too big an error to fix. Here is everything that needs a look:",
+    "lang_left_one": "1 problem couldn't be fixed:",
+    "lang_left_many": "{n} problems couldn't be fixed:",
+    "lang_list_more": "…and more, not shown here.",
+    "lang_put_found": "Fix the {n} it found anyway",
     "cm_empty": "Write some code first.",
     "cm_expected": "expected {what} here.",
     "cm_ended": "the code stops before it's finished.",
@@ -455,7 +465,7 @@ EN = {
     "problems": "{n} to look at",
     "problems_more": "and {n} more",
     "h_too_many": "Too many shapes (limit {n})",
-    "h_info": "How to draw a flowchart",
+    "h_info": "How to draw",
     "h_add_how": "Click a shape to add it below the one you're on, or drag it onto the paper. Basic, Flow, Data and Other have more shapes.",
     "h_mouse": "Mouse and touch",
     "h_keys": "Keys",
@@ -560,6 +570,23 @@ EN = {
     "pz_done": "{done} of {all} solved",
     "pz_nothing": "(nothing)",
     "pz_brief": "The puzzle",
+    "games": "Games",
+    "games_tip": "Games to play, and to watch as a flowchart while you do",
+    "gm_head": "Games",
+    "gm_small": "Quick games",
+    "gm_big": "Big games",
+    "gm_charts": "Charts",
+    "gm_many": "Multiple",
+    "gm_one": "One flowchart",
+    "gm_many_tip": "Each module and function is a chart of its own, beside the main one",
+    "gm_one_tip": "Every module and function drawn where it is called, so the game is one flowchart",
+    "gm_size": "{n} lines · {charts}",
+    "gm_charts_n": "{n} charts",
+    "gm_chart_one": "one chart",
+    "gm_how": "How to play",
+    "gm_play": "Play",
+    "gm_play_tip": "Run it all at once, to play it",
+    "gm_all": "All games",
     "z_greet_b": "It says hello before it has asked who to. Ask first, then greet.",
     "z_range_b": "1 to 9 should be in range. At the moment every number is.",
     "z_double_b": "It should show double the number it was given.",
@@ -768,6 +795,7 @@ EN = {
     "o_shapes": "The shapes", "o_paper": "Spacing and paper",
     "o_for": "For loops", "o_for_wide": "Opened out", "o_for_hex": "One hexagon",
     "o_everyout": "A symbol for every Display",
+    "o_onechart": "Modules and functions in one chart",
     "o_roomy": "Roomy: more space around every step",
     "o_tight": "Compressed: fewer shapes, packed tightly",
     "o_columns": "Wrap a tall chart into columns",
@@ -795,7 +823,7 @@ EN = {
     "wipe_title1": "Clear everything?",
     "wipe_said": "This takes away everything you have made here:",
     "wipe_l_work": "the pseudocode, the chart and its tests",
-    "wipe_l_hand": "the flowchart you drew by hand",
+    "wipe_l_hand": "the drawing you made by hand",
     "wipe_l_code": "the code and all of its files",
     "wipe_l_run": "the run, what it printed and its trace table",
     "wipe_saves": "Saved progress and solved puzzles too",
@@ -820,15 +848,15 @@ EN = {
     "open_no": "Cancel",
     "open_yes": "Open it",
     "sync_head_code": "Replace the pseudocode?",
-    "sync_head_hand": "Replace the flowchart?",
+    "sync_head_hand": "Replace the drawing?",
     "sync_head_lang": "Replace the code?",
-    "sync_code_from_hand": "The pseudocode has changes of its own, and the flowchart has changed since. Going on writes the flowchart's program in place of the pseudocode.",
+    "sync_code_from_hand": "The pseudocode has changes of its own, and the drawing has changed since. Going on writes the drawing's program in place of the pseudocode.",
     "sync_code_from_lang": "The pseudocode has changes of its own, and the code has changed since. Going on reads the code into the pseudocode in its place.",
-    "sync_hand_from_code": "The flowchart has changes of its own, and the pseudocode has changed since. Going on draws the pseudocode's program in place of the flowchart.",
+    "sync_hand_from_code": "The drawing has changes of its own, and the pseudocode has changed since. Going on draws the pseudocode's program in place of the drawing.",
     "sync_lang_from_code": "The code here is your own, and the pseudocode has changed since. Going on writes the pseudocode's program as code in its place.",
     "sync_keep": "Keep this one",
     "sync_go": "Replace it",
-    "sync_unfinished": "The flowchart isn't a whole program yet, so the pseudocode was left as it was.",
+    "sync_unfinished": "The drawing isn't a whole program yet, so the pseudocode was left as it was.",
     "app_tip": "Opens in its own window, like an app, and works offline",
     "app_ios": "Press Share, then Add to Home Screen.",
     "app_mac": "In Safari's File menu, choose Add to Dock.",
@@ -887,9 +915,9 @@ EN = {
     "k_any": "Anywhere",
     "k_code": "Writing pseudocode",
     "k_shape": "With a shape picked",
-    "k_hand": "Drawing a flowchart",
+    "k_hand": "Drawing",
     "k_lang": "Writing code",
-    "k_build": "Build the chart (Flowchart: check the design)",
+    "k_build": "Build the chart (Drawing: check the design)",
     "k_undo": "Undo, and redo",
     "k_zoom": "Zoom in, zoom out, actual size",
     "k_close": "Close what is open",
@@ -2953,6 +2981,1772 @@ EN = {
     "zw_open": "open",
     "zw_redwins": "Red wins", "zw_bluewins": "Blue wins", "zw_tie": "A tie",
     "zw_pick": "Pick a number, 0 to stop", "zw_bye": "Bye",
+    # ---- the games (37-games.js): a name, a line saying what it is, how
+    # to play it, and the program -- written in modules, so it is a
+    # chart to each one, or one chart with the option that draws every
+    # module where it is called.  Smallest first; the last four are big.
+    "g_coin": "Coin Toss",
+    "g_coin_d": "Call heads or tails, five tosses in a row",
+    "g_coin_h": "Call each toss before the coin lands: type 1 for heads or 2 for tails. There are five tosses. How many can you call right?",
+    "g_highlow": "Higher or Lower",
+    "g_highlow_d": "Guess whether the next card will beat this one",
+    "g_highlow_h": "A card is turned over. Type 1 if you think the next card will be higher, or 2 if lower. Aces are low. A wrong guess costs one of your 3 lives, and there are ten cards in all.",
+    "g_sticks": "Twenty-One Sticks",
+    "g_sticks_d": "Take 1, 2 or 3 sticks, and don't take the last",
+    "g_sticks_h": "There are 21 sticks. You and the computer take turns taking 1, 2 or 3 of them, and whoever takes the last stick loses. The computer knows a trick. Can you work it out?",
+    "g_dice": "Dice Duel",
+    "g_dice_d": "Roll two dice against the computer, first to 3 rounds",
+    "g_dice_h": "Press Enter to roll two dice, then the computer rolls its two. The higher total takes the round, and doubles count twice. The first to win 3 rounds wins the duel.",
+    "g_hangman": "Hangman",
+    "g_hangman_d": "Find the hidden word one letter at a time",
+    "g_hangman_h": "Guess the hidden word one letter at a time. Each wrong letter adds a piece to the drawing, and six wrong letters end the game.",
+    "g_codebreak": "Code Breaker",
+    "g_codebreak_d": "Crack a secret 4-digit code in 10 guesses",
+    "g_codebreak_h": "The computer picks a code of 4 digits, each from 1 to 6. Type a guess like 1234. You are told how many digits are right and in the right place, and how many are right but in the wrong place. Crack it in 10 guesses.",
+    "g_dungeon": "Dungeon Escape",
+    "g_dungeon_d": "A text adventure with a lamp, a key, a troll and gold",
+    "g_dungeon_h": "Walk through the dungeon by typing n, s, e or w. Type look to look around, take to pick something up and bag to see what you carry. Find the gold and bring it back out through the gate before your torch burns out, and watch out for the troll.",
+    "g_connect": "Connect Four",
+    "g_connect_d": "Drop pieces to get four in a row before the computer",
+    "g_connect_h": "You are X and the computer is O. Type a column from 1 to 7 to drop a piece into it. Four in a row wins: across, up and down, or on a slant.",
+    "g_blackjack": "Blackjack",
+    "g_blackjack_d": "Beat the dealer to 21 without going over",
+    "g_blackjack_h": "Bet some of your 100 chips. Then type 1 to take another card (hit), 2 to stop (stand) or 3 to double your bet for one last card. Get closer to 21 than the dealer without going over. J, Q and K count 10, and an A counts 1 or 11.",
+    "g_battleship": "Battleship",
+    "g_battleship_d": "Sink the enemy fleet before it sinks yours",
+    "g_battleship_h": "Both sides hide three ships on a 6 by 6 sea. Fire by typing a letter and a number, like B4. X is a hit and o is a miss. Sink every enemy ship before the enemy sinks yours.",
+    "g_coin_p": program("""
+        Start
+        Declare Integer pick
+        Declare Integer side
+        Declare Integer score
+        score = 0
+        For toss = 1 To 5
+            Display "Toss ", toss, " of 5. Call it: 1 for heads, 2 for tails"
+            Input pick
+            While pick < 1 Or pick > 2
+                Display "Type 1 for heads or 2 for tails"
+                Input pick
+            End While
+            side = random(1, 2)
+            Display "It lands on ", sideName(side), "!"
+            If pick = side Then
+                score = score + 1
+                Display "You called it"
+            Else
+                Display "Not this time"
+            End If
+        End For
+        Display "You called ", score, " out of 5"
+        If score >= 4 Then
+            Display "What luck!"
+        End If
+        Stop
+
+        Function String sideName(Integer side)
+            Declare String name
+            If side = 1 Then
+                name = "heads"
+            Else
+                name = "tails"
+            End If
+            Return name
+        End Function
+    """),
+    "g_highlow_p": program("""
+        Start
+        Declare Integer card
+        Declare Integer nextCard
+        Declare Integer pick
+        Declare Integer points
+        Declare Integer lives
+        Declare Integer turn
+        card = random(1, 13)
+        points = 0
+        lives = 3
+        turn = 0
+        Display "Will the next card be higher or lower? Aces are low. You have 3 lives"
+        While turn < 10 And lives > 0
+            turn = turn + 1
+            Display "Card ", turn, " of 10 is the ", cardName(card), ". Is the next one 1 higher or 2 lower?"
+            Input pick
+            While pick < 1 Or pick > 2
+                Display "Type 1 for higher or 2 for lower"
+                Input pick
+            End While
+            nextCard = random(1, 13)
+            Display "The next card is the ", cardName(nextCard)
+            If nextCard = card Then
+                Display "The same again! That one does not count"
+            Else If (pick = 1 And nextCard > card) Or (pick = 2 And nextCard < card) Then
+                points = points + 1
+                Display "Right! Points: ", points
+            Else
+                lives = lives - 1
+                Display "Wrong! Lives left: ", lives
+            End If
+            card = nextCard
+        End While
+        Display "Game over. You scored ", points, " points"
+        Call showRating(points)
+        Stop
+
+        Function String cardName(Integer n)
+            names = ["Ace", "Two", "Three", "Four", "Five", "Six", "Seven", "Eight", "Nine", "Ten", "Jack", "Queen", "King"]
+            Return names[n - 1]
+        End Function
+
+        Module showRating(Integer points)
+            If points >= 8 Then
+                Display "A card shark!"
+            Else If points >= 5 Then
+                Display "Well played"
+            Else
+                Display "Better luck next time"
+            End If
+        End Module
+    """),
+    "g_sticks_p": program("""
+        Start
+        Declare Integer sticks
+        Declare Integer take
+        Declare Integer first
+        Declare Boolean yourTurn
+        sticks = 21
+        Display "There are 21 sticks. Take 1, 2 or 3 at a time. Whoever takes the last stick loses"
+        Display "Who goes first? 1 for you, 2 for the computer"
+        Input first
+        While first < 1 Or first > 2
+            Display "Type 1 or 2"
+            Input first
+        End While
+        yourTurn = first = 1
+        While sticks > 0
+            Call showSticks(sticks)
+            If yourTurn Then
+                Display "How many will you take?"
+                Input take
+                While take < 1 Or take > 3 Or take > sticks
+                    Display "Take 1, 2 or 3, and no more than there are"
+                    Input take
+                End While
+            Else
+                take = computerTakes(sticks)
+                Display "The computer takes ", take
+            End If
+            sticks = sticks - take
+            yourTurn = Not yourTurn
+        End While
+        If yourTurn Then
+            Display "The computer took the last stick. You win!"
+        Else
+            Display "You took the last stick, so the computer wins"
+            Display "There is a trick to it. Watch how many sticks the computer leaves you"
+        End If
+        Stop
+
+        Module showSticks(Integer left)
+            Declare String row
+            row = ""
+            For i = 1 To left
+                row = row + "|"
+            End For
+            Display row, "  (", left, " left)"
+        End Module
+
+        Function Integer computerTakes(Integer left)
+            Declare Integer amount
+            amount = (left - 1) mod 4
+            If amount = 0 Then
+                amount = random(1, 3)
+            End If
+            If amount > left Then
+                amount = left
+            End If
+            Return amount
+        End Function
+    """),
+    "g_dice_p": program("""
+        Start
+        Declare Integer myWins
+        Declare Integer cpuWins
+        Declare Integer turn
+        Declare Integer a
+        Declare Integer b
+        Declare Integer mine
+        Declare Integer theirs
+        Declare String ready
+        myWins = 0
+        cpuWins = 0
+        turn = 0
+        Display "Dice Duel: the higher pair of dice wins the round. Doubles score twice. First to 3 wins"
+        While myWins < 3 And cpuWins < 3
+            turn = turn + 1
+            Display "Round ", turn, ". Press Enter to roll"
+            Input ready
+            a = rollDie()
+            b = rollDie()
+            mine = scoreOf(a, b)
+            Call showRoll("You", a, b, mine)
+            a = rollDie()
+            b = rollDie()
+            theirs = scoreOf(a, b)
+            Call showRoll("The computer", a, b, theirs)
+            If mine > theirs Then
+                myWins = myWins + 1
+                Display "You take the round!"
+            Else If theirs > mine Then
+                cpuWins = cpuWins + 1
+                Display "The computer takes the round"
+            Else
+                Display "A tie, so nobody scores"
+            End If
+            Display "Rounds won: you ", myWins, ", the computer ", cpuWins
+        End While
+        If myWins = 3 Then
+            Display "You win the duel!"
+        Else
+            Display "The computer wins the duel"
+        End If
+        Stop
+
+        Function Integer rollDie()
+            Return random(1, 6)
+        End Function
+
+        Function Integer scoreOf(Integer first, Integer second)
+            Declare Integer points
+            points = first + second
+            If first = second Then
+                points = points * 2
+            End If
+            Return points
+        End Function
+
+        Module showRoll(String who, Integer first, Integer second, Integer points)
+            Display who, " rolled ", first, " and ", second, " for ", points, " points"
+            If first = second Then
+                Display "Doubles! They count twice"
+            End If
+        End Module
+    """),
+    "g_hangman_p": program("""
+        Start
+        Declare String secret
+        Declare String tried
+        Declare String letter
+        Declare Integer misses
+        Declare Boolean won
+        words = ["planet", "jungle", "rocket", "pirate", "wizard", "castle", "dragon", "guitar", "puzzle", "volcano", "penguin", "blanket"]
+        secret = words[random(0, length(words) - 1)]
+        tried = ""
+        misses = 0
+        won = False
+        Display "Hangman! Guess the word one letter at a time. Six wrong guesses and you lose"
+        While misses < 6 And Not won
+            Call showGallows(misses)
+            Display "The word: ", masked(secret, tried)
+            Display "Guess a letter"
+            Input letter
+            letter = toLower(letter)
+            If length(letter) <> 1 Then
+                Display "One letter at a time, please"
+            Else If contains(tried, letter) Then
+                Display "You already tried ", letter
+            Else
+                tried = tried + letter
+                If contains(secret, letter) Then
+                    Display "Yes, there is a ", letter
+                Else
+                    misses = misses + 1
+                    Display "No ", letter, ". Wrong guesses: ", misses, " of 6"
+                End If
+                won = allFound(secret, tried)
+            End If
+        End While
+        Call showGallows(misses)
+        If won Then
+            Display "You got it: ", secret, "! You win"
+        Else
+            Display "Out of guesses. The word was ", secret
+        End If
+        Stop
+
+        Function String masked(String word, String letters)
+            Declare String shown
+            Declare String ch
+            shown = ""
+            For i = 0 To length(word) - 1
+                ch = substring(word, i, i + 1)
+                If contains(letters, ch) Then
+                    shown = shown + ch + " "
+                Else
+                    shown = shown + "_ "
+                End If
+            End For
+            Return shown
+        End Function
+
+        Function Boolean allFound(String word, String letters)
+            Declare Boolean found
+            found = True
+            For i = 0 To length(word) - 1
+                If Not contains(letters, substring(word, i, i + 1)) Then
+                    found = False
+                End If
+            End For
+            Return found
+        End Function
+
+        Module showGallows(Integer wrong)
+            heads = ["   ", " O ", " O ", " O ", " O ", " O ", " O "]
+            bodies = ["   ", "   ", " | ", "-| ", "-|-", "-|-", "-|-"]
+            legs = ["   ", "   ", "   ", "   ", "   ", "|  ", "| |"]
+            Display "  +---+"
+            Display "  |   |"
+            Display "  |  ", heads[wrong]
+            Display "  |  ", bodies[wrong]
+            Display "  |  ", legs[wrong]
+            Display "==+=="
+        End Module
+    """),
+    "g_codebreak_p": program("""
+        Start
+        Declare String code
+        Declare String guess
+        Declare Boolean ok
+        Declare Boolean cracked
+        Declare Integer exact
+        Declare Integer near
+        Declare Integer tries
+        code = makeCode()
+        tries = 0
+        cracked = False
+        Display "I am thinking of a 4-digit code. Each digit is from 1 to 6, and digits can repeat"
+        Display "After each guess I say how many digits are in the right place, and how many are right but in the wrong place"
+        While Not cracked And tries < 10
+            tries = tries + 1
+            Display "Guess ", tries, " of 10:"
+            Input guess
+            ok = isValid(guess)
+            While Not ok
+                Display "Type 4 digits from 1 to 6, like 1234"
+                Input guess
+                ok = isValid(guess)
+            End While
+            exact = rightPlace(code, guess)
+            near = sharedDigits(code, guess) - exact
+            Display guess, "   right place: ", exact, "   wrong place: ", near
+            If exact = 4 Then
+                cracked = True
+            End If
+        End While
+        If cracked Then
+            Display "You cracked it in ", tries, " guesses!"
+        Else
+            Display "Out of guesses. The code was ", code
+        End If
+        Stop
+
+        Function String makeCode()
+            Declare String made
+            made = ""
+            For i = 1 To 4
+                made = made + random(1, 6)
+            End For
+            Return made
+        End Function
+
+        Function Boolean isValid(String text)
+            Declare Boolean good
+            good = length(text) = 4
+            If good Then
+                For i = 0 To 3
+                    If Not contains("123456", substring(text, i, i + 1)) Then
+                        good = False
+                    End If
+                End For
+            End If
+            Return good
+        End Function
+
+        Function Integer rightPlace(String secret, String tried)
+            Declare Integer hits
+            hits = 0
+            For i = 0 To 3
+                If substring(secret, i, i + 1) = substring(tried, i, i + 1) Then
+                    hits = hits + 1
+                End If
+            End For
+            Return hits
+        End Function
+
+        Function Integer sharedDigits(String secret, String tried)
+            Declare Integer both
+            Declare Integer inSecret
+            Declare Integer inTried
+            Declare String digit
+            both = 0
+            For d = 1 To 6
+                digit = "" + d
+                inSecret = 0
+                inTried = 0
+                For i = 0 To 3
+                    If substring(secret, i, i + 1) = digit Then
+                        inSecret = inSecret + 1
+                    End If
+                    If substring(tried, i, i + 1) = digit Then
+                        inTried = inTried + 1
+                    End If
+                End For
+                If inSecret < inTried Then
+                    both = both + inSecret
+                Else
+                    both = both + inTried
+                End If
+            End For
+            Return both
+        End Function
+    """),
+    "g_dungeon_p": program("""
+        Start
+        Declare Integer room
+        Declare Integer target
+        Declare Integer way
+        Declare Integer health
+        Declare Integer moves
+        Declare String command
+        Declare Boolean trollHere
+        Declare Boolean playing
+        items = ["", "", "lamp", "sword", "key", "", "gold"]
+        exits = [[1, -1, -1, -1], [5, 0, 3, 2], [-1, 4, 1, -1], [-1, -1, -1, 1], [2, -1, -1, -1], [6, 1, -1, -1], [-1, 5, -1, -1]]
+        bag = []
+        room = 0
+        health = 3
+        moves = 0
+        trollHere = True
+        playing = True
+        Display "DUNGEON ESCAPE"
+        Display "Find the gold and bring it back out through the gate before your torch burns out"
+        Display "Type n, s, e or w to walk, or look, take, bag or help"
+        Call describe(room, items, bag)
+        While playing
+            Display "What now?"
+            Input command
+            command = toLower(command)
+            way = wayOf(command)
+            If way >= 0 Then
+                target = exits[room][way]
+                moves = moves + 1
+                If target = -1 Then
+                    Display "You can't go that way"
+                Else If target = 6 And trollHere Then
+                    If contains(bag, "sword") Then
+                        Display "The troll blocks the door. You draw your sword, and it runs off howling into the dark!"
+                        trollHere = False
+                    Else
+                        health = health - 1
+                        Display "The troll blocks the door and swats you away with one huge hand! Health: ", health
+                    End If
+                Else If target = 6 And Not contains(bag, "key") Then
+                    Display "The door to the north is locked tight. If only you had a key"
+                Else
+                    room = target
+                    Call describe(room, items, bag)
+                    If room = 4 And Not contains(bag, "lamp") Then
+                        health = health - 1
+                        Display "You stumble in the dark and hit your head! Health: ", health
+                    End If
+                    If room = 5 And trollHere Then
+                        Display "A huge troll stands guard in front of the far door!"
+                    End If
+                End If
+            Else If command = "look" Then
+                Call describe(room, items, bag)
+            Else If command = "take" Then
+                Call takeItem(room, items, bag)
+            Else If command = "bag" Then
+                Call showBag(bag)
+            Else If command = "help" Then
+                Display "Walk with n, s, e and w. Type look to look around, take to pick something up, and bag to see what you carry"
+            Else
+                Display "I don't know how to ", command
+            End If
+            If room = 0 And contains(bag, "gold") Then
+                Display "You push open the gate and walk out into the sunshine with the gold. You escaped in ", moves, " moves!"
+                playing = False
+            Else If health <= 0 Then
+                Display "You sink to the cold stone floor. The dungeon wins this time"
+                playing = False
+            Else If moves >= 40 Then
+                Display "Your torch flickers and goes out. You are lost in the dark for good"
+                playing = False
+            Else If moves = 30 And way >= 0 Then
+                Display "Your torch is burning low. Ten moves left!"
+            End If
+        End While
+        Stop
+
+        Function Integer wayOf(String said)
+            Declare Integer found
+            found = -1
+            If said = "n" Then
+                found = 0
+            Else If said = "s" Then
+                found = 1
+            Else If said = "e" Then
+                found = 2
+            Else If said = "w" Then
+                found = 3
+            End If
+            Return found
+        End Function
+
+        Module describe(Integer here, things, carried)
+            names = ["Gate", "Great Hall", "Library", "Armory", "Cellar", "Troll Bridge", "Treasure Vault"]
+            about = ["The iron gate behind you is barred shut. A passage leads north.", "A great hall with doors to the north, east and west. The gate is back to the south.", "Dusty shelves of old books. A trapdoor in the floor leads down to the south, and a door east.", "Racks of rusty weapons line the walls. The only way out is west.", "A damp cellar that smells of mold. A ladder goes back up to the north.", "A narrow stone bridge over a deep chasm, with a heavy door at the far end to the north. The hall is south.", "Chests of treasure glitter all around you. The bridge is back to the south."]
+            Display "== ", names[here], " =="
+            If here = 4 And Not contains(carried, "lamp") Then
+                Display "It is pitch dark in here. You can't see a thing."
+            Else
+                Display about[here]
+                If things[here] <> "" Then
+                    Display "You see: ", things[here]
+                End If
+            End If
+        End Module
+
+        Module takeItem(Integer here, things, carried)
+            If here = 4 And Not contains(carried, "lamp") Then
+                Display "You feel around in the dark, but find nothing"
+            Else If things[here] = "" Then
+                Display "There is nothing here to take"
+            Else
+                append(carried, things[here])
+                Display "You take the ", things[here]
+                things[here] = ""
+            End If
+        End Module
+
+        Module showBag(carried)
+            Declare String packed
+            If length(carried) = 0 Then
+                Display "Your bag is empty"
+            Else
+                packed = ""
+                For Each thing In carried
+                    packed = packed + thing + " "
+                End For
+                Display "In your bag: ", packed
+            End If
+        End Module
+    """),
+    "g_connect_p": program("""
+        Start
+        Declare Integer col
+        Declare Integer row
+        Declare Integer moves
+        Declare String mark
+        Declare String winner
+        grid = newBoard()
+        moves = 0
+        mark = "X"
+        winner = ""
+        Display "Connect Four! You are X and the computer is O. Drop your pieces to get four in a row"
+        Display "Rows, columns and diagonals all count"
+        While winner = "" And moves < 42
+            Call showBoard(grid)
+            If mark = "X" Then
+                Display "Your move. Pick a column from 1 to 7"
+                Input col
+                row = -1
+                While row = -1
+                    While col < 1 Or col > 7
+                        Display "The columns go from 1 to 7"
+                        Input col
+                    End While
+                    row = dropRow(grid, col - 1)
+                    If row = -1 Then
+                        Display "That column is full. Pick another one"
+                        Input col
+                    End If
+                End While
+                col = col - 1
+            Else
+                col = computerColumn(grid)
+                row = dropRow(grid, col)
+                Display "The computer drops a piece into column ", col + 1
+            End If
+            grid[row][col] = mark
+            moves = moves + 1
+            If fourFrom(grid, row, col, mark) Then
+                winner = mark
+            Else If mark = "X" Then
+                mark = "O"
+            Else
+                mark = "X"
+            End If
+        End While
+        Call showBoard(grid)
+        If winner = "X" Then
+            Display "Four in a row! You win!"
+        Else If winner = "O" Then
+            Display "The computer got four in a row. It wins this time"
+        Else
+            Display "The board is full. It is a draw"
+        End If
+        Stop
+
+        Function newBoard()
+            rows = []
+            For r = 1 To 6
+                cells = []
+                For c = 1 To 7
+                    append(cells, ".")
+                End For
+                append(rows, cells)
+            End For
+            Return rows
+        End Function
+
+        Module showBoard(board)
+            Declare String line
+            For r = 0 To 5
+                line = "|"
+                For c = 0 To 6
+                    line = line + " " + board[r][c]
+                End For
+                Display line, " |"
+            End For
+            Display "+---------------+"
+            Display "  1 2 3 4 5 6 7"
+        End Module
+
+        Function Integer dropRow(board, Integer c)
+            Declare Integer lowest
+            lowest = -1
+            For r = 0 To 5
+                If board[r][c] = "." Then
+                    lowest = r
+                End If
+            End For
+            Return lowest
+        End Function
+
+        Function Boolean fourFrom(board, Integer row, Integer col, String piece)
+            Declare Integer inLine
+            Declare Integer r
+            Declare Integer c
+            Declare Boolean going
+            Declare Boolean found
+            found = False
+            ways = [[0, 1], [1, 0], [1, 1], [1, -1]]
+            For Each way In ways
+                inLine = 1
+                For sign = -1 To 1 Step 2
+                    r = row + way[0] * sign
+                    c = col + way[1] * sign
+                    going = True
+                    While going
+                        If r < 0 Or r > 5 Or c < 0 Or c > 6 Then
+                            going = False
+                        Else If board[r][c] <> piece Then
+                            going = False
+                        Else
+                            inLine = inLine + 1
+                            r = r + way[0] * sign
+                            c = c + way[1] * sign
+                        End If
+                    End While
+                End For
+                If inLine >= 4 Then
+                    found = True
+                End If
+            End For
+            Return found
+        End Function
+
+        Function Integer computerColumn(board)
+            Declare Integer pick
+            Declare Integer r
+            pick = -1
+            marks = ["O", "X"]
+            For Each piece In marks
+                For c = 0 To 6
+                    If pick = -1 Then
+                        r = dropRow(board, c)
+                        If r >= 0 Then
+                            board[r][c] = piece
+                            If fourFrom(board, r, c, piece) Then
+                                pick = c
+                            End If
+                            board[r][c] = "."
+                        End If
+                    End If
+                End For
+            End For
+            While pick = -1
+                c = random(0, 6)
+                If board[0][c] = "." Then
+                    pick = c
+                End If
+            End While
+            Return pick
+        End Function
+    """),
+    "g_blackjack_p": program("""
+        Start
+        Declare Integer chips
+        Declare Integer bet
+        Declare Integer choice
+        Declare Integer mine
+        Declare Integer theirs
+        Declare Integer change
+        Declare Boolean playing
+        Declare Boolean standing
+        chips = 100
+        playing = True
+        Display "Blackjack! Get closer to 21 than the dealer without going over"
+        Display "Number cards count as they are, J, Q and K count 10, and an A counts 1 or 11"
+        While playing
+            deck = newDeck()
+            Display "You have ", chips, " chips. How many will you bet?"
+            Input bet
+            While bet < 1 Or bet > chips
+                Display "Bet from 1 to ", chips
+                Input bet
+            End While
+            you = []
+            dealer = []
+            append(you, pop(deck))
+            append(dealer, pop(deck))
+            append(you, pop(deck))
+            append(dealer, pop(deck))
+            standing = False
+            While Not standing
+                mine = handValue(you)
+                If mine >= 21 Then
+                    standing = True
+                Else
+                    Call showTable(you, mine, dealer)
+                    Display "1 to hit, 2 to stand, 3 to double down"
+                    Input choice
+                    While choice < 1 Or choice > 3
+                        Display "Type 1, 2 or 3"
+                        Input choice
+                    End While
+                    If choice = 3 And (length(you) > 2 Or bet * 2 > chips) Then
+                        Display "You can only double down on your first two cards, with the chips to cover it"
+                    Else If choice = 2 Then
+                        standing = True
+                    Else
+                        append(you, pop(deck))
+                        If choice = 3 Then
+                            bet = bet * 2
+                            Display "Bet doubled to ", bet, ", and one card only"
+                            standing = True
+                        End If
+                    End If
+                End If
+            End While
+            mine = handValue(you)
+            If mine < 21 Or (mine = 21 And length(you) > 2) Then
+                Call dealerPlays(dealer, deck)
+            End If
+            theirs = handValue(dealer)
+            Call showHands(you, mine, dealer, theirs)
+            change = settle(mine, length(you), theirs, length(dealer), bet)
+            chips = chips + change
+            If change > 0 Then
+                Display "You win ", change, " chips"
+            Else If change < 0 Then
+                Display "You lose ", 0 - change, " chips"
+            Else
+                Display "A push: you get your bet back"
+            End If
+            If chips = 0 Then
+                Display "You are out of chips. The house wins this time"
+                playing = False
+            Else
+                Display "1 to deal again, 2 to cash out"
+                Input choice
+                While choice < 1 Or choice > 2
+                    Display "Type 1 or 2"
+                    Input choice
+                End While
+                playing = choice = 1
+            End If
+        End While
+        Display "You leave the table with ", chips, " chips"
+        If chips > 100 Then
+            Display "That is ", chips - 100, " more than you sat down with!"
+        End If
+        Stop
+
+        Function newDeck()
+            Declare Integer other
+            Declare Integer held
+            cards = []
+            For i = 0 To 51
+                append(cards, i)
+            End For
+            For i = 51 To 1 Step -1
+                other = random(0, i)
+                held = cards[i]
+                cards[i] = cards[other]
+                cards[other] = held
+            End For
+            Return cards
+        End Function
+
+        Function String cardName(Integer card)
+            ranks = ["A", "2", "3", "4", "5", "6", "7", "8", "9", "10", "J", "Q", "K"]
+            suits = ["♠", "♥", "♦", "♣"]
+            Return ranks[card mod 13] + suits[card div 13]
+        End Function
+
+        Function Integer handValue(hand)
+            Declare Integer total
+            Declare Integer aces
+            Declare Integer rank
+            total = 0
+            aces = 0
+            For Each card In hand
+                rank = card mod 13 + 1
+                If rank = 1 Then
+                    total = total + 11
+                    aces = aces + 1
+                Else If rank > 10 Then
+                    total = total + 10
+                Else
+                    total = total + rank
+                End If
+            End For
+            While total > 21 And aces > 0
+                total = total - 10
+                aces = aces - 1
+            End While
+            Return total
+        End Function
+
+        Function String handText(hand)
+            Declare String shown
+            shown = ""
+            For Each card In hand
+                shown = shown + cardName(card) + " "
+            End For
+            Return shown
+        End Function
+
+        Module showTable(player, Integer total, house)
+            Display "Dealer: ", cardName(house[0]), " ??"
+            Display "You:    ", handText(player), "(", total, ")"
+        End Module
+
+        Module showHands(player, Integer total, house, Integer houseTotal)
+            Display "Dealer: ", handText(house), "(", houseTotal, ")"
+            Display "You:    ", handText(player), "(", total, ")"
+        End Module
+
+        Module dealerPlays(hand, cards)
+            Declare Integer total
+            Do
+                total = handValue(hand)
+                If total < 17 Then
+                    append(hand, pop(cards))
+                End If
+            Until total >= 17
+        End Module
+
+        Function Integer settle(Integer mine, Integer myCards, Integer theirs, Integer theirCards, Integer stake)
+            Declare Integer won
+            If mine > 21 Then
+                Display "Bust! You went over 21"
+                won = 0 - stake
+            Else If mine = 21 And myCards = 2 And (theirs <> 21 Or theirCards > 2) Then
+                Display "Blackjack! That pays 3 to 2"
+                won = stake * 3 div 2
+            Else If theirs = 21 And theirCards = 2 And (mine <> 21 Or myCards > 2) Then
+                Display "The dealer has blackjack"
+                won = 0 - stake
+            Else If theirs > 21 Then
+                Display "The dealer busts!"
+                won = stake
+            Else If mine > theirs Then
+                won = stake
+            Else If mine < theirs Then
+                won = 0 - stake
+            Else
+                won = 0
+            End If
+            Return won
+        End Function
+    """),
+    "g_battleship_p": program("""
+        Start
+        Declare String shot
+        Declare Integer at
+        Declare Integer result
+        Declare Integer myLeft
+        Declare Integer theirLeft
+        Declare Integer turn
+        home = emptySea()
+        away = emptySea()
+        Call placeFleet(home)
+        Call placeFleet(away)
+        myLeft = 9
+        theirLeft = 9
+        turn = 0
+        Display "Battleship! Each side has three ships, 4, 3 and 2 squares long. Sink theirs before they sink yours"
+        Display "S is your ship, X a hit and o a miss. Fire with a letter and a number, like B4"
+        While myLeft > 0 And theirLeft > 0
+            Call showSeas(home, away)
+            turn = turn + 1
+            at = -1
+            While at = -1
+                Display "Turn ", turn, ". Where do you fire?"
+                Input shot
+                at = squareOf(shot)
+                If at = -1 Then
+                    Display "Type a letter from A to F and a number from 1 to 6, like B4"
+                End If
+            End While
+            result = fireAt(away, at)
+            If result = 2 Then
+                Display "Hit!"
+            Else If result = 1 Then
+                Display "Splash. A miss"
+            Else
+                Display "You already fired at ", shot
+            End If
+            theirLeft = shipsLeft(away)
+            If theirLeft > 0 Then
+                at = enemyAim(home)
+                result = fireAt(home, at)
+                If result = 2 Then
+                    Display "The enemy fires at ", nameOf(at), ". They hit your ship!"
+                Else
+                    Display "The enemy fires at ", nameOf(at), " and misses"
+                End If
+                myLeft = shipsLeft(home)
+            End If
+            Display "Ship squares left: yours ", myLeft, ", theirs ", theirLeft
+        End While
+        Call showSeas(home, away)
+        If theirLeft = 0 Then
+            Display "You sank their whole fleet in ", turn, " turns. Victory!"
+        Else
+            Display "Your fleet is sunk. The enemy wins this battle"
+        End If
+        Stop
+
+        Function emptySea()
+            sea = []
+            For i = 1 To 36
+                append(sea, ".")
+            End For
+            Return sea
+        End Function
+
+        Module placeFleet(sea)
+            Declare Integer row
+            Declare Integer col
+            Declare Integer across
+            Declare Boolean fits
+            sizes = [4, 3, 2]
+            For Each size In sizes
+                fits = False
+                While Not fits
+                    across = random(0, 1)
+                    If across = 1 Then
+                        row = random(0, 5)
+                        col = random(0, 6 - size)
+                    Else
+                        row = random(0, 6 - size)
+                        col = random(0, 5)
+                    End If
+                    fits = True
+                    For k = 0 To size - 1
+                        If sea[(row + k * (1 - across)) * 6 + col + k * across] <> "." Then
+                            fits = False
+                        End If
+                    End For
+                End While
+                For k = 0 To size - 1
+                    sea[(row + k * (1 - across)) * 6 + col + k * across] = "S"
+                End For
+            End For
+        End Module
+
+        Module showSeas(mine, theirs)
+            Declare String line
+            Declare String cell
+            Display "   Your fleet       Enemy waters"
+            Display "   1 2 3 4 5 6      1 2 3 4 5 6"
+            For r = 0 To 5
+                line = substring("ABCDEF", r, r + 1) + "  "
+                For c = 0 To 5
+                    line = line + mine[r * 6 + c] + " "
+                End For
+                line = line + "  " + substring("ABCDEF", r, r + 1) + "  "
+                For c = 0 To 5
+                    cell = theirs[r * 6 + c]
+                    If cell = "S" Then
+                        cell = "."
+                    End If
+                    line = line + cell + " "
+                End For
+                Display line
+            End For
+        End Module
+
+        Function Integer squareOf(String text)
+            Declare Integer row
+            Declare Integer col
+            Declare Integer square
+            square = -1
+            If length(text) = 2 Then
+                row = indexOf("ABCDEF", toUpper(substring(text, 0, 1)))
+                col = indexOf("123456", substring(text, 1, 2))
+                If row >= 0 And col >= 0 Then
+                    square = row * 6 + col
+                End If
+            End If
+            Return square
+        End Function
+
+        Function String nameOf(Integer square)
+            Return substring("ABCDEF", square div 6, square div 6 + 1) + (square mod 6 + 1)
+        End Function
+
+        Function Integer fireAt(sea, Integer square)
+            Declare Integer result
+            If sea[square] = "S" Then
+                sea[square] = "X"
+                result = 2
+            Else If sea[square] = "." Then
+                sea[square] = "o"
+                result = 1
+            Else
+                result = 0
+            End If
+            Return result
+        End Function
+
+        Function Integer shipsLeft(sea)
+            Declare Integer afloat
+            afloat = 0
+            For Each cell In sea
+                If cell = "S" Then
+                    afloat = afloat + 1
+                End If
+            End For
+            Return afloat
+        End Function
+
+        Function Integer enemyAim(sea)
+            Declare Integer row
+            Declare Integer col
+            near = []
+            For i = 0 To 35
+                If sea[i] = "X" Then
+                    row = i div 6
+                    col = i mod 6
+                    If row > 0 Then
+                        append(near, i - 6)
+                    End If
+                    If row < 5 Then
+                        append(near, i + 6)
+                    End If
+                    If col > 0 Then
+                        append(near, i - 1)
+                    End If
+                    If col < 5 Then
+                        append(near, i + 1)
+                    End If
+                End If
+            End For
+            targets = []
+            For Each square In near
+                If sea[square] = "." Or sea[square] = "S" Then
+                    append(targets, square)
+                End If
+            End For
+            If length(targets) = 0 Then
+                For i = 0 To 35
+                    If sea[i] = "." Or sea[i] = "S" Then
+                        append(targets, i)
+                    End If
+                End For
+            End If
+            Return targets[random(0, length(targets) - 1)]
+        End Function
+    """),
+    # ---- icons, and a drawing run as what it is: a home walked through,
+    # work passed on, data sent, a circuit switched on, a launch
+    # (03-icons.js, 11-hand-icons.js, 37-board.js to 39-orbit.js)
+    "ic_open": "Icons",
+    "ic_open_tip": "People at work, furniture, devices and more",
+    "ic_find": "Search icons",
+    "ic_none": "No icon matches that.",
+    "ic_all": "All",
+    "ic_recent": "Recent",
+    "ic_people": "People at work",
+    "ic_devices": "Computers & network",
+    "ic_circuit": "Circuits",
+    "ic_travel": "Travel & city",
+    "ic_space": "Space",
+    "ic_things": "Things & ideas",
+    "fp_unit": "ft",
+    "fp_area": "{n} sq ft",
+    "n_i_person": "Person",
+    "n_i_man": "Man",
+    "n_i_woman": "Woman",
+    "n_i_child": "Child",
+    "n_i_elder": "Older person",
+    "n_i_team": "Team",
+    "n_i_doctor": "Doctor",
+    "n_i_nurse": "Nurse",
+    "n_i_surgeon": "Surgeon",
+    "n_i_dentist": "Dentist",
+    "n_i_pharmacist": "Pharmacist",
+    "n_i_paramedic": "Paramedic",
+    "n_i_patient": "Patient",
+    "n_i_chef": "Chef",
+    "n_i_baker": "Baker",
+    "n_i_waiter": "Waiter",
+    "n_i_farmer": "Farmer",
+    "n_i_gardener": "Gardener",
+    "n_i_builder": "Construction worker",
+    "n_i_engineer": "Engineer",
+    "n_i_electrician": "Electrician",
+    "n_i_plumber": "Plumber",
+    "n_i_mechanic": "Mechanic",
+    "n_i_carpenter": "Carpenter",
+    "n_i_painter": "Painter",
+    "n_i_cleaner": "Janitor",
+    "n_i_miner": "Miner",
+    "n_i_artist": "Artist",
+    "n_i_musician": "Musician",
+    "n_i_photographer": "Photographer",
+    "n_i_reporter": "Reporter",
+    "n_i_teacher": "Teacher",
+    "n_i_student": "Student",
+    "n_i_graduate": "Graduate",
+    "n_i_librarian": "Librarian",
+    "n_i_scientist": "Scientist",
+    "n_i_programmer": "Programmer",
+    "n_i_office": "Office worker",
+    "n_i_manager": "Manager",
+    "n_i_accountant": "Accountant",
+    "n_i_receptionist": "Receptionist",
+    "n_i_agent": "Call center agent",
+    "n_i_cashier": "Cashier",
+    "n_i_customer": "Customer",
+    "n_i_police": "Police officer",
+    "n_i_firefighter": "Firefighter",
+    "n_i_soldier": "Soldier",
+    "n_i_guard": "Security guard",
+    "n_i_lawyer": "Lawyer",
+    "n_i_judge": "Judge",
+    "n_i_pilot": "Pilot",
+    "n_i_astronaut": "Astronaut",
+    "n_i_driver": "Driver",
+    "n_i_delivery": "Delivery driver",
+    "n_i_postman": "Mail carrier",
+    "n_i_hairdresser": "Hairdresser",
+    "n_i_coach": "Coach",
+    "n_i_room": "Room",
+    "n_i_wall": "Wall",
+    "n_i_door": "Door",
+    "n_i_door2": "Double door",
+    "n_i_slide": "Sliding door",
+    "n_i_window": "Window",
+    "n_i_stairs": "Stairs",
+    "n_i_bed": "Double bed",
+    "n_i_bed1": "Single bed",
+    "n_i_crib": "Crib",
+    "n_i_nightstand": "Nightstand",
+    "n_i_wardrobe": "Closet",
+    "n_i_dresser": "Dresser",
+    "n_i_sofa": "Sofa",
+    "n_i_armchair": "Armchair",
+    "n_i_coffee": "Coffee table",
+    "n_i_tv": "TV",
+    "n_i_fireplace": "Fireplace",
+    "n_i_piano": "Piano",
+    "n_i_bookcase": "Bookcase",
+    "n_i_rug": "Rug",
+    "n_i_lamp": "Floor lamp",
+    "n_i_plant": "Plant",
+    "n_i_dining": "Dining table",
+    "n_i_roundtable": "Round table",
+    "n_i_chair": "Chair",
+    "n_i_desk": "Desk",
+    "n_i_officechair": "Office chair",
+    "n_i_counter": "Kitchen counter",
+    "n_i_stove": "Stove",
+    "n_i_fridge": "Refrigerator",
+    "n_i_kitchensink": "Kitchen sink",
+    "n_i_toilet": "Toilet",
+    "n_i_sink": "Sink",
+    "n_i_bathtub": "Bathtub",
+    "n_i_shower": "Shower",
+    "n_i_washer": "Washer",
+    "n_i_dryer": "Dryer",
+    "n_i_parked": "Car (from above)",
+    "n_i_shrub": "Tree (from above)",
+    "n_i_computer": "Computer",
+    "n_i_laptop": "Laptop",
+    "n_i_tablet": "Tablet",
+    "n_i_phone": "Phone",
+    "n_i_server": "Server",
+    "n_i_database": "Database",
+    "n_i_router": "Router",
+    "n_i_switch": "Network switch",
+    "n_i_firewall": "Firewall",
+    "n_i_wifi": "Wi-Fi",
+    "n_i_internet": "Internet",
+    "n_i_tower": "Cell tower",
+    "n_i_printer": "Printer",
+    "n_i_camera": "Security camera",
+    "n_i_battery": "Battery",
+    "n_i_bulb": "Light bulb",
+    "n_i_switch_on": "Switch",
+    "n_i_resistor": "Resistor",
+    "n_i_capacitor": "Capacitor",
+    "n_i_led": "LED",
+    "n_i_motor": "Motor",
+    "n_i_buzzer": "Buzzer",
+    "n_i_socket": "Outlet",
+    "n_i_solar": "Solar panel",
+    "n_i_ground": "Ground",
+    "n_i_car": "Car",
+    "n_i_bus": "Bus",
+    "n_i_truck": "Truck",
+    "n_i_bike": "Bicycle",
+    "n_i_train": "Train",
+    "n_i_plane": "Airplane",
+    "n_i_ship": "Ship",
+    "n_i_house": "House",
+    "n_i_building": "Office building",
+    "n_i_shop": "Store",
+    "n_i_school": "School",
+    "n_i_hospital": "Hospital",
+    "n_i_factory": "Factory",
+    "n_i_warehouse": "Warehouse",
+    "n_i_tree": "Tree",
+    "n_i_traffic": "Traffic light",
+    "n_i_rocket": "Rocket",
+    "n_i_satellite": "Satellite",
+    "n_i_sun": "Sun",
+    "n_i_earth": "Earth",
+    "n_i_moon": "Moon",
+    "n_i_planet": "Planet",
+    "n_i_star": "Star",
+    "n_i_telescope": "Telescope",
+    "n_i_ufo": "UFO",
+    "n_i_zone": "Container",
+    "n_i_money": "Money",
+    "n_i_coins": "Coins",
+    "n_i_cart": "Shopping cart",
+    "n_i_package": "Package",
+    "n_i_mail": "Mail",
+    "n_i_chat": "Chat",
+    "n_i_clock": "Clock",
+    "n_i_calendar": "Calendar",
+    "n_i_gear": "Gear",
+    "n_i_lock": "Lock",
+    "n_i_key": "Key",
+    "n_i_idea": "Idea",
+    "n_i_search": "Search",
+    "n_i_check": "Check mark",
+    "n_i_cross": "Cross",
+    "n_i_warning": "Warning",
+    "n_i_flag": "Flag",
+    "n_i_heart": "Heart",
+    "n_i_trophy": "Trophy",
+    "n_i_chart": "Bar chart",
+    "n_i_book": "Book",
+    "n_i_megaphone": "Megaphone",
+    "vb_i_person": "does their part",
+    "vb_i_man": "does their part",
+    "vb_i_woman": "does their part",
+    "vb_i_child": "draws a picture",
+    "vb_i_elder": "gives some advice",
+    "vb_i_team": "works on it together",
+    "vb_i_doctor": "examines the patient",
+    "vb_i_nurse": "takes care of the patient",
+    "vb_i_surgeon": "operates",
+    "vb_i_dentist": "checks the teeth",
+    "vb_i_pharmacist": "fills the prescription",
+    "vb_i_paramedic": "gives first aid",
+    "vb_i_patient": "describes the symptoms",
+    "vb_i_chef": "cooks the meal",
+    "vb_i_baker": "bakes the bread",
+    "vb_i_waiter": "takes the order",
+    "vb_i_farmer": "harvests the crop",
+    "vb_i_gardener": "waters the plants",
+    "vb_i_builder": "builds it",
+    "vb_i_engineer": "designs it",
+    "vb_i_electrician": "wires it up",
+    "vb_i_plumber": "fixes the pipes",
+    "vb_i_mechanic": "repairs the engine",
+    "vb_i_carpenter": "builds the frame",
+    "vb_i_painter": "paints it",
+    "vb_i_cleaner": "cleans up",
+    "vb_i_miner": "digs for ore",
+    "vb_i_artist": "draws it",
+    "vb_i_musician": "plays a tune",
+    "vb_i_photographer": "takes a photo",
+    "vb_i_reporter": "writes the story",
+    "vb_i_teacher": "teaches the lesson",
+    "vb_i_student": "does the homework",
+    "vb_i_graduate": "gets the diploma",
+    "vb_i_librarian": "finds the book",
+    "vb_i_scientist": "runs the experiment",
+    "vb_i_programmer": "writes the code",
+    "vb_i_office": "fills in the forms",
+    "vb_i_manager": "makes the plan",
+    "vb_i_accountant": "balances the books",
+    "vb_i_receptionist": "books the appointment",
+    "vb_i_agent": "answers the call",
+    "vb_i_cashier": "rings it up",
+    "vb_i_customer": "places the order",
+    "vb_i_police": "investigates",
+    "vb_i_firefighter": "puts out the fire",
+    "vb_i_soldier": "stands guard",
+    "vb_i_guard": "checks the badge",
+    "vb_i_lawyer": "argues the case",
+    "vb_i_judge": "gives the verdict",
+    "vb_i_pilot": "flies the plane",
+    "vb_i_astronaut": "goes into orbit",
+    "vb_i_driver": "drives it over",
+    "vb_i_delivery": "delivers the package",
+    "vb_i_postman": "delivers the mail",
+    "vb_i_hairdresser": "cuts the hair",
+    "vb_i_coach": "trains the team",
+    "wk_i_bed": "sleeps in the bed",
+    "wk_i_bed1": "takes a nap",
+    "wk_i_crib": "checks on the baby",
+    "wk_i_nightstand": "turns on the bedside lamp",
+    "wk_i_wardrobe": "picks out some clothes",
+    "wk_i_dresser": "gets dressed",
+    "wk_i_sofa": "sits on the sofa",
+    "wk_i_armchair": "reads in the armchair",
+    "wk_i_coffee": "puts a cup on the coffee table",
+    "wk_i_tv": "watches TV",
+    "wk_i_fireplace": "warms up by the fire",
+    "wk_i_piano": "plays the piano",
+    "wk_i_bookcase": "takes down a book",
+    "wk_i_lamp": "switches on the lamp",
+    "wk_i_plant": "waters the plant",
+    "wk_i_dining": "eats at the table",
+    "wk_i_roundtable": "has a coffee at the table",
+    "wk_i_chair": "sits down",
+    "wk_i_desk": "works at the desk",
+    "wk_i_officechair": "spins in the office chair",
+    "wk_i_counter": "makes a sandwich",
+    "wk_i_stove": "cooks at the stove",
+    "wk_i_fridge": "gets milk from the refrigerator",
+    "wk_i_kitchensink": "does the dishes",
+    "wk_i_toilet": "uses the toilet",
+    "wk_i_sink": "washes their hands",
+    "wk_i_bathtub": "takes a bath",
+    "wk_i_shower": "takes a shower",
+    "wk_i_washer": "does the laundry",
+    "wk_i_dryer": "dries the clothes",
+    "wk_i_parked": "gets in the car",
+    "wk_i_shrub": "rests under the tree",
+    "wk_i_stairs": "climbs the stairs",
+    "fr_kitchen": "the kitchen",
+    "fr_bath": "the bathroom",
+    "fr_bed": "the bedroom",
+    "fr_laundry": "the laundry room",
+    "fr_garage": "the garage",
+    "fr_office": "the study",
+    "fr_dining": "the dining room",
+    "fr_living": "the living room",
+    "fr_room": "the room",
+    "wk_comes_in": "{who} comes in the front door.",
+    "wk_starts": "{who} starts in {room}.",
+    "wk_in_room": "On to {room}.",
+    "wk_empty": "Nothing in {room}.",
+    "wk_does": "{who} {does}.",
+    "wk_cannot_reach": "Can’t get to this: {what} ({room}).",
+    "wk_leaves": "{who} leaves by the front door.",
+    "wk_no_way_in": "No way into {room}: it has no door.",
+    "wk_summary": "Rooms walked through: {rooms} · Things used: {used} · Floor: {area}",
+    "wk_no_rooms": "Put a Room around the furniture to walk through it.",
+    "wk_door_loose": "This door isn’t in a room’s wall.",
+    "wk_no_door": "There’s no door into {room}.",
+    "wk_blocked": "Something stands in a doorway: {what}.",
+    "wk_sum": "Rooms: {rooms} · Furniture: {pieces} · Floor: {area}",
+    "wk_visitor": "A visitor",
+    "wk_hello": "Hi!",
+    "bd_auto": "Auto",
+    "bd_auto_is": "Auto: {what}",
+    "bd_pick": "What the drawing is, and what Run does with it",
+    "bd_program": "Program",
+    "bd_home": "Floor plan",
+    "bd_team": "People at work",
+    "bd_network": "Network",
+    "bd_circuit": "Circuit",
+    "bd_space": "Space",
+    "bd_city": "Travel",
+    "bd_flow": "Arrows",
+    "bd_tidy_kept": "A floor plan or a sky stays where you drew it: Tidy up is for flowcharts and for charts of people.",
+    "go_home": "Walk through",
+    "go_team": "Pass the work on",
+    "go_network": "Send data",
+    "go_circuit": "Switch on",
+    "go_space": "Launch",
+    "go_city": "Drive",
+    "go_flow": "Follow the arrows",
+    "v3_open": "3D view",
+    "v3_tip": "Look around it in 3D",
+    "v3_empty": "Nothing to put up yet.",
+    "v3_low": "Low walls",
+    "v3_hint": "Drag to turn · wheel to zoom · Shift+drag to move",
+    "v3_close": "Close the 3D view",
+    "tw_alone": "Join the people with arrows to pass the work on.",
+    "tw_works": "{who}: {does}.",
+    "tw_shares": "{who} shares the work out: {to}.",
+    "tw_back": "Everything comes back to {who}.",
+    "tw_hands": "{who} → {to}.",
+    "tw_hands_what": "{who} → {to}: {what}.",
+    "tw_done": "Done. Handovers: {hands} · People: {people} · Busiest: {who}",
+    "tw_loose": "No arrows to or from {who}.",
+    "tw_sum": "People: {people} · Arrows: {arrows}",
+    "nw_cables": "Join the devices with arrows, as cables, to send data.",
+    "nw_none": "{who} can’t reach anything.",
+    "nw_allowed": "allowed",
+    "nw_reply": "OK",
+    "nw_route": "{path} ({ms} ms)",
+    "nw_ok": "Got through: {n} of {all}.",
+    "nw_loose": "{who} isn’t connected to anything.",
+    "nw_sum": "Devices: {devices} · Cables: {cables}",
+    "cy_none": "Join each vehicle to the places it goes with arrows.",
+    "cy_still": "{who} has nowhere to go.",
+    "cy_stop": "Stop: {place}",
+    "cy_route": "{who}: {stops}",
+    "cy_sum": "Vehicles: {vehicles} · Places: {places}",
+    "fw_none": "Join the shapes with arrows to follow them.",
+    "fw_at": "→ {what}",
+    "fw_done": "Arrows followed: {n}.",
+    "fw_sum": "Shapes: {shapes} · Arrows: {arrows}",
+    "ec_no_source": "Add a battery to power the circuit.",
+    "ec_opened": "{who}: off.",
+    "ec_closed": "{who}: on.",
+    "ec_press": "Click a switch to flip it.",
+    "ec_buzz": "bzzz",
+    "ec_short": "Short circuit! Nothing holds the current back across the battery.",
+    "ec_open": "The circuit isn’t closed, so no current flows.",
+    "ec_source": "{who}: {v} V, {a}",
+    "ec_dark": "{who}: no light.",
+    "ec_too_bright": "{who}: far too much current ({a}), it would burn out.",
+    "ec_lit": "{who}: lights up ({a}).",
+    "ec_turns": "{who}: turning ({a}).",
+    "ec_still": "{who}: not turning.",
+    "ec_buzzes": "{who}: buzzing ({a}).",
+    "ec_quiet": "{who}: silent.",
+    "ec_drop": "{who}: {v} V across it, {a}",
+    "ec_loose": "{who} needs a wire at each end.",
+    "ec_sum": "Parts: {parts} · Wires: {wires}",
+    "os_empty": "Draw a Sun and some planets to set them going.",
+    "os_year_vs": "{who} goes around {around}: a year there is {n} Earth years.",
+    "os_year": "{who} goes around {around} every {n} seconds here.",
+    "os_launch": "{who} lifts off.",
+    "os_orbit": "{who} goes into orbit around {around}.",
+    "os_arrive": "{who} reaches {where}.",
+    "os_landed": "Landed: {where}",
+    "os_no_sun": "Add a Sun for the planets to go around.",
+    "os_sum": "Bodies: {bodies} · Craft: {craft}",
+    "tw_again": "carries on",
+    "ec_dim": "{who}: glows dimly ({a}).",
+    "n_i_picture": "Picture",
+    "n_i_mirror": "Mirror",
+    "n_i_shelf": "Wall shelf",
+    "n_i_walltv": "Wall TV",
+    "n_i_wallclock": "Wall clock",
+    "n_i_sconce": "Wall light",
+    "n_i_cabinet": "Wall cabinet",
+    "n_i_hooks": "Coat hooks",
+    "n_i_radiator": "Radiator",
+    "wk_i_picture": "looks at the picture",
+    "wk_i_mirror": "checks the mirror",
+    "wk_i_shelf": "takes a book from the shelf",
+    "wk_i_walltv": "watches TV",
+    "wk_i_wallclock": "checks the time",
+    "wk_i_sconce": "switches on the light",
+    "wk_i_cabinet": "gets a plate from the cabinet",
+    "wk_i_hooks": "hangs up a coat",
+    "wk_i_radiator": "warms their hands",
+    "wk_locked_in": "{room} is behind a locked door.",
+    "v3_walk": "Walk around",
+    "v3_above": "View from above",
+    "v3_hint_walk": "W A S D or the arrows to walk · drag to look · E or a click opens doors",
+    "v3_restart": "Start again",
+    "v3_door": "Door",
+    "v3_locked": "It’s locked.",
+    "v3_no_door": "No door within reach.",
+    "v3_outside": "Outside",
+    "v3_tips": "Suggestions: {n}",
+    "ad_said": "Suggestion: {what}",
+    "ad_no_front": "There’s no front door, so nobody can get in from outside.",
+    "ad_fix_front": "Add a front door",
+    "ad_window_bed": "No window in {room}: a bedroom needs daylight, and a way out in a fire.",
+    "ad_window": "No window in {room} to let the daylight in.",
+    "ad_fix_window": "Add a window",
+    "ad_dark": "No window or light in {room}.",
+    "ad_fix_light": "Add a wall light",
+    "ad_missing": "Missing in {room}: {what}.",
+    "ad_fix_add": "Add: {what}",
+    "ad_bath_sink": "There’s a toilet in {room} but no sink to wash your hands.",
+    "ad_small_bed": "A double bed is a tight fit in {room} ({area}): about {want} is comfortable.",
+    "ad_back_to_tv": "Facing away from the TV: {what}.",
+    "ad_fix_face_tv": "Turn it to face the TV",
+    "ad_door_hits": "A door swings into this: {what}.",
+    "ad_fix_flip": "Swing it the other way",
+    "ad_bath_kitchen": "The door from {bath} opens straight into {kitchen}.",
+    "ad_boxed_in": "Nobody can get to this: {what} ({room}).",
+    "ad_firewall": "Nothing guards the network from the Internet: put a firewall between them.",
+    "ad_fix_firewall": "Add a firewall",
+    "ad_single": "Everything goes through {who}: if it fails, nothing gets through.",
+    "ad_led": "{who} gets too much current ({a}) and would burn out: put a resistor in front of it.",
+    "ad_fix_resistor": "Add a resistor",
+    "ad_switch": "There’s no switch to turn it off.",
+    "ad_fix_switch": "Add a switch",
+    "ad_busy": "{who} handles most of the work: share it out.",
+    "tab_code_tip": "Write the steps in plain words (pseudocode); the chart is drawn from them",
+    "tab_hand_tip": "Draw by hand: flowcharts, floor plans, people at work, networks, circuits and more",
+    "tab_lang_tip": "Write it in a programming language: Python, Java, C#, C++, JavaScript and more",
+    "hm_icons": "Add an icon from Icons, under the shapes: press it, or drag it onto the paper; search it by name",
+    "hm_room": "Move a room or a container, and everything in it moves too",
+    "hm_door": "Put a door, a window or a picture by a wall, and it fits itself into the wall",
+    "hm_run_as": "Run does what the drawing is: walks through a home, passes work on, sends data, switches a circuit on, launches a rocket",
+    "depth": "Depth",
+    "depth_tip": "Shade every shape in its own color and give it a shadow, so colors look solid",
+    "n_i_ac": "Air conditioner",
+    "n_i_aquarium": "Aquarium",
+    "n_i_arclamp": "Arc lamp",
+    "n_i_basket": "Basket",
+    "n_i_bathmat": "Bath mat",
+    "n_i_beanbag": "Beanbag",
+    "n_i_bedking": "King bed",
+    "n_i_bench": "Bench",
+    "n_i_books": "Books",
+    "n_i_bunkbed": "Bunk bed",
+    "n_i_cactus": "Cactus",
+    "n_i_candle": "Candle",
+    "n_i_cattree": "Cat tree",
+    "n_i_ceilingfan": "Ceiling fan",
+    "n_i_chandelier": "Chandelier",
+    "n_i_chest": "Chest",
+    "n_i_coatrack": "Coat rack",
+    "n_i_coffeemaker": "Coffee maker",
+    "n_i_console": "Game console",
+    "n_i_cornershelf": "Corner shelf",
+    "n_i_cubeshelf": "Cube shelf",
+    "n_i_deck": "Deck",
+    "n_i_desklamp": "Desk lamp",
+    "n_i_dishwasher": "Dishwasher",
+    "n_i_dogbed": "Dog bed",
+    "n_i_driveway": "Driveway",
+    "n_i_dryrack": "Drying rack",
+    "n_i_elevator": "Elevator",
+    "n_i_fan": "Fan",
+    "n_i_fence": "Fence",
+    "n_i_filing": "Filing cabinet",
+    "n_i_floor": "Floor",
+    "n_i_flowerbed": "Flower bed",
+    "n_i_flowers": "Flowers",
+    "n_i_frame": "Photo frame",
+    "n_i_fruitbowl": "Fruit bowl",
+    "n_i_garagedoor": "Garage door",
+    "n_i_gardenbench": "Garden bench",
+    "n_i_grill": "Grill",
+    "n_i_hamper": "Laundry hamper",
+    "n_i_hanging": "Hanging plant",
+    "n_i_heater": "Space heater",
+    "n_i_hedge": "Hedge",
+    "n_i_herbs": "Herb pot",
+    "n_i_hood": "Range hood",
+    "n_i_hottub": "Hot tub",
+    "n_i_ironing": "Ironing board",
+    "n_i_island": "Kitchen island",
+    "n_i_kettle": "Kettle",
+    "n_i_lot": "Lot",
+    "n_i_loveseat": "Loveseat",
+    "n_i_medicine": "Medicine cabinet",
+    "n_i_microwave": "Microwave",
+    "n_i_monitor": "Monitor",
+    "n_i_ottoman": "Ottoman",
+    "n_i_palm": "Palm",
+    "n_i_pantry": "Pantry",
+    "n_i_path": "Garden path",
+    "n_i_patio": "Patio table",
+    "n_i_pc": "Computer tower",
+    "n_i_pendant": "Pendant light",
+    "n_i_pool": "Swimming pool",
+    "n_i_projector": "Projector",
+    "n_i_proscreen": "Projector screen",
+    "n_i_recliner": "Recliner",
+    "n_i_recordplayer": "Record player",
+    "n_i_sectional": "Sectional sofa",
+    "n_i_shoerack": "Shoe rack",
+    "n_i_sidetable": "Side table",
+    "n_i_soundbar": "Soundbar",
+    "n_i_speaker": "Speaker",
+    "n_i_spiral": "Spiral stairs",
+    "n_i_stool": "Stool",
+    "n_i_succulent": "Succulent",
+    "n_i_tablelamp": "Table lamp",
+    "n_i_toaster": "Toaster",
+    "n_i_towelrail": "Towel bar",
+    "n_i_trash": "Trash can",
+    "n_i_tvstand": "TV stand",
+    "n_i_utilitysink": "Utility sink",
+    "n_i_vanity": "Bathroom vanity",
+    "n_i_vanitytable": "Dressing table",
+    "n_i_vase": "Vase",
+    "wk_i_spiral": "climbs the spiral stairs",
+    "wk_i_elevator": "takes the elevator",
+    "wk_i_dishwasher": "loads the dishwasher",
+    "wk_i_island": "chops vegetables at the island",
+    "wk_i_stool": "sits on a stool",
+    "wk_i_trash": "takes out the trash",
+    "wk_i_pantry": "gets something from the pantry",
+    "wk_i_microwave": "heats up leftovers",
+    "wk_i_coffeemaker": "makes a coffee",
+    "wk_i_toaster": "makes toast",
+    "wk_i_kettle": "puts the kettle on",
+    "wk_i_fruitbowl": "grabs an apple",
+    "wk_i_vanity": "brushes their teeth",
+    "wk_i_hamper": "drops clothes in the hamper",
+    "wk_i_ironing": "irons a shirt",
+    "wk_i_dryrack": "hangs the laundry to dry",
+    "wk_i_heater": "warms up by the heater",
+    "wk_i_utilitysink": "rinses out a bucket",
+    "wk_i_bedking": "stretches out on the big bed",
+    "wk_i_bunkbed": "climbs into the top bunk",
+    "wk_i_vanitytable": "does their hair",
+    "wk_i_bench": "sits on the bench",
+    "wk_i_chest": "opens the chest",
+    "wk_i_sidetable": "sets down a glass",
+    "wk_i_filing": "files some papers",
+    "wk_i_loveseat": "curls up on the loveseat",
+    "wk_i_sectional": "stretches out on the sectional",
+    "wk_i_recliner": "leans back in the recliner",
+    "wk_i_ottoman": "puts their feet up",
+    "wk_i_tvstand": "picks up the remote",
+    "wk_i_aquarium": "feeds the fish",
+    "wk_i_beanbag": "flops onto the beanbag",
+    "wk_i_speaker": "turns up the music",
+    "wk_i_tablelamp": "switches on the table lamp",
+    "wk_i_desklamp": "switches on the desk lamp",
+    "wk_i_vase": "arranges the flowers",
+    "wk_i_candle": "lights a candle",
+    "wk_i_books": "picks up a book",
+    "wk_i_frame": "looks at the photo",
+    "wk_i_basket": "looks in the basket",
+    "wk_i_monitor": "checks the screen",
+    "wk_i_succulent": "dusts the succulent",
+    "wk_i_herbs": "picks some basil",
+    "wk_i_palm": "waters the palm",
+    "wk_i_cactus": "admires the cactus",
+    "wk_i_flowers": "smells the flowers",
+    "wk_i_arclamp": "switches on the arc lamp",
+    "wk_i_cubeshelf": "tidies the shelf",
+    "wk_i_cornershelf": "puts a plant on the corner shelf",
+    "wk_i_shoerack": "takes off their shoes",
+    "wk_i_coatrack": "hangs up their coat",
+    "wk_i_hood": "turns on the range hood",
+    "wk_i_towelrail": "grabs a towel",
+    "wk_i_medicine": "takes a vitamin",
+    "wk_i_soundbar": "turns up the sound",
+    "wk_i_console": "plays a video game",
+    "wk_i_pc": "turns on the computer",
+    "wk_i_proscreen": "watches a movie on the big screen",
+    "wk_i_recordplayer": "puts on a record",
+    "wk_i_fan": "switches on the fan",
+    "wk_i_ac": "turns on the air conditioning",
+    "wk_i_grill": "fires up the grill",
+    "wk_i_pool": "goes for a swim",
+    "wk_i_patio": "has lunch outside",
+    "wk_i_gardenbench": "sits in the garden",
+    "wk_i_hottub": "relaxes in the hot tub",
+    "wk_i_dogbed": "pets the dog",
+    "wk_i_cattree": "plays with the cat",
+    "wk_i_hedge": "trims the hedge",
+    "wk_i_flowerbed": "weeds the flower bed",
+    "ic_rooms": "Rooms, doors & stairs",
+    "ic_living": "Living room",
+    "ic_bedroom": "Bedroom & office",
+    "ic_kitchen": "Kitchen & dining",
+    "ic_bath": "Bathroom & laundry",
+    "ic_decor": "Decor, plants & lights",
+    "ic_walls": "On the walls & storage",
+    "ic_tech": "TV & electronics",
+    "ic_outdoor": "Yard, driveway & garden",
+    "fl_ground": "Ground floor",
+    "fl_up_name": "Upstairs",
+    "fl_upper": "Upper floor {n}",
+    "fl_lower": "Basement {n}",
+    "wk_up": "{who} goes upstairs: {floor}.",
+    "wk_down": "{who} goes downstairs: {floor}.",
+    "wk_lift": "{who} takes the elevator: {floor}.",
+    "wk_up_said": "Upstairs!",
+    "wk_down_said": "Downstairs!",
+    "v3_went_up": "Up to {floor}",
+    "v3_went_down": "Down to {floor}",
+    "v3_all_floors": "All floors",
+    "v3_up_to": "Up to: {floor}",
+    "v3_floors_tip": "Show every floor, or lift off the ones above",
+    "fp_real": "Real size",
+    "fp_depth": "Depth",
+    "fp_ceiling": "Ceiling",
+    "lot_keep": "Setbacks: kept clear from the edges",
+    "lot_front": "Front",
+    "lot_side": "Sides",
+    "lot_back": "Back",
+    "lot_says": "Lot {w} × {d} {unit} · {area}",
+    "lot_build": "Room to build: {w} × {d} {unit} · {area}",
+    "lot_house": "House {area}",
+    "lot_yard": "Yard {area}",
+    "lot_front_is": "front",
+    "lot_side_is": "side",
+    "lot_back_is": "back",
+    "ad_stairs_nowhere": "Nowhere to go yet: {what}. Draw the floor above beside this one.",
+    "ad_fix_upstairs": "Make it lead upstairs",
+    "ad_group_house": "The house is loose rooms: put it in a Floor to drag it around the lot in one piece.",
+    "ad_fix_group": "Put it in a Floor",
+    "ad_too_big": "The house ({house}) is bigger than the room to build ({room}).",
+    "ad_setback": "The house crosses the {side} setback by {by}.",
+    "ad_fix_move_in": "Move it inside the line",
+    "ad_no_driveway": "Nothing leads up to the garage door: add a driveway.",
+    "ad_fix_driveway": "Add a driveway",
+    "hm_floors": "Draw each story of a house in its own Floor, side by side: stairs in the same place on each lead up and down, in 3D too",
+    "hm_lot": "Put a Lot under the house and give it its size and setbacks in the panel: it shows the room to build and the yard left",
+    "v3_roof": "Roof",
+    "v3_roof_tip": "Put the roof on, or lift it off to see inside",
+    "v3_labels": "Labels",
+    "v3_labels_tip": "Name the rooms and what is in them",
+    "v3_2d": "2D",
+    "v3_3d": "3D",
+    "v3_2d_tip": "Flat, straight down on it, like the plan",
+    "v3_3d_tip": "Stand it up in 3D again",
+    "v3_hint_flat": "Drag to move · wheel to zoom",
+    "labels": "Labels",
+    "labels_tip": "Name the furniture and rooms on a floor plan",
+    "rl_kitchen": "Kitchen",
+    "rl_bath": "Bathroom",
+    "rl_bed": "Bedroom",
+    "rl_laundry": "Laundry room",
+    "rl_garage": "Garage",
+    "rl_office": "Study",
+    "rl_dining": "Dining room",
+    "rl_living": "Living room",
 }
 
 speaks("en", "English", EN)

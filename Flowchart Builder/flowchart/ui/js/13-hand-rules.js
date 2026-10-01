@@ -91,6 +91,7 @@
   // kind of step, and the shape.  A question the flow comes back round to
   // is a loop, and may wear the Loop's shape as well as the Decision's.
   function ruleWant(n, outs, ins) {
+    if (ICONS[n.kind]) { return null; }  // an icon is what it is (03-icons.js)
     var role = stepRole(n, outs, ins);
     if (!role) { return null; }
     var want = ruleShape(role);
@@ -103,6 +104,7 @@
   }
 
   function ruleHintFor(n) {
+    if (boardName() !== "program") { return null; }   // a home, a network... (37-board.js)
     return n ? ruleWant(n, outOf(n.id).length, intoOf(n.id).length) : null;
   }
 
@@ -110,7 +112,9 @@
   // than two for each shape.
   function ruleHints() {
     var outs = {}, ins = {}, hints = {};
-    if (!byHand) { return hints; }
+    // Not a flowchart at all -- a home, a network, a circuit -- none of
+    // its shapes is a step the rules have a shape for (37-board.js).
+    if (!byHand || boardName() !== "program") { return hints; }
     hand.links.forEach(function (l) {
       outs[l.from] = (outs[l.from] || 0) + 1;
       ins[l.to] = (ins[l.to] || 0) + 1;

@@ -20,18 +20,29 @@ def loop_up():
 
 
 def layout_pre(item):
-    """While: test first.  (Do Until ... Loop swaps the Yes / No labels.)"""
+    """While: test first.  (Do Until ... Loop swaps the Yes / No labels.)
+
+    A loop may have a head: steps that work out what the test needs, done
+    every time it is made -- a function the test calls, drawn where it is
+    called (make/inline.py).  They stand over the test, inside the loop, and
+    the way back comes in above them."""
     shape = "hex" if item.hex else "diamond"
     dia = node_block(part_of(item, shape, item.cond))
     body = layout_seq(item.body)
+    head = layout_seq(item.head) if getattr(item, "head", None) else None
     half = dia.w / 2.0
     into, out = (settings.NO, settings.YES) if item.until else (settings.YES, settings.NO)
     if item.hex:
         into = out = ""
 
     up = loop_up()
-    elems = shift(dia.elems, -dia.axis, 0)
-    y = dia.h
+    elems, top = [], 0
+    if head:
+        elems = shift(head.elems, -head.axis, 0)
+        top = head.h + settings.VGAP
+        elems.append(("line", 0, head.h, 0, top, True))
+    elems += shift(dia.elems, -dia.axis, top)
+    y = top + dia.h
     run = label_run(into)
     elems += [("line", 0, y, 0, y + run, True),
               label_beside(0, y, into, 1)]
@@ -40,7 +51,7 @@ def layout_pre(item):
     body_top = y
     y += body.h
 
-    back_x = -(max(half, body.axis) + settings.HGAP)
+    back_x = -(max(half, body.axis, head.axis if head else 0) + settings.HGAP)
     if not body.terminal:
         # The way back starts by going sideways, so where the body ends on a
         # box it leaves that box's side.  Dropping out of the bottom first
@@ -74,13 +85,15 @@ def layout_pre(item):
     # that line, and carries on down it.  Left as the end of a route it
     # would stop dead there with a head on it, and the turn would come out
     # square, drawn as two strokes meeting rather than one line bending.
-    elems += [("line", half, dia.h / 2.0, right_x, dia.h / 2.0, False),
-              label_above(half, dia.h / 2.0, out, 1),
-              ("line", right_x, dia.h / 2.0, right_x, exit_y, False),
+    mid = top + dia.h / 2.0
+    elems += [("line", half, mid, right_x, mid, False),
+              label_above(half, mid, out, 1),
+              ("line", right_x, mid, right_x, exit_y, False),
               ("line", right_x, exit_y, 0, exit_y, False)]
 
     left = -back_x
-    return Block(left + right_x, exit_y + up, left,
+    right = max(right_x, head.w - head.axis if head else 0)
+    return Block(left + right, exit_y + up, left,
                  shift(elems, left, up), loop=True)
 
 

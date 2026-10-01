@@ -509,8 +509,13 @@ def to_svg(elems, title=None, author=None, paper=None):
             # chart can pick out one shape, or every shape of one kind, and
             # color it.
             nodes += 1
+            # A module drawn where it is called is drawn once per call, the
+            # same statements each time: data-via says which call this copy
+            # is (make/inline.py), for the runner to light the one it is in.
+            via = getattr(said, "via", "")
             piece = [f'<g class="node" data-kind="{shape}" '
-                     f'data-i="{said or nodes}">']
+                     f'data-i="{said or nodes}"' +
+                     (f' data-via="{via}">' if via else '>')]
             drawn = geom_of(shape)
             # Lines as far apart as the words they carry are tall, and the
             # baseline set down by a third of that, whatever size the page

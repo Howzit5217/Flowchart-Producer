@@ -71,6 +71,10 @@ def draw_for_studio(ask):
     # straight back out again.
     settings.FOR_STYLE = "hexagon" if ask.get("hexfor") else "expand"
     settings.GROUP_OUTPUT = not ask.get("everyout")
+    # Every module drawn where it is called, in the one chart.  Never for
+    # Tidy up (asis): that lays out shapes already on the paper, one to a
+    # statement, and has no shapes for the copies.
+    settings.ONE_CHART = bool(ask.get("onechart")) and not ask.get("asis")
     settings.COLUMN_H = float(ask.get("columns") or 0)
     if ask.get("tight"):                                # as tight as it goes
         vars(settings).update(settings.TIGHT)

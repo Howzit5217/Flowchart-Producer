@@ -19,6 +19,10 @@ NO = "False"                        #   if that is what your class uses
 FOR_STYLE = "expand"                # "expand": init box + test diamond + step box
                                     # "hexagon": one hexagon for the whole For
 SPLIT_MODULES = False               # True: write one .svg per module / function
+ONE_CHART = False                   # True: a module or function is drawn
+                                    #   where it is called, inside the chart
+                                    #   that calls it, rather than in a chart
+                                    #   of its own beside it (make/inline.py)
 MAX_ROW_W = 1600                    # charts go left-to-right; wrap past this width
 CHART_GAP = 60                      # space between two charts
 

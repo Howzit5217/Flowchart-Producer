@@ -478,9 +478,80 @@
     return st;
   }
 
+  // draw.io's own libraries -- the floor plan, its clip art of people and
+  // computers, its network and Cisco stencils, its signs -- read as the
+  // icons drawn here for the same things (03-icon-art.js), so a home or a
+  // network drawn there opens as one here, and runs as one (37-board.js).
+  // By the stencil's name (mxgraph.floorplan.bed_double) or the picture's
+  // file (img/lib/clip_art/people/Doctor_Man_128x128.png).
+  var DRAWIO_ICONS = [
+    [/floorplan\.bed_?double/, "i_bed"], [/floorplan\.bed_?single/, "i_bed1"],
+    [/floorplan\.(couch|sofa)/, "i_sofa"], [/floorplan\.office_?chair/, "i_officechair"],
+    [/floorplan\.chair/, "i_chair"], [/floorplan\.bathtub/, "i_bathtub"], [/floorplan\.toilet/, "i_toilet"],
+    [/floorplan\.shower/, "i_shower"], [/floorplan\.sink_?double/, "i_kitchensink"], [/floorplan\.sink/, "i_sink"],
+    [/floorplan\.refrigerator/, "i_fridge"], [/floorplan\.range/, "i_stove"],
+    [/floorplan\.washing_?machine/, "i_washer"], [/floorplan\.drying_?machine/, "i_dryer"],
+    [/floorplan\.fireplace/, "i_fireplace"], [/floorplan\.piano/, "i_piano"], [/floorplan\.plant/, "i_plant"],
+    [/floorplan\.bookcase/, "i_bookcase"], [/floorplan\.dresser/, "i_dresser"],
+    [/floorplan\.(flat_?tv|crt_?tv)/, "i_tv"], [/floorplan\.floor_?lamp/, "i_lamp"],
+    [/floorplan\.(desk|workstation)/, "i_desk"], [/floorplan\.(spiral_?)?stairs/, "i_stairs"],
+    [/floorplan\.door_?double/, "i_door2"], [/floorplan\.door_?sliding/, "i_slide"], [/floorplan\.door/, "i_door"],
+    [/floorplan\.window/, "i_window"], [/floorplan\.wall/, "i_wall"], [/floorplan\.room/, "i_room"],
+    [/floorplan\.(table|office_?table)/, "i_dining"], [/floorplan\.(copier|printer)/, "i_printer"],
+    [/floorplan\.laptop/, "i_laptop"], [/floorplan\.water_?cooler/, "i_counter"],
+    [/clip_?art\/people\/doctor/, "i_doctor"], [/clip_?art\/people\/nurse/, "i_nurse"],
+    [/clip_?art\/people\/construction_?worker/, "i_builder"], [/clip_?art\/people\/farmer/, "i_farmer"],
+    [/clip_?art\/people\/military/, "i_soldier"], [/clip_?art\/people\/pilot/, "i_pilot"],
+    [/clip_?art\/people\/scientist/, "i_scientist"], [/clip_?art\/people\/security/, "i_guard"],
+    [/clip_?art\/people\/tech/, "i_programmer"], [/clip_?art\/people\/telesales/, "i_agent"],
+    [/clip_?art\/people\/waiter/, "i_waiter"], [/clip_?art\/people\/worker/, "i_builder"],
+    [/clip_?art\/people\/suit/, "i_office"],
+    [/clip_?art\/computers\/(laptop|macbook|netbook)/, "i_laptop"], [/clip_?art\/computers\/(ipad|.*tablet)/, "i_tablet"],
+    [/clip_?art\/computers\/(server|mainframe)/, "i_server"], [/clip_?art\/computers\/database/, "i_database"],
+    [/clip_?art\/computers\/(imac|monitor|workstation)/, "i_computer"], [/clip_?art\/computers\/printer/, "i_printer"],
+    [/clip_?art\/networking\/(wireless_)?router/, "i_router"], [/clip_?art\/networking\/firewall/, "i_firewall"],
+    [/clip_?art\/networking\/switch/, "i_switch"], [/clip_?art\/networking\/ip_camera/, "i_camera"],
+    [/clip_?art\/telecommunication\/(iphone|cellphone|htc|blackberry|palm)/, "i_phone"],
+    [/clip_?art\/telecommunication\/signal_tower/, "i_tower"],
+    [/clip_?art\/finance\/(coins|dollar)/, "i_coins"], [/clip_?art\/finance\/shopping_cart/, "i_cart"],
+    [/clip_?art\/finance\/(graph|pie_chart|stock)/, "i_chart"],
+    [/mxgraph\.(network|cisco\w*|office)\.[\w.]*laptop/, "i_laptop"],
+    [/mxgraph\.(network|cisco\w*|office)\.[\w.]*router/, "i_router"],
+    [/mxgraph\.(network|cisco\w*|office)\.[\w.]*firewall/, "i_firewall"],
+    [/mxgraph\.(network|cisco\w*)\.[\w.]*switch/, "i_switch"],
+    [/mxgraph\.(network|cisco\w*|office)\.[\w.]*(server|mainframe)/, "i_server"],
+    [/mxgraph\.(network|cisco\w*|office)\.[\w.]*printer/, "i_printer"],
+    [/mxgraph\.(network|cisco\w*|office)\.[\w.]*tablet/, "i_tablet"],
+    [/mxgraph\.(network|cisco\w*|office)\.[\w.]*(mobile|phone)/, "i_phone"],
+    [/mxgraph\.(network|cisco\w*|office)\.[\w.]*(wireless|access_point|wifi)/, "i_wifi"],
+    [/mxgraph\.(network|cisco\w*|office)\.[\w.]*(pc|desktop|workstation|terminal|monitor)/, "i_computer"],
+    [/mxgraph\.network\.[\w.]*satellite/, "i_satellite"], [/mxgraph\.network\.[\w.]*security_camera/, "i_camera"],
+    [/mxgraph\.network\.[\w.]*radio_tower/, "i_tower"],
+    [/mxgraph\.(network|cisco\w*|office)\.[\w.]*user/, "i_person"],
+    [/mxgraph\.signs\.\w+\.(man|male)(_\d)?$/, "i_man"], [/mxgraph\.signs\.\w+\.(woman|female)(_\d)?$/, "i_woman"],
+    [/mxgraph\.signs\.transportation\.(car|taxi|jeep)/, "i_car"], [/mxgraph\.signs\.transportation\.bus/, "i_bus"],
+    [/mxgraph\.signs\.transportation\.truck/, "i_truck"], [/mxgraph\.signs\.transportation\.(train|tram)/, "i_train"],
+    [/mxgraph\.signs\.transportation\.airplane/, "i_plane"], [/mxgraph\.signs\.transportation\.(ship|ferry)/, "i_ship"],
+    [/mxgraph\.signs\.transportation\.bicycle/, "i_bike"], [/mxgraph\.signs\.nature\.sun/, "i_sun"],
+    [/mxgraph\.signs\.nature\.moon/, "i_moon"], [/mxgraph\.signs\.nature\.earth/, "i_earth"],
+    [/mxgraph\.signs\.nature\.(mars|jupiter|saturn|venus|mercury|neptune|uranus|pluto)/, "i_planet"],
+    [/mxgraph\.signs\.healthcare\.hospital/, "i_hospital"], [/mxgraph\.signs\.tech\.computer/, "i_computer"],
+    [/mxgraph\.signs\.tech\.cell_phone/, "i_phone"]
+  ];
+  function drawioIcon(st) {
+    var said = ((st.shape || "") + " " + (st.image || "")).toLowerCase();
+    if (said.length < 2) { return ""; }
+    for (var i = 0; i < DRAWIO_ICONS.length; i++) {
+      if (DRAWIO_ICONS[i][0].test(said)) { return DRAWIO_ICONS[i][1]; }
+    }
+    return "";
+  }
+
   // null: not a step of the flow at all -- a swimlane or a group holding
   // others, a picture, a line drawn for looks.
   function drawioKind(st) {
+    var icon = drawioIcon(st);
+    if (icon) { return icon; }
     var names = [st.shape || ""].concat(st._).join(" ");
     var low = names.toLowerCase();
     if (/\b(swimlane|group|table|tablerow|image|line|partialrectangle)\b/.test(low) ||

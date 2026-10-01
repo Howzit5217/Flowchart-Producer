@@ -171,13 +171,13 @@
      but they are switches rather than something written in, so the sheet
      is only as tall as what is in it and never the whole screen.  Past
      that it scrolls, which on a short phone is the only thing it can do. */
-  #more-over, #tidy-over, #eg-over, #pz-over, #keys-over, #tests-over, #in-over {
+  #more-over, #tidy-over, #eg-over, #pz-over, #gm-over, #keys-over, #tests-over, #in-over {
     position: fixed; inset: 0; z-index: 60; display: flex;
     align-items: center; justify-content: center; padding: 26px;
     background: var(--dim);
     -webkit-backdrop-filter: blur(3px); backdrop-filter: blur(3px);
   }
-  #more-over[hidden], #tidy-over[hidden], #eg-over[hidden], #pz-over[hidden],
+  #more-over[hidden], #tidy-over[hidden], #eg-over[hidden], #pz-over[hidden], #gm-over[hidden],
   #keys-over[hidden], #tests-over[hidden], #in-over[hidden] {
     display: none !important;
   }
@@ -266,6 +266,37 @@
   .eg-grid .eg-size { font-size: 11px; color: var(--muted); font-weight: 400; }
   @media (max-width: 760px) {
     .eg-grid { grid-template-columns: 1fr 1fr; grid-template-rows: none; grid-auto-flow: row; }
+  }
+  /* The ten games (37-games.js): the six quick ones three to a row, the
+     four big ones two to a row and a size up, each with what it is under
+     its name and how big it is under that.  Over them, the switch for how
+     they are drawn, with its name beside it. */
+  #gm-over .more-sheet { width: min(780px, 100%); }
+  .gm-top { display: flex; align-items: center; gap: 12px; padding-top: 14px; }
+  .gm-top .opt-name { flex: none; color: var(--muted); font-size: 12.5px; }
+  .gm-top .seg { flex: 0 1 340px; }
+  .gm-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+  .gm-grid.big { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .gm-grid .btn {
+    flex-direction: column; align-items: flex-start; justify-content: flex-start; gap: 2px;
+    text-align: left; white-space: normal; min-width: 0; padding: 9px 12px;
+  }
+  .gm-grid.big .btn { padding: 12px 14px; }
+  .gm-grid .gm-name { font-weight: 600; }
+  .gm-grid.big .gm-name { font-size: 15px; }
+  .gm-grid .gm-what { font-size: 12.5px; line-height: 1.4; color: var(--ink); opacity: .82; }
+  .gm-grid .gm-size {
+    margin-top: 3px; font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums;
+  }
+  /* the one played last, so coming back to the list shows where you were */
+  .gm-grid .btn.here { box-shadow: 0 0 0 2px var(--accent); border-color: var(--accent); }
+  @media (max-width: 760px) {
+    .gm-grid { grid-template-columns: 1fr 1fr; }
+  }
+  @media (max-width: 479px) {
+    .gm-grid, .gm-grid.big { grid-template-columns: 1fr; }
+    .gm-top { flex-wrap: wrap; gap: 6px; }
+    .gm-top .seg { flex: 1 1 100%; }
   }
   .in-list { display: flex; flex-direction: column; gap: 4px; }
   .in-pick {
@@ -450,7 +481,7 @@
      before it, the count is what pushes it there; the sheets with no
      count -- Options, the examples, the keys -- push it themselves, or it
      sat in the middle of the bar, straight after the name of the sheet. */
-  #eg-done, #keys-done, #more-done, #tidy-no, #in-cancel { margin-left: auto; }
+  #eg-done, #gm-done, #keys-done, #more-done, #tidy-no, #in-cancel { margin-left: auto; }
   #tidy-no + #tidy-go { margin-left: -4px; }   /* the pair, a pair */
 
   /* As tall as the program in it (fitSlot in 24-scroll.js sets the
@@ -497,7 +528,7 @@
   :is(#code-slot, #tape-slot, #lang-full) > .slide-frame.has-x > .slider.y { bottom: -1px; }
   /* the pseudocode's has room under it only while it has a sideways bar */
   #code-slot > .slide-frame:not(.has-x) > .slider.y { bottom: 0; }
-  :is(#code-slot, #tape-slot) > .slide-frame.has-x.has-y::after {
+  :is(#code-slot, #tape-slot, #lang-full) > .slide-frame.has-x.has-y::after {
     right: -16px; bottom: -16px;
   }
   /* up to the bar across the top, unless the tape has what the program is
@@ -539,6 +570,10 @@
     padding: 14px 16px 0; background: var(--code-bg);
     border-top: 1px solid var(--line-soft);
   }
+  /* Room under the box for its sideways bar, while it has one, as the
+     pseudocode's has: without it the bar hung below the box, over Copy and
+     Save it. */
+  #lang-full:has(> .slide-frame.has-x) { padding-bottom: 16px; }
   #lang-full > .slide-frame { flex: 1; min-width: 0; display: flex; }
   #lang-full #lang-code {
     display: block; flex: 1; width: 100%; height: auto; min-height: 0; min-width: 0;
@@ -565,7 +600,7 @@
     flex: none; padding: 8px 16px 4px; background: var(--code-bg);
     border-top: 1px solid var(--line-soft);
   }
-  #lang-full-fixed .fixed-list { max-height: 30vh; }
+  #lang-full-fixed .fixed-list, #lang-full-note .fixed-list { max-height: 30vh; }
   #lang-full-note:not(:empty) + #lang-full { border-top: 0; }
 
   /* ---------------------------- a story, and what it was read as, side by side -- */

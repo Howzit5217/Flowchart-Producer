@@ -54,9 +54,24 @@ __APPHEAD__
   <!-- Reading a chart and writing one are not the thing anybody is
        marked on in the end: whether the program does what it was asked
        to.  The puzzles are programs that do not. -->
+  <!-- On a phone held upright the two of them are a picture each, a
+       puzzle piece and a game pad, or Files was squeezed down to "Fi" to
+       make room for them (04-panel.css says when). -->
   <button class="btn" id="puzzles" aria-expanded="false"
           data-w-title="puzzles" title="__W(puzzles)__">
+    <svg class="bar-art" viewBox="0 0 20 20" aria-hidden="true">
+      <path d="M4 6.5h3.1a1.9 1.9 0 1 1 3.8 0H14v3.1a1.9 1.9 0 1 1 0 3.8v3.1H4z"/></svg>
     <span data-w="puzzles">__W(puzzles)__</span>
+  </button>
+  <!-- And programs to play: ten games, small to big, each one a chart to
+       watch while you play it (37-games.js). -->
+  <button class="btn" id="games" aria-expanded="false"
+          data-w-title="games_tip" title="__W(games_tip)__">
+    <svg class="bar-art" viewBox="0 0 20 20" aria-hidden="true">
+      <path d="M6.3 6.5h7.4a3.8 3.8 0 0 1 3.7 4.6l-.7 3.2a1.8 1.8 0 0 1-3 .9L12 13.5H8l-1.7 1.7a1.8 1.8 0 0 1-3-.9l-.7-3.2a3.8 3.8 0 0 1 3.7-4.6z"/>
+      <path d="M6.6 9v3M5.1 10.5h3"/>
+      <circle cx="13" cy="9.7" r=".55"/><circle cx="14.6" cy="11.3" r=".55"/></svg>
+    <span data-w="games">__W(games)__</span>
   </button>
   <button class="btn primary" id="save-open" data-w="files"
           aria-expanded="false">__W(files)__</button>
@@ -258,6 +273,18 @@ __SOURCE__
         <span class="name" data-w="show_grid">__W(show_grid)__</span>
         <label class="switch"><input type="checkbox" id="grid-on" checked></label>
       </div>
+      <!-- Every shape shaded in its own color and casting a shadow, so a
+           colored drawing has some depth to it (02-depth.js). -->
+      <div class="row" data-w-title="depth_tip" title="__W(depth_tip)__">
+        <span class="name" data-w="depth">__W(depth)__</span>
+        <label class="switch"><input type="checkbox" id="depth-on"></label>
+      </div>
+      <!-- Names on the furniture and rooms of a plan drawn by hand
+           (labelArt, 03-icons.js; the switch in 11-hand-icons.js). -->
+      <div class="row" data-w-title="labels_tip" title="__W(labels_tip)__">
+        <span class="name" data-w="labels">__W(labels)__</span>
+        <label class="switch"><input type="checkbox" id="labels-on" checked></label>
+      </div>
     </section>
 
       <section class="card">
@@ -410,6 +437,39 @@ __SVG__
   </div>
 </div>
 
+<!-- The games, smallest first and the big ones in a part of their own
+     (37-games.js).  Over them, which way they are drawn: a chart to each
+     module, or every module in the one chart -- the same switch as the one
+     in Options, shown here because it is half of what a game looks like. -->
+<div id="gm-over" hidden>
+  <div class="code-sheet more-sheet" role="dialog" aria-labelledby="gm-head">
+    <div class="code-bar">
+      <span class="mark small" aria-hidden="true">
+        <svg viewBox="0 0 24 24">
+          <rect x="7.5" y="1.8" width="9" height="5.4" rx="1.4"/>
+          <path d="M12 7.2v3.1"/>
+          <path d="M12 10.3l4 3.3-4 3.3-4-3.3z"/>
+          <path d="M12 16.9v2.1H4.6v3.2M12 19h7.4v3.2"/>
+        </svg>
+      </span>
+      <strong id="gm-head" data-w="gm_head">__W(gm_head)__</strong>
+      <button class="btn small primary" id="gm-done" data-w="done">__W(done)__</button>
+    </div>
+    <div class="more-body" id="gm-body">
+      <div class="gm-top">
+        <span class="opt-name" data-w="gm_charts">__W(gm_charts)__</span>
+        <div class="seg gm-charts" id="gm-seg">
+          <button class="seg-btn" data-charts="many" data-w="gm_many"
+                  data-w-title="gm_many_tip" title="__W(gm_many_tip)__">__W(gm_many)__</button>
+          <button class="seg-btn" data-charts="one" data-w="gm_one"
+                  data-w-title="gm_one_tip" title="__W(gm_one_tip)__">__W(gm_one)__</button>
+        </div>
+      </div>
+      <div id="gm-list"></div>
+    </div>
+  </div>
+</div>
+
 <!-- Fifteen short programs, in three levels, for anybody who has never
      seen this pseudocode before.  Three of them sit under the box for the
      first minute; this is where the rest of them are. -->
@@ -504,6 +564,11 @@ __SVG__
           <label class="opt-row">
             <span class="opt-name" data-w="o_everyout">__W(o_everyout)__</span>
             <input type="checkbox" id="o-everyout"></label>
+          <!-- Each module drawn where it is called, so the program is one
+               chart rather than a chart for each module (make/inline.py) -->
+          <label class="opt-row">
+            <span class="opt-name" data-w="o_onechart">__W(o_onechart)__</span>
+            <input type="checkbox" id="o-onechart"></label>
           <div class="opt-row">
             <span class="opt-name" data-w="o_for">__W(o_for)__</span>
             <div class="seg" id="for-seg">

@@ -29,6 +29,7 @@ def main():
     settings.FOR_STYLE = args.for_style
     settings.LEGEND = args.legend or settings.LEGEND
     settings.GROUP_OUTPUT = settings.GROUP_OUTPUT and not args.no_group_output
+    settings.ONE_CHART = args.one_chart or settings.ONE_CHART
     off = ("tall", "off", "none", "")
     settings.SHAPE = "" if str(args.shape).lower() in off else args.shape
     settings.GRID = settings.GRID and not args.no_grid

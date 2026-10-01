@@ -15,6 +15,7 @@
   function letGoOfMenus() {
     all('[aria-expanded="true"]').forEach(function (b) {
       if (b.id === "more" || b.id === "hand-info" || b.classList.contains("set-btn") ||
+          b.classList.contains("icon-lib-btn") ||   // the icons' library (11-hand-icons.js)
           b.closest(".menu")) {          // and a row whose menu went with it
         b.setAttribute("aria-expanded", "false");
       }
@@ -748,7 +749,10 @@
     openMenu(x, y, [{ head: TXT.add_shape }].concat(spots.map(function (one) {
       return { mark: keyMark(one.kind), name: one.name, drag: one.kind,
                go: function () { add(one.kind); } };
-    }), [moreShapesRow(add, true), "-"], after, after.length ? ["-"] : [], [
+    }), [moreShapesRow(add, true),
+         // and the icons, landing where the menu was opened (11-hand-icons.js)
+         iconRow(function (kind) { addNode(kind, here); }), "-"],
+       after, after.length ? ["-"] : [], [
       { icon: "fit", name: TXT.m_fit, go: function () { el("#fit").click(); } }
     ]));
   }

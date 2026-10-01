@@ -299,6 +299,8 @@
     // the whole of the first frame and left every shape in the old color
     // -- the chart appeared to do nothing at all until the frame after.
     var nodes = here.nodes;
+    // Depth on: every fill shaded, and shadows under the shapes (02-depth.js)
+    var depthOn = depthDress(nodes.length);
     var first = eyeAt(nodes.length);
     nodes.forEach(function (ignored, step) {
       var g = nodes[(first + step) % nodes.length];
@@ -320,14 +322,14 @@
       // the way they are meant to be, is stepped over whole and never
       // looked into at all.
       if (g._fill === fill && g._line === line && g._word === word &&
-          g._dress === dress) { return; }
-      if (g._fill === undefined && !fill && !line && !word && !dress) {
+          g._dress === dress && g._depth === depthOn) { return; }
+      if (g._fill === undefined && !fill && !line && !word && !dress && !depthOn) {
         g._fill = fill; g._line = line; g._word = word;   // already exactly this
         g._dress = dress;
         return;
       }
       if (daubed >= ATONCE && !paintingAll) { leftOver = true; return; }
-      if (g._fill !== fill || g._line !== line) {
+      if (g._fill !== fill || g._line !== line || g._depth !== depthOn) {
         // circle is the actor's head: left out, it stayed white and black.
         all("ellipse, rect, polygon, path, circle", g).forEach(function (e) {
           // .ghost is the clear pane behind a words-only box: it is there to
@@ -336,7 +338,13 @@
           if (e.classList.contains("ghost") || e.classList.contains("highlight")) {
             return;
           }
-          if (!e.classList.contains("trim")) { e.style.fill = fill; }
+          // .inked is filled with the outline's color, as ink, and .gap is
+          // the paper showing through a wall (03-icon-art.js)
+          if (e.classList.contains("gap")) { e.style.fill = gapFill(g); return; }
+          if (e.classList.contains("inked")) { e.style.fill = line; }
+          else if (!e.classList.contains("trim")) {
+            e.style.fill = depthOn ? depthFill(fill || e.getAttribute("fill") || "#ffffff") : fill;
+          }
           e.style.stroke = line;
           daubed += 1;
         });
@@ -346,6 +354,7 @@
         });
         g._fill = fill;
         g._line = line;
+        g._depth = depthOn;
       }
       if (g._word !== word) {
         all("text", g).forEach(function (e) {
@@ -399,7 +408,9 @@
       var k = kindColors(g.dataset.kind), line = k.line || style.ink || "";
       all("ellipse, rect, polygon, path, circle, line", g).forEach(function (e) {
         if (e.classList.contains("ghost")) { return; }
-        if (e.tagName !== "line" && !e.classList.contains("trim")) {
+        if (e.classList.contains("gap")) { putOn(e, "_fill", style.sheet || "#ffffff", fillIt); return; }
+        if (e.classList.contains("inked")) { putOn(e, "_fill", line, fillIt); }
+        else if (e.tagName !== "line" && !e.classList.contains("trim")) {
           putOn(e, "_fill", k.fill, fillIt);
         }
         putOn(e, "_line", line, strokeIt);
@@ -421,7 +432,11 @@
     all(".keymark", document).forEach(function (mark) {
       var kind = mark.dataset.kind, k = kindColors(kind);
       all("ellipse, rect, polygon, path, circle", mark).forEach(function (e) {
-        e.setAttribute("fill", k.fill || style.sheet || "#ffffff");
+        // an outline's folds stay lines, and an icon's ink stays ink
+        if (e.classList.contains("ghost")) { return; }
+        if (e.classList.contains("gap")) { e.setAttribute("fill", style.sheet || "#ffffff"); return; }
+        if (e.classList.contains("inked")) { e.setAttribute("fill", k.line || style.ink || "#10151b"); }
+        else if (!e.classList.contains("trim")) { e.setAttribute("fill", k.fill || style.sheet || "#ffffff"); }
         e.setAttribute("stroke", k.line || style.ink || "#10151b");
       });
       all("line", mark).forEach(function (e) {

@@ -35,6 +35,7 @@
   var stepsUsed = 0;                     // steps taken, the whole program over
   var sinceAsked = 0;                    // and since somebody last answered it
   var callsDeep = 0;                     // how many calls in the run is
+  var callPath = [];                     // and the statement each was made from
   var GLOBALS = {};                      // the names every chart can see
 
   // Letting go, properly.  Everything in here is async, but awaiting a value
@@ -200,19 +201,49 @@
   // came from -- so the line a statement was read from is the way back to
   // its shape.  Asked by number, a design drawn by hand has none: its run
   // lit up nothing, and the camera never moved from where it was.
+  //
+  // A module drawn where it is called (Options, Modules and functions in one
+  // chart) is drawn once for every call, each copy numbered as the module's
+  // own statements are -- and says which call it is in data-via: the
+  // statements the calls were made from, outermost first.  The run lights
+  // the copy for the calls it is inside, and every copy only if none fits.
   function runShapes(id, line) {
-    if (!byHand) { return shapesNumbered(id); }
+    if (!byHand) {
+      var found = shapesNumbered(id);
+      if (found.length < 2) { return found; }
+      var via = callPath.join(".");
+      var ours = found.filter(function (g) { return (g.getAttribute("data-via") || "") === via; });
+      return ours.length ? ours : found;
+    }
     var mine = id && line ? handLine[line] : null;
     var g = mine && chart ? el('.node[data-i="h' + mine + '"]', chart) : null;
     return g ? [g] : [];
   }
 
+  // Whether the chart on the paper has its modules drawn where they are
+  // called, which is asked once a drawing.
+  function joinedChart() {
+    if (!chart) { return false; }
+    if (chart._joined === undefined) { chart._joined = !!el(".node[data-via]", chart); }
+    return chart._joined;
+  }
+
   function lightUp(item) {
     var id = item ? item.id : 0;
+    var shapes = runShapes(id, item ? item.line : 0);
+    // Drawn as one chart, a call, a module's way in and a Return with
+    // nothing to hand back have no shape of their own: the module's steps
+    // stand where the call was.  The light stays where it is for them,
+    // rather than going out for a step and coming back on further down.
+    if (id && !shapes.length && litNow.length && joinedChart()) {
+      if (flatOut()) { followSoon(item, litNow[0]); }
+      else { markLine(id, item ? item.line : 0); }
+      return;
+    }
     litNow.forEach(function (g) { g.classList.remove("now"); });
     litNow = [];
     var lit = null;
-    runShapes(id, item ? item.line : 0).forEach(function (g) {
+    shapes.forEach(function (g) {
       g.classList.add("now");
       litNow.push(g);
       if (!lit) { lit = g; }
@@ -1009,6 +1040,7 @@
       throw deep;
     }
     try {
+      callPath.push(from ? from.id : 0);
       await runSteps(mod.body, where);
       return "";
     } catch (thrown) {
@@ -1020,6 +1052,7 @@
       throw thrown;
     } finally {
       callsDeep--;
+      callPath.pop();
       // What was handed over by reference goes home again.  A module given a
       // variable rather than a value is meant to be able to change it -- that
       // is the whole of what Ref says -- and the change used to be thrown
@@ -1717,7 +1750,7 @@
     var back = resumeTo;
     resumeTo = null;
     running = true; stopping = false; breaths = 0;
-    stepsUsed = 0; sinceAsked = 0; callsDeep = 0;
+    stepsUsed = 0; sinceAsked = 0; callsDeep = 0; callPath = [];
     trail = [];
     CASH = back ? back.cash : {};        // a fresh run, a fresh set of names
     GLOBALS = back ? back.globals : {};  //   and a fresh set of shared ones

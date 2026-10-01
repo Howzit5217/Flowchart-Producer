@@ -216,7 +216,50 @@ function runner(WORDS) {
     builtText = null;
     return got;
   };
+  // Played, the way somebody plays a game.  Each answer typed is somebody
+  // still there, so the steps are counted from the last one (tick, in
+  // 14-run.js) rather than from the start -- a game of Battleship is tens
+  // of thousands of steps between its first shot and its last, far past
+  // what a puzzle is allowed.  Out of answers, the run is stopped where it
+  // stands, and that is said rather than taken for the end of the game.
+  go.played = function (ast, typed) {
+    AST = ast;
+    var left = (typed || []).slice(), said = [], ranOut = false;
+    var wasTalk = talk, wasAsk = ask, wasLit = lightUp;
+    quiet = true;
+    faults.length = 0;
+    tape.innerHTML = "";
+    talk = function (what, how) {
+      if (!how) { said.push(String(what)); }
+      return document.createElement("div");
+    };
+    ask = function () {
+      sinceAsked = 0;
+      if (!left.length) { ranOut = true; stopping = true; return Promise.resolve(""); }
+      return Promise.resolve(String(left.shift()));
+    };
+    lightUp = function () { /* nobody is watching */ };
+    function after() {
+      quiet = false; talk = wasTalk; ask = wasAsk; lightUp = wasLit;
+      running = false; stopping = false;
+    }
+    return runIt().then(function () {
+      after();
+      return { printed: said, ranOut: ranOut, faults: faults.slice() };
+    }, function (blew) { after(); throw blew; });
+  };
   return go;
+}
+
+// The same random numbers every time, from a seed: a game played twice
+// with the same answers and the same seed goes the same way twice.
+function seeded(a) {
+  return function () {
+    a |= 0; a = a + 0x6D2B79F5 | 0;
+    var t = Math.imul(a ^ a >>> 15, 1 | a);
+    t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
+    return ((t ^ t >>> 14) >>> 0) / 4294967296;
+  };
 }
 
 // ---- and the checking --------------------------------------------------
@@ -430,6 +473,32 @@ function wanted(one) {                   // what run.py said it should print
                    code: code, apart: apart });
     }
     fs.writeFileSync(asked.shelfOut, JSON.stringify(shelf));
+  }
+
+  // ---- the games, each played to its end -----------------------------
+  // With the answers run.py hands over, and the random numbers drawn from a
+  // seed, so a game that ends one time ends every time.  Stopping on a
+  // fault and still asking when the answers ran out are both a game that
+  // does not work; and where run.py says what its last line has in it --
+  // the moves a winning walk through the dungeon took -- it has to.
+  for (var g = 0; g < (asked.games || []).length; g++) {
+    var game = asked.games[g], chance = Math.random, played = null;
+    Math.random = seeded(game.seed || 1);
+    try { played = await go.played(game.ast, game.typed); }
+    catch (blew) { bad.push(game.name + ": it threw -- " + (blew && blew.message || blew)); }
+    finally { Math.random = chance; }
+    if (!played) { continue; }
+    var last = played.printed[played.printed.length - 1] || "";
+    if (played.faults.length) {
+      bad.push(game.name + ": it stopped on line " + played.faults[0].line + " -- " +
+               played.faults[0].message);
+    } else if (played.ranOut) {
+      bad.push(game.name + ": still playing when the answers ran out, last saying " +
+               JSON.stringify(last));
+    } else if (game.lastHas && last.indexOf(game.lastHas) < 0) {
+      bad.push(game.name + ": it ended on " + JSON.stringify(last) + ", with no " +
+               JSON.stringify(game.lastHas) + " in it");
+    }
   }
 
   bad.forEach(function (line) { console.error("  " + line); });

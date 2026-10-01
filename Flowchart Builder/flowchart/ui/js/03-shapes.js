@@ -8,6 +8,7 @@
   // handed the lines and how far apart they are (see wordsAt, below).
   // Handed none, as in the key, each is drawn the way it looks on its own.
   function shapeArt(kind, cx, cy, w, h, fill, words, line) {
+    if (ICONS[kind]) { return iconArt(kind, cx, cy, w, h, fill, words, line); }   // 03-icons.js
     var l = cx - w / 2, r = cx + w / 2, t = cy - h / 2, b = cy + h / 2;
     var lean = Math.min(12, w / 4), paint = fill || "#ffffff";
     var box = 'fill="' + paint + '"';
@@ -268,6 +269,9 @@
 
   // The middle of a shape's words (the numbers are shapeArt's, above).
   function wordsAt(kind, cx, cy, w, h, words, line) {
+    // an icon says for itself (03-icons.js); the guard is for tests/router.js,
+    // which lifts these lines out without the icons
+    if (typeof ICONS === "object" && ICONS[kind]) { return iconWordsAt(kind, cx, cy, w, h, words, line); }
     var dx = 0, dy = 0;
     switch (kind) {
       case "store": dy = Math.min(11, h * 0.24) / 2; break;          // under the lip
@@ -328,6 +332,7 @@
   // The least box that holds these words in this shape, `across` measuring
   // one line: the words' own room and whatever the shape's parts take.
   function wordsNeed(kind, words, line, across) {
+    if (typeof ICONS === "object" && ICONS[kind]) { return iconNeed(kind, words, line, across); }   // 03-icons.js
     var wide = 0;
     words.forEach(function (one) { wide = Math.max(wide, across(one)); });
     var more = WORD_ROOM[kind] || [0, 0];

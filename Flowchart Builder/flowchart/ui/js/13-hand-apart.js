@@ -23,6 +23,11 @@
   // turned towards it by the width of that box rather than by the shape,
   // and came to rest with a corner of the turned one still across it.
   function boxesMeet(a, ax, ay, b, bx, by, gap) {
+    // A room and the pieces of a floor plan stand on one another the way
+    // they do in a house -- a chair half under a table, a door in a wall,
+    // the lot on the floor of a room -- so nothing is pushed off them and
+    // they push nothing (isLoose, 03-icons.js).
+    if (isLoose(a.kind) || isLoose(b.kind)) { return false; }
     var p = turned(a), q = turned(b);
     // Clear even of the boxes round them: nothing more to ask.
     if (Math.abs(ax - bx) * 2 >= p.w + q.w + gap * 2 ||

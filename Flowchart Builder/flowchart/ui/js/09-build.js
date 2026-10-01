@@ -1022,10 +1022,11 @@
     return from.text || "";
   }
 
-  // Which example or puzzle a program is, word for word, as any language
-  // the page carries writes it out -- so one opened in German is still
-  // that example with the page in French.  The key it goes by (e_ask,
-  // z_else) and the puzzle itself, where it is one; or nothing.
+  // Which example, puzzle or game a program is, word for word, as any
+  // language the page carries writes it out -- so one opened in German is
+  // still that example with the page in French.  The key it goes by
+  // (e_ask, z_else, g_coin) and the puzzle itself, where it is one; or
+  // nothing.
   function shippedAs(code) {
     if (!code) { return null; }
     function is(key) {
@@ -1042,6 +1043,9 @@
           if (!found && is(one.key)) { found = { key: one.key, puzzle: one }; }
         });
       });
+    }
+    if (!found && typeof GAMES !== "undefined") {       // 37-games.js
+      GAMES.forEach(function (key) { if (!found && is(key)) { found = { key: key }; } });
     }
     return found;
   }
@@ -1234,8 +1238,8 @@
   // drawing code could always be told and the studio had no way to say.
   // They are read straight off the page rather than kept in a variable
   // beside it: one place a thing is true is one place it can be wrong.
-  var OPTIONS = ["o-tint", "o-everyout", "o-roomy", "o-tight", "o-chains",
-                 "o-columns", "o-steady"];
+  var OPTIONS = ["o-tint", "o-everyout", "o-onechart", "o-roomy", "o-tight",
+                 "o-chains", "o-columns", "o-steady"];
 
   function optionOn(id) {
     var box = el("#" + id);
@@ -1262,6 +1266,7 @@
       hexfor: forNow() === "hex",
       tint: optionOn("o-tint"),
       everyout: optionOn("o-everyout"),
+      onechart: optionOn("o-onechart"),
       roomy: optionOn("o-roomy"),
       tight: optionOn("o-tight"),
       chains: optionOn("o-chains"),

@@ -662,15 +662,26 @@
 
   /* ------------------------------------------- the settings, over the page -- */
   #more-over:not([hidden]), #tidy-over:not([hidden]), #eg-over:not([hidden]),
-  #pz-over:not([hidden]), #keys-over:not([hidden]), #tests-over:not([hidden]) {
+  #pz-over:not([hidden]), #gm-over:not([hidden]), #keys-over:not([hidden]),
+  #tests-over:not([hidden]) {
     animation: dim-in var(--move) var(--ease-soft) backwards;
   }
   #more-over:not([hidden]) .code-sheet, #tidy-over:not([hidden]) .code-sheet,
-  #in-over:not([hidden]) .code-sheet,
+  #in-over:not([hidden]) .code-sheet, #gm-over:not([hidden]) .code-sheet,
   #eg-over:not([hidden]) .code-sheet, #tests-over:not([hidden]) .code-sheet,
   #pz-over:not([hidden]) .code-sheet, #keys-over:not([hidden]) .code-sheet {
     animation: sheet-rise var(--sheet-t) var(--ease) backwards;
   }
+  /* The games fill in the way the examples do, the big ones after the
+     quick ones; and the card of the one being played arrives as a
+     puzzle's does. */
+  #gm-over:not([hidden]) .more-part { animation: row-in .32s var(--ease) backwards; }
+  #gm-over:not([hidden]) .more-part:nth-child(2) { animation-delay: .06s; }
+  #gm-over:not([hidden]) .gm-grid .btn {
+    animation: row-in .3s var(--ease) backwards;
+    animation-delay: calc(var(--i, 0) * 22ms);
+  }
+  #gm-card:not([hidden]) { animation: swap-in .3s var(--ease) backwards; }
   /* The levels and the names in them fill in the way the examples do. */
   #pz-over:not([hidden]) .more-part {
     animation: row-in .32s var(--ease) backwards;
@@ -757,12 +768,13 @@
      out was a click on a thing nobody could see any more. */
   #more-over.going, #tidy-over.going, #eg-over.going, #pz-over.going, #print-over.going,
   #sure-over.going, #code-over.going, #tape-over.going, #lang-over.going,
-  #keys-over.going { pointer-events: none; }
-  #more-over.going, #tidy-over.going, #eg-over.going, #pz-over.going, #keys-over.going {
+  #keys-over.going, #gm-over.going { pointer-events: none; }
+  #more-over.going, #tidy-over.going, #eg-over.going, #pz-over.going, #keys-over.going,
+  #gm-over.going {
     animation: dim-out .19s var(--ease-soft) forwards;
   }
   #more-over.going .code-sheet, #tidy-over.going .code-sheet, #eg-over.going .code-sheet,
-  #pz-over.going .code-sheet, #keys-over.going .code-sheet {
+  #pz-over.going .code-sheet, #keys-over.going .code-sheet, #gm-over.going .code-sheet {
     animation: sheet-fall .19s var(--ease-soft) forwards;
   }
   /* The page for printing, the same -- on the screen only.  A printer lays

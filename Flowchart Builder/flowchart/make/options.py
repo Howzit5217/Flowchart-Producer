@@ -17,6 +17,10 @@ def options():
     ap.add_argument("-a", "--author", help="your name, under the title")
     ap.add_argument("--split", action="store_true",
                     help="write one .svg per module / function")
+    ap.add_argument("--one-chart", action="store_true",
+                    help="draw each module / function where it is called, "
+                         "so the whole program is one chart rather than a "
+                         "chart for each module")
     ap.add_argument("--for-style", choices=["expand", "hexagon"], default=settings.FOR_STYLE,
                     help="how to draw For loops (default: %(default)s)")
     ap.add_argument("--columns-height", type=float, default=settings.COLUMN_H,

@@ -2,6 +2,15 @@
   "version": "0.0.1",
   "configurations": [
     {
+      "name": "code-screen-studio",
+      "runtimeExecutable": "python",
+      "runtimeArgs": [
+        "C:/Users/origa/AppData/Local/Temp/claude/C--Users-origa-Downloads-GitHub-Flowchart-Producer/7a8c5147-308a-4c92-8454-06241441351d/scratchpad/studio_here.py",
+        "9053"
+      ],
+      "port": 9053
+    },
+    {
       "name": "site",
       "runtimeExecutable": "python",
       "runtimeArgs": [
@@ -322,6 +331,30 @@
       "port": 9017
     },
     {
+      "name": "one-chart-site",
+      "runtimeExecutable": "python",
+      "runtimeArgs": [
+        "-m",
+        "http.server",
+        "9047",
+        "--directory",
+        "C:/Users/origa/Downloads/GitHub/Flowchart-Producer/Flowchart Builder"
+      ],
+      "port": 9047
+    },
+    {
+      "name": "games-site",
+      "runtimeExecutable": "python",
+      "runtimeArgs": [
+        "-m",
+        "http.server",
+        "9061",
+        "--directory",
+        "C:/Users/origa/Downloads/GitHub/Flowchart-Producer/Flowchart Builder"
+      ],
+      "port": 9061
+    },
+    {
       "name": "import-site",
       "runtimeExecutable": "python",
       "runtimeArgs": [
@@ -332,6 +365,15 @@
         "C:/Users/origa/Downloads/GitHub/Flowchart-Producer/Flowchart Builder"
       ],
       "port": 9031
+    },
+    {
+      "name": "icons-studio",
+      "runtimeExecutable": "python",
+      "runtimeArgs": [
+        "C:/Users/origa/AppData/Local/Temp/claude/C--Users-origa-Downloads-GitHub-Flowchart-Producer/13e2bf87-97d8-4dc0-89f7-4ab1da662f66/scratchpad/icons_studio.py",
+        "9131"
+      ],
+      "port": 9131
     }
   ]
 }

@@ -1,0 +1,199 @@
+/* ---------------------------------------------------------------------------
+   08-icons.css -- the library of icons, and a drawing run as what it is:
+   a walk through a home, work passed along, data sent, a circuit switched
+   on, a launch
+
+   One part of the studio's stylesheet; parts.py pours them in order.
+   --------------------------------------------------------------------------- */
+  /* ---------------------------------------------------- the library -- */
+  /* Under Add a shape: the button, and the icons used last beside it. */
+  .icon-shelf { display: flex; align-items: center; gap: 6px; min-width: 0; }
+  .adders .icon-lib-btn { flex: none; gap: 6px; padding: 5px 10px; }
+  .icon-lib-btn svg, .icon-quick svg.keymark { flex: none; }
+  .icon-lib-btn > svg {
+    width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.5;
+    stroke-linecap: round; stroke-linejoin: round;
+  }
+  .icon-lib-btn[aria-expanded="true"] { border-color: var(--accent); color: var(--accent); }
+  .icon-recent { display: flex; gap: 4px; min-width: 0; overflow: hidden; }
+  .adders .icon-quick {
+    flex: none; width: 30px; height: 30px; padding: 0; min-width: 0;
+    display: inline-flex; align-items: center; justify-content: center;
+  }
+
+  /* The library itself: the search box, the sets, and the tiles. */
+  .menu.icon-lib { width: min(380px, calc(100vw - 16px)); padding: 8px; }
+  .icon-lib-in { display: flex; flex-direction: column; gap: 7px; }
+  .icon-lib-in .icon-find { width: 100%; box-sizing: border-box; }
+  .icon-sets { display: flex; flex-wrap: wrap; gap: 4px; }
+  .menu .icon-sets button.icon-chip {
+    width: auto; padding: 3px 9px; font-size: 12px; border-radius: 999px;
+    border: 1px solid var(--line); color: var(--muted);
+  }
+  .menu .icon-sets button.icon-chip[aria-pressed="true"] {
+    border-color: var(--accent); color: var(--accent); background: var(--accent-soft);
+  }
+  .icon-grid {
+    display: grid; grid-template-columns: repeat(auto-fill, minmax(74px, 1fr)); gap: 2px;
+    max-height: min(54vh, 400px); overflow-y: auto; overscroll-behavior: contain;
+  }
+  .menu .icon-grid button.icon-cell {
+    flex-direction: column; justify-content: flex-start; gap: 3px;
+    padding: 7px 3px 5px; font-size: 11px; text-align: center; min-width: 0;
+  }
+  .icon-cell .icon-name {
+    display: block; width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    color: var(--muted);
+  }
+  .menu .icon-grid button.icon-cell:is(:hover, :focus-visible) .icon-name { color: var(--ink); }
+  .icon-none { margin: 4px 2px; }
+
+  /* An icon's ink prints black, as its outline does (05-chart.css). */
+  .no-ink svg .node .inked, .no-ink svg .key-shape .inked { fill: #000 !important; }
+  .no-ink svg .node .gap, .no-ink svg .key-shape .gap { fill: #fff !important; stroke: none !important; }
+
+  /* --------------------------------------- what the drawing is run as -- */
+  /* Under the pace, by hand only: the list of what the drawing is, and the
+     3D view's button beside it for a home or a sky. */
+  .board-row { display: none; gap: 6px; margin-top: 8px; align-items: center; }
+  body.by-hand .board-row { display: flex; }
+  .board-row .field { flex: 1; min-width: 0; }
+  .board-row .btn { flex: none; gap: 5px; }
+  .board-row .btn svg {
+    width: 15px; height: 15px; fill: none; stroke: currentColor; stroke-width: 1.5;
+    stroke-linejoin: round;
+  }
+  .board-row .btn[aria-pressed="true"] { border-color: var(--accent); color: var(--accent); }
+  #report .scene-sum { margin: 2px 0 6px; font-weight: 600; }
+
+  /* -------------------------------------------- while a scene runs -- */
+  /* What it moves about is drawn over the paper and takes no clicks; a
+     shape a copy of which is moving is left as a faint outline where it
+     stood, and the shapes it is at glow as a program's do (.now). */
+  svg .sim-layer { pointer-events: none; }
+  svg .node.sim-off { opacity: 0.18; }
+  svg .node.sim-used { opacity: 0.85; }
+  svg .sim-say text { font-family: inherit; }
+  svg .sim-walker, svg .sim-vehicle, svg .sim-body {
+    filter: drop-shadow(0 2px 3px rgba(16, 24, 40, .28));
+  }
+  svg .sim-token { filter: drop-shadow(0 1px 2px rgba(16, 24, 40, .3)); }
+  body.simulating #chart .node[data-kind="i_switch_on"] { cursor: pointer; }
+
+  /* ----------------------------------------------------- the 3D view -- */
+  /* Over the paper exactly (38-view3d.js places it), on the page's own
+     background -- or the night, for a sky -- with its few buttons along
+     the top. */
+  .view3d {
+    position: fixed; z-index: 12; background: var(--bg);
+    border-left: 1px solid var(--line); overflow: hidden; outline: 0;
+    animation: v3-in .22s var(--ease-soft, ease-out);
+  }
+  .view3d.sky { background: #0b0f15; }
+  .view3d > canvas:first-child { display: block; width: 100%; height: 100%; touch-action: none; cursor: grab; }
+  .view3d > canvas:first-child:active { cursor: grabbing; }
+  .v3-bar {
+    position: absolute; left: 10px; right: 10px; top: 10px; display: flex; gap: 6px;
+    align-items: center; flex-wrap: wrap; pointer-events: none;
+  }
+  .v3-bar > * { pointer-events: auto; }
+  .v3-bar .btn[aria-pressed="true"] { border-color: var(--accent); color: var(--accent); }
+  .v3-hint {
+    font-size: 11.5px; color: var(--muted); background: var(--panel); border: 1px solid var(--line-soft);
+    border-radius: 999px; padding: 3px 10px; pointer-events: none;
+  }
+  .view3d.sky .v3-hint { background: rgba(255, 255, 255, .08); color: #c9d2dc; border-color: transparent; }
+  .v3-bar .v3-shut { margin-left: auto; background: var(--panel); }
+  .v3-shut svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; }
+  @keyframes v3-in { from { opacity: 0; } to { opacity: 1; } }
+  @media (prefers-reduced-motion: reduce) { .view3d { animation: none; } }
+
+  /* Walking round inside: where you are, what you are looking at, a map
+     of the plan, a word when a door will not open, and a pad for a finger
+     (38-view3d.js). */
+  .view3d.walking > canvas:first-child { cursor: crosshair; }
+  .v3-where {
+    position: absolute; left: 50%; top: 52px; transform: translateX(-50%);
+    background: var(--panel); border: 1px solid var(--line-soft); border-radius: 999px;
+    padding: 3px 12px; font-size: 12.5px; font-weight: 600; pointer-events: none;
+  }
+  .v3-cross {
+    position: absolute; left: 50%; top: 50%; width: 8px; height: 8px; margin: -4px 0 0 -4px;
+    border: 1.5px solid var(--ink); border-radius: 50%; pointer-events: none; opacity: .7;
+  }
+  .v3-map {
+    position: absolute; right: 10px; top: 52px; width: 150px; height: 110px;
+    background: var(--panel); border: 1px solid var(--line); border-radius: 8px; pointer-events: none;
+  }
+  .v3-toast {
+    position: absolute; left: 50%; bottom: 28px; transform: translateX(-50%);
+    background: var(--ink); color: var(--panel); border-radius: 8px; padding: 6px 12px;
+    font-size: 13px; pointer-events: none;
+  }
+  .v3-pad {
+    position: absolute; left: 14px; bottom: 14px; display: grid; gap: 4px;
+    grid-template-columns: repeat(3, 40px); grid-template-rows: repeat(3, 40px);
+    grid-template-areas: ". up ." "left door right" ". down .";
+  }
+  .v3-pad button {
+    border: 1px solid var(--line); background: var(--panel); color: var(--ink); border-radius: 8px;
+    font-size: 13px; touch-action: none; user-select: none; -webkit-user-select: none; cursor: pointer;
+  }
+  .v3-pad button:active { background: var(--accent-soft); border-color: var(--accent); }
+  .v3-pad [data-pad="up"] { grid-area: up; }
+  .v3-pad [data-pad="left"] { grid-area: left; }
+  .v3-pad [data-pad="right"] { grid-area: right; }
+  .v3-pad [data-pad="down"] { grid-area: down; }
+  .v3-pad .v3-pad-door { grid-area: door; font-size: 11px; }
+
+  /* The suggestions, listed over the view (38-advice.js), each with its fix. */
+  .v3-bar .v3-advise[aria-expanded="true"] { border-color: var(--accent); color: var(--accent); }
+  .v3-advice {
+    position: absolute; left: 10px; top: 52px; width: min(360px, calc(100% - 20px));
+    max-height: calc(100% - 120px); overflow-y: auto; background: var(--panel);
+    border: 1px solid var(--line); border-radius: 10px; box-shadow: var(--shadow); padding: 6px;
+  }
+  .v3-tip {
+    display: flex; gap: 8px; align-items: center; justify-content: space-between;
+    padding: 7px 8px; font-size: 12.5px; border-radius: 7px; color: var(--warn);
+  }
+  .v3-tip + .v3-tip { border-top: 1px solid var(--line-soft); }
+  .v3-tip .btn { flex: none; }
+  @media (max-width: 640px) { .v3-map { display: none; } }
+  .view3d [hidden] { display: none !important; }
+
+  /* ---------------------------------------------------------- depth -- */
+  /* Depth on (02-depth.js): a soft shadow under every shape -- the shading
+     is in the fills themselves.  A shape picked, run or pointed at keeps
+     its own glow instead. */
+  #chart.depth .node:not(.on):not(.now):not(.wrong):not(.here) {
+    filter: drop-shadow(1.5px 2.5px 2px rgba(16, 24, 40, .28));
+  }
+  .no-ink #chart.depth .node { filter: none !important; }
+
+/* What a lot comes to, under its setbacks in the panel (11-hand-icons.js). */
+.lot-sums { font-size: 11.5px; color: var(--muted); margin-top: 8px; line-height: 1.5; }
+.real-size .trio { margin-top: 4px; }
+
+/* Names on a plan (labelArt, 03-icons.js): never in the way of a click,
+   faded in when switched on and out when switched off. */
+#chart text.tag { pointer-events: none; }
+#chart.tags-arrive text.tag { animation: tag-in .4s ease both; }
+#chart.tags-leave text.tag { transition: opacity .2s ease; opacity: 0; }
+@keyframes tag-in { from { opacity: 0; } }
+@media print { #chart.tags-leave text.tag { opacity: 1; } }
+
+/* The 3D view going: faded out as it comes back down onto the paper
+   (v3Leave); and what it shows over itself, eased in, not popped. */
+.view3d.closing { animation: v3-out .44s ease .02s both; pointer-events: none; }
+@keyframes v3-out { to { opacity: 0; } }
+.v3-advice:not([hidden]) { animation: v3-drop .22s var(--ease-soft, ease-out) both; }
+.v3-toast:not([hidden]) { animation: v3-toast .2s ease-out both; }
+.v3-where:not([hidden]), .v3-map:not([hidden]), .v3-pad:not([hidden]) { animation: v3-in .3s ease-out both; }
+.v3-bar .btn { transition: border-color .18s ease, color .18s ease, background-color .18s ease; }
+@keyframes v3-drop { from { opacity: 0; transform: translateY(-6px); } }
+@keyframes v3-toast { from { opacity: 0; transform: translate(-50%, 6px); } }
+@media (prefers-reduced-motion: reduce) {
+  .view3d.closing, .v3-advice:not([hidden]), .v3-toast:not([hidden]),
+  .v3-where:not([hidden]), .v3-map:not([hidden]), .v3-pad:not([hidden]) { animation: none; }
+}

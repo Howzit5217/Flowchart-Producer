@@ -5,9 +5,9 @@
          paper, its runner and its Build. -->
     <section class="card" id="modes">
       <div class="tabs">
-        <button class="tab on" id="tab-code" data-w="mode_code">__W(mode_code)__</button>
-        <button class="tab" id="tab-hand" data-w="mode_hand">__W(mode_hand)__</button>
-        <button class="tab" id="tab-lang" data-w="mode_lang">__W(mode_lang)__</button>
+        <button class="tab on" id="tab-code" data-w="mode_code" data-w-title="tab_code_tip" title="__W(tab_code_tip)__">__W(mode_code)__</button>
+        <button class="tab" id="tab-hand" data-w="mode_hand" data-w-title="tab_hand_tip" title="__W(tab_hand_tip)__">__W(mode_hand)__</button>
+        <button class="tab" id="tab-lang" data-w="mode_lang" data-w-title="tab_lang_tip" title="__W(tab_lang_tip)__">__W(mode_lang)__</button>
       </div>
     </section>
 
@@ -41,6 +41,36 @@
       <div class="pair-wide pz-ways">
         <button class="btn small" id="pz-reset" data-w="pz_reset">__W(pz_reset)__</button>
         <button class="btn small" id="pz-list" data-w="pz_all">__W(pz_all)__</button>
+      </div>
+    </section>
+
+    <!-- The game being played (37-games.js), at the top of the panel the
+         way a puzzle is: what it is, how to play it, which way it is drawn,
+         and Play -- which runs it all at once, where Run goes at the pace
+         chosen under it, for watching it work. -->
+    <section class="card" id="gm-card" hidden>
+      <div class="pz-top">
+        <strong id="gm-name"></strong>
+        <button class="icon small" id="gm-shut" data-w-title="done"
+                title="__W(done)__" aria-label="__W(done)__">
+          <svg viewBox="0 0 20 20"><path d="M5 5l10 10M15 5L5 15"/></svg>
+        </button>
+      </div>
+      <h4 class="pz-head" data-w="gm_how">__W(gm_how)__</h4>
+      <p class="pz-text" id="gm-how"></p>
+      <div class="gm-row">
+        <span class="gm-row-name" data-w="gm_charts">__W(gm_charts)__</span>
+        <div class="seg gm-charts" id="gm-card-seg">
+          <button class="seg-btn" data-charts="many" data-w="gm_many"
+                  data-w-title="gm_many_tip" title="__W(gm_many_tip)__">__W(gm_many)__</button>
+          <button class="seg-btn" data-charts="one" data-w="gm_one"
+                  data-w-title="gm_one_tip" title="__W(gm_one_tip)__">__W(gm_one)__</button>
+        </div>
+      </div>
+      <div class="pair-wide pz-ways">
+        <button class="btn small primary" id="gm-play" data-w-title="gm_play_tip"
+                title="__W(gm_play_tip)__">__W(gm_play)__</button>
+        <button class="btn small" id="gm-all" data-w="gm_all">__W(gm_all)__</button>
       </div>
     </section>
 
@@ -181,6 +211,29 @@
           <option value="press" data-w="r_by_step">__W(r_by_step)__</option>
           <option value="timed" data-w="r_timed">__W(r_timed)__</option>
         </select>
+      </div>
+      <!-- Drawn by hand, what the drawing is run as: read from what it is
+           made of (37-board.js) -- a program, a floor plan somebody walks
+           through, people passing work on, a network, a circuit, space --
+           or told.  Run says what it will do; a home or a sky can also be
+           looked round in 3D (38-view3d.js). -->
+      <div class="board-row">
+        <select class="field" id="r-board" data-w-title="bd_pick" title="__W(bd_pick)__"
+                data-w-aria="bd_pick" aria-label="__W(bd_pick)__">
+          <option value="auto" data-w="bd_auto">__W(bd_auto)__</option>
+          <option value="program" data-w="bd_program">__W(bd_program)__</option>
+          <option value="home" data-w="bd_home">__W(bd_home)__</option>
+          <option value="team" data-w="bd_team">__W(bd_team)__</option>
+          <option value="network" data-w="bd_network">__W(bd_network)__</option>
+          <option value="circuit" data-w="bd_circuit">__W(bd_circuit)__</option>
+          <option value="space" data-w="bd_space">__W(bd_space)__</option>
+          <option value="city" data-w="bd_city">__W(bd_city)__</option>
+          <option value="flow" data-w="bd_flow">__W(bd_flow)__</option>
+        </select>
+        <button class="btn small" id="view3d-open" data-w-title="v3_tip" title="__W(v3_tip)__" hidden>
+          <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M10 2.5 17 6.3v7.4L10 17.5 3 13.7V6.3z"/><path d="M3 6.3 10 10l7-3.7M10 10v7.5"/></svg>
+          <span data-w="v3_open">__W(v3_open)__</span>
+        </button>
       </div>
       <!-- One thing to press, the width of the panel, under the two
            dropdowns that say how it will go.  It matches Build the chart

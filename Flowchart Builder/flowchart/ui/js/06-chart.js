@@ -420,6 +420,11 @@
       } else if (g && inMany(node.id)) {
         crowd = crowdOf(many);
       } else if (g) { picked = node.id; chosen = null; }
+      // A room or a container carries whatever stands in it (03-icons.js).
+      if (g && !crowd && !more && isArea(node.kind)) {
+        var aboard = heldIn(node);
+        if (aboard.length) { crowd = crowdOf([node.id].concat(aboard)); }
+      }
 
       function paint() {
         if (waiting) { return; }

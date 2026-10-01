@@ -72,6 +72,7 @@
                parallel: [170, 64], cloud: [186, 76], arrow: [192, 58],
                text: [120, 34], actor: [110, 96], callout: [180, 76],
                cube: [176, 68], step: [190, 58], table: [180, 76] };
+  iconRooms(ROOM);                       // and every icon its own (03-icons.js)
 
   // Where the words sit in a shape is the shape's to say: wordsAt, and
   // wordsArt for a table, in 03-shapes.js.
@@ -195,6 +196,7 @@
   function measure(node, force) {         // how big the words make it
     if (node.own && !force) { return; }   // unless a size was set by hand
     if (force) { node.own = false; }      // sized afresh: wrapped the usual way
+    if (ICONS[node.kind]) { iconMeasure(node); return; }   // an icon sizes itself (03-icons.js)
     var pen = measure.pen || (measure.pen = document.createElement("canvas")
                               .getContext("2d"));
     var type = handType(node);
@@ -434,7 +436,9 @@
       case "actor": return null;          // met at its hands, inside the box (ports)
       case "rect": case "sub": case "roundrect": case "parallel": case "stored":
       case "table": case "docs": case "text": return box;
-      default: return [[0, t], [r, 0], [0, b], [l, 0]];   // shapeArt's own default
+      default:                            // an icon is met at its box (03-icons.js)
+        if (typeof ICONS === "object" && ICONS[kind]) { return box; }
+        return [[0, t], [r, 0], [0, b], [l, 0]];   // shapeArt's own default
     }
   }
 
@@ -613,6 +617,10 @@
     // (routeScene): looking at every shape for every way tried, for every
     // arrow, made a chart of a thousand shapes take seconds to draw.
     (routeScene ? routeScene.near.around(x0, y0, x1, y1) : hand.nodes).forEach(function (n) {
+      // A room or a container is a floor to go over, not a shape to go
+      // round: everything in it stands on it (03-icons.js).
+      if (n.id !== a.id && n.id !== b.id && typeof ICONS === "object" &&
+          ICONS[n.kind] && ICONS[n.kind].area) { return; }
       var t = turned(n);
       if (t.x + t.w / 2 < x0 || t.x - t.w / 2 > x1 ||
           t.y + t.h / 2 < y0 || t.y - t.h / 2 > y1) { return; }
@@ -1889,6 +1897,13 @@
         maxy = Math.max(maxy, p[1] + 8);
       });
     });
+    // and under whatever a run is moving about past the shapes -- a planet
+    // going round (39-orbit.js) -- while it runs
+    if (simReach) {
+      least = Math.min(least, simReach.x0);
+      maxx = Math.max(maxx, simReach.x1);
+      maxy = Math.max(maxy, simReach.y1);
+    }
     if (least < 20) {                  // out past the left edge: more paper
       ox = Math.ceil((20 - least) / HAND_RULE) * HAND_RULE;
     }
@@ -2008,10 +2023,12 @@
     // What is being carried goes over the shapes it passes, not under them
     // (13-hand-apart.js); let go, it is back in its place in the drawing.
     var inHand = function (n) { return picked === n.id || inMany(n.id); };
-    (shapeCarried ? hand.nodes.filter(function (n) { return !inHand(n); })
-                              .concat(hand.nodes.filter(inHand))
-                  : hand.nodes).forEach(function (n) {
-      var moved = { kind: n.kind, x: n.x + ox, y: n.y + oy, w: n.w, h: n.h };
+    // Rooms and containers under everything, as floors are (floorFirst,
+    // 03-icons.js).
+    floorFirst(shapeCarried ? hand.nodes.filter(function (n) { return !inHand(n); })
+                                        .concat(hand.nodes.filter(inHand))
+                            : hand.nodes).forEach(function (n) {
+      var moved = { kind: n.kind, x: n.x + ox, y: n.y + oy, w: n.w, h: n.h, src: n };
       var about = turned(n);           // what it takes up, once turned
       marks.push(ruleMark(n, moved, about, hints[n.id]));
       out.push('<g class="node' + (picked === n.id || inMany(n.id) ? " on" : "") +
@@ -2099,7 +2116,10 @@
     // the paper moves but what was moved.
     if (before !== null) { keepStill(handScreenX() - before); }
     paint();
-    el("#sub").textContent = TXT.as_chart + " · " + wide + " x " + tall + " px";
+    // what it is -- a floor plan, a circuit -- where it is not a chart
+    // (boardName, 37-board.js)
+    var what = typeof boardName === "function" ? boardName() : "program";
+    el("#sub").textContent = (what !== "program" && what !== "flow" && TXT["bd_" + what] || TXT.as_chart) + " · " + wide + " x " + tall + " px";
     handKeep();
     handChanged();                       // moved on from what Check read
   }

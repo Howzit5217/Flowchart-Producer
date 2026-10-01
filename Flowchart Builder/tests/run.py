@@ -27,6 +27,9 @@ What is beside this file
     router.js     the by-hand arrow router, lifted out of the page's script
                   and tried in every arrangement.  Only where node is
                   installed.
+    scenes.js     the icons, and drawings run as what they are -- a home
+                  walked through, a circuit worked out, suggestions and
+                  their fixes -- lifted out the same way.
     writer.js     a drawing by hand written out as pseudocode, by the
                   writer lifted out of the page's script the same way.
     program.js    the runner itself, lifted out the same way: it runs real
@@ -454,6 +457,91 @@ def designed(text, design):
     finally:
         for name, value in keep.items():
             setattr(fb, name, value)
+
+
+# A function that calls itself, beside one that does not: drawn as one chart,
+# the one that does keeps its chart and the other is drawn where it is called.
+ROUND_AGAIN = """Start
+Declare Integer n
+Input n
+Display "Factorial: ", fact(n)
+Display twice(n)
+Stop
+
+Function fact(k)
+    If k <= 1 Then
+        Return 1
+    End If
+    Return k * fact(k - 1)
+End Function
+
+Function twice(x)
+    Return x * 2
+End Function
+"""
+# What the runner lights a shape for, and that a module drawn where it is
+# called still has a shape for: everything but its door, its Returns and the
+# calls themselves, which are what the copy stands in place of.
+LIT_OPS = {"display", "input", "declare", "if", "while", "dowhile", "for",
+           "foreach", "select"}
+
+
+@check("modules drawn where they are called make one chart")
+def _():
+    """Options, Modules and functions in one chart: every example written as
+    modules comes out as one chart, laid out as cleanly as any other, with a
+    shape for every statement the run lights -- the main chart's as they
+    are, each module's once for every call, saying which call it is in."""
+    fb = builder()
+    from flowchart.make.inline import one_chart
+    bad, tried = [], 0
+    keep = fb.ONE_CHART
+    try:
+        for key in sorted(k for k in fb.WORDS["en"] if re.match(r"^e_.*_p$", k)):
+            text = fb.WORDS["en"][key]
+            read = fb.parse_program(text)
+            if len(read) < 2:
+                continue
+            tried += 1
+            if len(one_chart(read)) != 1:
+                bad.append("%s is %d charts" % (key, len(one_chart(read))))
+            fb.ONE_CHART = True
+            for shape, seed in (("auto", 1), ("square", 4), ("page", 7)):
+                svg = drawn(None, text=text, shape=shape, seed=seed)
+                found = (charts.overlapping(svg) + charts.doubles_back(svg)
+                         + charts.wraps_a_shape(svg))
+                if found or 'class="heading"' in svg:
+                    bad.append("%s %s: %d faults%s" % (key, shape, found,
+                               ", headings" if 'class="heading"' in svg else ""))
+            fb.ONE_CHART = keep
+            shown = set(re.findall(r'data-i="(\d+)"(?: data-via="[\d.]+")?', svg))
+            copied = set(re.findall(r'data-i="(\d+)" data-via="[\d.]+"', svg))
+            ast = fb.program_json(read)
+
+            def lit(steps):
+                for st in steps:
+                    if st.get("op") in LIT_OPS:
+                        yield st["id"]
+                    for inner in ("then", "else", "body"):
+                        for one in lit(st.get(inner) or []):
+                            yield one
+                    for case in st.get("cases") or []:
+                        for one in lit(case.get("body") or []):
+                            yield one
+            missing = [i for i in lit(ast["main"]) if str(i) not in shown]
+            missing += [i for m in ast["modules"] for i in lit(m["body"])
+                        if str(i) not in copied]
+            if missing:
+                bad.append("%s: no shape for statement %s" % (key, missing[0]))
+        read = fb.parse_program(ROUND_AGAIN)
+        left = one_chart(read)
+        if [c.module.name for c in left if c.module] != ["fact"]:
+            bad.append("calling itself: %s" % [c.heading for c in left])
+        elif "twice(" in " ".join(n.text for n in left[0].items if hasattr(n, "text")):
+            bad.append("twice() was not drawn where it is called")
+    finally:
+        fb.ONE_CHART = keep
+    return not bad, "%d examples%s" % (tried, "" if not bad else " -- " + "; ".join(bad[:3]))
 
 
 @check("compressed and roomy are other charts of the same program")
@@ -2485,6 +2573,34 @@ MENDED_ALL = [
      "            t += i;\n        System.out.println(t);\n    }\n}",
      "class M {\n    static void main(String[] a) {\n        int t = 0;\n        for (int i = 0; i < 3; i++) {\n"
      "            t += i;\n        }\n        System.out.println(t);\n    }\n}"),
+    # Each of these went wrong once, a mistake made into many: the next
+    # method read as a statement and given a ; after its name, then the
+    # one after that; a doubled } and the class's own } taken out instead;
+    # Python's else, lined up with nothing, moved in with the if's body.
+    ("a method's } lost", 'java',
+     'class M {\n    static int a(int x) {\n        return x + 1;\n    \n\n    static int b(int x) {\n        return x * 2;\n    }\n\n    public static void main(String[] args) {\n        System.out.println(a(1) + b(2));\n    }\n}',
+     'class M {\n    static int a(int x) {\n        return x + 1;\n    }\n\n    static int b(int x) {\n        return x * 2;\n    }\n\n    public static void main(String[] args) {\n        System.out.println(a(1) + b(2));\n    }\n}'),
+    ('a } too many', 'java',
+     'class M {\n    static int a(int x) {\n        if (x > 1) {\n            x = x - 1;\n        }}\n        return x;\n    }\n\n    public static void main(String[] args) {\n        System.out.println(a(3));\n    }\n}',
+     'class M {\n    static int a(int x) {\n        if (x > 1) {\n            x = x - 1;\n        }\n        return x;\n    }\n\n    public static void main(String[] args) {\n        System.out.println(a(3));\n    }\n}'),
+    ('} else without its {', 'java',
+     'class M {\n    public static void main(String[] args) {\n        int x = 3;\n        if (x > 1) {\n            x = 1;\n        } else \n            x = 2;\n        }\n        System.out.println(x);\n    }\n}',
+     'class M {\n    public static void main(String[] args) {\n        int x = 3;\n        if (x > 1) {\n            x = 1;\n        } else {\n            x = 2;\n        }\n        System.out.println(x);\n    }\n}'),
+    ("a method's ( lost", 'java',
+     'class M {\n    static int twice(int x) {\n        return x * 2;\n    }\n\n    static int add3int a, int b, int c) {\n        return a + b + c;\n    }\n\n    public static void main(String[] args) {\n        System.out.println(twice(add3(1, 2, 3)));\n    }\n}',
+     'class M {\n    static int twice(int x) {\n        return x * 2;\n    }\n\n    static int add3(int a, int b, int c) {\n        return a + b + c;\n    }\n\n    public static void main(String[] args) {\n        System.out.println(twice(add3(1, 2, 3)));\n    }\n}'),
+    ('an if moved out of line', 'python',
+     'def f(items, limit):\n    total = 0\n    for x in items:\n      if x > limit:\n            total = total + x * 2\n        else:\n            total = total - 1\n    return total\n\nprint(f([1, 5], 2))',
+     'def f(items, limit):\n    total = 0\n    for x in items:\n        if x > limit:\n            total = total + x * 2\n        else:\n            total = total - 1\n    return total\n\nprint(f([1, 5], 2))'),
+    ('a ) lost, and a line out of line under it', 'python',
+     'def f(x):\n    print("start", x\n    if x > 1:\n        y = 2\n      z = 3\n    return x\n\nf(3)',
+     'def f(x):\n    print("start", x)\n    if x > 1:\n        y = 2\n    z = 3\n    return x\n\nf(3)'),
+    ('else spelt wrong', 'python',
+     'def f(x):\n    if x > 2:\n        print(1)\n    elsee:\n        print(2)\n\nf(3)',
+     'def f(x):\n    if x > 2:\n        print(1)\n    else:\n        print(2)\n\nf(3)'),
+    ('two lines run into one', 'python',
+     'def f(items, limit):\n    total = 0\n    for x in items:        if x > limit:\n        total = total + x * 2\n    return total\n\nprint(f([1, 5], 2))',
+     'def f(items, limit):\n    total = 0\n    for x in items:\n        if x > limit:\n            total = total + x * 2\n    return total\n\nprint(f([1, 5], 2))'),
 ]
 # A call the reading does not know, said as one that can't be run -- and the
 # name written wrong it most likely is, changed.
@@ -2539,6 +2655,24 @@ def _():
     return not wrong, "%d programs, %d offered a fix, %d put right all at once, %d renamed%s" % (
         len(MENDED), len([m for m in MENDED if m[3]]), len(MENDED_ALL), len(RENAMED),
         "" if not wrong else "\n       " + "\n       ".join(wrong[:6]))
+
+
+@check("code wrong all through is put right in good time, or said to be too much")
+def _():
+    """The fixer at the size people hand it (fixer.js): a long program and
+    twenty files, each wrong a few hundred times, all put right in seconds
+    with the bar following the clock; a line nothing can put right held out
+    of the way while the rest is, and given back as it was; and a program
+    wrong from end to end said to be too much soon, every problem listed."""
+    if not node_there():
+        return None, "node is not installed -- skipped"
+    got = subprocess.run(["node", os.path.join(HERE, "fixer.js")], capture_output=True, text=True)
+    try:
+        cases = json.loads(got.stdout)
+    except ValueError:
+        return False, (got.stdout + got.stderr).strip()[:400]
+    bad = [c for c in cases if not c["ok"]]
+    return not bad, "; ".join("%s: %s" % (c["name"], c["what"]) for c in (bad or cases))
 
 
 # Where the runner and a real language part company over the same line of
@@ -3039,7 +3173,7 @@ def _():
             len(keys), len(fb.WORDS), "" if not bad else " -- " + "; ".join(bad[:3]))
 
     puzzles = puzzle_list()
-    listed = set(example_keys()) | set(one["key"] for one in puzzles)
+    listed = set(example_keys()) | set(one["key"] for one in puzzles) | set(game_keys())
     for key in sorted(listed ^ set(k[:-2] for k in keys)):
         bad.append("%s: %s" % (key, "on the page with no program" if key in listed
                                else "a program nothing on the page offers"))
@@ -3077,6 +3211,135 @@ def _():
         "" if not bad else " -- " + "; ".join(bad[:4]))
 
 
+GAMES_JS = os.path.join(HERE, "..", "flowchart", "ui", "js", "37-games.js")
+
+
+def game_keys():
+    """The games' keys, read out of 37-games.js as the examples' are read
+    out of 09-build.js: the programs are words, the list is the page's."""
+    with io.open(GAMES_JS, encoding="utf-8") as f:
+        found = re.search(r"var GAMES = (\[[^\]]*\]);", f.read())
+    if not found:
+        raise RuntimeError("could not read the games out of 37-games.js")
+    return json.loads(found.group(1))
+
+
+# How each game is played to its end: the answers, in the order they are
+# typed, and every one tried at two seeds.  Bad answers are in there on
+# purpose -- a 7 where 1 or 2 was asked, a Z9 at sea -- since a game that
+# falls over at the first wrong key is not one anybody can play.  A word
+# in braces is one the game asks for in its own language (the dungeon's
+# directions and look, take, bag), said the way GAME_SAID says it.
+GAME_PLAYS = {
+    "g_coin": [["7", "1", "2", "1", "2", "1"]],
+    "g_highlow": [["1"] * 10, ["x", "1", "2"] * 5],
+    "g_sticks": [["2"] + ["1"] * 25, ["1"] + ["3", "1", "9"] * 15],
+    "g_dice": [[""] * 30],
+    "g_hangman": [["ab", "e", "e"] + list("taoinshrdlucmfwypvbgkjqxz")],
+    "g_codebreak": [["12", "1234", "1111", "2222", "3333", "4444", "5555", "6666",
+                     "1256", "6543", "3412"]],
+    "g_dungeon": [["{help}", "{n}", "{w}", "{take}", "{s}", "{take}", "{n}", "{e}", "{e}",
+                   "{take}", "{w}", "{n}", "{n}", "{n}", "{take}", "{bag}", "{s}", "{s}", "{s}"],
+                  ["{n}", "{n}", "{n}", "{n}", "{n}"],
+                  ["{n}", "{w}", "{s}", "{take}", "{look}", "{n}", "{n}", "dance", "{e}", "{e}"]
+                  + ["{n}", "{s}"] * 30],
+    "g_connect": [["9", "4", "3", "5", "2", "6", "1", "7"] * 7,
+                  [c for c in "1234567" for _ in range(7)]],
+    "g_blackjack": [["10", "1", "3", "2", "1"] * 6 + ["2"] * 10,
+                    ["500", "100", "1", "1", "1", "1", "1", "1"] + ["2"] * 10,
+                    ["20", "3", "1", "2", "1", "20", "2", "1"] * 4 + ["2"] * 10],
+    "g_battleship": [["Z9"] + [r + c for r in "ABCDEF" for c in "123456"],
+                     [r + c for c in "135246" for r in "abcdef"]],
+}
+# The winning walk through the dungeon is 13 moves in every language.
+GAME_ENDS = {("g_dungeon", 0): " 13 "}
+GAME_SAID = {
+    "en": {"n": "n", "s": "s", "e": "e", "w": "w", "look": "look", "take": "take",
+           "bag": "bag", "help": "help"},
+    "de": {"n": "n", "s": "s", "e": "o", "w": "w", "look": "schau", "take": "nimm",
+           "bag": "tasche", "help": "hilfe"},
+    "es": {"n": "n", "s": "s", "e": "e", "w": "o", "look": "mira", "take": "toma",
+           "bag": "bolsa", "help": "ayuda"},
+    "fr": {"n": "n", "s": "s", "e": "e", "w": "o", "look": "regarde", "take": "prends",
+           "bag": "sac", "help": "aide"},
+}
+
+
+@check("every game plays to its end, drawn one chart to each module or all in one")
+def _():
+    """The ten games, in every language: each played to its end with the
+    answers above, and each drawn both ways the page offers -- a chart to
+    every module beside the main one, and (Options, Modules and functions
+    in one chart) the one chart with every module drawn where it is called.
+
+    A game that stops on a fault, or is still asking when the answers run
+    out, does not work, whatever its chart looks like.  And drawn as one
+    chart it has to really be one: make/inline.py falls back to a chart
+    each for anything it cannot draw in place, which is the right thing
+    for a program somebody typed and the wrong thing for one the page
+    ships under a switch that says One flowchart.
+    """
+    from flowchart import settings
+    from flowchart.make.chart import make_flowchart
+    from flowchart.make.inline import one_chart
+    from flowchart.parse.read import parse_program
+    fb = builder()
+    keys = game_keys()
+    bad, drawn, games = [], 0, []
+    was = settings.ONE_CHART
+    try:
+        for code in sorted(fb.WORDS):
+            words = fb.WORDS[code]
+            for key in keys:
+                text = words.get(key + "_p", "")
+                if not text:
+                    bad.append("%s/%s: not written out" % (code, key))
+                    continue
+                for part in ("", "_d", "_h"):
+                    if not words.get(key + part):
+                        bad.append("%s/%s%s: not said" % (code, key, part))
+                charts = parse_program(text)
+                if len(charts) < 2:
+                    bad.append("%s/%s: no modules, so one chart either way" % (code, key))
+                if len(one_chart(parse_program(text))) != 1:
+                    bad.append("%s/%s: not one chart with the modules drawn in" % (code, key))
+                for joined in (False, True):
+                    settings.ONE_CHART = joined
+                    svg = make_flowchart(text, title=words.get(key, key))
+                    if ("data-via" in svg) != joined:
+                        bad.append("%s/%s: drawn %s, but not as asked"
+                                   % (code, key, "as one chart" if joined else "apart"))
+                    drawn += 1
+                said = GAME_SAID.get(code, GAME_SAID["en"])
+                for n, plays in enumerate(GAME_PLAYS.get(key, [])):
+                    typed = [said.get(t[1:-1], t) if t.startswith("{") else t for t in plays]
+                    for seed in (1, 2):
+                        games.append({"name": "%s %s, play %d at seed %d" % (code, key, n + 1, seed),
+                                      "ast": read_as_data(text), "typed": typed, "seed": seed,
+                                      "lastHas": GAME_ENDS.get((key, n))})
+                if key not in GAME_PLAYS:
+                    bad.append("%s: no way to play it written down here" % key)
+    finally:
+        settings.ONE_CHART = was
+    if not node_there():
+        return not bad, "%d games x %d languages drawn %d ways, not played: node is not installed%s" % (
+            len(keys), len(fb.WORDS), drawn, "" if not bad else " -- " + "; ".join(bad[:3]))
+    handle, where = tempfile.mkstemp(suffix=".json")
+    try:
+        with io.open(handle, "w", encoding="utf-8") as f:
+            f.write(json.dumps({"words": fb.WORDS["en"], "cases": [], "games": games}))
+        got = subprocess.run(["node", os.path.join(HERE, "program.js"), where],
+                             capture_output=True, text=True, encoding="utf-8")
+    finally:
+        os.remove(where)
+    if got.returncode:
+        bad += [line.strip() for line in got.stderr.strip().split("\n") if line.strip()][:6] \
+            or [got.stdout.strip()[-200:]]
+    return not bad, "%d games x %d languages, %d drawings, %d played%s" % (
+        len(keys), len(fb.WORDS), drawn, len(games),
+        "" if not bad else " -- " + "; ".join(bad[:4]))
+
+
 def node_there():
     try:
         subprocess.run(["node", "--version"], capture_output=True, check=True)
@@ -3094,6 +3357,46 @@ def _():
     if got.returncode:
         return False, (got.stderr.strip().split(chr(10)) or ["failed"])[-1][:90]
     return True, got.stdout.strip().replace(chr(10), "; ")
+
+
+@check("every icon draws, and a drawing runs as what it is")
+def _():
+    """The icons (03-icon-art.js) drawn at three sizes; doors, windows and
+    pictures fitted into the wall they are put by; a walk through a home
+    going through its doors and never through a wall or a locked door;
+    suggestions for a home made, and put right by their own fixes; and
+    circuits worked out to the milliamp -- by the page's own parts, lifted
+    out (tests/scenes.js)."""
+    if not node_there():
+        return None, "node is not installed -- skipped"
+    got = subprocess.run(["node", os.path.join(HERE, "scenes.js")],
+                         cwd=HOME, capture_output=True, text=True, encoding="utf-8")
+    said = (got.stdout.strip() or got.stderr.strip() or "failed").split(chr(10))
+    return not got.returncode, "; ".join(said[:3])[:300]
+
+
+@check("every icon has a name, and what it does, in every language")
+def _():
+    """A name for the library and the key (n_i_...), and for the people a
+    thing they do with the work passed to them (vb_i_...), and for the
+    pieces of a home what is done with them on a walk (wk_i_...) -- in
+    every language, since a missing one shows a reader the inside of the
+    program."""
+    import re as _re
+    fb = builder()
+    text = fb.read_ui("js/03-icon-art.js")
+    sets = text[text.index("var ICON_SETS"):]
+    kinds = sorted(set(_re.findall(r'"(i_[a-z0-9_]+)"', sets)))
+    people = _re.search(r'\["ic_people", \[(.*?)\]\]', sets, _re.S).group(1)
+    walk = fb.read_ui("js/38-walk.js")
+    done_at = _re.search(r"var WALK_DO = \{(.*?)\};", walk, _re.S).group(1)
+    want = (["n_" + k for k in kinds] +
+            ["vb_" + k for k in _re.findall(r'"(i_[a-z0-9_]+)"', people)] +
+            ["wk_" + k for k in _re.findall(r"(i_[a-z0-9_]+):", done_at)])
+    missing = ["%s/%s" % (code, key) for code in fb.WORDS for key in want
+               if not fb.WORDS[code].get(key)]
+    return not missing, "%d icons, %d words x %d languages%s" % (
+        len(kinds), len(want), len(fb.WORDS), "" if not missing else " -- " + ", ".join(missing[:5]))
 
 
 @check("flowcharts from other programs, and pictures of them, are read")

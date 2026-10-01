@@ -335,7 +335,7 @@ FR = {
     "h_tidied": "Rangé : {n} formes déplacées.",
     "h_tidy_none": "Rien à ranger pour l’instant.",
     "h_tidy_done": "Déjà rangé.",
-    "h_write": "En pseudocode",
+    "h_write": "En texte",
     "h_write_tip": "Voir le pseudocode de ce dessin",
     "h_into_box": "Le mettre dans le cadre",
     "h_into_box_tip": "Mettre ceci dans le cadre de pseudocode, à la place de ce qui s’y trouve. Le dessin reste.",
@@ -374,8 +374,8 @@ FR = {
     "fit_words": "Ajuster au texte",
     "colors_here": "Couleurs",
     "odd_shape": "Impossible de dessiner {pair} ; voir --help.",
-    "mode_code": "Pseudocode",
-    "mode_hand": "Organigramme",
+    "mode_code": "Texte",
+    "mode_hand": "Dessin",
     "mode_lang": "Code",
     # ---- un programme raconté en mots, et le pseudocode qui en est tiré
     "told_head": "Pseudocode mis à jour",
@@ -405,7 +405,7 @@ FR = {
     "lang_stale": "Le pseudocode a changé depuis.",
     "lang_rewrite": "Réécrire en {lang}",
     "lang_rewrite_tip": "Remplace le code par le pseudocode écrit en {lang}",
-    "lang_made": "Créé à partir de votre code. Modifiez-le sous Pseudocode.",
+    "lang_made": "Créé à partir de votre code. Modifiez-le sous Texte.",
     "lang_line": "Ligne {n} : {said}",
     "lang_check": "Vérifier",
     "lang_check_tip": "Lire le code et dire si quelque chose ne va pas",
@@ -419,11 +419,21 @@ FR = {
     "lang_fix_change_at": "Remplacer {word} par {instead} à la ligne {line}",
     "lang_fix_indent": "Aligner la ligne {line}",
     "lang_fix_call": "En faire {name}(…)",
+    "lang_fix_split": "Mettre la suite de la ligne sur une ligne à part",
+    "lang_fix_split_at": "Mettre la suite de la ligne {line} sur une ligne à part",
     "lang_fixing": "Correction des bugs et des problèmes",
     "lang_fixed_one": "1 erreur corrigée",
     "lang_fixed_many": "{n} erreurs corrigées",
     "lang_fixed_tip": "Voir ce qui n'allait pas et ce qui a été fait",
     "lang_fixed_undo": "Remettre comme avant",
+    "lang_reading": "Lecture du code",
+    "lang_finding": "Recherche des bogues et des problèmes",
+    "lang_listing": "Liste de ce qui reste",
+    "lang_too_big": "Cette erreur est trop grande pour être corrigée. Voici tout ce qu'il faut regarder :",
+    "lang_left_one": "1 problème n'a pas pu être corrigé :",
+    "lang_left_many": "{n} problèmes n'ont pas pu être corrigés :",
+    "lang_list_more": "…et d'autres, non affichés ici.",
+    "lang_put_found": "Corriger quand même les {n} trouvés",
     "cm_empty": "Écrivez d’abord du code.",
     "cm_expected": "{what} attendu ici.",
     "cm_ended": "le code s’arrête avant d’être terminé.",
@@ -455,7 +465,7 @@ FR = {
     "problems": "{n} choses à revoir",
     "problems_more": "et {n} de plus",
     "h_too_many": "Trop de formes (maximum {n})",
-    "h_info": "Comment dessiner un organigramme",
+    "h_info": "Comment dessiner",
     "h_add_how": "Cliquez sur une forme pour l’ajouter sous celle en cours, ou faites-la glisser sur la feuille. Base, Flux, Données et Autres en ont d’autres.",
     "h_mouse": "Souris et tactile",
     "h_keys": "Touches",
@@ -560,6 +570,23 @@ FR = {
     "pz_done": "{done} sur {all} résolus",
     "pz_nothing": "(rien)",
     "pz_brief": "Le défi",
+    "games": "Jeux",
+    "games_tip": "Des jeux à jouer, et à suivre en organigramme pendant la partie",
+    "gm_head": "Jeux",
+    "gm_small": "Jeux rapides",
+    "gm_big": "Grands jeux",
+    "gm_charts": "Schémas",
+    "gm_many": "Plusieurs",
+    "gm_one": "Un seul",
+    "gm_many_tip": "Chaque module et chaque fonction a son propre schéma, à côté du principal",
+    "gm_one_tip": "Chaque module et chaque fonction est dessiné là où il est appelé, et le jeu tient en un seul schéma",
+    "gm_size": "{n} lignes · {charts}",
+    "gm_charts_n": "{n} schémas",
+    "gm_chart_one": "un schéma",
+    "gm_how": "Comment jouer",
+    "gm_play": "Jouer",
+    "gm_play_tip": "Tout exécuter d'un coup, pour jouer",
+    "gm_all": "Tous les jeux",
     "z_greet_b": "Il salue avant d’avoir demandé qui. Demander d’abord, saluer ensuite.",
     "z_range_b": "De 1 à 9 devrait être dans l’intervalle. Pour l’instant tout l’est.",
     "z_double_b": "Il devrait afficher le double du nombre donné.",
@@ -765,6 +792,7 @@ FR = {
     "o_shapes": "Les formes", "o_paper": "Espacement et papier",
     "o_for": "Boucles For", "o_for_wide": "Dépliée", "o_for_hex": "Un hexagone",
     "o_everyout": "Un symbole pour chaque Afficher",
+    "o_onechart": "Modules et fonctions dans un seul schéma",
     "o_roomy": "Aéré : plus de place autour de chaque étape",
     "o_tight": "Compact : moins de formes, bien serrées",
     "o_columns": "Répartir un schéma haut en colonnes",
@@ -791,7 +819,7 @@ FR = {
     "wipe_title1": "Tout effacer ?",
     "wipe_said": "Cela enlève tout ce que tu as fait ici :",
     "wipe_l_work": "le pseudocode, le diagramme et ses tests",
-    "wipe_l_hand": "l'organigramme dessiné à la main",
+    "wipe_l_hand": "le dessin fait à la main",
     "wipe_l_code": "le code et tous ses fichiers",
     "wipe_l_run": "l'exécution, ce qu'elle a affiché et sa table de trace",
     "wipe_saves": "Aussi la progression enregistrée et les énigmes résolues",
@@ -816,15 +844,15 @@ FR = {
     "open_no": "Annuler",
     "open_yes": "L'ouvrir",
     "sync_head_code": "Remplacer le pseudocode ?",
-    "sync_head_hand": "Remplacer l'organigramme ?",
+    "sync_head_hand": "Remplacer le dessin ?",
     "sync_head_lang": "Remplacer le code ?",
-    "sync_code_from_hand": "Le pseudocode a ses propres changements, et l'organigramme a changé depuis. Continuer écrit le programme de l'organigramme à la place du pseudocode.",
+    "sync_code_from_hand": "Le pseudocode a ses propres changements, et le dessin a changé depuis. Continuer écrit le programme du dessin à la place du pseudocode.",
     "sync_code_from_lang": "Le pseudocode a ses propres changements, et le code a changé depuis. Continuer lit le code dans le pseudocode à sa place.",
-    "sync_hand_from_code": "L'organigramme a ses propres changements, et le pseudocode a changé depuis. Continuer dessine le programme du pseudocode à la place de l'organigramme.",
+    "sync_hand_from_code": "Le dessin a ses propres changements, et le pseudocode a changé depuis. Continuer dessine le programme du pseudocode à la place du dessin.",
     "sync_lang_from_code": "Le code ici est le tien, et le pseudocode a changé depuis. Continuer écrit le programme du pseudocode en code à sa place.",
     "sync_keep": "Garder celui-ci",
     "sync_go": "Le remplacer",
-    "sync_unfinished": "L'organigramme n'est pas encore un programme complet, alors le pseudocode est resté tel quel.",
+    "sync_unfinished": "Le dessin n'est pas encore un programme complet, alors le pseudocode est resté tel quel.",
     "app_tip": "S’ouvre dans sa propre fenêtre, comme une appli, et marche hors ligne",
     "app_ios": "Touche Partager, puis Sur l’écran d’accueil.",
     "app_mac": "Dans Safari, menu Fichier, choisis Ajouter au Dock.",
@@ -878,9 +906,9 @@ FR = {
     "k_any": "Partout",
     "k_code": "En écrivant le pseudo-code",
     "k_shape": "Avec une forme choisie",
-    "k_hand": "Dessiner un organigramme",
+    "k_hand": "Dessiner",
     "k_lang": "En écrivant du code",
-    "k_build": "Dessiner l'organigramme (Organigramme : le vérifier)",
+    "k_build": "Dessiner l'organigramme (Dessin : le vérifier)",
     "k_undo": "Annuler et rétablir",
     "k_zoom": "Zoom avant, zoom arrière, taille réelle",
     "k_close": "Fermer ce qui est ouvert",
@@ -2957,6 +2985,1772 @@ FR = {
     "zw_tie": "Égalité",
     "zw_pick": "Choisis un nombre, 0 pour arrêter",
     "zw_bye": "Au revoir",
+    # ---- the games (37-games.js): a name, a line saying what it is, how
+    # to play it, and the program -- written in modules, so it is a
+    # chart to each one, or one chart with the option that draws every
+    # module where it is called.  Smallest first; the last four are big.
+    "g_coin": "Pile ou Face",
+    "g_coin_d": "Annonce pile ou face, cinq lancers de suite",
+    "g_coin_h": "Annonce chaque lancer avant que la pièce retombe : tape 1 pour face ou 2 pour pile. Il y a cinq lancers. Combien en devineras-tu ?",
+    "g_highlow": "Plus Haut ou Plus Bas",
+    "g_highlow_d": "Devine si la carte suivante battra celle-ci",
+    "g_highlow_h": "Une carte est retournée. Tape 1 si tu penses que la suivante sera plus haute, ou 2 si elle sera plus basse. L'as est la plus basse. Chaque erreur te coûte une de tes 3 vies, et il y a dix cartes en tout.",
+    "g_sticks": "Les Vingt et Un Bâtons",
+    "g_sticks_d": "Prends 1, 2 ou 3 bâtons, mais pas le dernier",
+    "g_sticks_h": "Il y a 21 bâtons. L'ordinateur et toi en prenez 1, 2 ou 3 à tour de rôle, et celui qui prend le dernier bâton perd. L'ordinateur connaît une astuce. Sauras-tu la trouver ?",
+    "g_dice": "Duel de Dés",
+    "g_dice_d": "Deux dés contre l'ordinateur, le premier à 3 manches",
+    "g_dice_h": "Appuie sur Entrée pour lancer deux dés, puis l'ordinateur lance les siens. Le plus haut total gagne la manche, et un double compte deux fois. Le premier à gagner 3 manches gagne le duel.",
+    "g_hangman": "Le Pendu",
+    "g_hangman_d": "Trouve le mot caché lettre par lettre",
+    "g_hangman_h": "Devine le mot caché lettre par lettre. Chaque mauvaise lettre ajoute un morceau au dessin, et six erreurs terminent la partie.",
+    "g_codebreak": "Casse-Code",
+    "g_codebreak_d": "Trouve un code secret de 4 chiffres en 10 essais",
+    "g_codebreak_h": "L'ordinateur choisit un code de 4 chiffres, chacun de 1 à 6. Tape un essai comme 1234. On te dit combien de chiffres sont justes et bien placés, et combien sont justes mais mal placés. Trouve-le en 10 essais.",
+    "g_dungeon": "Évasion du Donjon",
+    "g_dungeon_d": "Une aventure textuelle avec une lampe, une clé, un troll et de l'or",
+    "g_dungeon_h": "Parcours le donjon en tapant n, s, e ou o. Tape regarde pour regarder autour de toi, prends pour ramasser quelque chose et sac pour voir ce que tu portes. Trouve l'or et ressors-le par la grille avant que ta torche ne s'éteigne, et méfie-toi du troll.",
+    "g_connect": "Puissance 4",
+    "g_connect_d": "Lâche tes jetons et aligne-en quatre avant l'ordinateur",
+    "g_connect_h": "Tu es X et l'ordinateur est O. Tape une colonne de 1 à 7 pour y lâcher un jeton. Quatre alignés gagnent : en ligne, en colonne ou en diagonale.",
+    "g_blackjack": "Blackjack",
+    "g_blackjack_d": "Bats le croupier jusqu'à 21 sans dépasser",
+    "g_blackjack_h": "Mise une partie de tes 100 jetons. Tape ensuite 1 pour une carte de plus, 2 pour rester ou 3 pour doubler ta mise contre une dernière carte. Approche-toi plus de 21 que le croupier sans dépasser. V, D et R valent 10, et un A vaut 1 ou 11.",
+    "g_battleship": "Bataille Navale",
+    "g_battleship_d": "Coule la flotte ennemie avant qu'elle ne coule la tienne",
+    "g_battleship_h": "Chaque camp cache trois navires sur une mer de 6 sur 6. Tire en tapant une lettre et un nombre, par exemple B4. X est un touché et o un raté. Coule tous les navires ennemis avant que l'ennemi ne coule les tiens.",
+    "g_coin_p": program("""
+        Start
+        Declare Integer choix
+        Declare Integer face
+        Declare Integer reussis
+        reussis = 0
+        For lancer = 1 To 5
+            Display "Lancer ", lancer, " sur 5. Annonce : 1 pour face, 2 pour pile"
+            Input choix
+            While choix < 1 Or choix > 2
+                Display "Tape 1 pour face ou 2 pour pile"
+                Input choix
+            End While
+            face = random(1, 2)
+            Display "La pièce tombe sur ", nomFace(face), " !"
+            If choix = face Then
+                reussis = reussis + 1
+                Display "Bien vu"
+            Else
+                Display "Pas cette fois"
+            End If
+        End For
+        Display "Tu as deviné ", reussis, " sur 5"
+        If reussis >= 4 Then
+            Display "Quelle chance !"
+        End If
+        Stop
+
+        Function String nomFace(Integer face)
+            Declare String nom
+            If face = 1 Then
+                nom = "face"
+            Else
+                nom = "pile"
+            End If
+            Return nom
+        End Function
+    """),
+    "g_highlow_p": program("""
+        Start
+        Declare Integer carte
+        Declare Integer suivante
+        Declare Integer choix
+        Declare Integer points
+        Declare Integer vies
+        Declare Integer tour
+        carte = random(1, 13)
+        points = 0
+        vies = 3
+        tour = 0
+        Display "La carte suivante sera-t-elle plus haute ou plus basse ? L'as est la plus basse. Tu as 3 vies"
+        While tour < 10 And vies > 0
+            tour = tour + 1
+            Display "Carte ", tour, " sur 10 : ", nomCarte(carte), ". La suivante sera-t-elle 1 plus haute ou 2 plus basse ?"
+            Input choix
+            While choix < 1 Or choix > 2
+                Display "Tape 1 pour plus haute ou 2 pour plus basse"
+                Input choix
+            End While
+            suivante = random(1, 13)
+            Display "La carte suivante : ", nomCarte(suivante)
+            If suivante = carte Then
+                Display "La même encore ! Celle-là ne compte pas"
+            Else If (choix = 1 And suivante > carte) Or (choix = 2 And suivante < carte) Then
+                points = points + 1
+                Display "Gagné ! Points : ", points
+            Else
+                vies = vies - 1
+                Display "Perdu ! Vies restantes : ", vies
+            End If
+            carte = suivante
+        End While
+        Display "Partie terminée. Tu as marqué ", points, " points"
+        Call afficherNote(points)
+        Stop
+
+        Function String nomCarte(Integer n)
+            noms = ["As", "Deux", "Trois", "Quatre", "Cinq", "Six", "Sept", "Huit", "Neuf", "Dix", "Valet", "Dame", "Roi"]
+            Return noms[n - 1]
+        End Function
+
+        Module afficherNote(Integer points)
+            If points >= 8 Then
+                Display "Un vrai as des cartes !"
+            Else If points >= 5 Then
+                Display "Bien joué"
+            Else
+                Display "Tu feras mieux la prochaine fois"
+            End If
+        End Module
+    """),
+    "g_sticks_p": program("""
+        Start
+        Declare Integer batons
+        Declare Integer nombre
+        Declare Integer premier
+        Declare Boolean aToi
+        batons = 21
+        Display "Il y a 21 bâtons. Prends-en 1, 2 ou 3 à la fois. Celui qui prend le dernier bâton perd"
+        Display "Qui commence ? 1 pour toi, 2 pour l'ordinateur"
+        Input premier
+        While premier < 1 Or premier > 2
+            Display "Tape 1 ou 2"
+            Input premier
+        End While
+        aToi = premier = 1
+        While batons > 0
+            Call afficherBatons(batons)
+            If aToi Then
+                Display "Combien en prends-tu ?"
+                Input nombre
+                While nombre < 1 Or nombre > 3 Or nombre > batons
+                    Display "Prends-en 1, 2 ou 3, et pas plus qu'il n'en reste"
+                    Input nombre
+                End While
+            Else
+                nombre = ordiPrend(batons)
+                Display "L'ordinateur en prend ", nombre
+            End If
+            batons = batons - nombre
+            aToi = Not aToi
+        End While
+        If aToi Then
+            Display "L'ordinateur a pris le dernier bâton. Tu gagnes !"
+        Else
+            Display "Tu as pris le dernier bâton, donc l'ordinateur gagne"
+            Display "Il y a une astuce. Regarde combien de bâtons l'ordinateur te laisse"
+        End If
+        Stop
+
+        Module afficherBatons(Integer restants)
+            Declare String rangee
+            rangee = ""
+            For i = 1 To restants
+                rangee = rangee + "|"
+            End For
+            Display rangee, "  (", restants, " restants)"
+        End Module
+
+        Function Integer ordiPrend(Integer restants)
+            Declare Integer combien
+            combien = (restants - 1) mod 4
+            If combien = 0 Then
+                combien = random(1, 3)
+            End If
+            If combien > restants Then
+                combien = restants
+            End If
+            Return combien
+        End Function
+    """),
+    "g_dice_p": program("""
+        Start
+        Declare Integer mesVictoires
+        Declare Integer sesVictoires
+        Declare Integer manche
+        Declare Integer a
+        Declare Integer b
+        Declare Integer miens
+        Declare Integer siens
+        Declare String pret
+        mesVictoires = 0
+        sesVictoires = 0
+        manche = 0
+        Display "Duel de dés : la plus haute paire de dés gagne la manche. Un double compte deux fois. Le premier à 3 gagne"
+        While mesVictoires < 3 And sesVictoires < 3
+            manche = manche + 1
+            Display "Manche ", manche, ". Appuie sur Entrée pour lancer"
+            Input pret
+            a = lancerDe()
+            b = lancerDe()
+            miens = pointsDe(a, b)
+            Call afficherLancer("Toi", a, b, miens)
+            a = lancerDe()
+            b = lancerDe()
+            siens = pointsDe(a, b)
+            Call afficherLancer("L'ordinateur", a, b, siens)
+            If miens > siens Then
+                mesVictoires = mesVictoires + 1
+                Display "Tu gagnes la manche !"
+            Else If siens > miens Then
+                sesVictoires = sesVictoires + 1
+                Display "L'ordinateur gagne la manche"
+            Else
+                Display "Égalité, personne ne marque"
+            End If
+            Display "Manches gagnées : toi ", mesVictoires, ", l'ordinateur ", sesVictoires
+        End While
+        If mesVictoires = 3 Then
+            Display "Tu gagnes le duel !"
+        Else
+            Display "L'ordinateur gagne le duel"
+        End If
+        Stop
+
+        Function Integer lancerDe()
+            Return random(1, 6)
+        End Function
+
+        Function Integer pointsDe(Integer premier, Integer second)
+            Declare Integer points
+            points = premier + second
+            If premier = second Then
+                points = points * 2
+            End If
+            Return points
+        End Function
+
+        Module afficherLancer(String qui, Integer premier, Integer second, Integer points)
+            Display qui, " : ", premier, " et ", second, ", soit ", points, " points"
+            If premier = second Then
+                Display "Un double ! Il compte deux fois"
+            End If
+        End Module
+    """),
+    "g_hangman_p": program("""
+        Start
+        Declare String secret
+        Declare String essayees
+        Declare String lettre
+        Declare Integer erreurs
+        Declare Boolean gagne
+        mots = ["ballon", "jungle", "bougie", "pirate", "sorcier", "tortue", "dragon", "guitare", "baleine", "volcan", "pingouin", "couverture"]
+        secret = mots[random(0, length(mots) - 1)]
+        essayees = ""
+        erreurs = 0
+        gagne = False
+        Display "Le pendu ! Devine le mot lettre par lettre. Six erreurs et tu perds"
+        While erreurs < 6 And Not gagne
+            Call afficherPotence(erreurs)
+            Display "Le mot : ", masque(secret, essayees)
+            Display "Propose une lettre"
+            Input lettre
+            lettre = toLower(lettre)
+            If length(lettre) <> 1 Then
+                Display "Une seule lettre à la fois, s'il te plaît"
+            Else If contains(essayees, lettre) Then
+                Display "Tu as déjà essayé ", lettre
+            Else
+                essayees = essayees + lettre
+                If contains(secret, lettre) Then
+                    Display "Oui, il y a un ", lettre
+                Else
+                    erreurs = erreurs + 1
+                    Display "Pas de ", lettre, ". Erreurs : ", erreurs, " sur 6"
+                End If
+                gagne = toutTrouve(secret, essayees)
+            End If
+        End While
+        Call afficherPotence(erreurs)
+        If gagne Then
+            Display "Trouvé : ", secret, " ! Tu gagnes"
+        Else
+            Display "Plus d'essais. Le mot était ", secret
+        End If
+        Stop
+
+        Function String masque(String mot, String lettres)
+            Declare String affiche
+            Declare String car
+            affiche = ""
+            For i = 0 To length(mot) - 1
+                car = substring(mot, i, i + 1)
+                If contains(lettres, car) Then
+                    affiche = affiche + car + " "
+                Else
+                    affiche = affiche + "_ "
+                End If
+            End For
+            Return affiche
+        End Function
+
+        Function Boolean toutTrouve(String mot, String lettres)
+            Declare Boolean trouve
+            trouve = True
+            For i = 0 To length(mot) - 1
+                If Not contains(lettres, substring(mot, i, i + 1)) Then
+                    trouve = False
+                End If
+            End For
+            Return trouve
+        End Function
+
+        Module afficherPotence(Integer fautes)
+            tetes = ["   ", " O ", " O ", " O ", " O ", " O ", " O "]
+            corps = ["   ", "   ", " | ", "-| ", "-|-", "-|-", "-|-"]
+            jambes = ["   ", "   ", "   ", "   ", "   ", "|  ", "| |"]
+            Display "  +---+"
+            Display "  |   |"
+            Display "  |  ", tetes[fautes]
+            Display "  |  ", corps[fautes]
+            Display "  |  ", jambes[fautes]
+            Display "==+=="
+        End Module
+    """),
+    "g_codebreak_p": program("""
+        Start
+        Declare String code
+        Declare String essai
+        Declare Boolean valide
+        Declare Boolean trouve
+        Declare Integer exacts
+        Declare Integer proches
+        Declare Integer essais
+        code = creerCode()
+        essais = 0
+        trouve = False
+        Display "Je pense à un code de 4 chiffres. Chaque chiffre va de 1 à 6, et un chiffre peut revenir"
+        Display "Après chaque essai, je dis combien de chiffres sont à la bonne place, et combien sont justes mais mal placés"
+        While Not trouve And essais < 10
+            essais = essais + 1
+            Display "Essai ", essais, " sur 10 :"
+            Input essai
+            valide = estValide(essai)
+            While Not valide
+                Display "Tape 4 chiffres de 1 à 6, par exemple 1234"
+                Input essai
+                valide = estValide(essai)
+            End While
+            exacts = bonnePlace(code, essai)
+            proches = chiffresCommuns(code, essai) - exacts
+            Display essai, "   bien placés : ", exacts, "   mal placés : ", proches
+            If exacts = 4 Then
+                trouve = True
+            End If
+        End While
+        If trouve Then
+            Display "Code trouvé en ", essais, " essais !"
+        Else
+            Display "Plus d'essais. Le code était ", code
+        End If
+        Stop
+
+        Function String creerCode()
+            Declare String cree
+            cree = ""
+            For i = 1 To 4
+                cree = cree + random(1, 6)
+            End For
+            Return cree
+        End Function
+
+        Function Boolean estValide(String texte)
+            Declare Boolean bon
+            bon = length(texte) = 4
+            If bon Then
+                For i = 0 To 3
+                    If Not contains("123456", substring(texte, i, i + 1)) Then
+                        bon = False
+                    End If
+                End For
+            End If
+            Return bon
+        End Function
+
+        Function Integer bonnePlace(String secret, String essaye)
+            Declare Integer justes
+            justes = 0
+            For i = 0 To 3
+                If substring(secret, i, i + 1) = substring(essaye, i, i + 1) Then
+                    justes = justes + 1
+                End If
+            End For
+            Return justes
+        End Function
+
+        Function Integer chiffresCommuns(String secret, String essaye)
+            Declare Integer communs
+            Declare Integer dansSecret
+            Declare Integer dansEssai
+            Declare String chiffre
+            communs = 0
+            For d = 1 To 6
+                chiffre = "" + d
+                dansSecret = 0
+                dansEssai = 0
+                For i = 0 To 3
+                    If substring(secret, i, i + 1) = chiffre Then
+                        dansSecret = dansSecret + 1
+                    End If
+                    If substring(essaye, i, i + 1) = chiffre Then
+                        dansEssai = dansEssai + 1
+                    End If
+                End For
+                If dansSecret < dansEssai Then
+                    communs = communs + dansSecret
+                Else
+                    communs = communs + dansEssai
+                End If
+            End For
+            Return communs
+        End Function
+    """),
+    "g_dungeon_p": program("""
+        Start
+        Declare Integer salle
+        Declare Integer cible
+        Declare Integer direction
+        Declare Integer sante
+        Declare Integer pas
+        Declare String ordre
+        Declare Boolean trollLa
+        Declare Boolean enJeu
+        objets = ["", "", "lampe", "épée", "clé", "", "or"]
+        sorties = [[1, -1, -1, -1], [5, 0, 3, 2], [-1, 4, 1, -1], [-1, -1, -1, 1], [2, -1, -1, -1], [6, 1, -1, -1], [-1, 5, -1, -1]]
+        sac = []
+        salle = 0
+        sante = 3
+        pas = 0
+        trollLa = True
+        enJeu = True
+        Display "ÉVASION DU DONJON"
+        Display "Trouve l'or et ressors-le par la grille avant que ta torche ne s'éteigne"
+        Display "Tape n, s, e ou o pour marcher, ou regarde, prends, sac ou aide"
+        Call decrire(salle, objets, sac)
+        While enJeu
+            Display "Et maintenant ?"
+            Input ordre
+            ordre = toLower(ordre)
+            direction = directionDe(ordre)
+            If direction >= 0 Then
+                cible = sorties[salle][direction]
+                pas = pas + 1
+                If cible = -1 Then
+                    Display "Tu ne peux pas aller par là"
+                Else If cible = 6 And trollLa Then
+                    If contains(sac, "épée") Then
+                        Display "Le troll bloque la porte. Tu tires ton épée, et il s'enfuit en hurlant dans le noir !"
+                        trollLa = False
+                    Else
+                        sante = sante - 1
+                        Display "Le troll bloque la porte et te repousse d'une énorme main ! Santé : ", sante
+                    End If
+                Else If cible = 6 And Not contains(sac, "clé") Then
+                    Display "La porte au nord est bien fermée. Si seulement tu avais une clé"
+                Else
+                    salle = cible
+                    Call decrire(salle, objets, sac)
+                    If salle = 4 And Not contains(sac, "lampe") Then
+                        sante = sante - 1
+                        Display "Tu trébuches dans le noir et tu te cognes la tête ! Santé : ", sante
+                    End If
+                    If salle = 5 And trollLa Then
+                        Display "Un énorme troll garde la porte du fond !"
+                    End If
+                End If
+            Else If ordre = "regarde" Then
+                Call decrire(salle, objets, sac)
+            Else If ordre = "prends" Then
+                Call prendreObjet(salle, objets, sac)
+            Else If ordre = "sac" Then
+                Call afficherSac(sac)
+            Else If ordre = "aide" Then
+                Display "Marche avec n, s, e et o. Tape regarde pour regarder autour de toi, prends pour ramasser quelque chose et sac pour voir ce que tu portes"
+            Else
+                Display "Je ne sais pas faire ça : ", ordre
+            End If
+            If salle = 0 And contains(sac, "or") Then
+                Display "Tu pousses la grille et sors au soleil avec l'or. Évadé en ", pas, " pas !"
+                enJeu = False
+            Else If sante <= 0 Then
+                Display "Tu t'effondres sur le sol de pierre froid. Cette fois, le donjon gagne"
+                enJeu = False
+            Else If pas >= 40 Then
+                Display "Ta torche vacille et s'éteint. Te voilà perdu dans le noir pour toujours"
+                enJeu = False
+            Else If pas = 30 And direction >= 0 Then
+                Display "Ta torche faiblit. Plus que dix pas !"
+            End If
+        End While
+        Stop
+
+        Function Integer directionDe(String dit)
+            Declare Integer trouvee
+            trouvee = -1
+            If dit = "n" Then
+                trouvee = 0
+            Else If dit = "s" Then
+                trouvee = 1
+            Else If dit = "e" Then
+                trouvee = 2
+            Else If dit = "o" Then
+                trouvee = 3
+            End If
+            Return trouvee
+        End Function
+
+        Module decrire(Integer ici, choses, porte)
+            noms = ["Grille", "Grande Salle", "Bibliothèque", "Armurerie", "Cave", "Pont du Troll", "Salle du Trésor"]
+            textes = ["La grille de fer derrière toi est verrouillée. Un couloir mène au nord.", "Une grande salle avec des portes au nord, à l'est et à l'ouest. La grille est au sud.", "Des étagères poussiéreuses de vieux livres. Une trappe dans le sol descend vers le sud, et une porte mène à l'est.", "Des armes rouillées couvrent les murs. La seule sortie est à l'ouest.", "Une cave humide qui sent le moisi. Une échelle remonte vers le nord.", "Un étroit pont de pierre au-dessus d'un gouffre, avec une lourde porte au bout, au nord. La salle est au sud.", "Des coffres pleins de trésors brillent tout autour de toi. Le pont est au sud."]
+            Display "== ", noms[ici], " =="
+            If ici = 4 And Not contains(porte, "lampe") Then
+                Display "Il fait noir comme dans un four. Tu ne vois rien."
+            Else
+                Display textes[ici]
+                If choses[ici] <> "" Then
+                    Display "Tu vois : ", choses[ici]
+                End If
+            End If
+        End Module
+
+        Module prendreObjet(Integer ici, choses, porte)
+            If ici = 4 And Not contains(porte, "lampe") Then
+                Display "Tu tâtonnes dans le noir, mais tu ne trouves rien"
+            Else If choses[ici] = "" Then
+                Display "Il n'y a rien à prendre ici"
+            Else
+                append(porte, choses[ici])
+                Display "Tu prends : ", choses[ici]
+                choses[ici] = ""
+            End If
+        End Module
+
+        Module afficherSac(porte)
+            Declare String contenu
+            If length(porte) = 0 Then
+                Display "Ton sac est vide"
+            Else
+                contenu = ""
+                For Each chose In porte
+                    contenu = contenu + chose + " "
+                End For
+                Display "Dans ton sac : ", contenu
+            End If
+        End Module
+    """),
+    "g_connect_p": program("""
+        Start
+        Declare Integer colonne
+        Declare Integer ligne
+        Declare Integer coups
+        Declare String pion
+        Declare String gagnant
+        grille = nouvelleGrille()
+        coups = 0
+        pion = "X"
+        gagnant = ""
+        Display "Puissance 4 ! Tu es X et l'ordinateur est O. Lâche tes jetons pour en aligner quatre"
+        Display "Les lignes, les colonnes et les diagonales comptent"
+        While gagnant = "" And coups < 42
+            Call afficherGrille(grille)
+            If pion = "X" Then
+                Display "À toi. Choisis une colonne de 1 à 7"
+                Input colonne
+                ligne = -1
+                While ligne = -1
+                    While colonne < 1 Or colonne > 7
+                        Display "Les colonnes vont de 1 à 7"
+                        Input colonne
+                    End While
+                    ligne = ligneChute(grille, colonne - 1)
+                    If ligne = -1 Then
+                        Display "Cette colonne est pleine. Choisis-en une autre"
+                        Input colonne
+                    End If
+                End While
+                colonne = colonne - 1
+            Else
+                colonne = colonneOrdi(grille)
+                ligne = ligneChute(grille, colonne)
+                Display "L'ordinateur lâche un jeton dans la colonne ", colonne + 1
+            End If
+            grille[ligne][colonne] = pion
+            coups = coups + 1
+            If quatreDepuis(grille, ligne, colonne, pion) Then
+                gagnant = pion
+            Else If pion = "X" Then
+                pion = "O"
+            Else
+                pion = "X"
+            End If
+        End While
+        Call afficherGrille(grille)
+        If gagnant = "X" Then
+            Display "Quatre alignés ! Tu gagnes !"
+        Else If gagnant = "O" Then
+            Display "L'ordinateur en a aligné quatre. Il gagne cette fois"
+        Else
+            Display "La grille est pleine. Match nul"
+        End If
+        Stop
+
+        Function nouvelleGrille()
+            lignes = []
+            For r = 1 To 6
+                cases = []
+                For c = 1 To 7
+                    append(cases, ".")
+                End For
+                append(lignes, cases)
+            End For
+            Return lignes
+        End Function
+
+        Module afficherGrille(plateau)
+            Declare String texte
+            For r = 0 To 5
+                texte = "|"
+                For c = 0 To 6
+                    texte = texte + " " + plateau[r][c]
+                End For
+                Display texte, " |"
+            End For
+            Display "+---------------+"
+            Display "  1 2 3 4 5 6 7"
+        End Module
+
+        Function Integer ligneChute(plateau, Integer c)
+            Declare Integer plusBasse
+            plusBasse = -1
+            For r = 0 To 5
+                If plateau[r][c] = "." Then
+                    plusBasse = r
+                End If
+            End For
+            Return plusBasse
+        End Function
+
+        Function Boolean quatreDepuis(plateau, Integer ligne, Integer colonne, String jeton)
+            Declare Integer alignes
+            Declare Integer r
+            Declare Integer c
+            Declare Boolean continue
+            Declare Boolean trouve
+            trouve = False
+            directions = [[0, 1], [1, 0], [1, 1], [1, -1]]
+            For Each direction In directions
+                alignes = 1
+                For sens = -1 To 1 Step 2
+                    r = ligne + direction[0] * sens
+                    c = colonne + direction[1] * sens
+                    continue = True
+                    While continue
+                        If r < 0 Or r > 5 Or c < 0 Or c > 6 Then
+                            continue = False
+                        Else If plateau[r][c] <> jeton Then
+                            continue = False
+                        Else
+                            alignes = alignes + 1
+                            r = r + direction[0] * sens
+                            c = c + direction[1] * sens
+                        End If
+                    End While
+                End For
+                If alignes >= 4 Then
+                    trouve = True
+                End If
+            End For
+            Return trouve
+        End Function
+
+        Function Integer colonneOrdi(plateau)
+            Declare Integer choix
+            Declare Integer r
+            choix = -1
+            pions = ["O", "X"]
+            For Each jeton In pions
+                For c = 0 To 6
+                    If choix = -1 Then
+                        r = ligneChute(plateau, c)
+                        If r >= 0 Then
+                            plateau[r][c] = jeton
+                            If quatreDepuis(plateau, r, c, jeton) Then
+                                choix = c
+                            End If
+                            plateau[r][c] = "."
+                        End If
+                    End If
+                End For
+            End For
+            While choix = -1
+                c = random(0, 6)
+                If plateau[0][c] = "." Then
+                    choix = c
+                End If
+            End While
+            Return choix
+        End Function
+    """),
+    "g_blackjack_p": program("""
+        Start
+        Declare Integer jetons
+        Declare Integer mise
+        Declare Integer choix
+        Declare Integer moi
+        Declare Integer lui
+        Declare Integer gain
+        Declare Boolean enJeu
+        Declare Boolean reste
+        jetons = 100
+        enJeu = True
+        Display "Blackjack ! Approche-toi plus de 21 que le croupier sans dépasser"
+        Display "Les cartes à chiffre valent leur nombre, V, D et R valent 10, et un A vaut 1 ou 11"
+        While enJeu
+            paquet = nouveauPaquet()
+            Display "Tu as ", jetons, " jetons. Combien en mises-tu ?"
+            Input mise
+            While mise < 1 Or mise > jetons
+                Display "Mise de 1 à ", jetons
+                Input mise
+            End While
+            toi = []
+            croupier = []
+            append(toi, pop(paquet))
+            append(croupier, pop(paquet))
+            append(toi, pop(paquet))
+            append(croupier, pop(paquet))
+            reste = False
+            While Not reste
+                moi = valeurMain(toi)
+                If moi >= 21 Then
+                    reste = True
+                Else
+                    Call afficherTable(toi, moi, croupier)
+                    Display "1 pour une carte, 2 pour rester, 3 pour doubler"
+                    Input choix
+                    While choix < 1 Or choix > 3
+                        Display "Tape 1, 2 ou 3"
+                        Input choix
+                    End While
+                    If choix = 3 And (length(toi) > 2 Or mise * 2 > jetons) Then
+                        Display "Tu ne peux doubler que sur tes deux premières cartes, avec assez de jetons"
+                    Else If choix = 2 Then
+                        reste = True
+                    Else
+                        append(toi, pop(paquet))
+                        If choix = 3 Then
+                            mise = mise * 2
+                            Display "Mise doublée à ", mise, ", et une seule carte de plus"
+                            reste = True
+                        End If
+                    End If
+                End If
+            End While
+            moi = valeurMain(toi)
+            If moi < 21 Or (moi = 21 And length(toi) > 2) Then
+                Call croupierJoue(croupier, paquet)
+            End If
+            lui = valeurMain(croupier)
+            Call afficherMains(toi, moi, croupier, lui)
+            gain = regler(moi, length(toi), lui, length(croupier), mise)
+            jetons = jetons + gain
+            If gain > 0 Then
+                Display "Tu gagnes ", gain, " jetons"
+            Else If gain < 0 Then
+                Display "Tu perds ", 0 - gain, " jetons"
+            Else
+                Display "Égalité : tu récupères ta mise"
+            End If
+            If jetons = 0 Then
+                Display "Tu n'as plus de jetons. La banque gagne cette fois"
+                enJeu = False
+            Else
+                Display "1 pour une nouvelle main, 2 pour encaisser"
+                Input choix
+                While choix < 1 Or choix > 2
+                    Display "Tape 1 ou 2"
+                    Input choix
+                End While
+                enJeu = choix = 1
+            End If
+        End While
+        Display "Tu quittes la table avec ", jetons, " jetons"
+        If jetons > 100 Then
+            Display "C'est ", jetons - 100, " de plus qu'à ton arrivée !"
+        End If
+        Stop
+
+        Function nouveauPaquet()
+            Declare Integer autre
+            Declare Integer gardee
+            cartes = []
+            For i = 0 To 51
+                append(cartes, i)
+            End For
+            For i = 51 To 1 Step -1
+                autre = random(0, i)
+                gardee = cartes[i]
+                cartes[i] = cartes[autre]
+                cartes[autre] = gardee
+            End For
+            Return cartes
+        End Function
+
+        Function String nomCarte(Integer carte)
+            valeurs = ["A", "2", "3", "4", "5", "6", "7", "8", "9", "10", "V", "D", "R"]
+            couleurs = ["♠", "♥", "♦", "♣"]
+            Return valeurs[carte mod 13] + couleurs[carte div 13]
+        End Function
+
+        Function Integer valeurMain(laMain)
+            Declare Integer total
+            Declare Integer as
+            Declare Integer valeur
+            total = 0
+            as = 0
+            For Each carte In laMain
+                valeur = carte mod 13 + 1
+                If valeur = 1 Then
+                    total = total + 11
+                    as = as + 1
+                Else If valeur > 10 Then
+                    total = total + 10
+                Else
+                    total = total + valeur
+                End If
+            End For
+            While total > 21 And as > 0
+                total = total - 10
+                as = as - 1
+            End While
+            Return total
+        End Function
+
+        Function String texteMain(laMain)
+            Declare String texte
+            texte = ""
+            For Each carte In laMain
+                texte = texte + nomCarte(carte) + " "
+            End For
+            Return texte
+        End Function
+
+        Module afficherTable(joueur, Integer total, banque)
+            Display "Croupier : ", nomCarte(banque[0]), " ??"
+            Display "Toi :      ", texteMain(joueur), "(", total, ")"
+        End Module
+
+        Module afficherMains(joueur, Integer total, banque, Integer totalBanque)
+            Display "Croupier : ", texteMain(banque), "(", totalBanque, ")"
+            Display "Toi :      ", texteMain(joueur), "(", total, ")"
+        End Module
+
+        Module croupierJoue(laMain, cartes)
+            Declare Integer total
+            Do
+                total = valeurMain(laMain)
+                If total < 17 Then
+                    append(laMain, pop(cartes))
+                End If
+            Until total >= 17
+        End Module
+
+        Function Integer regler(Integer moi, Integer mesCartes, Integer lui, Integer sesCartes, Integer somme)
+            Declare Integer resultat
+            If moi > 21 Then
+                Display "Trop ! Tu as dépassé 21"
+                resultat = 0 - somme
+            Else If moi = 21 And mesCartes = 2 And (lui <> 21 Or sesCartes > 2) Then
+                Display "Blackjack ! Ça paie 3 pour 2"
+                resultat = somme * 3 div 2
+            Else If lui = 21 And sesCartes = 2 And (moi <> 21 Or mesCartes > 2) Then
+                Display "Le croupier a un blackjack"
+                resultat = 0 - somme
+            Else If lui > 21 Then
+                Display "Le croupier dépasse 21 !"
+                resultat = somme
+            Else If moi > lui Then
+                resultat = somme
+            Else If moi < lui Then
+                resultat = 0 - somme
+            Else
+                resultat = 0
+            End If
+            Return resultat
+        End Function
+    """),
+    "g_battleship_p": program("""
+        Start
+        Declare String tir
+        Declare Integer numCase
+        Declare Integer resultat
+        Declare Integer mesRestes
+        Declare Integer sesRestes
+        Declare Integer tour
+        maison = merVide()
+        ennemi = merVide()
+        Call placerFlotte(maison)
+        Call placerFlotte(ennemi)
+        mesRestes = 9
+        sesRestes = 9
+        tour = 0
+        Display "Bataille navale ! Chaque camp a trois navires, de 4, 3 et 2 cases. Coule les siens avant qu'il ne coule les tiens"
+        Display "S est ton navire, X un touché et o un raté. Tire avec une lettre et un nombre, par exemple B4"
+        While mesRestes > 0 And sesRestes > 0
+            Call afficherMers(maison, ennemi)
+            tour = tour + 1
+            numCase = -1
+            While numCase = -1
+                Display "Tour ", tour, ". Où tires-tu ?"
+                Input tir
+                numCase = caseDe(tir)
+                If numCase = -1 Then
+                    Display "Tape une lettre de A à F et un nombre de 1 à 6, par exemple B4"
+                End If
+            End While
+            resultat = tirerSur(ennemi, numCase)
+            If resultat = 2 Then
+                Display "Touché !"
+            Else If resultat = 1 Then
+                Display "Plouf. Raté"
+            Else
+                Display "Tu as déjà tiré en ", tir
+            End If
+            sesRestes = naviresRestants(ennemi)
+            If sesRestes > 0 Then
+                numCase = visee(maison)
+                resultat = tirerSur(maison, numCase)
+                If resultat = 2 Then
+                    Display "L'ennemi tire en ", nomDe(numCase), ". Il touche ton navire !"
+                Else
+                    Display "L'ennemi tire en ", nomDe(numCase), " et rate"
+                End If
+                mesRestes = naviresRestants(maison)
+            End If
+            Display "Cases de navire restantes : les tiennes ", mesRestes, ", les siennes ", sesRestes
+        End While
+        Call afficherMers(maison, ennemi)
+        If sesRestes = 0 Then
+            Display "Tu as coulé toute sa flotte en ", tour, " tours. Victoire !"
+        Else
+            Display "Ta flotte est coulée. L'ennemi gagne cette bataille"
+        End If
+        Stop
+
+        Function merVide()
+            mer = []
+            For i = 1 To 36
+                append(mer, ".")
+            End For
+            Return mer
+        End Function
+
+        Module placerFlotte(mer)
+            Declare Integer ligne
+            Declare Integer colonne
+            Declare Integer horizontal
+            Declare Boolean tient
+            tailles = [4, 3, 2]
+            For Each taille In tailles
+                tient = False
+                While Not tient
+                    horizontal = random(0, 1)
+                    If horizontal = 1 Then
+                        ligne = random(0, 5)
+                        colonne = random(0, 6 - taille)
+                    Else
+                        ligne = random(0, 6 - taille)
+                        colonne = random(0, 5)
+                    End If
+                    tient = True
+                    For k = 0 To taille - 1
+                        If mer[(ligne + k * (1 - horizontal)) * 6 + colonne + k * horizontal] <> "." Then
+                            tient = False
+                        End If
+                    End For
+                End While
+                For k = 0 To taille - 1
+                    mer[(ligne + k * (1 - horizontal)) * 6 + colonne + k * horizontal] = "S"
+                End For
+            End For
+        End Module
+
+        Module afficherMers(mienne, sienne)
+            Declare String texte
+            Declare String cellule
+            Display "   Ta flotte        Eaux ennemies"
+            Display "   1 2 3 4 5 6      1 2 3 4 5 6"
+            For r = 0 To 5
+                texte = substring("ABCDEF", r, r + 1) + "  "
+                For c = 0 To 5
+                    texte = texte + mienne[r * 6 + c] + " "
+                End For
+                texte = texte + "  " + substring("ABCDEF", r, r + 1) + "  "
+                For c = 0 To 5
+                    cellule = sienne[r * 6 + c]
+                    If cellule = "S" Then
+                        cellule = "."
+                    End If
+                    texte = texte + cellule + " "
+                End For
+                Display texte
+            End For
+        End Module
+
+        Function Integer caseDe(String saisie)
+            Declare Integer ligne
+            Declare Integer colonne
+            Declare Integer carre
+            carre = -1
+            If length(saisie) = 2 Then
+                ligne = indexOf("ABCDEF", toUpper(substring(saisie, 0, 1)))
+                colonne = indexOf("123456", substring(saisie, 1, 2))
+                If ligne >= 0 And colonne >= 0 Then
+                    carre = ligne * 6 + colonne
+                End If
+            End If
+            Return carre
+        End Function
+
+        Function String nomDe(Integer carre)
+            Return substring("ABCDEF", carre div 6, carre div 6 + 1) + (carre mod 6 + 1)
+        End Function
+
+        Function Integer tirerSur(mer, Integer carre)
+            Declare Integer resultat
+            If mer[carre] = "S" Then
+                mer[carre] = "X"
+                resultat = 2
+            Else If mer[carre] = "." Then
+                mer[carre] = "o"
+                resultat = 1
+            Else
+                resultat = 0
+            End If
+            Return resultat
+        End Function
+
+        Function Integer naviresRestants(mer)
+            Declare Integer aFlot
+            aFlot = 0
+            For Each cellule In mer
+                If cellule = "S" Then
+                    aFlot = aFlot + 1
+                End If
+            End For
+            Return aFlot
+        End Function
+
+        Function Integer visee(mer)
+            Declare Integer ligne
+            Declare Integer colonne
+            voisines = []
+            For i = 0 To 35
+                If mer[i] = "X" Then
+                    ligne = i div 6
+                    colonne = i mod 6
+                    If ligne > 0 Then
+                        append(voisines, i - 6)
+                    End If
+                    If ligne < 5 Then
+                        append(voisines, i + 6)
+                    End If
+                    If colonne > 0 Then
+                        append(voisines, i - 1)
+                    End If
+                    If colonne < 5 Then
+                        append(voisines, i + 1)
+                    End If
+                End If
+            End For
+            cibles = []
+            For Each carre In voisines
+                If mer[carre] = "." Or mer[carre] = "S" Then
+                    append(cibles, carre)
+                End If
+            End For
+            If length(cibles) = 0 Then
+                For i = 0 To 35
+                    If mer[i] = "." Or mer[i] = "S" Then
+                        append(cibles, i)
+                    End If
+                End For
+            End If
+            Return cibles[random(0, length(cibles) - 1)]
+        End Function
+    """),
+    # ---- icons, and a drawing run as what it is: a home walked through,
+    # work passed on, data sent, a circuit switched on, a launch
+    # (03-icons.js, 11-hand-icons.js, 37-board.js to 39-orbit.js)
+    "ic_open": "Icônes",
+    "ic_open_tip": "Métiers, meubles, appareils et plus",
+    "ic_find": "Rechercher des icônes",
+    "ic_none": "Aucune icône ne correspond.",
+    "ic_all": "Toutes",
+    "ic_recent": "Récentes",
+    "ic_people": "Métiers",
+    "ic_devices": "Ordinateurs et réseau",
+    "ic_circuit": "Circuits",
+    "ic_travel": "Transports et ville",
+    "ic_space": "Espace",
+    "ic_things": "Objets et idées",
+    "fp_unit": "m",
+    "fp_area": "{n} m²",
+    "n_i_person": "Personne",
+    "n_i_man": "Homme",
+    "n_i_woman": "Femme",
+    "n_i_child": "Enfant",
+    "n_i_elder": "Personne âgée",
+    "n_i_team": "Équipe",
+    "n_i_doctor": "Médecin",
+    "n_i_nurse": "Infirmier",
+    "n_i_surgeon": "Chirurgien",
+    "n_i_dentist": "Dentiste",
+    "n_i_pharmacist": "Pharmacien",
+    "n_i_paramedic": "Ambulancier",
+    "n_i_patient": "Patient",
+    "n_i_chef": "Chef cuisinier",
+    "n_i_baker": "Boulanger",
+    "n_i_waiter": "Serveur",
+    "n_i_farmer": "Agriculteur",
+    "n_i_gardener": "Jardinier",
+    "n_i_builder": "Ouvrier du bâtiment",
+    "n_i_engineer": "Ingénieur",
+    "n_i_electrician": "Électricien",
+    "n_i_plumber": "Plombier",
+    "n_i_mechanic": "Mécanicien",
+    "n_i_carpenter": "Menuisier",
+    "n_i_painter": "Peintre",
+    "n_i_cleaner": "Agent d’entretien",
+    "n_i_miner": "Mineur",
+    "n_i_artist": "Artiste",
+    "n_i_musician": "Musicien",
+    "n_i_photographer": "Photographe",
+    "n_i_reporter": "Journaliste",
+    "n_i_teacher": "Enseignant",
+    "n_i_student": "Élève",
+    "n_i_graduate": "Diplômé",
+    "n_i_librarian": "Bibliothécaire",
+    "n_i_scientist": "Scientifique",
+    "n_i_programmer": "Programmeur",
+    "n_i_office": "Employé de bureau",
+    "n_i_manager": "Responsable",
+    "n_i_accountant": "Comptable",
+    "n_i_receptionist": "Réceptionniste",
+    "n_i_agent": "Téléconseiller",
+    "n_i_cashier": "Caissier",
+    "n_i_customer": "Client",
+    "n_i_police": "Policier",
+    "n_i_firefighter": "Pompier",
+    "n_i_soldier": "Soldat",
+    "n_i_guard": "Agent de sécurité",
+    "n_i_lawyer": "Avocat",
+    "n_i_judge": "Juge",
+    "n_i_pilot": "Pilote",
+    "n_i_astronaut": "Astronaute",
+    "n_i_driver": "Chauffeur",
+    "n_i_delivery": "Livreur",
+    "n_i_postman": "Facteur",
+    "n_i_hairdresser": "Coiffeur",
+    "n_i_coach": "Entraîneur",
+    "n_i_room": "Pièce",
+    "n_i_wall": "Mur",
+    "n_i_door": "Porte",
+    "n_i_door2": "Porte double",
+    "n_i_slide": "Porte coulissante",
+    "n_i_window": "Fenêtre",
+    "n_i_stairs": "Escalier",
+    "n_i_bed": "Lit double",
+    "n_i_bed1": "Lit simple",
+    "n_i_crib": "Lit de bébé",
+    "n_i_nightstand": "Table de chevet",
+    "n_i_wardrobe": "Armoire",
+    "n_i_dresser": "Commode",
+    "n_i_sofa": "Canapé",
+    "n_i_armchair": "Fauteuil",
+    "n_i_coffee": "Table basse",
+    "n_i_tv": "Télévision",
+    "n_i_fireplace": "Cheminée",
+    "n_i_piano": "Piano",
+    "n_i_bookcase": "Bibliothèque",
+    "n_i_rug": "Tapis",
+    "n_i_lamp": "Lampadaire",
+    "n_i_plant": "Plante",
+    "n_i_dining": "Table à manger",
+    "n_i_roundtable": "Table ronde",
+    "n_i_chair": "Chaise",
+    "n_i_desk": "Bureau",
+    "n_i_officechair": "Chaise de bureau",
+    "n_i_counter": "Plan de travail",
+    "n_i_stove": "Cuisinière",
+    "n_i_fridge": "Réfrigérateur",
+    "n_i_kitchensink": "Évier",
+    "n_i_toilet": "Toilettes",
+    "n_i_sink": "Lavabo",
+    "n_i_bathtub": "Baignoire",
+    "n_i_shower": "Douche",
+    "n_i_washer": "Lave-linge",
+    "n_i_dryer": "Sèche-linge",
+    "n_i_parked": "Voiture (vue de dessus)",
+    "n_i_shrub": "Arbre (vu de dessus)",
+    "n_i_computer": "Ordinateur",
+    "n_i_laptop": "Ordinateur portable",
+    "n_i_tablet": "Tablette",
+    "n_i_phone": "Téléphone",
+    "n_i_server": "Serveur informatique",
+    "n_i_database": "Base de données",
+    "n_i_router": "Routeur",
+    "n_i_switch": "Commutateur réseau",
+    "n_i_firewall": "Pare-feu",
+    "n_i_wifi": "Wi-Fi",
+    "n_i_internet": "Internet",
+    "n_i_tower": "Antenne relais",
+    "n_i_printer": "Imprimante",
+    "n_i_camera": "Caméra de surveillance",
+    "n_i_battery": "Pile",
+    "n_i_bulb": "Ampoule",
+    "n_i_switch_on": "Interrupteur",
+    "n_i_resistor": "Résistance",
+    "n_i_capacitor": "Condensateur",
+    "n_i_led": "LED",
+    "n_i_motor": "Moteur",
+    "n_i_buzzer": "Buzzer",
+    "n_i_socket": "Prise",
+    "n_i_solar": "Panneau solaire",
+    "n_i_ground": "Masse",
+    "n_i_car": "Voiture",
+    "n_i_bus": "Bus",
+    "n_i_truck": "Camion",
+    "n_i_bike": "Vélo",
+    "n_i_train": "Train",
+    "n_i_plane": "Avion",
+    "n_i_ship": "Bateau",
+    "n_i_house": "Maison",
+    "n_i_building": "Immeuble de bureaux",
+    "n_i_shop": "Magasin",
+    "n_i_school": "École",
+    "n_i_hospital": "Hôpital",
+    "n_i_factory": "Usine",
+    "n_i_warehouse": "Entrepôt",
+    "n_i_tree": "Arbre",
+    "n_i_traffic": "Feu tricolore",
+    "n_i_rocket": "Fusée",
+    "n_i_satellite": "Satellite",
+    "n_i_sun": "Soleil",
+    "n_i_earth": "Terre",
+    "n_i_moon": "Lune",
+    "n_i_planet": "Planète",
+    "n_i_star": "Étoile",
+    "n_i_telescope": "Télescope",
+    "n_i_ufo": "OVNI",
+    "n_i_zone": "Conteneur",
+    "n_i_money": "Argent",
+    "n_i_coins": "Pièces de monnaie",
+    "n_i_cart": "Chariot",
+    "n_i_package": "Colis",
+    "n_i_mail": "Courrier",
+    "n_i_chat": "Discussion",
+    "n_i_clock": "Horloge",
+    "n_i_calendar": "Calendrier",
+    "n_i_gear": "Engrenage",
+    "n_i_lock": "Cadenas",
+    "n_i_key": "Clé",
+    "n_i_idea": "Idée",
+    "n_i_search": "Recherche",
+    "n_i_check": "Coche",
+    "n_i_cross": "Croix",
+    "n_i_warning": "Avertissement",
+    "n_i_flag": "Drapeau",
+    "n_i_heart": "Cœur",
+    "n_i_trophy": "Trophée",
+    "n_i_chart": "Diagramme en barres",
+    "n_i_book": "Livre",
+    "n_i_megaphone": "Mégaphone",
+    "vb_i_person": "fait sa part",
+    "vb_i_man": "fait sa part",
+    "vb_i_woman": "fait sa part",
+    "vb_i_child": "fait un dessin",
+    "vb_i_elder": "donne un conseil",
+    "vb_i_team": "y travaille ensemble",
+    "vb_i_doctor": "examine le patient",
+    "vb_i_nurse": "soigne le patient",
+    "vb_i_surgeon": "opère",
+    "vb_i_dentist": "examine les dents",
+    "vb_i_pharmacist": "prépare l’ordonnance",
+    "vb_i_paramedic": "donne les premiers secours",
+    "vb_i_patient": "décrit les symptômes",
+    "vb_i_chef": "prépare le repas",
+    "vb_i_baker": "cuit le pain",
+    "vb_i_waiter": "prend la commande",
+    "vb_i_farmer": "fait la récolte",
+    "vb_i_gardener": "arrose les plantes",
+    "vb_i_builder": "le construit",
+    "vb_i_engineer": "le conçoit",
+    "vb_i_electrician": "fait le câblage",
+    "vb_i_plumber": "répare la tuyauterie",
+    "vb_i_mechanic": "répare le moteur",
+    "vb_i_carpenter": "monte la charpente",
+    "vb_i_painter": "le peint",
+    "vb_i_cleaner": "fait le ménage",
+    "vb_i_miner": "extrait le minerai",
+    "vb_i_artist": "le dessine",
+    "vb_i_musician": "joue un air",
+    "vb_i_photographer": "prend une photo",
+    "vb_i_reporter": "écrit l’article",
+    "vb_i_teacher": "fait cours",
+    "vb_i_student": "fait ses devoirs",
+    "vb_i_graduate": "reçoit son diplôme",
+    "vb_i_librarian": "trouve le livre",
+    "vb_i_scientist": "mène l’expérience",
+    "vb_i_programmer": "écrit le code",
+    "vb_i_office": "remplit les formulaires",
+    "vb_i_manager": "établit le plan",
+    "vb_i_accountant": "tient les comptes",
+    "vb_i_receptionist": "fixe le rendez-vous",
+    "vb_i_agent": "répond à l’appel",
+    "vb_i_cashier": "encaisse",
+    "vb_i_customer": "passe la commande",
+    "vb_i_police": "enquête",
+    "vb_i_firefighter": "éteint le feu",
+    "vb_i_soldier": "monte la garde",
+    "vb_i_guard": "vérifie le badge",
+    "vb_i_lawyer": "plaide la cause",
+    "vb_i_judge": "rend le verdict",
+    "vb_i_pilot": "pilote l’avion",
+    "vb_i_astronaut": "part en orbite",
+    "vb_i_driver": "le conduit à bon port",
+    "vb_i_delivery": "livre le colis",
+    "vb_i_postman": "distribue le courrier",
+    "vb_i_hairdresser": "coupe les cheveux",
+    "vb_i_coach": "entraîne l’équipe",
+    "wk_i_bed": "dort dans le lit",
+    "wk_i_bed1": "fait une sieste",
+    "wk_i_crib": "veille sur le bébé",
+    "wk_i_nightstand": "allume la lampe de chevet",
+    "wk_i_wardrobe": "choisit des vêtements",
+    "wk_i_dresser": "s’habille",
+    "wk_i_sofa": "s’assoit sur le canapé",
+    "wk_i_armchair": "lit dans le fauteuil",
+    "wk_i_coffee": "pose une tasse sur la table basse",
+    "wk_i_tv": "regarde la télé",
+    "wk_i_fireplace": "se réchauffe près du feu",
+    "wk_i_piano": "joue du piano",
+    "wk_i_bookcase": "prend un livre",
+    "wk_i_lamp": "allume la lampe",
+    "wk_i_plant": "arrose la plante",
+    "wk_i_dining": "mange à table",
+    "wk_i_roundtable": "prend un café à table",
+    "wk_i_chair": "s’assoit",
+    "wk_i_desk": "travaille au bureau",
+    "wk_i_officechair": "tourne sur la chaise de bureau",
+    "wk_i_counter": "prépare un sandwich",
+    "wk_i_stove": "cuisine aux fourneaux",
+    "wk_i_fridge": "prend du lait dans le réfrigérateur",
+    "wk_i_kitchensink": "fait la vaisselle",
+    "wk_i_toilet": "va aux toilettes",
+    "wk_i_sink": "se lave les mains",
+    "wk_i_bathtub": "prend un bain",
+    "wk_i_shower": "prend une douche",
+    "wk_i_washer": "fait la lessive",
+    "wk_i_dryer": "sèche le linge",
+    "wk_i_parked": "monte dans la voiture",
+    "wk_i_shrub": "se repose sous l’arbre",
+    "wk_i_stairs": "monte l’escalier",
+    "fr_kitchen": "la cuisine",
+    "fr_bath": "la salle de bain",
+    "fr_bed": "la chambre",
+    "fr_laundry": "la buanderie",
+    "fr_garage": "le garage",
+    "fr_office": "le bureau",
+    "fr_dining": "la salle à manger",
+    "fr_living": "le salon",
+    "fr_room": "la pièce",
+    "wk_comes_in": "{who} entre par la porte d’entrée.",
+    "wk_starts": "{who} commence dans {room}.",
+    "wk_in_room": "Direction {room}.",
+    "wk_empty": "Rien dans {room}.",
+    "wk_does": "{who} {does}.",
+    "wk_cannot_reach": "Impossible d’y accéder : {what} ({room}).",
+    "wk_leaves": "{who} sort par la porte d’entrée.",
+    "wk_no_way_in": "Impossible d’entrer dans {room} : pas de porte.",
+    "wk_summary": "Pièces parcourues : {rooms} · Objets utilisés : {used} · Surface : {area}",
+    "wk_no_rooms": "Placez une Pièce autour des meubles pour la parcourir.",
+    "wk_door_loose": "Cette porte n’est dans aucun mur.",
+    "wk_no_door": "Aucune porte ne mène dans {room}.",
+    "wk_blocked": "Quelque chose bloque une porte : {what}.",
+    "wk_sum": "Pièces : {rooms} · Meubles : {pieces} · Surface : {area}",
+    "wk_visitor": "Un visiteur",
+    "wk_hello": "Salut !",
+    "bd_auto": "Automatique",
+    "bd_auto_is": "Automatique : {what}",
+    "bd_pick": "Ce qu’est le dessin, et ce que Lancer en fait",
+    "bd_program": "Programme",
+    "bd_home": "Plan d’étage",
+    "bd_team": "Personnes au travail",
+    "bd_network": "Réseau",
+    "bd_circuit": "Circuit",
+    "bd_space": "Espace",
+    "bd_city": "Déplacements",
+    "bd_flow": "Flèches",
+    "bd_tidy_kept": "Un plan ou un ciel reste là où vous l’avez dessiné : Ranger sert aux diagrammes de flux et aux organigrammes.",
+    "go_home": "Visiter",
+    "go_team": "Faire passer le travail",
+    "go_network": "Envoyer des données",
+    "go_circuit": "Allumer",
+    "go_space": "Décoller",
+    "go_city": "Rouler",
+    "go_flow": "Suivre les flèches",
+    "v3_open": "Vue 3D",
+    "v3_tip": "Voir en 3D",
+    "v3_empty": "Rien à construire pour l’instant.",
+    "v3_low": "Murs bas",
+    "v3_hint": "Glissez pour tourner · molette pour zoomer · Maj+glisser pour déplacer",
+    "v3_close": "Fermer la vue 3D",
+    "tw_alone": "Reliez les personnes par des flèches pour faire passer le travail.",
+    "tw_works": "{who} : {does}.",
+    "tw_shares": "{who} répartit le travail : {to}.",
+    "tw_back": "Tout revient à {who}.",
+    "tw_hands": "{who} → {to}.",
+    "tw_hands_what": "{who} → {to} : {what}.",
+    "tw_done": "Terminé. Passages : {hands} · Personnes : {people} · Le plus de travail : {who}",
+    "tw_loose": "Aucune flèche vers ou depuis {who}.",
+    "tw_sum": "Personnes : {people} · Flèches : {arrows}",
+    "nw_cables": "Reliez les appareils par des flèches, comme des câbles, pour envoyer des données.",
+    "nw_none": "{who} n’atteint rien.",
+    "nw_allowed": "autorisé",
+    "nw_reply": "OK",
+    "nw_route": "{path} ({ms} ms)",
+    "nw_ok": "Arrivés : {n} sur {all}.",
+    "nw_loose": "{who} n’est relié à rien.",
+    "nw_sum": "Appareils : {devices} · Câbles : {cables}",
+    "cy_none": "Reliez chaque véhicule par des flèches aux lieux où il va.",
+    "cy_still": "{who} n’a nulle part où aller.",
+    "cy_stop": "Arrêt : {place}",
+    "cy_route": "{who} : {stops}",
+    "cy_sum": "Véhicules : {vehicles} · Lieux : {places}",
+    "fw_none": "Reliez les formes par des flèches pour les suivre.",
+    "fw_at": "→ {what}",
+    "fw_done": "Flèches suivies : {n}.",
+    "fw_sum": "Formes : {shapes} · Flèches : {arrows}",
+    "ec_no_source": "Ajoutez une pile pour alimenter le circuit.",
+    "ec_opened": "{who} : ouvert.",
+    "ec_closed": "{who} : fermé.",
+    "ec_press": "Cliquez sur un interrupteur pour le basculer.",
+    "ec_buzz": "bzzz",
+    "ec_short": "Court-circuit ! Rien ne freine le courant aux bornes de la pile.",
+    "ec_open": "Le circuit n’est pas fermé : aucun courant ne passe.",
+    "ec_source": "{who} : {v} V, {a}",
+    "ec_dark": "{who} : pas de lumière.",
+    "ec_too_bright": "{who} : beaucoup trop de courant ({a}), ça grillerait.",
+    "ec_lit": "{who} : éclaire ({a}).",
+    "ec_turns": "{who} : tourne ({a}).",
+    "ec_still": "{who} : ne tourne pas.",
+    "ec_buzzes": "{who} : sonne ({a}).",
+    "ec_quiet": "{who} : silence.",
+    "ec_drop": "{who} : {v} V à ses bornes, {a}",
+    "ec_loose": "{who} a besoin d’un fil à chaque bout.",
+    "ec_sum": "Composants : {parts} · Fils : {wires}",
+    "os_empty": "Dessinez un Soleil et quelques planètes pour les mettre en mouvement.",
+    "os_year_vs": "{who} tourne autour de {around} : une année y dure {n} années terrestres.",
+    "os_year": "{who} fait le tour de {around} toutes les {n} secondes.",
+    "os_launch": "{who} décolle.",
+    "os_orbit": "{who} se met en orbite autour de {around}.",
+    "os_arrive": "{who} atteint {where}.",
+    "os_landed": "Atterrissage : {where}",
+    "os_no_sun": "Ajoutez un Soleil autour duquel les planètes tourneront.",
+    "os_sum": "Astres : {bodies} · Engins : {craft}",
+    "tw_again": "continue",
+    "ec_dim": "{who} : éclaire faiblement ({a}).",
+    "n_i_picture": "Tableau",
+    "n_i_mirror": "Miroir",
+    "n_i_shelf": "Étagère murale",
+    "n_i_walltv": "Télévision murale",
+    "n_i_wallclock": "Horloge murale",
+    "n_i_sconce": "Applique murale",
+    "n_i_cabinet": "Placard mural",
+    "n_i_hooks": "Patères",
+    "n_i_radiator": "Radiateur",
+    "wk_i_picture": "regarde le tableau",
+    "wk_i_mirror": "se regarde dans le miroir",
+    "wk_i_shelf": "prend un livre sur l’étagère",
+    "wk_i_walltv": "regarde la télé",
+    "wk_i_wallclock": "regarde l’heure",
+    "wk_i_sconce": "allume la lumière",
+    "wk_i_cabinet": "prend une assiette dans le placard",
+    "wk_i_hooks": "accroche un manteau",
+    "wk_i_radiator": "se réchauffe les mains",
+    "wk_locked_in": "{room} est derrière une porte verrouillée.",
+    "v3_walk": "Se promener",
+    "v3_above": "Vue de dessus",
+    "v3_hint_walk": "Z Q S D ou les flèches pour marcher · glissez pour regarder · E ou un clic ouvre les portes",
+    "v3_restart": "Recommencer",
+    "v3_door": "Porte",
+    "v3_locked": "C’est verrouillé.",
+    "v3_no_door": "Aucune porte à portée.",
+    "v3_outside": "Dehors",
+    "v3_tips": "Suggestions : {n}",
+    "ad_said": "Suggestion : {what}",
+    "ad_no_front": "Il n’y a pas de porte d’entrée : personne ne peut entrer de l’extérieur.",
+    "ad_fix_front": "Ajouter une porte d’entrée",
+    "ad_window_bed": "Pas de fenêtre dans {room} : une chambre a besoin de lumière et d’une issue en cas d’incendie.",
+    "ad_window": "Pas de fenêtre dans {room} pour laisser entrer le jour.",
+    "ad_fix_window": "Ajouter une fenêtre",
+    "ad_dark": "Ni fenêtre ni lumière dans {room}.",
+    "ad_fix_light": "Ajouter une applique",
+    "ad_missing": "Il manque dans {room} : {what}.",
+    "ad_fix_add": "Ajouter : {what}",
+    "ad_bath_sink": "Il y a des toilettes dans {room} mais pas de lavabo pour se laver les mains.",
+    "ad_small_bed": "Un lit double est à l’étroit dans {room} ({area}) : environ {want} serait confortable.",
+    "ad_back_to_tv": "Dos à la télé : {what}.",
+    "ad_fix_face_tv": "Le tourner vers la télé",
+    "ad_door_hits": "Une porte heurte ceci en s’ouvrant : {what}.",
+    "ad_fix_flip": "L’ouvrir dans l’autre sens",
+    "ad_bath_kitchen": "La porte de {bath} donne directement dans {kitchen}.",
+    "ad_boxed_in": "Personne ne peut y accéder : {what} ({room}).",
+    "ad_firewall": "Rien ne protège le réseau d’Internet : placez un pare-feu entre les deux.",
+    "ad_fix_firewall": "Ajouter un pare-feu",
+    "ad_single": "Tout passe par {who} : s’il tombe en panne, plus rien ne passe.",
+    "ad_led": "{who} reçoit trop de courant ({a}) et grillerait : placez une résistance devant.",
+    "ad_fix_resistor": "Ajouter une résistance",
+    "ad_switch": "Il n’y a pas d’interrupteur pour l’éteindre.",
+    "ad_fix_switch": "Ajouter un interrupteur",
+    "ad_busy": "{who} fait l’essentiel du travail : répartissez-le.",
+    "tab_code_tip": "Écrire les étapes en mots simples (pseudocode) ; le diagramme est dessiné à partir d’elles",
+    "tab_hand_tip": "Dessiner à la main : organigrammes, plans, personnes au travail, réseaux, circuits et plus",
+    "tab_lang_tip": "L’écrire dans un langage de programmation : Python, Java, C#, C++, JavaScript et plus",
+    "hm_icons": "Ajouter une icône depuis Icônes, sous les formes : cliquez-la ou glissez-la sur la feuille ; cherchez-la par son nom",
+    "hm_room": "Déplacer une pièce ou un conteneur, et tout ce qu’il contient suit",
+    "hm_door": "Placer une porte, une fenêtre ou un tableau près d’un mur, et il s’y encastre",
+    "hm_run_as": "Lancer fait ce qu’est le dessin : visite une maison, fait passer le travail, envoie des données, allume un circuit, lance une fusée",
+    "depth": "Profondeur",
+    "depth_tip": "Ombrer chaque forme dans sa propre couleur et lui donner une ombre, pour donner du relief aux couleurs",
+    "n_i_ac": "Climatiseur",
+    "n_i_aquarium": "Aquarium",
+    "n_i_arclamp": "Lampadaire arc",
+    "n_i_basket": "Panier",
+    "n_i_bathmat": "Tapis de bain",
+    "n_i_beanbag": "Pouf poire",
+    "n_i_bedking": "Lit king size",
+    "n_i_bench": "Banc",
+    "n_i_books": "Livres",
+    "n_i_bunkbed": "Lits superposés",
+    "n_i_cactus": "Cactus",
+    "n_i_candle": "Bougie",
+    "n_i_cattree": "Arbre à chat",
+    "n_i_ceilingfan": "Ventilateur de plafond",
+    "n_i_chandelier": "Lustre",
+    "n_i_chest": "Coffre",
+    "n_i_coatrack": "Portemanteau",
+    "n_i_coffeemaker": "Cafetière",
+    "n_i_console": "Console de jeux",
+    "n_i_cornershelf": "Étagère d’angle",
+    "n_i_cubeshelf": "Étagère cube",
+    "n_i_deck": "Terrasse en bois",
+    "n_i_desklamp": "Lampe de bureau",
+    "n_i_dishwasher": "Lave-vaisselle",
+    "n_i_dogbed": "Panier pour chien",
+    "n_i_driveway": "Allée de garage",
+    "n_i_dryrack": "Étendoir",
+    "n_i_elevator": "Ascenseur",
+    "n_i_fan": "Ventilateur",
+    "n_i_fence": "Clôture",
+    "n_i_filing": "Classeur",
+    "n_i_floor": "Niveau",
+    "n_i_flowerbed": "Parterre de fleurs",
+    "n_i_flowers": "Fleurs",
+    "n_i_frame": "Cadre photo",
+    "n_i_fruitbowl": "Corbeille à fruits",
+    "n_i_garagedoor": "Porte de garage",
+    "n_i_gardenbench": "Banc de jardin",
+    "n_i_grill": "Barbecue",
+    "n_i_hamper": "Panier à linge",
+    "n_i_hanging": "Plante suspendue",
+    "n_i_heater": "Chauffage d’appoint",
+    "n_i_hedge": "Haie",
+    "n_i_herbs": "Pot d’herbes",
+    "n_i_hood": "Hotte",
+    "n_i_hottub": "Spa",
+    "n_i_ironing": "Planche à repasser",
+    "n_i_island": "Îlot de cuisine",
+    "n_i_kettle": "Bouilloire",
+    "n_i_lot": "Terrain",
+    "n_i_loveseat": "Causeuse",
+    "n_i_medicine": "Armoire à pharmacie",
+    "n_i_microwave": "Micro-ondes",
+    "n_i_monitor": "Écran",
+    "n_i_ottoman": "Pouf",
+    "n_i_palm": "Palmier",
+    "n_i_pantry": "Garde-manger",
+    "n_i_path": "Chemin de jardin",
+    "n_i_patio": "Salon de jardin",
+    "n_i_pc": "Tour d’ordinateur",
+    "n_i_pendant": "Suspension",
+    "n_i_pool": "Piscine",
+    "n_i_projector": "Projecteur",
+    "n_i_proscreen": "Écran de projection",
+    "n_i_recliner": "Fauteuil inclinable",
+    "n_i_recordplayer": "Platine vinyle",
+    "n_i_sectional": "Canapé d’angle",
+    "n_i_shoerack": "Range-chaussures",
+    "n_i_sidetable": "Table d’appoint",
+    "n_i_soundbar": "Barre de son",
+    "n_i_speaker": "Enceinte",
+    "n_i_spiral": "Escalier en colimaçon",
+    "n_i_stool": "Tabouret",
+    "n_i_succulent": "Plante grasse",
+    "n_i_tablelamp": "Lampe de table",
+    "n_i_toaster": "Grille-pain",
+    "n_i_towelrail": "Porte-serviettes",
+    "n_i_trash": "Poubelle",
+    "n_i_tvstand": "Meuble TV",
+    "n_i_utilitysink": "Évier de buanderie",
+    "n_i_vanity": "Meuble vasque",
+    "n_i_vanitytable": "Coiffeuse",
+    "n_i_vase": "Vase",
+    "wk_i_spiral": "monte l’escalier en colimaçon",
+    "wk_i_elevator": "prend l’ascenseur",
+    "wk_i_dishwasher": "remplit le lave-vaisselle",
+    "wk_i_island": "coupe des légumes sur l’îlot",
+    "wk_i_stool": "s’assoit sur un tabouret",
+    "wk_i_trash": "sort la poubelle",
+    "wk_i_pantry": "prend quelque chose dans le garde-manger",
+    "wk_i_microwave": "réchauffe des restes",
+    "wk_i_coffeemaker": "se fait un café",
+    "wk_i_toaster": "fait griller du pain",
+    "wk_i_kettle": "fait chauffer de l’eau",
+    "wk_i_fruitbowl": "prend une pomme",
+    "wk_i_vanity": "se brosse les dents",
+    "wk_i_hamper": "met le linge au panier",
+    "wk_i_ironing": "repasse une chemise",
+    "wk_i_dryrack": "étend le linge",
+    "wk_i_heater": "se réchauffe près du chauffage",
+    "wk_i_utilitysink": "rince un seau",
+    "wk_i_bedking": "s’étire sur le grand lit",
+    "wk_i_bunkbed": "grimpe sur le lit du haut",
+    "wk_i_vanitytable": "se coiffe",
+    "wk_i_bench": "s’assoit sur le banc",
+    "wk_i_chest": "ouvre le coffre",
+    "wk_i_sidetable": "pose un verre",
+    "wk_i_filing": "classe des papiers",
+    "wk_i_loveseat": "se blottit dans la causeuse",
+    "wk_i_sectional": "s’allonge sur le canapé d’angle",
+    "wk_i_recliner": "s’installe dans le fauteuil",
+    "wk_i_ottoman": "pose les pieds sur le pouf",
+    "wk_i_tvstand": "prend la télécommande",
+    "wk_i_aquarium": "nourrit les poissons",
+    "wk_i_beanbag": "se laisse tomber dans le pouf",
+    "wk_i_speaker": "monte le son",
+    "wk_i_tablelamp": "allume la lampe",
+    "wk_i_desklamp": "allume la lampe de bureau",
+    "wk_i_vase": "arrange les fleurs",
+    "wk_i_candle": "allume une bougie",
+    "wk_i_books": "prend un livre",
+    "wk_i_frame": "regarde la photo",
+    "wk_i_basket": "regarde dans le panier",
+    "wk_i_monitor": "regarde l’écran",
+    "wk_i_succulent": "dépoussière la plante grasse",
+    "wk_i_herbs": "cueille du basilic",
+    "wk_i_palm": "arrose le palmier",
+    "wk_i_cactus": "admire le cactus",
+    "wk_i_flowers": "sent les fleurs",
+    "wk_i_arclamp": "allume le lampadaire",
+    "wk_i_cubeshelf": "range l’étagère",
+    "wk_i_cornershelf": "pose une plante sur l’étagère d’angle",
+    "wk_i_shoerack": "enlève ses chaussures",
+    "wk_i_coatrack": "accroche son manteau",
+    "wk_i_hood": "allume la hotte",
+    "wk_i_towelrail": "prend une serviette",
+    "wk_i_medicine": "prend une vitamine",
+    "wk_i_soundbar": "monte le volume",
+    "wk_i_console": "joue à un jeu vidéo",
+    "wk_i_pc": "allume l’ordinateur",
+    "wk_i_proscreen": "regarde un film sur grand écran",
+    "wk_i_recordplayer": "met un vinyle",
+    "wk_i_fan": "allume le ventilateur",
+    "wk_i_ac": "allume la climatisation",
+    "wk_i_grill": "allume le barbecue",
+    "wk_i_pool": "va nager",
+    "wk_i_patio": "déjeune dehors",
+    "wk_i_gardenbench": "s’assoit au jardin",
+    "wk_i_hottub": "se détend dans le spa",
+    "wk_i_dogbed": "caresse le chien",
+    "wk_i_cattree": "joue avec le chat",
+    "wk_i_hedge": "taille la haie",
+    "wk_i_flowerbed": "désherbe le parterre",
+    "ic_rooms": "Pièces, portes et escaliers",
+    "ic_living": "Salon",
+    "ic_bedroom": "Chambre et bureau",
+    "ic_kitchen": "Cuisine et salle à manger",
+    "ic_bath": "Salle de bain et buanderie",
+    "ic_decor": "Déco, plantes et luminaires",
+    "ic_walls": "Aux murs et rangement",
+    "ic_tech": "TV et électronique",
+    "ic_outdoor": "Terrain, allée et jardin",
+    "fl_ground": "Rez-de-chaussée",
+    "fl_up_name": "Étage",
+    "fl_upper": "Étage {n}",
+    "fl_lower": "Sous-sol {n}",
+    "wk_up": "{who} monte : {floor}.",
+    "wk_down": "{who} descend : {floor}.",
+    "wk_lift": "{who} prend l’ascenseur : {floor}.",
+    "wk_up_said": "En haut !",
+    "wk_down_said": "En bas !",
+    "v3_went_up": "En haut : {floor}",
+    "v3_went_down": "En bas : {floor}",
+    "v3_all_floors": "Tous les niveaux",
+    "v3_up_to": "Jusqu’à : {floor}",
+    "v3_floors_tip": "Montrer tous les niveaux, ou retirer ceux du dessus",
+    "fp_real": "Taille réelle",
+    "fp_depth": "Profondeur",
+    "fp_ceiling": "Plafond",
+    "lot_keep": "Reculs par rapport aux limites",
+    "lot_front": "Avant",
+    "lot_side": "Côtés",
+    "lot_back": "Arrière",
+    "lot_says": "Terrain {w} × {d} {unit} · {area}",
+    "lot_build": "Constructible : {w} × {d} {unit} · {area}",
+    "lot_house": "Maison {area}",
+    "lot_yard": "Jardin {area}",
+    "lot_front_is": "avant",
+    "lot_side_is": "latéral",
+    "lot_back_is": "arrière",
+    "ad_stairs_nowhere": "Ne mène encore nulle part : {what}. Dessinez l’étage du dessus à côté.",
+    "ad_fix_upstairs": "La faire monter à l’étage",
+    "ad_group_house": "La maison est faite de pièces séparées : mettez-la dans un Niveau pour la déplacer d’un bloc sur le terrain.",
+    "ad_fix_group": "La mettre dans un Niveau",
+    "ad_too_big": "La maison ({house}) est plus grande que la surface constructible ({room}).",
+    "ad_setback": "La maison dépasse le recul {side} de {by}.",
+    "ad_fix_move_in": "La ramener dans la limite",
+    "ad_no_driveway": "Rien ne mène à la porte du garage : ajoutez une allée.",
+    "ad_fix_driveway": "Ajouter une allée",
+    "hm_floors": "Dessinez chaque étage de la maison dans son propre Niveau, côte à côte : des escaliers au même endroit montent et descendent, en 3D aussi",
+    "hm_lot": "Placez un Terrain sous la maison et indiquez sa taille et ses reculs dans le panneau : il montre la surface constructible et le jardin",
+    "v3_roof": "Toit",
+    "v3_roof_tip": "Poser le toit, ou le soulever pour voir l’intérieur",
+    "v3_labels": "Étiquettes",
+    "v3_labels_tip": "Nommer les pièces et ce qu’elles contiennent",
+    "v3_2d": "2D",
+    "v3_3d": "3D",
+    "v3_2d_tip": "À plat, vu d’en haut, comme le plan",
+    "v3_3d_tip": "Le remettre debout en 3D",
+    "v3_hint_flat": "Glisser pour déplacer · molette pour zoomer",
+    "labels": "Étiquettes",
+    "labels_tip": "Nommer les meubles et les pièces sur un plan",
+    "rl_kitchen": "Cuisine",
+    "rl_bath": "Salle de bain",
+    "rl_bed": "Chambre",
+    "rl_laundry": "Buanderie",
+    "rl_garage": "Garage",
+    "rl_office": "Bureau",
+    "rl_dining": "Salle à manger",
+    "rl_living": "Salon",
 }
 
 speaks("fr", "Français", FR)

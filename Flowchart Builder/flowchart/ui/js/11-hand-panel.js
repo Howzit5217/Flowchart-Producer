@@ -156,6 +156,7 @@
   }
 
   function firstWords(kind) {
+    if (ICONS[kind]) { return iconFirstWords(kind); }   // its name, mostly (03-icons.js)
     if (endsKind(kind)) {                // an oval, or the rules' Start / End
       return hand.nodes.some(function (n) { return endsKind(n.kind); })
              ? TXT.end : TXT.start;
@@ -230,7 +231,9 @@
     // how big, and which way round
     var sizing = document.createElement("div");
     sizing.className = "trio";
-    [[TXT.width, "w", 30, 600], [TXT.height, "h", 24, 400],
+    // a plan piece is as small as a wall is thin, a lot as big as land is
+    var plan = ICONS[node.kind] && !isFigure(node.kind);
+    [[TXT.width, "w", plan ? 4 : 30, plan ? 20000 : 600], [TXT.height, "h", plan ? 4 : 24, plan ? 20000 : 400],
      [TXT.turn, "turn", 0, 359]].forEach(function (item) {
       var cell = document.createElement("label");
       cell.innerHTML = '<span>' + item[0] + "</span>";

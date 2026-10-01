@@ -188,7 +188,13 @@
     [[["click"]], "hm_rule"],            // the amber mark (13-hand-rules.js)
     [[["dblclick"]], "hm_type"],
     [[["rclick"], ["hold"]], "hm_menu"],
-    [[["ctrl", "wheel"], ["pinch"]], "hm_zoom"]
+    [[["ctrl", "wheel"], ["pinch"]], "hm_zoom"],
+    [[["click"], ["drag"]], "hm_icons"],     // the library (11-hand-icons.js)
+    [[["drag"]], "hm_room"],                 // a room carries its furniture (03-icons.js)
+    [[["drag"]], "hm_door"],                 // into the wall it is put by (snapToWalls)
+    [[["drag"]], "hm_floors"],               // a storey to a Floor, stairs between (38-walk.js)
+    [[["click"]], "hm_lot"],                 // a lot's size and setbacks (lotMeasure, 03-icons.js)
+    [[["click"]], "hm_run_as"]               // Run, as what the drawing is (37-board.js)
   ];
 
   function handHelp(button) {

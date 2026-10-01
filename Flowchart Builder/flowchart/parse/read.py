@@ -59,9 +59,12 @@ def lettered(items, letters=None):
         if exits:
             letter = next(letters, "?")
             item.landing = letter
+            if isinstance(item, Node):           # a landing standing on its own,
+                item.text = letter               #   at the foot of a module drawn
+                                                 #   where it is called (make/inline.py)
             for one in exits:
                 one.text = letter
-        for key in ("then", "orelse", "body"):
+        for key in ("head", "then", "orelse", "body"):
             lettered(getattr(item, key, None) or [], letters)
         for branch in getattr(item, "branches", None) or []:
             lettered(branch[1], letters)

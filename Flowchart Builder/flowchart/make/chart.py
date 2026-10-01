@@ -6,7 +6,22 @@ from ..draw.svg import to_svg
 from ..make.legend import with_legend
 from ..make.fit import fit_shape, paper_ratio
 from ..layout.columns import arrange, layout_chart
+from ..make.inline import one_chart
 from ..parse.read import parse_program
+
+
+def drawn_charts(charts):
+    """The charts as they are drawn: as they were read, or with every module
+    drawn where it is called when one chart was asked for.  Should drawing
+    them together trip over something, they are drawn apart, the way they
+    always were, rather than not drawn at all."""
+    if not settings.ONE_CHART:
+        return charts
+    try:
+        return one_chart(charts)
+    except (RecursionError, MemoryError, ValueError, TypeError, AttributeError,
+            IndexError, KeyError):
+        return charts
 
 
 def make_flowchart(text, title=None, author=None, max_h=settings.COLUMN_H,
@@ -19,6 +34,7 @@ def make_flowchart(text, title=None, author=None, max_h=settings.COLUMN_H,
     draws it and hands it to the runner from that one reading."""
     if charts is None:
         charts = parse_program(text)
+    charts = drawn_charts(charts)
     paper = paper_ratio(settings.SHAPE)              # square asked, square given
     if settings.SHAPE and not max_h:                 # let the shape pick the layout
         return to_svg(fit_shape(charts, settings.SHAPE), title, author, paper)
@@ -28,7 +44,7 @@ def make_flowchart(text, title=None, author=None, max_h=settings.COLUMN_H,
 
 def make_flowcharts(text, title=None, author=None, max_h=settings.COLUMN_H):
     """Whole program -> [(module name, SVG string), ...], one per module."""
-    charts = parse_program(text)
+    charts = drawn_charts(parse_program(text))
     paper = paper_ratio(settings.SHAPE)
     result = []
     for c in charts:
