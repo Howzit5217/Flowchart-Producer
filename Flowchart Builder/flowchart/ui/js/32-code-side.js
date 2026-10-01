@@ -1068,7 +1068,12 @@
 
   // `asked`: Build pressed, or asked for by its keys -- where what is wrong
   // with the code is put right (langAutoFix).
-  function readLangIn(asked) {
+  // `quiet`: read in because code was put in -- a file opened, dropped or
+  // pasted, a reload putting it back -- and not because anybody asked.
+  // Then what is wrong with it is not said: nothing is, until Build is
+  // pressed, which puts it right and says what it did.  Code that reads is
+  // drawn either way.
+  function readLangIn(asked, quiet) {
     if (!langBox() || !el("#code")) { return false; }
     langDetect();
     fixReportDrop();
@@ -1080,6 +1085,7 @@
     try {
       said = codeToPseudo(langAll(), langNow());
     } catch (err) {
+      if (quiet) { langSays("", []); return false; }
       langAutoFix(err, asked, again);
       return false;
     }
@@ -1093,7 +1099,7 @@
       showStarts();
       countLines();
     }
-    langSays("warn", said.notes.map(function (n) { return inFile(n.file, n.text); }));
+    langSays("warn", quiet ? [] : said.notes.map(function (n) { return inFile(n.file, n.text); }));
     return true;
   }
 
@@ -1111,9 +1117,11 @@
       var asked = langAsked, forced = langForced;
       langAsked = false;
       langForced = false;
-      if (byLang && langBox() &&
-          ((ev && ev.isTrusted) || asked || forced || langKey() !== langFrom)) {
-        if (!readLangIn((ev && ev.isTrusted) || asked)) {
+      var byPerson = (ev && ev.isTrusted) || asked;
+      if (byLang && langBox() && (byPerson || forced || langKey() !== langFrom)) {
+        // said out loud only when somebody asked: Build, its keys, or
+        // Translate (forced "say"); quiet when code was only put in
+        if (!readLangIn(byPerson, !byPerson && forced !== "say")) {
           langTranslating = null;        // nothing to translate from, as it stands
           return;
         }
@@ -1445,7 +1453,7 @@
       if (byLang && langBox() && langHasCode() &&
           (langKey() !== langFrom || !runnable())) {
         langTranslating = el("#see-code").value;
-        langForced = true;               // read in, not put right: that is Build's
+        langForced = "say";              // read in, not put right: that is Build's
         el("#build").click();            // read in and drawn; langBuilt goes on
         return;
       }
