@@ -257,12 +257,12 @@ FR = {
     "held_shared": "Déclaré hors de tout module, donc visible par chaque schéma",
     "held_none": "rien encore",
     "held_switch": "Montrer ce qu’il retient",
-    "tests_open": "Le tester",
-    "tests_tip": "Des tests à lui : ce qu’on tape et ce qu’il doit afficher",
-    "tests_head": "Tests",
+    "tests_open": "Cas de test",
+    "tests_tip": "Le vérifier avec les entrées de votre choix et la sortie attendue",
+    "tests_head": "Cas de test",
     "tests_one": "Test {n}",
-    "tests_typed": "Ce qu’on tape, une par ligne",
-    "tests_want": "Doit afficher, une ligne chacune",
+    "tests_typed": "Entrée, une par ligne",
+    "tests_want": "Sortie attendue, une par ligne",
     "tests_add": "Ajouter un test",
     "tests_run": "Lancer les tests",
     "tests_drop": "Retirer",
@@ -274,8 +274,6 @@ FR = {
     "tests_short": "Il a affiché {n} lignes, pas {m}.",
     "tests_long": "Il a affiché {n} lignes, pas {m}.",
     "tests_broke": "Il s’est arrêté sur une erreur.",
-    "graphs_on": "Graphique de ce qu’il affiche",
-    "graphs_tip": "Tracer un graphique sous une liste ou une suite de nombres que le programme affiche",
     "trace_open": "Table de trace",
     "trace_tip": "Chaque changement fait par l’exécution, pas à pas, en tableau",
     "trace_head": "Table de trace",
@@ -368,7 +366,7 @@ FR = {
     "lang_fix_change_at": "Remplacer {word} par {instead} à la ligne {line}",
     "lang_fix_indent": "Aligner la ligne {line}",
     "lang_fix_call": "En faire {name}(…)",
-    "lang_fixing": "Correction en cours",
+    "lang_fixing": "Correction des bugs et des problèmes",
     "lang_fixed_one": "1 erreur corrigée",
     "lang_fixed_many": "{n} erreurs corrigées",
     "lang_fixed_tip": "Voir ce qui n'allait pas et ce qui a été fait",
@@ -564,7 +562,6 @@ FR = {
     "e_add": "Additionner deux nombres",
     "e_oddeven": "Pair ou impair",
     "e_guess": "Devine le nombre",
-    "e_swap": "Échanger deux nombres",
     "e_factorial": "Une factorielle",
     "try_short": "Vous débutez ?",
     "try_go": "Essayer un exemple",
@@ -581,17 +578,15 @@ FR = {
     "e_weekday": "Quel jour de la semaine ?",
     "e_loan": "Rembourser un prêt",
     "e_rps": "Pierre, feuille, ciseaux",
-    "e_bands": "Des notes avec Select Case",
+    "e_library": "Emprunts à la bibliothèque",
+    "e_inventory": "Gestion du stock",
+    "e_tictactoe": "Morpion",
+    "e_weather": "Deux semaines de météo",
+    "e_sortsearch": "Trier et chercher des notes",
     "e_hailstone": "Les nombres grêlons",
-    "e_doubling": "Doubler sur un échiquier",
     "e_rainfall": "La pluie mois par mois",
     "e_savings": "L’épargne année après année",
     "e_classlist": "Une liste de classe en fiches",
-    "eg_l6": "Dans le style des examens",
-    "e_aqa": "Style AQA : un quiz de tables",
-    "e_ocr": "Style OCR : une liste de courses",
-    "e_cie": "Style Cambridge : notes et mentions",
-    "e_cietype": "Style Cambridge : des livres en fiches",
     # ---- a name for a program nobody named, from what it does (09-names.js)
     "d_rps": "Pierre, feuille, ciseaux",
     "d_weekday": "Jour de la semaine",
@@ -686,9 +681,8 @@ FR = {
     "e_fib": "Les nombres de Fibonacci",
     "e_change": "Dollars, dizaines et pennies",
     "e_quiz": "Un quiz de trois questions",
-    "e_sentinel": "Des nombres jusqu’à 0",
-    "e_picktable": "La table que tu veux",
     "eg_head": "Exemples",
+    "eg_lines": "{n} lignes",
     "eg_more": "Plus d’exemples",
     "eg_l1": "Premiers pas",
     "eg_l2": "Décisions et boucles",
@@ -864,20 +858,6 @@ FR = {
         Input b
         Display "Ensemble, ils font"
         Display a + b
-        Stop
-    """),
-    "e_swap_p": program("""
-        Start
-        Declare Integer a
-        Declare Integer b
-        Declare Integer copie
-        Input a
-        Input b
-        copie = a
-        a = b
-        b = copie
-        Display a
-        Display b
         Stop
     """),
     "e_decide_p": program("""
@@ -1424,43 +1404,6 @@ FR = {
             End If
         End Module
     """),
-    "e_sentinel_p": program("""
-        Start
-        Declare Integer n
-        Declare Integer total
-        Declare Integer combien
-        total = 0
-        combien = 0
-        Display "Des nombres, s'il te plaît. 0 pour finir."
-        Input n
-        While n <> 0
-            total = total + n
-            combien = combien + 1
-            Input n
-        End While
-        If combien > 0 Then
-            Display "La moyenne est"
-            Display total / combien
-        Else
-            Display "Rien dont faire la moyenne"
-        End If
-        Stop
-    """),
-    "e_picktable_p": program("""
-        Start
-        Declare Integer n
-        Display "Quelle table ? 0 pour arrêter."
-        Input n
-        While n > 0
-            For i = 1 To 12
-                Display n * i
-            End For
-            Display "Quelle table ? 0 pour arrêter."
-            Input n
-        End While
-        Display "Salut"
-        Stop
-    """),
     # ---- the examples: bigger projects
     "e_bank_p": program("""
         Start
@@ -1859,25 +1802,6 @@ FR = {
             End If
         End Function
     """),
-    "e_bands_p": program("""
-        Start
-        Declare Integer score
-        Display "Ton score sur 100 ?"
-        Input score
-        Select Case score
-            Case 90 To 100
-                Display "A : excellent"
-            Case 80 To 89
-                Display "B : très bien"
-            Case 70 To 79
-                Display "C : bien"
-            Case 60 To 69
-                Display "D : réussi"
-            Case Else
-                Display "F : pas encore réussi"
-        End Select
-        Stop
-    """),
     "e_hailstone_p": program("""
         Start
         Declare Integer n
@@ -1895,20 +1819,6 @@ FR = {
             Display n
         End While
         Display "Étapes pour arriver à 1 : ", etapes
-        Stop
-    """),
-    "e_doubling_p": program("""
-        Start
-        Declare Integer grains
-        Declare Integer total
-        grains = 1
-        total = 0
-        For numero = 1 To 16
-            Display grains
-            total = total + grains
-            grains = grains * 2
-        End For
-        Display "Grains sur les 16 premières cases : ", total
         Stop
     """),
     "e_rainfall_p": program("""
@@ -1999,106 +1909,362 @@ FR = {
             Return un
         End Function
     """),
-    "e_aqa_p": program("""
-        SUBROUTINE question(a, b)
-            OUTPUT "Combien font " + INT_TO_STRING(a) + " x " + INT_TO_STRING(b) + " ?"
-            reponse ← STRING_TO_INT(USERINPUT)
-            RETURN reponse = a * b
-        ENDSUBROUTINE
+    "e_library_p": program("""
+        Start
+        Declare Integer choix
+        Declare Integer place
+        Declare String titre
+        rayon = []
+        Call append(rayon, nouveauLivre("Le Petit Monde de Charlotte", "E. B. White"))
+        Call append(rayon, nouveauLivre("Hachette", "Gary Paulsen"))
+        Call append(rayon, nouveauLivre("Le Passage", "Louis Sachar"))
+        Call append(rayon, nouveauLivre("Wonder", "R. J. Palacio"))
+        Do
+            Display "1 voir les livres  2 emprunter  3 rendre  4 quitter"
+            Input choix
+            Select Case choix
+                Case 1
+                    Call montrerLivres(rayon)
+                Case 2
+                    Display "Quel titre veux-tu ?"
+                    Input titre
+                    place = chercherLivre(rayon, titre)
+                    If place = -1 Then
+                        Display "Il n'y a aucun livre appelé ", titre
+                    Else If rayon[place].sorti Then
+                        Display titre, " est déjà emprunté"
+                    Else
+                        rayon[place].sorti = True
+                        Display "Tu as emprunté ", rayon[place].titre
+                    End If
+                Case 3
+                    Display "Quel titre rends-tu ?"
+                    Input titre
+                    place = chercherLivre(rayon, titre)
+                    If place = -1 Then
+                        Display "Ce livre n'est pas de cette bibliothèque"
+                    Else If Not rayon[place].sorti Then
+                        Display rayon[place].titre, " n'était pas emprunté"
+                    Else
+                        rayon[place].sorti = False
+                        Display "Merci d'avoir rendu ", rayon[place].titre
+                    End If
+                Case 4
+                    Display "Au revoir"
+                Case Else
+                    Display "Choisis 1, 2, 3 ou 4"
+            End Select
+        Until choix = 4
+        Display "Livres encore empruntés : ", compterSortis(rayon)
+        Stop
 
-        score ← 0
-        table ← 7
-        FOR i ← 1 TO 5
-            IF question(table, i) THEN
-                score ← score + 1
-                OUTPUT "Juste"
-            ELSE
-                OUTPUT "C’est " + INT_TO_STRING(table * i)
-            ENDIF
-        ENDFOR
-        OUTPUT "Tu as " + INT_TO_STRING(score) + " sur 5"
-    """),
-    "e_ocr_p": program("""
-        array articles[4]
-        array prix[4]
-        articles[0] = "pain"
-        prix[0] = 1.20
-        articles[1] = "lait"
-        prix[1] = 0.95
-        articles[2] = "pommes"
-        prix[2] = 2.40
-        articles[3] = "fromage"
-        prix[3] = 3.10
-        total = 0
-        for i = 0 to 3
-            print(articles[i] + " : " + str(prix[i]))
-            total = total + prix[i]
-        next i
-        budget = float(input("Ton budget ?"))
-        if total <= budget then
-            print("Ça rentre dans ton budget")
-        else
-            print("Trop cher de " + str(total - budget))
-        endif
-    """),
-    "e_cie_p": program("""
-        DECLARE Notes : ARRAY[1:5] OF INTEGER
-        DECLARE Indice : INTEGER
-        DECLARE Total : INTEGER
-        Notes[1] ← 67
-        Notes[2] ← 84
-        Notes[3] ← 45
-        Notes[4] ← 92
-        Notes[5] ← 73
-        Total ← 0
-        FOR Indice ← 1 TO 5
-            Total ← Total + Notes[Indice]
-            OUTPUT "Élève ", Indice, " : ", Notes[Indice]
-        NEXT Indice
-        OUTPUT "Moyenne : ", Total / 5
-        FOR Indice ← 1 TO 5
-            CASE OF Notes[Indice]
-                90 TO 100 : OUTPUT "Élève ", Indice, " obtient A"
-                70 TO 89 : OUTPUT "Élève ", Indice, " obtient B"
-                50 TO 69 : OUTPUT "Élève ", Indice, " obtient C"
-                OTHERWISE : OUTPUT "Élève ", Indice, " obtient U"
-            ENDCASE
-        NEXT Indice
-    """),
-    "e_cietype_p": program("""
-        TYPE Livre
-            DECLARE Titre : STRING
-            DECLARE Pages : INTEGER
-        ENDTYPE
-        DECLARE Etagere : ARRAY[1:3] OF Livre
-        DECLARE Indice : INTEGER
-        Etagere[1].Titre ← "Dune"
-        Etagere[1].Pages ← 412
-        Etagere[2].Titre ← "Emma"
-        Etagere[2].Pages ← 474
-        Etagere[3].Titre ← "Holes"
-        Etagere[3].Pages ← 233
-        FOR Indice ← 1 TO 3
-            CALL MontrerLivre(Etagere[Indice])
-        NEXT Indice
-        OUTPUT "Le plus long : ", PlusLong(Etagere)
+        Function nouveauLivre(titre, auteur)
+            un = New Livre
+            un.titre = titre
+            un.auteur = auteur
+            un.sorti = False
+            Return un
+        End Function
 
-        PROCEDURE MontrerLivre(L : Livre)
-            OUTPUT L.Titre, " : ", L.Pages
-        ENDPROCEDURE
+        Function Integer chercherLivre(livres, titre)
+            For i = 0 To length(livres) - 1
+                If toLower(livres[i].titre) = toLower(titre) Then
+                    Return i
+                End If
+            End For
+            Return -1
+        End Function
 
-        FUNCTION PlusLong(Livres : ARRAY OF Livre) RETURNS STRING
-            DECLARE Meilleur : INTEGER
-            DECLARE Indice : INTEGER
-            Meilleur ← 1
-            FOR Indice ← 2 TO 3
-                IF Livres[Indice].Pages > Livres[Meilleur].Pages
-                    THEN
-                        Meilleur ← Indice
-                ENDIF
-            NEXT Indice
-            RETURN Livres[Meilleur].Titre
-        ENDFUNCTION
+        Module montrerLivres(livres)
+            For Each l In livres
+                If l.sorti Then
+                    Display l.titre, " de ", l.auteur, " (emprunté)"
+                Else
+                    Display l.titre, " de ", l.auteur, " (en rayon)"
+                End If
+            End For
+        End Module
+
+        Function Integer compterSortis(livres)
+            Declare Integer n
+            n = 0
+            For Each l In livres
+                If l.sorti Then
+                    n = n + 1
+                End If
+            End For
+            Return n
+        End Function
+    """),
+    "e_inventory_p": program("""
+        Start
+        Declare Integer choix
+        Declare Integer quantite
+        Declare String article
+        stock = {"pommes": 40, "pain": 12, "lait": 6, "oeufs": 30}
+        prix = {"pommes": 0.5, "pain": 2.25, "lait": 3.1, "oeufs": 0.3}
+        Do
+            Display "1 voir le stock  2 vendre  3 réapprovisionner  4 quitter"
+            Input choix
+            Select Case choix
+                Case 1
+                    Call montrerStock(stock, prix)
+                Case 2
+                    Display "Vendre quel article ?"
+                    Input article
+                    If Not existe(stock, article) Then
+                        Display "Nous ne vendons pas de ", article
+                    Else
+                        Display "Combien ?"
+                        Input quantite
+                        If quantite <= 0 Then
+                            Display "Vends-en au moins un"
+                        Else If quantite > stock[article] Then
+                            Display "Il n'en reste que ", stock[article]
+                        Else
+                            stock[article] = stock[article] - quantite
+                            Display "Vendu ", quantite, " ", article, " pour $", round(quantite * prix[article], 2)
+                        End If
+                    End If
+                Case 3
+                    Display "Réapprovisionner quel article ?"
+                    Input article
+                    If Not existe(stock, article) Then
+                        Display "Nous ne vendons pas de ", article
+                    Else
+                        Display "Combien en sont arrivés ?"
+                        Input quantite
+                        If quantite <= 0 Then
+                            Display "Une livraison en a au moins un"
+                        Else
+                            stock[article] = stock[article] + quantite
+                            Display "Il y a maintenant ", stock[article], " ", article
+                        End If
+                    End If
+                Case 4
+                    Display "On ferme"
+                Case Else
+                    Display "Choisis 1, 2, 3 ou 4"
+            End Select
+        Until choix = 4
+        Display "Le stock vaut $", valeur(stock, prix)
+        Stop
+
+        Module montrerStock(stock, prix)
+            For Each nom In stock
+                If stock[nom] < 10 Then
+                    Display nom, " : ", stock[nom], " à $", prix[nom], " -- bientôt épuisé"
+                Else
+                    Display nom, " : ", stock[nom], " à $", prix[nom]
+                End If
+            End For
+        End Module
+
+        Function Boolean existe(stock, article)
+            For Each nom In stock
+                If nom = article Then
+                    Return True
+                End If
+            End For
+            Return False
+        End Function
+
+        Function Real valeur(stock, prix)
+            Declare Real total
+            total = 0
+            For Each nom In stock
+                total = total + stock[nom] * prix[nom]
+            End For
+            Return round(total, 2)
+        End Function
+    """),
+    "e_tictactoe_p": program("""
+        Start
+        Declare Integer coup
+        Declare Integer tours
+        Declare String joueur
+        Declare String gagnant
+        plateau = [" ", " ", " ", " ", " ", " ", " ", " ", " "]
+        joueur = "X"
+        gagnant = ""
+        tours = 0
+        While gagnant = "" And tours < 9
+            Call montrerPlateau(plateau)
+            Display "Joueur ", joueur, ", choisis une case de 1 à 9"
+            Input coup
+            While coup < 1 Or coup > 9
+                Display "Les cases vont de 1 à 9"
+                Input coup
+            End While
+            If plateau[coup - 1] <> " " Then
+                Display "Cette case est déjà prise"
+            Else
+                plateau[coup - 1] = joueur
+                tours = tours + 1
+                If aGagne(plateau, joueur) Then
+                    gagnant = joueur
+                Else If joueur = "X" Then
+                    joueur = "O"
+                Else
+                    joueur = "X"
+                End If
+            End If
+        End While
+        Call montrerPlateau(plateau)
+        If gagnant = "" Then
+            Display "Match nul"
+        Else
+            Display "Le joueur ", gagnant, " gagne !"
+        End If
+        Stop
+
+        Module montrerPlateau(cases)
+            For ligne = 0 To 2
+                Display " ", cases[ligne * 3], " | ", cases[ligne * 3 + 1], " | ", cases[ligne * 3 + 2]
+                If ligne < 2 Then
+                    Display "---+---+---"
+                End If
+            End For
+        End Module
+
+        Function Boolean aGagne(cases, marque)
+            lignes = [[0, 1, 2], [3, 4, 5], [6, 7, 8], [0, 3, 6], [1, 4, 7], [2, 5, 8], [0, 4, 8], [2, 4, 6]]
+            For Each trois In lignes
+                If cases[trois[0]] = marque And cases[trois[1]] = marque And cases[trois[2]] = marque Then
+                    Return True
+                End If
+            End For
+            Return False
+        End Function
+    """),
+    "e_weather_p": program("""
+        Start
+        Declare Real moyenne
+        Declare Integer auDessus
+        Declare Integer serie
+        Declare Integer plusLongue
+        maximales = [61, 64, 70, 73, 69, 66, 72, 78, 81, 79, 75, 68, 63, 67]
+        Display "Maximales du jour : ", maximales
+        moyenne = moyenneDe(maximales)
+        Display "Maximale moyenne : ", round(moyenne, 1)
+        Display "Jour le plus chaud : ", plusGrand(maximales), "   Jour le plus frais : ", plusPetit(maximales)
+        auDessus = 0
+        serie = 0
+        plusLongue = 0
+        For jour = 1 To length(maximales)
+            If maximales[jour - 1] > moyenne Then
+                auDessus = auDessus + 1
+                serie = serie + 1
+                If serie > plusLongue Then
+                    plusLongue = serie
+                End If
+            Else
+                serie = 0
+            End If
+            Display "Jour ", jour, " : ", barre(maximales[jour - 1]), " ", maximales[jour - 1]
+        End For
+        Display auDessus, " jours ont été plus chauds que la moyenne"
+        Display "La plus longue période chaude a duré ", plusLongue, " jours"
+        Stop
+
+        Function Real moyenneDe(valeurs)
+            Declare Real total
+            total = 0
+            For Each v In valeurs
+                total = total + v
+            End For
+            Return total / length(valeurs)
+        End Function
+
+        Function Integer plusGrand(valeurs)
+            Declare Integer meilleur
+            meilleur = valeurs[0]
+            For Each v In valeurs
+                If v > meilleur Then
+                    meilleur = v
+                End If
+            End For
+            Return meilleur
+        End Function
+
+        Function Integer plusPetit(valeurs)
+            Declare Integer meilleur
+            meilleur = valeurs[0]
+            For Each v In valeurs
+                If v < meilleur Then
+                    meilleur = v
+                End If
+            End For
+            Return meilleur
+        End Function
+
+        Function String barre(Integer degres)
+            Declare String etoiles
+            etoiles = ""
+            For i = 1 To degres div 5
+                etoiles = etoiles + "*"
+            End For
+            Return etoiles
+        End Function
+    """),
+    "e_sortsearch_p": program("""
+        Start
+        Declare Integer cible
+        Declare Integer place
+        Declare Integer echanges
+        notes = [72, 95, 64, 88, 79, 91, 57, 83]
+        Display "Notes dans l'ordre d'arrivée : ", notes
+        echanges = triBulles(notes)
+        Display "Triées : ", notes
+        Display "Le tri a demandé ", echanges, " échanges"
+        Display "Quelle note dois-je chercher ?"
+        Input cible
+        place = rechercheDichotomique(notes, cible)
+        If place = -1 Then
+            Display cible, " ne fait pas partie des notes"
+        Else
+            Display cible, " est la numéro ", place + 1, " sur ", length(notes), " en partant du bas"
+        End If
+        Stop
+
+        Function Integer triBulles(valeurs)
+            Declare Integer echanges
+            Declare Integer tampon
+            Declare Boolean echange
+            echanges = 0
+            Do
+                echange = False
+                For i = 0 To length(valeurs) - 2
+                    If valeurs[i] > valeurs[i + 1] Then
+                        tampon = valeurs[i]
+                        valeurs[i] = valeurs[i + 1]
+                        valeurs[i + 1] = tampon
+                        echanges = echanges + 1
+                        echange = True
+                    End If
+                End For
+            Until Not echange
+            Return echanges
+        End Function
+
+        Function Integer rechercheDichotomique(valeurs, cible)
+            Declare Integer bas
+            Declare Integer haut
+            Declare Integer milieu
+            bas = 0
+            haut = length(valeurs) - 1
+            While bas <= haut
+                milieu = (bas + haut) div 2
+                If valeurs[milieu] = cible Then
+                    Return milieu
+                Else If valeurs[milieu] < cible Then
+                    bas = milieu + 1
+                Else
+                    haut = milieu - 1
+                End If
+            End While
+            Return -1
+        End Function
     """),
     # ---- the puzzles: find the fault
     "z_else_p": program("""

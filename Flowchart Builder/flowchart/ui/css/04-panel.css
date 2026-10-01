@@ -1316,11 +1316,14 @@
   .trace-page .tape-chart { margin: 0 0 12px; max-width: 720px; border: 1px solid var(--line-soft);
     border-radius: 8px; padding: 8px 10px 6px; background: var(--panel); }
   /* the Run card's switch for them: its name, and the switch at the far end */
-  #runner .graphs-switch { justify-content: space-between; margin: 8px 0 2px; }
 
   /* Tests of the program's own (34-tests.js): a card each, what is typed
      in beside what it should print, green or red once run. */
-  .tests-row { display: flex; justify-content: flex-end; margin-top: 6px; }
+  /* Test Cases: under Run, the width of the card like it, quieter than it */
+  .tests-row { margin-top: 8px; }
+  #tests-open { display: flex; align-items: center; justify-content: center; gap: 8px; }
+  #tests-open svg { width: 16px; height: 16px; flex: none; fill: none; stroke: currentColor;
+                    stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
   #tests-body { display: flex; flex-direction: column; gap: 12px; padding-top: 14px; }
   .test-card {
     border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px;

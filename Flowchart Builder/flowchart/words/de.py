@@ -255,14 +255,14 @@ DE = {
     "held_shared": "Außerhalb aller Module deklariert, also für jedes Diagramm sichtbar",
     "held_none": "noch nichts",
     "held_switch": "Zeigen, was es gerade hält",
-    "tests_open": "Testen",
-    "tests_tip": "Eigene Tests: was eingegeben wird und was herauskommen soll",
-    "tests_head": "Tests",
+    "tests_open": "Testfälle",
+    "tests_tip": "Mit selbst gewählten Eingaben und der erwarteten Ausgabe prüfen",
+    "tests_head": "Testfälle",
     "tests_one": "Test {n}",
-    "tests_typed": "Eingaben, eine pro Zeile",
-    "tests_want": "Soll ausgeben, Zeile für Zeile",
+    "tests_typed": "Eingabe, eine pro Zeile",
+    "tests_want": "Erwartete Ausgabe, eine pro Zeile",
     "tests_add": "Test hinzufügen",
-    "tests_run": "Tests starten",
+    "tests_run": "Tests ausführen",
     "tests_drop": "Entfernen",
     "tests_pass": "Bestanden",
     "tests_fail": "Nicht bestanden",
@@ -272,8 +272,6 @@ DE = {
     "tests_short": "Es kamen {n} Zeilen statt {m}.",
     "tests_long": "Es kamen {n} Zeilen statt {m}.",
     "tests_broke": "Es hielt mit einem Fehler an.",
-    "graphs_on": "Ausgaben als Diagramm",
-    "graphs_tip": "Unter einer Liste oder Reihe von Zahlen, die das Programm ausgibt, ein Diagramm zeichnen",
     "trace_open": "Ablauftabelle",
     "trace_tip": "Jede Änderung des Laufs, Schritt für Schritt, als Tabelle",
     "trace_head": "Ablauftabelle",
@@ -366,7 +364,7 @@ DE = {
     "lang_fix_change_at": "{word} in Zeile {line} in {instead} ändern",
     "lang_fix_indent": "Zeile {line} ausrichten",
     "lang_fix_call": "{name}(…) daraus machen",
-    "lang_fixing": "Wird behoben",
+    "lang_fixing": "Fehler und Probleme werden behoben",
     "lang_fixed_one": "1 Fehler behoben",
     "lang_fixed_many": "{n} Fehler behoben",
     "lang_fixed_tip": "Sehen, was falsch war und was dagegen getan wurde",
@@ -562,7 +560,6 @@ DE = {
     "e_add": "Zwei Zahlen addieren",
     "e_oddeven": "Gerade oder ungerade",
     "e_guess": "Zahl raten",
-    "e_swap": "Zwei Zahlen tauschen",
     "e_factorial": "Eine Fakultät",
     "try_short": "Neu hier?",
     "try_go": "Beispiel ausprobieren",
@@ -579,17 +576,15 @@ DE = {
     "e_weekday": "Welcher Wochentag?",
     "e_loan": "Einen Kredit abbezahlen",
     "e_rps": "Schere, Stein, Papier",
-    "e_bands": "Noten mit Select Case",
+    "e_library": "Bibliotheksausleihe",
+    "e_inventory": "Lagerverwaltung",
+    "e_tictactoe": "Tic-Tac-Toe",
+    "e_weather": "Zwei Wochen Wetter",
+    "e_sortsearch": "Punkte sortieren und suchen",
     "e_hailstone": "Hagelkornzahlen",
-    "e_doubling": "Verdoppeln auf dem Schachbrett",
     "e_rainfall": "Regen Monat für Monat",
     "e_savings": "Ersparnisse Jahr für Jahr",
     "e_classlist": "Eine Klassenliste aus Datensätzen",
-    "eg_l6": "Im Stil der Prüfungsämter",
-    "e_aqa": "AQA-Stil: ein Einmaleins-Quiz",
-    "e_ocr": "OCR-Stil: eine Einkaufsliste",
-    "e_cie": "Cambridge-Stil: Punkte und Noten",
-    "e_cietype": "Cambridge-Stil: Bücher als Datensätze",
     # ---- a name for a program nobody named, from what it does (09-names.js)
     "d_rps": "Schere, Stein, Papier",
     "d_weekday": "Wochentag",
@@ -684,9 +679,8 @@ DE = {
     "e_fib": "Die Fibonacci-Zahlen",
     "e_change": "Dollar, Zehner und Pennies",
     "e_quiz": "Ein Quiz mit drei Fragen",
-    "e_sentinel": "Zahlen, bis 0 kommt",
-    "e_picktable": "Jede Reihe, die du willst",
     "eg_head": "Beispiele",
+    "eg_lines": "{n} Zeilen",
     "eg_more": "Mehr Beispiele",
     "eg_l1": "Erste Schritte",
     "eg_l2": "Entscheidungen und Schleifen",
@@ -862,20 +856,6 @@ DE = {
         Input b
         Display "Zusammen ergeben sie"
         Display a + b
-        Stop
-    """),
-    "e_swap_p": program("""
-        Start
-        Declare Integer a
-        Declare Integer b
-        Declare Integer merker
-        Input a
-        Input b
-        merker = a
-        a = b
-        b = merker
-        Display a
-        Display b
         Stop
     """),
     "e_decide_p": program("""
@@ -1422,43 +1402,6 @@ DE = {
             End If
         End Module
     """),
-    "e_sentinel_p": program("""
-        Start
-        Declare Integer n
-        Declare Integer summe
-        Declare Integer anzahl
-        summe = 0
-        anzahl = 0
-        Display "Bitte Zahlen. 0 zum Beenden."
-        Input n
-        While n <> 0
-            summe = summe + n
-            anzahl = anzahl + 1
-            Input n
-        End While
-        If anzahl > 0 Then
-            Display "Der Durchschnitt ist"
-            Display summe / anzahl
-        Else
-            Display "Nichts, wovon man den Durchschnitt nehmen kann"
-        End If
-        Stop
-    """),
-    "e_picktable_p": program("""
-        Start
-        Declare Integer n
-        Display "Welche Reihe? 0 zum Aufhören."
-        Input n
-        While n > 0
-            For i = 1 To 12
-                Display n * i
-            End For
-            Display "Welche Reihe? 0 zum Aufhören."
-            Input n
-        End While
-        Display "Tschüss"
-        Stop
-    """),
     # ---- the examples: bigger projects
     "e_bank_p": program("""
         Start
@@ -1857,25 +1800,6 @@ DE = {
             End If
         End Function
     """),
-    "e_bands_p": program("""
-        Start
-        Declare Integer punkte
-        Display "Deine Punkte von 100?"
-        Input punkte
-        Select Case punkte
-            Case 90 To 100
-                Display "A: ausgezeichnet"
-            Case 80 To 89
-                Display "B: sehr gut"
-            Case 70 To 79
-                Display "C: gut"
-            Case 60 To 69
-                Display "D: bestanden"
-            Case Else
-                Display "F: noch nicht bestanden"
-        End Select
-        Stop
-    """),
     "e_hailstone_p": program("""
         Start
         Declare Integer n
@@ -1893,20 +1817,6 @@ DE = {
             Display n
         End While
         Display "Schritte bis 1: ", schritte
-        Stop
-    """),
-    "e_doubling_p": program("""
-        Start
-        Declare Integer koerner
-        Declare Integer summe
-        koerner = 1
-        summe = 0
-        For feld = 1 To 16
-            Display koerner
-            summe = summe + koerner
-            koerner = koerner * 2
-        End For
-        Display "Körner auf den ersten 16 Feldern: ", summe
         Stop
     """),
     "e_rainfall_p": program("""
@@ -1997,106 +1907,362 @@ DE = {
             Return einer
         End Function
     """),
-    "e_aqa_p": program("""
-        SUBROUTINE frage(a, b)
-            OUTPUT "Was ist " + INT_TO_STRING(a) + " x " + INT_TO_STRING(b) + "?"
-            antwort ← STRING_TO_INT(USERINPUT)
-            RETURN antwort = a * b
-        ENDSUBROUTINE
+    "e_library_p": program("""
+        Start
+        Declare Integer wahl
+        Declare Integer stelle
+        Declare String titel
+        regal = []
+        Call append(regal, neuesBuch("Wilbur und Charlotte", "E. B. White"))
+        Call append(regal, neuesBuch("Allein in der Wildnis", "Gary Paulsen"))
+        Call append(regal, neuesBuch("Löcher", "Louis Sachar"))
+        Call append(regal, neuesBuch("Wunder", "R. J. Palacio"))
+        Do
+            Display "1 Bücher zeigen  2 ausleihen  3 zurückgeben  4 beenden"
+            Input wahl
+            Select Case wahl
+                Case 1
+                    Call buecherZeigen(regal)
+                Case 2
+                    Display "Welchen Titel möchtest du?"
+                    Input titel
+                    stelle = buchSuchen(regal, titel)
+                    If stelle = -1 Then
+                        Display "Es gibt kein Buch namens ", titel
+                    Else If regal[stelle].ausgeliehen Then
+                        Display titel, " ist schon ausgeliehen"
+                    Else
+                        regal[stelle].ausgeliehen = True
+                        Display "Du hast ausgeliehen: ", regal[stelle].titel
+                    End If
+                Case 3
+                    Display "Welchen Titel gibst du zurück?"
+                    Input titel
+                    stelle = buchSuchen(regal, titel)
+                    If stelle = -1 Then
+                        Display "Dieses Buch gehört nicht dieser Bibliothek"
+                    Else If Not regal[stelle].ausgeliehen Then
+                        Display regal[stelle].titel, " war nicht ausgeliehen"
+                    Else
+                        regal[stelle].ausgeliehen = False
+                        Display "Danke für die Rückgabe von ", regal[stelle].titel
+                    End If
+                Case 4
+                    Display "Auf Wiedersehen"
+                Case Else
+                    Display "Wähle 1, 2, 3 oder 4"
+            End Select
+        Until wahl = 4
+        Display "Noch ausgeliehene Bücher: ", ausgeliehene(regal)
+        Stop
 
-        punkte ← 0
-        reihe ← 7
-        FOR i ← 1 TO 5
-            IF frage(reihe, i) THEN
-                punkte ← punkte + 1
-                OUTPUT "Richtig"
-            ELSE
-                OUTPUT "Es ist " + INT_TO_STRING(reihe * i)
-            ENDIF
-        ENDFOR
-        OUTPUT "Du hast " + INT_TO_STRING(punkte) + " von 5"
-    """),
-    "e_ocr_p": program("""
-        array waren[4]
-        array preise[4]
-        waren[0] = "Brot"
-        preise[0] = 1.20
-        waren[1] = "Milch"
-        preise[1] = 0.95
-        waren[2] = "Äpfel"
-        preise[2] = 2.40
-        waren[3] = "Käse"
-        preise[3] = 3.10
-        summe = 0
-        for i = 0 to 3
-            print(waren[i] + ": " + str(preise[i]))
-            summe = summe + preise[i]
-        next i
-        budget = float(input("Dein Budget?"))
-        if summe <= budget then
-            print("Das passt in dein Budget")
-        else
-            print("Zu viel um " + str(summe - budget))
-        endif
-    """),
-    "e_cie_p": program("""
-        DECLARE Punkte : ARRAY[1:5] OF INTEGER
-        DECLARE Index : INTEGER
-        DECLARE Summe : INTEGER
-        Punkte[1] ← 67
-        Punkte[2] ← 84
-        Punkte[3] ← 45
-        Punkte[4] ← 92
-        Punkte[5] ← 73
-        Summe ← 0
-        FOR Index ← 1 TO 5
-            Summe ← Summe + Punkte[Index]
-            OUTPUT "Schüler ", Index, ": ", Punkte[Index]
-        NEXT Index
-        OUTPUT "Durchschnitt: ", Summe / 5
-        FOR Index ← 1 TO 5
-            CASE OF Punkte[Index]
-                90 TO 100 : OUTPUT "Schüler ", Index, " bekommt A"
-                70 TO 89 : OUTPUT "Schüler ", Index, " bekommt B"
-                50 TO 69 : OUTPUT "Schüler ", Index, " bekommt C"
-                OTHERWISE : OUTPUT "Schüler ", Index, " bekommt U"
-            ENDCASE
-        NEXT Index
-    """),
-    "e_cietype_p": program("""
-        TYPE Buch
-            DECLARE Titel : STRING
-            DECLARE Seiten : INTEGER
-        ENDTYPE
-        DECLARE Regal : ARRAY[1:3] OF Buch
-        DECLARE Index : INTEGER
-        Regal[1].Titel ← "Dune"
-        Regal[1].Seiten ← 412
-        Regal[2].Titel ← "Emma"
-        Regal[2].Seiten ← 474
-        Regal[3].Titel ← "Holes"
-        Regal[3].Seiten ← 233
-        FOR Index ← 1 TO 3
-            CALL ZeigeBuch(Regal[Index])
-        NEXT Index
-        OUTPUT "Das längste: ", Laengstes(Regal)
+        Function neuesBuch(titel, autor)
+            eines = New Buch
+            eines.titel = titel
+            eines.autor = autor
+            eines.ausgeliehen = False
+            Return eines
+        End Function
 
-        PROCEDURE ZeigeBuch(B : Buch)
-            OUTPUT B.Titel, ": ", B.Seiten
-        ENDPROCEDURE
+        Function Integer buchSuchen(buecher, titel)
+            For i = 0 To length(buecher) - 1
+                If toLower(buecher[i].titel) = toLower(titel) Then
+                    Return i
+                End If
+            End For
+            Return -1
+        End Function
 
-        FUNCTION Laengstes(Buecher : ARRAY OF Buch) RETURNS STRING
-            DECLARE Bestes : INTEGER
-            DECLARE Index : INTEGER
-            Bestes ← 1
-            FOR Index ← 2 TO 3
-                IF Buecher[Index].Seiten > Buecher[Bestes].Seiten
-                    THEN
-                        Bestes ← Index
-                ENDIF
-            NEXT Index
-            RETURN Buecher[Bestes].Titel
-        ENDFUNCTION
+        Module buecherZeigen(buecher)
+            For Each b In buecher
+                If b.ausgeliehen Then
+                    Display b.titel, " von ", b.autor, " (ausgeliehen)"
+                Else
+                    Display b.titel, " von ", b.autor, " (im Regal)"
+                End If
+            End For
+        End Module
+
+        Function Integer ausgeliehene(buecher)
+            Declare Integer n
+            n = 0
+            For Each b In buecher
+                If b.ausgeliehen Then
+                    n = n + 1
+                End If
+            End For
+            Return n
+        End Function
+    """),
+    "e_inventory_p": program("""
+        Start
+        Declare Integer wahl
+        Declare Integer menge
+        Declare String ware
+        lager = {"Äpfel": 40, "Brot": 12, "Milch": 6, "Eier": 30}
+        preise = {"Äpfel": 0.5, "Brot": 2.25, "Milch": 3.1, "Eier": 0.3}
+        Do
+            Display "1 Lager zeigen  2 verkaufen  3 nachfüllen  4 beenden"
+            Input wahl
+            Select Case wahl
+                Case 1
+                    Call lagerZeigen(lager, preise)
+                Case 2
+                    Display "Welche Ware verkaufen?"
+                    Input ware
+                    If Not gibtEs(lager, ware) Then
+                        Display "Das führen wir nicht: ", ware
+                    Else
+                        Display "Wie viele?"
+                        Input menge
+                        If menge <= 0 Then
+                            Display "Verkaufe mindestens eins"
+                        Else If menge > lager[ware] Then
+                            Display "Nur noch ", lager[ware], " da"
+                        Else
+                            lager[ware] = lager[ware] - menge
+                            Display "Verkauft: ", menge, " ", ware, " für $", round(menge * preise[ware], 2)
+                        End If
+                    End If
+                Case 3
+                    Display "Welche Ware nachfüllen?"
+                    Input ware
+                    If Not gibtEs(lager, ware) Then
+                        Display "Das führen wir nicht: ", ware
+                    Else
+                        Display "Wie viele sind gekommen?"
+                        Input menge
+                        If menge <= 0 Then
+                            Display "Eine Lieferung hat mindestens eins"
+                        Else
+                            lager[ware] = lager[ware] + menge
+                            Display "Jetzt sind es ", lager[ware], " ", ware
+                        End If
+                    End If
+                Case 4
+                    Display "Feierabend"
+                Case Else
+                    Display "Wähle 1, 2, 3 oder 4"
+            End Select
+        Until wahl = 4
+        Display "Der Bestand ist $", wert(lager, preise), " wert"
+        Stop
+
+        Module lagerZeigen(lager, preise)
+            For Each name In lager
+                If lager[name] < 10 Then
+                    Display name, ": ", lager[name], " für $", preise[name], " -- wird knapp"
+                Else
+                    Display name, ": ", lager[name], " für $", preise[name]
+                End If
+            End For
+        End Module
+
+        Function Boolean gibtEs(lager, ware)
+            For Each name In lager
+                If name = ware Then
+                    Return True
+                End If
+            End For
+            Return False
+        End Function
+
+        Function Real wert(lager, preise)
+            Declare Real summe
+            summe = 0
+            For Each name In lager
+                summe = summe + lager[name] * preise[name]
+            End For
+            Return round(summe, 2)
+        End Function
+    """),
+    "e_tictactoe_p": program("""
+        Start
+        Declare Integer zug
+        Declare Integer zuege
+        Declare String spieler
+        Declare String sieger
+        brett = [" ", " ", " ", " ", " ", " ", " ", " ", " "]
+        spieler = "X"
+        sieger = ""
+        zuege = 0
+        While sieger = "" And zuege < 9
+            Call brettZeigen(brett)
+            Display "Spieler ", spieler, ", wähle ein Feld von 1 bis 9"
+            Input zug
+            While zug < 1 Or zug > 9
+                Display "Die Felder gehen von 1 bis 9"
+                Input zug
+            End While
+            If brett[zug - 1] <> " " Then
+                Display "Das Feld ist schon besetzt"
+            Else
+                brett[zug - 1] = spieler
+                zuege = zuege + 1
+                If hatGewonnen(brett, spieler) Then
+                    sieger = spieler
+                Else If spieler = "X" Then
+                    spieler = "O"
+                Else
+                    spieler = "X"
+                End If
+            End If
+        End While
+        Call brettZeigen(brett)
+        If sieger = "" Then
+            Display "Unentschieden"
+        Else
+            Display "Spieler ", sieger, " gewinnt!"
+        End If
+        Stop
+
+        Module brettZeigen(felder)
+            For reihe = 0 To 2
+                Display " ", felder[reihe * 3], " | ", felder[reihe * 3 + 1], " | ", felder[reihe * 3 + 2]
+                If reihe < 2 Then
+                    Display "---+---+---"
+                End If
+            End For
+        End Module
+
+        Function Boolean hatGewonnen(felder, zeichen)
+            reihen = [[0, 1, 2], [3, 4, 5], [6, 7, 8], [0, 3, 6], [1, 4, 7], [2, 5, 8], [0, 4, 8], [2, 4, 6]]
+            For Each drei In reihen
+                If felder[drei[0]] = zeichen And felder[drei[1]] = zeichen And felder[drei[2]] = zeichen Then
+                    Return True
+                End If
+            End For
+            Return False
+        End Function
+    """),
+    "e_weather_p": program("""
+        Start
+        Declare Real schnitt
+        Declare Integer darueber
+        Declare Integer serie
+        Declare Integer laengste
+        hoechstwerte = [61, 64, 70, 73, 69, 66, 72, 78, 81, 79, 75, 68, 63, 67]
+        Display "Tageshöchstwerte: ", hoechstwerte
+        schnitt = mittel(hoechstwerte)
+        Display "Durchschnitt: ", round(schnitt, 1)
+        Display "Wärmster Tag: ", groesster(hoechstwerte), "   Kühlster Tag: ", kleinster(hoechstwerte)
+        darueber = 0
+        serie = 0
+        laengste = 0
+        For tag = 1 To length(hoechstwerte)
+            If hoechstwerte[tag - 1] > schnitt Then
+                darueber = darueber + 1
+                serie = serie + 1
+                If serie > laengste Then
+                    laengste = serie
+                End If
+            Else
+                serie = 0
+            End If
+            Display "Tag ", tag, ": ", balken(hoechstwerte[tag - 1]), " ", hoechstwerte[tag - 1]
+        End For
+        Display darueber, " Tage waren wärmer als der Durchschnitt"
+        Display "Die längste warme Phase dauerte ", laengste, " Tage"
+        Stop
+
+        Function Real mittel(werte)
+            Declare Real summe
+            summe = 0
+            For Each w In werte
+                summe = summe + w
+            End For
+            Return summe / length(werte)
+        End Function
+
+        Function Integer groesster(werte)
+            Declare Integer bester
+            bester = werte[0]
+            For Each w In werte
+                If w > bester Then
+                    bester = w
+                End If
+            End For
+            Return bester
+        End Function
+
+        Function Integer kleinster(werte)
+            Declare Integer bester
+            bester = werte[0]
+            For Each w In werte
+                If w < bester Then
+                    bester = w
+                End If
+            End For
+            Return bester
+        End Function
+
+        Function String balken(Integer grad)
+            Declare String sterne
+            sterne = ""
+            For i = 1 To grad div 5
+                sterne = sterne + "*"
+            End For
+            Return sterne
+        End Function
+    """),
+    "e_sortsearch_p": program("""
+        Start
+        Declare Integer ziel
+        Declare Integer stelle
+        Declare Integer tausch
+        punkte = [72, 95, 64, 88, 79, 91, 57, 83]
+        Display "Punkte, wie sie kamen: ", punkte
+        tausch = blasenSort(punkte)
+        Display "Sortiert: ", punkte
+        Display "Das Sortieren brauchte ", tausch, " Tauschvorgänge"
+        Display "Welche Punktzahl soll ich suchen?"
+        Input ziel
+        stelle = binaerSuche(punkte, ziel)
+        If stelle = -1 Then
+            Display ziel, " ist keine der Punktzahlen"
+        Else
+            Display ziel, " ist Nummer ", stelle + 1, " von ", length(punkte), " von unten"
+        End If
+        Stop
+
+        Function Integer blasenSort(werte)
+            Declare Integer tausch
+            Declare Integer zwischen
+            Declare Boolean getauscht
+            tausch = 0
+            Do
+                getauscht = False
+                For i = 0 To length(werte) - 2
+                    If werte[i] > werte[i + 1] Then
+                        zwischen = werte[i]
+                        werte[i] = werte[i + 1]
+                        werte[i + 1] = zwischen
+                        tausch = tausch + 1
+                        getauscht = True
+                    End If
+                End For
+            Until Not getauscht
+            Return tausch
+        End Function
+
+        Function Integer binaerSuche(werte, ziel)
+            Declare Integer unten
+            Declare Integer oben
+            Declare Integer mitte
+            unten = 0
+            oben = length(werte) - 1
+            While unten <= oben
+                mitte = (unten + oben) div 2
+                If werte[mitte] = ziel Then
+                    Return mitte
+                Else If werte[mitte] < ziel Then
+                    unten = mitte + 1
+                Else
+                    oben = mitte - 1
+                End If
+            End While
+            Return -1
+        End Function
     """),
     # ---- the puzzles: find the fault
     "z_else_p": program("""

@@ -431,8 +431,10 @@ def parse_program(text, story=True):
                 close(is_loop)
             continue
         if R_ENDLOOP.match(s):
-            shut = find(is_post)                   # a Do nobody ever tested
-            if shut >= 0 and not stack[shut].owner.cond:
+            # a Do nobody ever tested -- the loop this closes, that is: an
+            # End For inside a Do ... Until closes the For, not the Do
+            shut = find(is_post)
+            if shut >= 0 and shut == find(is_loop) and not stack[shut].owner.cond:
                 trouble("w_do_no_test", stack[shut].owner.line)
             if not close(is_loop):
                 trouble("w_no_loop", at_line, s, {"how": "drop", "at": at_line})

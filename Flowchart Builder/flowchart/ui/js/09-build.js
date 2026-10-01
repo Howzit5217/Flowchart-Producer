@@ -949,12 +949,14 @@
   // pseudocode looks like -- the keywords are in --help and in the README,
   // neither of which is in front of the person looking at the box.
   //
-  // Fifty programs are, in five sections of ten, each named for what is in
-  // it: the basics one idea at a time, decisions and loops together,
-  // numbers and patterns, everyday programs, and then bigger projects --
-  // whole programs of thirty to seventy lines, most of them split into
-  // modules and functions, the size a course works up to.  All of them
-  // are a press away from the line under the box.
+  // Fifty programs, five columns of ten with no headings over them: the
+  // basics one idea at a time on the left, then decisions and loops,
+  // numbers and patterns, everyday programs, and on the right whole
+  // programs in depth -- a library that checks books out and back in, a
+  // store's stock, tic-tac-toe, two weeks of weather, a bubble sort and a
+  // binary search -- the size a course works up to.  Each says how many
+  // lines it is, which is how big a step it is from the one before.  All
+  // of them are a press away from the line under the box.
   //
   // They are written in US English, down to the money: dollars, dimes and
   // cents, and a letter grade on the 90 / 80 / 70 / 60 scale.  The other
@@ -977,19 +979,16 @@
   // program that skips it comes out as `age = askText();` with no `int`
   // anywhere and will not compile.
   var STARTS = [
-    ["eg_l1", ["e_ask", "e_add", "e_swap", "e_decide", "e_oddeven",
-               "e_count", "e_while", "e_total", "e_module", "e_answers"]],
-    ["eg_l2", ["e_grades", "e_bands", "e_biggest", "e_menu", "e_vowel", "e_leap",
-               "e_keepasking", "e_sumevens", "e_countdown", "e_guess"]],
-    ["eg_l3", ["e_fizz", "e_prime", "e_gcd", "e_hailstone", "e_doubling",
-               "e_fib", "e_factorial", "e_minmax", "e_grid", "e_stars"]],
-    ["eg_l4", ["e_rainfall", "e_change", "e_temps", "e_shop", "e_report",
-               "e_votes", "e_quiz", "e_login", "e_sentinel", "e_picktable"]],
-    ["eg_l5", ["e_bank", "e_gradebook", "e_paycheck", "e_savings",
-               "e_classlist", "e_vending", "e_primelist", "e_weekday",
-               "e_loan", "e_rps"]],
-    // written the way an exam board writes pseudocode (parse/boards.py)
-    ["eg_l6", ["e_aqa", "e_ocr", "e_cie", "e_cietype"]]
+    ["eg_l1", ["e_ask", "e_add", "e_decide", "e_oddeven", "e_count",
+               "e_while", "e_total", "e_countdown", "e_module", "e_answers"]],
+    ["eg_l2", ["e_grades", "e_biggest", "e_menu", "e_vowel", "e_leap",
+               "e_keepasking", "e_sumevens", "e_guess", "e_hailstone", "e_stars"]],
+    ["eg_l3", ["e_fizz", "e_prime", "e_gcd", "e_fib", "e_factorial",
+               "e_minmax", "e_grid", "e_change", "e_temps", "e_votes"]],
+    ["eg_l4", ["e_rainfall", "e_shop", "e_report", "e_quiz", "e_login",
+               "e_savings", "e_classlist", "e_vending", "e_primelist", "e_weekday"]],
+    ["eg_l5", ["e_bank", "e_gradebook", "e_paycheck", "e_loan", "e_rps",
+               "e_library", "e_inventory", "e_tictactoe", "e_weather", "e_sortsearch"]]
   ];
 
   // One of them, in the language the page is in.
@@ -1060,13 +1059,11 @@
     // A story is named by the pseudocode it was last read as (33-told.js):
     // what the words amount to says what the program does, where the words
     // themselves are sentences, not a program to be read.
-    var named = titleFor(toldText || code);
-    // Read from code: its own name for itself, before what the chart does
-    var hint = langTitle();
-    if (hint) {
-      var notes = topNotes(code);
-      if (!notes.heading && !purposeTitle(notes.about)) { named = asTitle(titleWords(nameWords(hint))); }
-    }
+    // Read from code: what the code calls itself, wherever it says it --
+    // its comments and docstrings, what it shows as it starts, its folder,
+    // file, namespace or class -- before what the chart does (codeTitle)
+    var naming = langNaming();
+    var named = naming ? codeTitle(naming, code) : titleFor(toldText || code);
     return named ? { text: named, guess: true } : null;
   }
 
@@ -1129,13 +1126,27 @@
     if (name) { titleComesFrom({ key: name }); }
     showStarts();
     showExamples(false);
+    // An example is pseudocode: drawn from the Pseudocode tab, whichever
+    // tab it was chosen from -- Build under Code reads the code box instead
+    if (byLang || byHand) { setMode(false); }
     el("#build").click();
   }
 
   function startButton(name, i) {
     var b = document.createElement("button");
     b.className = "btn small";
-    b.textContent = TXT[name] || name;
+    var called = document.createElement("span");
+    called.className = "eg-name";
+    called.textContent = TXT[name] || name;
+    b.appendChild(called);
+    // how big it is, in lines of program: the step it is from the last
+    var rows = programOf(name).split("\n").filter(function (l) { return l.trim(); }).length;
+    if (rows) {
+      var size = document.createElement("span");
+      size.className = "eg-size";
+      size.textContent = say("eg_lines", { n: rows });
+      b.appendChild(size);
+    }
     b.style.setProperty("--i", i);       // so they arrive one after another
     b.onclick = function () { startFrom(programOf(name), name); };
     return b;
@@ -1165,23 +1176,20 @@
     buildExamples();
   }
 
-  // All of them, in their levels, over the page.
+  // All of them over the page: a column to a level, the simplest at the
+  // top left and the biggest at the bottom right, and no headings -- the
+  // order and the sizes say it.
   function buildExamples() {
     var body = el("#eg-body");
     if (!body) { return; }
     body.innerHTML = "";
+    var grid = document.createElement("div");
+    grid.className = "eg-grid";
+    var n = 0;
     STARTS.forEach(function (level) {
-      var part = document.createElement("section");
-      part.className = "more-part";
-      part.innerHTML = "<h3>" + (TXT[level[0]] || level[0]) + "</h3>";
-      var list = document.createElement("div");
-      list.className = "eg-row";
-      level[1].forEach(function (key, i) {
-        list.appendChild(startButton(key, i));
-      });
-      part.appendChild(list);
-      body.appendChild(part);
+      level[1].forEach(function (key) { grid.appendChild(startButton(key, n++)); });
     });
+    body.appendChild(grid);
   }
 
   function showExamples(open) {

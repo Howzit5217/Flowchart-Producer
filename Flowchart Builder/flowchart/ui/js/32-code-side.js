@@ -810,10 +810,13 @@
   // The code, read into the pseudocode box.  True when it could be; when it
   // could not, the pseudocode and the chart are left as they were and the
   // box says why.
-  // What the code says the program is called (codeToPseudo's title): used
-  // for the title where the pseudocode has no name of its own to give.
-  var langHint = "";
-  function langTitle() { return byLang ? langHint : ""; }
+  // What the code says the program is called, for the Title box
+  // (codeTitle, 09-names.js): the files as they were read, the folder they
+  // came in, and what the reading said the program is called (the class
+  // main is kept in, or the one function main calls).
+  var langNamed = null;
+  var langFolder = "";                   // the folder the files were opened from
+  function langNaming() { return byLang ? langNamed : null; }
 
   // `asked`: Build pressed, or asked for by its keys -- where what is wrong
   // with the code is put right (langAutoFix).
@@ -835,7 +838,7 @@
     if (langAutoRename(said.notes, asked, again)) { return false; }
     langFrom = langKey();
     langMade = said.text;
-    langHint = said.title || "";
+    langNamed = { files: langAll(), folder: langFolder, hint: said.title || "" };
     if (el("#code").value !== said.text) {
       el("#code").value = said.text;
       newProgram();                      // named afresh from what it now says
@@ -984,7 +987,7 @@
     if (!langBox() || !langHasCode()) { return null; }
     var pick = el("#lang-pick");
     return { lang: pick ? pick.value : "auto", files: langAll(), at: langAt,
-             from: langFrom, made: langMade };
+             from: langFrom, made: langMade, folder: langFolder };
   }
 
   function wearLang(was) {
@@ -1000,6 +1003,8 @@
     box.value = langFiles[langAt].text;
     langFrom = typeof was.from === "string" ? was.from : null;
     langMade = typeof was.made === "string" ? was.made : null;
+    langFolder = String(was.folder || "");
+    langNamed = null;
     // what was read before files were kept is the text of the one file
     if (langFrom !== null && langFrom.charAt(0) !== "[") {
       langFrom = JSON.stringify([["", langFrom]]);
@@ -1031,6 +1036,14 @@
       return { name: String(one.name || "").replace(/^.*[\\/]/, ""),
                text: String(one.text || "").replace(/\r\n?/g, "\n") };
     });
+    // the folder they all came in, which is as often as not what the
+    // program is called (LibrarySystem/Main.java)
+    var tops = list.map(function (one) {
+      var parts = String(one.path || one.name || "").split(/[\\/]/);
+      return parts.length > 1 ? parts[0] : "";
+    });
+    langFolder = tops[0] && tops.every(function (t) { return t === tops[0]; }) ? tops[0] : "";
+    langNamed = null;
     langAt = 0;
     box.value = langFiles[0].text;
     if (el("#lang-pick")) { el("#lang-pick").value = "auto"; }

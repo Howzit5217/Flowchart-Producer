@@ -21,28 +21,12 @@
   // lines above it do not.  The charts are the page's, not the program's:
   // they are not printed lines, so Copy, Save it and a save of the run
   // leave them out (tapeKind), and code written out from the program does
-  // not draw them.  A switch in the Run card turns them off, and the page
-  // remembers it.
+  // not draw them.  They are simply there, whenever what was printed wants
+  // one: a switch for them was one more thing to read past to get to Run.
   var GRAPH_MOST = 4;                    // charts one run is given, at most
   var GRAPH_BARS = 40;                   // more than this, and it is a line
   var GRAPH_POINTS = 400;                // a line drawn through more is thinned to this
-  var graphsOn = true;
-  try { graphsOn = localStorage.getItem("flowchart-graphs") !== "off"; } catch (e) { /* on */ }
   var graphsMade = 0;                    // this run's
-
-  function wearGraphs() {
-    var tick = el("#graphs-on");
-    if (tick) { tick.checked = graphsOn; }
-    all(".tape-chart").forEach(function (c) { c.hidden = !graphsOn; });
-  }
-  if (el("#graphs-on")) {
-    el("#graphs-on").onchange = function () {
-      graphsOn = el("#graphs-on").checked;
-      try { localStorage.setItem("flowchart-graphs", graphsOn ? "on" : "off"); } catch (e) { /* fine */ }
-      wearGraphs();
-    };
-  }
-  wearGraphs();
 
   function graphNum(v) {                 // a number as it is to be drawn, or null
     if (typeof v === "number" && isFinite(v)) { return v; }
@@ -175,7 +159,6 @@
     if (!after || !after.parentNode) { return null; }
     var card = document.createElement("div");
     card.className = "tape-chart";
-    card.hidden = !graphsOn;
     if (heading) {
       var h = document.createElement("div");
       h.className = "graph-head";
@@ -320,7 +303,7 @@
   // table says row by row, seen at once -- the total climbing, the counter
   // going round.  Four at most, the ones that changed most often.
   function traceGraph(page, rows, cols) {
-    if (!graphsOn || rows.length < 3) { return; }
+    if (rows.length < 3) { return; }
     var picked = cols.map(function (c) {
       var vals = [], now = null, changes = 0, numeric = true;
       rows.forEach(function (r) {

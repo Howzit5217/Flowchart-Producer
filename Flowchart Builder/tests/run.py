@@ -713,6 +713,38 @@ def _names(fb, lang, *more):
         os.unlink(words.name)
 
 
+@check("code that says what it is called is called that")
+def _():
+    """A program written as code names itself in more ways than pseudocode:
+    a docstring, a doc comment (//! @file Package main is a ...), a banner
+    it prints, the file and folder it came in, a namespace, its class -- and
+    a #! line or a class called Lab3 is no name at all.  Each is read into
+    pseudocode and named the way the Title box names it (codeTitle)."""
+    if not node_there():
+        return None, "node is not installed -- skipped"
+    import coded_titles
+    fb = builder()
+    with tempfile.NamedTemporaryFile("w", suffix=".json", delete=False, encoding="utf-8") as words:
+        json.dump(fb.WORDS["en"], words)
+    with tempfile.NamedTemporaryFile("w", suffix=".json", delete=False, encoding="utf-8") as cases:
+        json.dump(coded_titles.CASES, cases)
+    try:
+        got = subprocess.run(["node", os.path.join(HERE, "code-titles.js"), words.name, cases.name],
+                             capture_output=True, text=True, encoding="utf-8", timeout=120)
+    finally:
+        os.unlink(words.name)
+        os.unlink(cases.name)
+    if got.returncode:
+        return False, got.stderr.strip()[-300:]
+    bad = []
+    for case, name in zip(coded_titles.CASES, json.loads(got.stdout)):
+        if (case["want"] is not None and name != case["want"]) or \
+                (case["want"] is None and (not name or name == case.get("notWant"))):
+            bad.append("%s: %r, not %r" % (case["name"], name, case["want"] or "a name"))
+    return not bad, "%d programs named%s" % (len(coded_titles.CASES),
+                                            "" if not bad else " -- " + "; ".join(bad[:4]))
+
+
 @check("a program that says what it is called is called that")
 def _():
     """A title written into the program itself -- "// Program: Paint Job

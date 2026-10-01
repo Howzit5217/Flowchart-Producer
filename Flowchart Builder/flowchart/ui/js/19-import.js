@@ -230,7 +230,7 @@
   function openUnit(u) {
     if (u.kind === "code") {
       var list = u.items.slice(0, CODE_MOST);
-      openCodeFiles(list.map(function (it) { return { name: it.e.name, text: it.text }; }));
+      openCodeFiles(list.map(function (it) { return { name: it.e.name, path: it.e.path, text: it.text }; }));
       broughtDone(true, u.items.length > CODE_MOST ? say("in_many", { n: CODE_MOST })
                   : say("f_opened", { name: u.items.length > 1 ? say("in_files", { n: u.items.length })
                                                                : u.items[0].e.name }));

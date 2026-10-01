@@ -257,14 +257,14 @@ EN = {
     "held_none": "nothing yet",
     # said over the tick box on its heading, which folds it away
     "held_switch": "Show what it is holding",
-    "tests_open": "Test it",
-    "tests_tip": "Tests of its own: what is typed in, and what it should print",
-    "tests_head": "Tests",
+    "tests_open": "Test Cases",
+    "tests_tip": "Check it against inputs you choose and the output it should give",
+    "tests_head": "Test Cases",
     "tests_one": "Test {n}",
-    "tests_typed": "Typed in, one to a line",
-    "tests_want": "Should print, a line each",
-    "tests_add": "Add a test",
-    "tests_run": "Run the tests",
+    "tests_typed": "Input, one per line",
+    "tests_want": "Expected output, one per line",
+    "tests_add": "Add a Test",
+    "tests_run": "Run the Tests",
     "tests_drop": "Remove",
     "tests_pass": "Passed",
     "tests_fail": "Failed",
@@ -274,8 +274,6 @@ EN = {
     "tests_short": "It printed {n} lines, not {m}.",
     "tests_long": "It printed {n} lines, not {m}.",
     "tests_broke": "It stopped with an error.",
-    "graphs_on": "Chart what it prints",
-    "graphs_tip": "Draw a chart under a list of numbers, or a run of them, when the program prints one",
     "trace_open": "Trace table",
     "trace_tip": "Every change the run made, step by step, as a table",
     "trace_head": "Trace table",
@@ -368,7 +366,7 @@ EN = {
     "lang_fix_change_at": "Change {word} to {instead} on line {line}",
     "lang_fix_indent": "Line up line {line}",
     "lang_fix_call": "Make it {name}(…)",
-    "lang_fixing": "Putting it right",
+    "lang_fixing": "Fixing bugs and issues",
     "lang_fixed_one": "Fixed 1 mistake",
     "lang_fixed_many": "Fixed {n} mistakes",
     "lang_fixed_tip": "See what was wrong, and what was done about it",
@@ -564,68 +562,64 @@ EN = {
     "try_short": "New to this?",
     "try_go": "Try an example",
     "eg_head": "Examples",
+    "eg_lines": "{n} lines",
     "eg_more": "More examples",
     # the five sections of the examples, and the ten in each
     "eg_l1": "Getting started",
-    "e_ask": "Ask and show",
-    "e_add": "Add two numbers",
-    "e_swap": "Swap two numbers",
-    "e_decide": "A decision",
-    "e_oddeven": "Odd or even",
+    "e_ask": "Ask and Show",
+    "e_add": "Add Two Numbers",
+    "e_decide": "A Decision",
+    "e_oddeven": "Odd or Even",
     "e_count": "Counting",
-    "e_while": "A While loop",
-    "e_total": "A running total",
-    "e_module": "A module",
-    "e_answers": "A function that answers",
+    "e_while": "A While Loop",
+    "e_total": "A Running Total",
+    "e_module": "A Module",
+    "e_answers": "A Function That Answers",
     "eg_l2": "Decisions and loops",
-    "e_grades": "Letter grades",
-    "e_biggest": "The biggest of three",
-    "e_menu": "A menu",
-    "e_vowel": "Vowel or not",
-    "e_leap": "Leap year",
-    "e_keepasking": "Keep asking",
-    "e_sumevens": "Add up the evens",
+    "e_grades": "Letter Grades",
+    "e_biggest": "The Biggest of Three",
+    "e_menu": "A Menu",
+    "e_vowel": "Vowel or Not",
+    "e_leap": "Leap Year",
+    "e_keepasking": "Keep Asking",
+    "e_sumevens": "Add Up the Evens",
     "e_countdown": "Countdown",
-    "e_guess": "Guess the number",
+    "e_guess": "Guess the Number",
     "eg_l3": "Numbers and patterns",
     "e_fizz": "Fizz and Buzz",
-    "e_prime": "Is it prime?",
-    "e_gcd": "Greatest common factor",
-    "e_fib": "The Fibonacci numbers",
-    "e_factorial": "A factorial",
-    "e_minmax": "Lowest and highest",
-    "e_grid": "A times table grid",
-    "e_stars": "A triangle of stars",
+    "e_prime": "Is It Prime?",
+    "e_gcd": "Greatest Common Factor",
+    "e_fib": "The Fibonacci Numbers",
+    "e_factorial": "A Factorial",
+    "e_minmax": "Lowest and Highest",
+    "e_grid": "A Times Table Grid",
+    "e_stars": "A Triangle of Stars",
     "eg_l4": "Everyday programs",
-    "e_change": "Dollars, dimes and pennies",
+    "e_change": "Dollars, Dimes and Pennies",
     "e_temps": "Celsius, Fahrenheit and Kelvin",
-    "e_shop": "A checkout with a discount",
-    "e_report": "A class report",
-    "e_votes": "Counting votes",
-    "e_quiz": "A three-question quiz",
-    "e_login": "Three tries at a password",
-    "e_sentinel": "Numbers until you type 0",
-    "e_picktable": "Any table you like",
+    "e_shop": "A Checkout with a Discount",
+    "e_report": "A Class Report",
+    "e_votes": "Counting Votes",
+    "e_quiz": "A Three-Question Quiz",
+    "e_login": "Three Tries at a Password",
     "eg_l5": "Bigger projects",
-    "e_bank": "A bank account",
-    "e_gradebook": "A gradebook",
-    "e_paycheck": "Weekly paychecks",
-    "e_vending": "A vending machine",
-    "e_primelist": "Every prime up to a limit",
-    "e_weekday": "What day of the week?",
-    "e_loan": "Paying off a loan",
-    "e_rps": "Rock, paper, scissors",
-    "e_bands": "Grades with Select Case",
-    "e_hailstone": "Hailstone numbers",
-    "e_doubling": "Doubling on a chessboard",
-    "e_rainfall": "Rainfall month by month",
-    "e_savings": "Savings year by year",
-    "e_classlist": "A class list of records",
-    "eg_l6": "Exam board styles",
-    "e_aqa": "AQA style: a times table quiz",
-    "e_ocr": "OCR style: a shopping list",
-    "e_cie": "Cambridge style: marks and grades",
-    "e_cietype": "Cambridge style: books as records",
+    "e_bank": "A Bank Account",
+    "e_gradebook": "A Gradebook",
+    "e_paycheck": "Weekly Paychecks",
+    "e_vending": "A Vending Machine",
+    "e_primelist": "Every Prime up to a Limit",
+    "e_weekday": "What Day of the Week?",
+    "e_loan": "Paying Off a Loan",
+    "e_rps": "Rock, Paper, Scissors",
+    "e_library": "Library Checkout System",
+    "e_inventory": "Store Inventory Manager",
+    "e_tictactoe": "Tic-Tac-Toe",
+    "e_weather": "Two Weeks of Weather",
+    "e_sortsearch": "Sorting and Searching Scores",
+    "e_hailstone": "Hailstone Numbers",
+    "e_rainfall": "Rainfall Month by Month",
+    "e_savings": "Savings Year by Year",
+    "e_classlist": "A Class List of Records",
     # ---- a name for a program nobody named, from what it does (09-names.js)
     "d_rps": "Rock, Paper, Scissors",
     "d_weekday": "Day of the Week",
@@ -872,20 +866,6 @@ EN = {
         Input b
         Display "They come to"
         Display a + b
-        Stop
-    """),
-    "e_swap_p": program("""
-        Start
-        Declare Integer a
-        Declare Integer b
-        Declare Integer keep
-        Input a
-        Input b
-        keep = a
-        a = b
-        b = keep
-        Display a
-        Display b
         Stop
     """),
     "e_decide_p": program("""
@@ -1432,43 +1412,6 @@ EN = {
             End If
         End Module
     """),
-    "e_sentinel_p": program("""
-        Start
-        Declare Integer n
-        Declare Integer total
-        Declare Integer many
-        total = 0
-        many = 0
-        Display "Numbers, please. 0 to finish."
-        Input n
-        While n <> 0
-            total = total + n
-            many = many + 1
-            Input n
-        End While
-        If many > 0 Then
-            Display "The average is"
-            Display total / many
-        Else
-            Display "Nothing to average"
-        End If
-        Stop
-    """),
-    "e_picktable_p": program("""
-        Start
-        Declare Integer n
-        Display "Which table? 0 to stop."
-        Input n
-        While n > 0
-            For i = 1 To 12
-                Display n * i
-            End For
-            Display "Which table? 0 to stop."
-            Input n
-        End While
-        Display "Bye"
-        Stop
-    """),
     # ---- the examples: bigger projects
     "e_bank_p": program("""
         Start
@@ -1867,25 +1810,6 @@ EN = {
             End If
         End Function
     """),
-    "e_bands_p": program("""
-        Start
-        Declare Integer score
-        Display "Your score out of 100?"
-        Input score
-        Select Case score
-            Case 90 To 100
-                Display "A: excellent"
-            Case 80 To 89
-                Display "B: very good"
-            Case 70 To 79
-                Display "C: good"
-            Case 60 To 69
-                Display "D: a pass"
-            Case Else
-                Display "F: not a pass yet"
-        End Select
-        Stop
-    """),
     "e_hailstone_p": program("""
         Start
         Declare Integer n
@@ -1903,20 +1827,6 @@ EN = {
             Display n
         End While
         Display "Steps to reach 1: ", steps
-        Stop
-    """),
-    "e_doubling_p": program("""
-        Start
-        Declare Integer grains
-        Declare Integer total
-        grains = 1
-        total = 0
-        For square = 1 To 16
-            Display grains
-            total = total + grains
-            grains = grains * 2
-        End For
-        Display "Grains on the first 16 squares: ", total
         Stop
     """),
     "e_rainfall_p": program("""
@@ -2007,106 +1917,362 @@ EN = {
             Return one
         End Function
     """),
-    "e_aqa_p": program("""
-        SUBROUTINE ask(a, b)
-            OUTPUT "What is " + INT_TO_STRING(a) + " x " + INT_TO_STRING(b) + "?"
-            answer ← STRING_TO_INT(USERINPUT)
-            RETURN answer = a * b
-        ENDSUBROUTINE
+    "e_library_p": program("""
+        Start
+        Declare Integer choice
+        Declare Integer at
+        Declare String title
+        shelf = []
+        Call append(shelf, newBook("Charlotte's Web", "E. B. White"))
+        Call append(shelf, newBook("Hatchet", "Gary Paulsen"))
+        Call append(shelf, newBook("Holes", "Louis Sachar"))
+        Call append(shelf, newBook("Wonder", "R. J. Palacio"))
+        Do
+            Display "1 list books  2 check out  3 return  4 quit"
+            Input choice
+            Select Case choice
+                Case 1
+                    Call listBooks(shelf)
+                Case 2
+                    Display "Which title would you like?"
+                    Input title
+                    at = findBook(shelf, title)
+                    If at = -1 Then
+                        Display "There is no book called ", title
+                    Else If shelf[at].out Then
+                        Display title, " is already checked out"
+                    Else
+                        shelf[at].out = True
+                        Display "You checked out ", shelf[at].title
+                    End If
+                Case 3
+                    Display "Which title are you returning?"
+                    Input title
+                    at = findBook(shelf, title)
+                    If at = -1 Then
+                        Display "That book is not from this library"
+                    Else If Not shelf[at].out Then
+                        Display shelf[at].title, " was not checked out"
+                    Else
+                        shelf[at].out = False
+                        Display "Thank you for returning ", shelf[at].title
+                    End If
+                Case 4
+                    Display "Goodbye"
+                Case Else
+                    Display "Pick 1, 2, 3 or 4"
+            End Select
+        Until choice = 4
+        Display "Books still checked out: ", countOut(shelf)
+        Stop
 
-        score ← 0
-        table ← 7
-        FOR i ← 1 TO 5
-            IF ask(table, i) THEN
-                score ← score + 1
-                OUTPUT "Right"
-            ELSE
-                OUTPUT "It is " + INT_TO_STRING(table * i)
-            ENDIF
-        ENDFOR
-        OUTPUT "You got " + INT_TO_STRING(score) + " out of 5"
-    """),
-    "e_ocr_p": program("""
-        array items[4]
-        array prices[4]
-        items[0] = "bread"
-        prices[0] = 1.20
-        items[1] = "milk"
-        prices[1] = 0.95
-        items[2] = "apples"
-        prices[2] = 2.40
-        items[3] = "cheese"
-        prices[3] = 3.10
-        total = 0
-        for i = 0 to 3
-            print(items[i] + ": " + str(prices[i]))
-            total = total + prices[i]
-        next i
-        budget = float(input("Your budget?"))
-        if total <= budget then
-            print("That fits your budget")
-        else
-            print("Over by " + str(total - budget))
-        endif
-    """),
-    "e_cie_p": program("""
-        DECLARE Marks : ARRAY[1:5] OF INTEGER
-        DECLARE Index : INTEGER
-        DECLARE Total : INTEGER
-        Marks[1] ← 67
-        Marks[2] ← 84
-        Marks[3] ← 45
-        Marks[4] ← 92
-        Marks[5] ← 73
-        Total ← 0
-        FOR Index ← 1 TO 5
-            Total ← Total + Marks[Index]
-            OUTPUT "Student ", Index, ": ", Marks[Index]
-        NEXT Index
-        OUTPUT "Average: ", Total / 5
-        FOR Index ← 1 TO 5
-            CASE OF Marks[Index]
-                90 TO 100 : OUTPUT "Student ", Index, " gets A"
-                70 TO 89 : OUTPUT "Student ", Index, " gets B"
-                50 TO 69 : OUTPUT "Student ", Index, " gets C"
-                OTHERWISE : OUTPUT "Student ", Index, " gets U"
-            ENDCASE
-        NEXT Index
-    """),
-    "e_cietype_p": program("""
-        TYPE Book
-            DECLARE Title : STRING
-            DECLARE Pages : INTEGER
-        ENDTYPE
-        DECLARE Shelf : ARRAY[1:3] OF Book
-        DECLARE Index : INTEGER
-        Shelf[1].Title ← "Dune"
-        Shelf[1].Pages ← 412
-        Shelf[2].Title ← "Emma"
-        Shelf[2].Pages ← 474
-        Shelf[3].Title ← "Holes"
-        Shelf[3].Pages ← 233
-        FOR Index ← 1 TO 3
-            CALL ShowBook(Shelf[Index])
-        NEXT Index
-        OUTPUT "Longest: ", Longest(Shelf)
+        Function newBook(title, author)
+            one = New Book
+            one.title = title
+            one.author = author
+            one.out = False
+            Return one
+        End Function
 
-        PROCEDURE ShowBook(B : Book)
-            OUTPUT B.Title, ": ", B.Pages
-        ENDPROCEDURE
+        Function Integer findBook(books, title)
+            For i = 0 To length(books) - 1
+                If toLower(books[i].title) = toLower(title) Then
+                    Return i
+                End If
+            End For
+            Return -1
+        End Function
 
-        FUNCTION Longest(Books : ARRAY OF Book) RETURNS STRING
-            DECLARE Best : INTEGER
-            DECLARE Index : INTEGER
-            Best ← 1
-            FOR Index ← 2 TO 3
-                IF Books[Index].Pages > Books[Best].Pages
-                    THEN
-                        Best ← Index
-                ENDIF
-            NEXT Index
-            RETURN Books[Best].Title
-        ENDFUNCTION
+        Module listBooks(books)
+            For Each b In books
+                If b.out Then
+                    Display b.title, " by ", b.author, " (checked out)"
+                Else
+                    Display b.title, " by ", b.author, " (on the shelf)"
+                End If
+            End For
+        End Module
+
+        Function Integer countOut(books)
+            Declare Integer n
+            n = 0
+            For Each b In books
+                If b.out Then
+                    n = n + 1
+                End If
+            End For
+            Return n
+        End Function
+    """),
+    "e_inventory_p": program("""
+        Start
+        Declare Integer choice
+        Declare Integer amount
+        Declare String item
+        stock = {"apples": 40, "bread": 12, "milk": 6, "eggs": 30}
+        prices = {"apples": 0.5, "bread": 2.25, "milk": 3.1, "eggs": 0.3}
+        Do
+            Display "1 show stock  2 sell  3 restock  4 quit"
+            Input choice
+            Select Case choice
+                Case 1
+                    Call showStock(stock, prices)
+                Case 2
+                    Display "Sell which item?"
+                    Input item
+                    If Not hasItem(stock, item) Then
+                        Display "We do not sell ", item
+                    Else
+                        Display "How many?"
+                        Input amount
+                        If amount <= 0 Then
+                            Display "Sell at least one"
+                        Else If amount > stock[item] Then
+                            Display "Only ", stock[item], " left"
+                        Else
+                            stock[item] = stock[item] - amount
+                            Display "Sold ", amount, " ", item, " for $", round(amount * prices[item], 2)
+                        End If
+                    End If
+                Case 3
+                    Display "Restock which item?"
+                    Input item
+                    If Not hasItem(stock, item) Then
+                        Display "We do not sell ", item
+                    Else
+                        Display "How many came in?"
+                        Input amount
+                        If amount <= 0 Then
+                            Display "A delivery has at least one"
+                        Else
+                            stock[item] = stock[item] + amount
+                            Display "There are now ", stock[item], " ", item
+                        End If
+                    End If
+                Case 4
+                    Display "Closing up"
+                Case Else
+                    Display "Pick 1, 2, 3 or 4"
+            End Select
+        Until choice = 4
+        Display "The stock is worth $", worth(stock, prices)
+        Stop
+
+        Module showStock(stock, prices)
+            For Each name In stock
+                If stock[name] < 10 Then
+                    Display name, ": ", stock[name], " at $", prices[name], " -- running low"
+                Else
+                    Display name, ": ", stock[name], " at $", prices[name]
+                End If
+            End For
+        End Module
+
+        Function Boolean hasItem(stock, item)
+            For Each name In stock
+                If name = item Then
+                    Return True
+                End If
+            End For
+            Return False
+        End Function
+
+        Function Real worth(stock, prices)
+            Declare Real total
+            total = 0
+            For Each name In stock
+                total = total + stock[name] * prices[name]
+            End For
+            Return round(total, 2)
+        End Function
+    """),
+    "e_tictactoe_p": program("""
+        Start
+        Declare Integer move
+        Declare Integer turns
+        Declare String player
+        Declare String winner
+        board = [" ", " ", " ", " ", " ", " ", " ", " ", " "]
+        player = "X"
+        winner = ""
+        turns = 0
+        While winner = "" And turns < 9
+            Call showBoard(board)
+            Display "Player ", player, ", pick a square from 1 to 9"
+            Input move
+            While move < 1 Or move > 9
+                Display "The squares go from 1 to 9"
+                Input move
+            End While
+            If board[move - 1] <> " " Then
+                Display "That square is taken"
+            Else
+                board[move - 1] = player
+                turns = turns + 1
+                If hasWon(board, player) Then
+                    winner = player
+                Else If player = "X" Then
+                    player = "O"
+                Else
+                    player = "X"
+                End If
+            End If
+        End While
+        Call showBoard(board)
+        If winner = "" Then
+            Display "It is a draw"
+        Else
+            Display "Player ", winner, " wins!"
+        End If
+        Stop
+
+        Module showBoard(cells)
+            For row = 0 To 2
+                Display " ", cells[row * 3], " | ", cells[row * 3 + 1], " | ", cells[row * 3 + 2]
+                If row < 2 Then
+                    Display "---+---+---"
+                End If
+            End For
+        End Module
+
+        Function Boolean hasWon(cells, mark)
+            rows = [[0, 1, 2], [3, 4, 5], [6, 7, 8], [0, 3, 6], [1, 4, 7], [2, 5, 8], [0, 4, 8], [2, 4, 6]]
+            For Each three In rows
+                If cells[three[0]] = mark And cells[three[1]] = mark And cells[three[2]] = mark Then
+                    Return True
+                End If
+            End For
+            Return False
+        End Function
+    """),
+    "e_weather_p": program("""
+        Start
+        Declare Real average
+        Declare Integer above
+        Declare Integer streak
+        Declare Integer longest
+        highs = [61, 64, 70, 73, 69, 66, 72, 78, 81, 79, 75, 68, 63, 67]
+        Display "Daily highs: ", highs
+        average = mean(highs)
+        Display "Average high: ", round(average, 1)
+        Display "Warmest day: ", largest(highs), "   Coolest day: ", smallest(highs)
+        above = 0
+        streak = 0
+        longest = 0
+        For day = 1 To length(highs)
+            If highs[day - 1] > average Then
+                above = above + 1
+                streak = streak + 1
+                If streak > longest Then
+                    longest = streak
+                End If
+            Else
+                streak = 0
+            End If
+            Display "Day ", day, ": ", bar(highs[day - 1]), " ", highs[day - 1]
+        End For
+        Display above, " days were warmer than average"
+        Display "The longest warm spell lasted ", longest, " days"
+        Stop
+
+        Function Real mean(values)
+            Declare Real total
+            total = 0
+            For Each v In values
+                total = total + v
+            End For
+            Return total / length(values)
+        End Function
+
+        Function Integer largest(values)
+            Declare Integer best
+            best = values[0]
+            For Each v In values
+                If v > best Then
+                    best = v
+                End If
+            End For
+            Return best
+        End Function
+
+        Function Integer smallest(values)
+            Declare Integer best
+            best = values[0]
+            For Each v In values
+                If v < best Then
+                    best = v
+                End If
+            End For
+            Return best
+        End Function
+
+        Function String bar(Integer degrees)
+            Declare String stars
+            stars = ""
+            For i = 1 To degrees div 5
+                stars = stars + "*"
+            End For
+            Return stars
+        End Function
+    """),
+    "e_sortsearch_p": program("""
+        Start
+        Declare Integer target
+        Declare Integer at
+        Declare Integer swaps
+        scores = [72, 95, 64, 88, 79, 91, 57, 83]
+        Display "Scores as they came in: ", scores
+        swaps = bubbleSort(scores)
+        Display "Sorted: ", scores
+        Display "The sort took ", swaps, " swaps"
+        Display "Which score should I look for?"
+        Input target
+        at = binarySearch(scores, target)
+        If at = -1 Then
+            Display target, " is not one of the scores"
+        Else
+            Display target, " is number ", at + 1, " of ", length(scores), " from the bottom"
+        End If
+        Stop
+
+        Function Integer bubbleSort(values)
+            Declare Integer swaps
+            Declare Integer temp
+            Declare Boolean swapped
+            swaps = 0
+            Do
+                swapped = False
+                For i = 0 To length(values) - 2
+                    If values[i] > values[i + 1] Then
+                        temp = values[i]
+                        values[i] = values[i + 1]
+                        values[i + 1] = temp
+                        swaps = swaps + 1
+                        swapped = True
+                    End If
+                End For
+            Until Not swapped
+            Return swaps
+        End Function
+
+        Function Integer binarySearch(values, target)
+            Declare Integer low
+            Declare Integer high
+            Declare Integer middle
+            low = 0
+            high = length(values) - 1
+            While low <= high
+                middle = (low + high) div 2
+                If values[middle] = target Then
+                    Return middle
+                Else If values[middle] < target Then
+                    low = middle + 1
+                Else
+                    high = middle - 1
+                End If
+            End While
+            Return -1
+        End Function
     """),
     # ---- the puzzles: find the fault
     "z_else_p": program("""

@@ -227,6 +227,23 @@
      it is in and, for a drawing, the program it came from.  The one that
      opens them all together comes first, in the page's blue. */
   #in-over .more-sheet { width: min(520px, 100%); }
+  /* The fifty examples, five columns of ten: a column to a level, read
+     down and then across, with how many lines each is under its name.
+     Two to a row, in the same order, where there is not room for five. */
+  #eg-over .more-sheet { width: min(1100px, 100%); }
+  .eg-grid {
+    display: grid; grid-template-columns: repeat(5, minmax(0, 1fr));
+    grid-template-rows: repeat(10, auto); grid-auto-flow: column; gap: 6px;
+  }
+  .eg-grid .btn {
+    flex-direction: column; align-items: flex-start; justify-content: flex-start; gap: 1px;
+    text-align: left; white-space: normal; min-width: 0; padding-top: 6px; padding-bottom: 6px;
+  }
+  .eg-grid .eg-name { font-weight: 550; }
+  .eg-grid .eg-size { font-size: 11px; color: var(--muted); font-weight: 400; }
+  @media (max-width: 760px) {
+    .eg-grid { grid-template-columns: 1fr 1fr; grid-template-rows: none; grid-auto-flow: row; }
+  }
   .in-list { display: flex; flex-direction: column; gap: 4px; }
   .in-pick {
     display: flex; align-items: baseline; gap: 8px; width: 100%;
