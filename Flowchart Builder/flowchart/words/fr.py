@@ -4751,6 +4751,20 @@ FR = {
     "rl_office": "Bureau",
     "rl_dining": "Salle à manger",
     "rl_living": "Salon",
+    "ic_all_icons": "Toutes les icônes",
+    "ic_sets": "Groupes d’icônes",
+    "ic_find_n": "Chercher parmi {n} icônes",
+    "ic_clear": "Effacer la recherche",
+    "ic_count": "{n} icônes",
+    "ic_found": "{n} trouvées",
+    "ic_hint": "Cliquez pour ajouter · glissez sur la feuille",
+    "ic_hint_touch": "Touchez pour ajouter · glissez sur la feuille",
+    "ic_show_set": "Afficher seulement {set}",
+    "ic_browse": "Parcourir toutes les icônes…",
+    "ad_overlap": "{a} et {b} sont au même endroit : en 3D l’un traverserait l’autre.",
+    "ad_fix_apart": "Les écarter",
+    "ad_in_wall": "{what} rentre dans le mur : {room}.",
+    "ad_fix_in": "Le ramener dans la pièce",
 }
 
 speaks("fr", "Français", FR)

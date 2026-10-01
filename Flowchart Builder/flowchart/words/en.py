@@ -4747,6 +4747,20 @@ EN = {
     "rl_office": "Study",
     "rl_dining": "Dining room",
     "rl_living": "Living room",
+    "ic_all_icons": "All icons",
+    "ic_sets": "Icon sets",
+    "ic_find_n": "Search {n} icons",
+    "ic_clear": "Clear the search",
+    "ic_count": "{n} icons",
+    "ic_found": "{n} found",
+    "ic_hint": "Click to add · drag onto the paper",
+    "ic_hint_touch": "Tap to add · drag onto the paper",
+    "ic_show_set": "Show only {set}",
+    "ic_browse": "Browse all icons…",
+    "ad_overlap": "{a} and {b} stand in the same place: in 3D one would go through the other.",
+    "ad_fix_apart": "Move them apart",
+    "ad_in_wall": "{what} goes into the wall of {room}.",
+    "ad_fix_in": "Move it into the room",
 }
 
 speaks("en", "English", EN)

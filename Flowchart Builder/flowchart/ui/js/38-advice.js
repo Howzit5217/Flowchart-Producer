@@ -295,7 +295,84 @@
     stairAdvice(plan, tip);
     lotAdvice(plan, tip);
     garageAdvice(plan, tip);
+    apartAdvice(plan, tip);
+    wallAdvice(plan, tip);
     return tips;
+  }
+
+  // ---- what would go through what ----------------------------------------------
+  // Two things that stand on the floor standing in the same place (isSolid,
+  // 03-icons.js), or somebody standing inside one, would go through each
+  // other in 3D -- and a piece pushed into its room's wall would stick out
+  // of the house.  Put right, the smaller is moved the shortest way that
+  // leaves it in its room and clear of everything; or into the room by as
+  // much as it was in the wall.
+  function thingName(n) {
+    var said = String(n.text || "").split("\n")[0].trim();
+    return said || (isFigure(n.kind) ? kindName(n.kind) : labelName(n.kind));
+  }
+  function roomInside(room) {                // a room's floor, inside its walls
+    var T = roomWallOf(room), r = turned(room);
+    return { l: room.x - r.w / 2 + T, r: room.x + r.w / 2 - T, t: room.y - r.h / 2 + T, b: room.y + r.h / 2 - T };
+  }
+  function fitsAt(plan, n, x, y, room) {
+    var t = turned(n);
+    if (room && !((room.turn || 0) % 90)) {
+      var f = roomInside(room);
+      if (x - t.w / 2 < f.l - 0.5 || x + t.w / 2 > f.r + 0.5 || y - t.h / 2 < f.t - 0.5 || y + t.h / 2 > f.b + 0.5) { return false; }
+    }
+    return !hand.nodes.some(function (m) { return m !== n && boxesMeet(n, x, y, m, m.x, m.y, -0.5); });
+  }
+  function clearOf(plan, mover, still) {
+    var p = turned(mover), q = turned(still), room = roomAt(plan, mover.x, mover.y);
+    var moves = [[still.x + (q.w + p.w) / 2 + 1 - mover.x, 0], [still.x - (q.w + p.w) / 2 - 1 - mover.x, 0],
+                 [0, still.y + (q.h + p.h) / 2 + 1 - mover.y], [0, still.y - (q.h + p.h) / 2 - 1 - mover.y]]
+      .sort(function (a, b) { return Math.abs(a[0]) + Math.abs(a[1]) - Math.abs(b[0]) - Math.abs(b[1]); });
+    for (var i = 0; i < moves.length; i++) {
+      var x = Math.round(mover.x + moves[i][0]), y = Math.round(mover.y + moves[i][1]);
+      if (fitsAt(plan, mover, x, y, room)) {
+        return (function (x, y) {
+          return function () { var n = nodeById(mover.id); if (n) { n.x = x; n.y = y; } };
+        })(x, y);
+      }
+    }
+    return null;
+  }
+  function apartAdvice(plan, tip) {
+    var things = hand.nodes.filter(function (n) { return isSolid(n.kind) || (isFigure(n.kind) && isPerson(n)); });
+    var told = {};
+    for (var i = 0; i < things.length; i++) {
+      for (var j = i + 1; j < things.length; j++) {
+        var a = things[i], b = things[j];
+        if (!isSolid(a.kind) && !isSolid(b.kind)) { continue; }
+        if (!boxesMeet(a, a.x, a.y, b, b.x, b.y, -3)) { continue; }
+        // the one to move: a person before a thing, else the smaller
+        var mover = isFigure(b.kind) || (!isFigure(a.kind) && b.w * b.h <= a.w * a.h) ? b : a;
+        var still = mover === a ? b : a;
+        if (told[mover.id]) { continue; }
+        told[mover.id] = true;
+        tip(say("ad_overlap", { a: thingName(still), b: thingName(mover) }), mover.id,
+            fixed(TXT.ad_fix_apart, clearOf(plan, mover, still)));
+      }
+    }
+  }
+  function wallAdvice(plan, tip) {
+    hand.nodes.forEach(function (n) {
+      if (!isSolid(n.kind) || ((n.turn || 0) % 90)) { return; }
+      var room = roomAt(plan, n.x, n.y);
+      if (!room || ((room.turn || 0) % 90)) { return; }
+      var f = roomInside(room), t = turned(n);
+      var dx = Math.max(0, f.l - (n.x - t.w / 2)) - Math.max(0, n.x + t.w / 2 - f.r);
+      var dy = Math.max(0, f.t - (n.y - t.h / 2)) - Math.max(0, n.y + t.h / 2 - f.b);
+      if (Math.abs(dx) <= 1.5 && Math.abs(dy) <= 1.5) { return; }
+      var fits = t.w <= f.r - f.l && t.h <= f.b - f.t;
+      var x = Math.round(n.x + dx), y = Math.round(n.y + dy);
+      tip(say("ad_in_wall", { what: thingName(n), room: roomName(plan, room) }), n.id,
+          fixed(TXT.ad_fix_in, fits && fitsAt(plan, n, x, y, room) ? function () {
+            var m = nodeById(n.id);
+            if (m) { m.x = x; m.y = y; }
+          } : null));
+    });
   }
 
   // ---- stairs, a lot, a garage -------------------------------------------------

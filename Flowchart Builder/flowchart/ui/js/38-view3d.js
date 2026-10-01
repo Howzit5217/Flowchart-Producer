@@ -528,7 +528,8 @@
         // hung from the ceiling on its cord (or its pole), as far down as
         // such a thing hangs
         var hi = ceilAt(n) * FLOOR_PX, drop = V3_DROP[n.kind] || [0.5, 0.25];
-        var bottom = hi - drop[0] * FLOOR_PX, body = bottom + drop[1] * FLOOR_PX;
+        var bottom = Math.min(Math.max(hi - drop[0] * FLOOR_PX, (under(n) + 0.08) * FLOOR_PX), hi - 0.12 * FLOOR_PX);
+        var body = Math.min(bottom + drop[1] * FLOOR_PX, hi - 0.03 * FLOOR_PX);
         roundOrBox(n, bottom, body, { piece: true, tex: v3Texture(n), color: look.fill, edge: look.line });
         v3Box(faces, n, -1, 1, -1, 1, body, hi, { piece: true, color: look.line, edge: look.line });
         return;
@@ -621,7 +622,7 @@
         var treads = 10, rise = (endOf[n.id] === "low" ? levelRise(n) : ceilAt(n) * FLOOR_PX) / treads;
         for (var k = 0; k < treads; k++) {
           var y1 = n.h / 2 - k * n.h / treads, y0 = y1 - n.h / treads;
-          v3Box(faces, n, -n.w / 2, n.w / 2, y0, n.h / 2, 0, rise * (k + 1), { piece: true, color: look.fill, edge: look.line });
+          v3Box(faces, n, -n.w / 2, n.w / 2, y0, y1, 0, rise * (k + 1), { piece: true, color: look.fill, edge: look.line });
         }
       } else if (V3_HIGH[n.kind] !== undefined) {
         var tall = V3_HIGH[n.kind] * FLOOR_PX, tex = v3Texture(n);

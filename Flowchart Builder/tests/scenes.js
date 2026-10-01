@@ -205,6 +205,33 @@ var tests = function () {
         "put right, and still said: " + grouped);
   said.push("a lot measured, a house kept to it, a drive laid");
 
+  // ---- nothing standing in anything else, or in a wall
+  hand.links = [];
+  hand.nodes = [{ id: 1, kind: "i_room", x: 0, y: 0, w: 400, h: 300, text: "" },
+                { id: 2, kind: "i_door", x: 0, y: -125, turn: 180, text: "" },
+                { id: 3, kind: "i_sofa", x: -60, y: 40, text: "" },
+                { id: 4, kind: "i_coffee", x: -40, y: 50, text: "" },
+                { id: 5, kind: "i_bookcase", x: 190, y: 0, turn: 90, text: "" },
+                { id: 6, kind: "i_lamp", x: 120, y: -100, text: "" },
+                { id: 7, kind: "i_rug", x: -50, y: 45, text: "" }];
+  hand.nodes.forEach(function (n) { if (!n.w) { measure(n); } });
+  hand.next = 20;
+  check(isSolid("i_sofa") && !isSolid("i_rug") && !isSolid("i_tablelamp") && !isSolid("i_door") && !isSolid("i_room"),
+        "what takes up the floor, wrong");
+  check(boxesMeet(nodeById(3), -60, 40, nodeById(4), -40, 50, 0) && !boxesMeet(nodeById(3), -60, 40, nodeById(7), -50, 45, 0),
+        "a sofa and a table in one place not kept apart, or a rug kept from them");
+  var overTips = homeAdvice();
+  function overTip(key) { return overTips.filter(function (t) { return t.text.indexOf(key) === 0; }); }
+  var overlap = overTip("ad_overlap"), inWall = overTip("ad_in_wall");
+  check(overlap.length === 1 && overlap[0].fix && overlap[0].fix.auto, "a sofa through a table: " + overlap.length);
+  check(inWall.length === 1 && inWall[0].id === 5 && inWall[0].fix && inWall[0].fix.auto, "a bookcase in the wall: " + inWall.length);
+  overlap.concat(inWall).forEach(function (t) { t.fix.go(); });
+  var after = homeAdvice().map(function (t) { return t.text.split("{")[0]; });
+  check(after.indexOf("ad_overlap") < 0 && after.indexOf("ad_in_wall") < 0, "put right, and still said: " + after);
+  check(!boxesMeet(nodeById(3), nodeById(3).x, nodeById(3).y, nodeById(4), nodeById(4).x, nodeById(4).y, 0),
+        "still one in the other");
+  said.push("nothing in anything else");
+
   // ---- circuits, worked out
   function circuit(nodes, links) {
     hand.nodes = nodes; hand.links = links;
@@ -237,7 +264,7 @@ var tests = function () {
   return { bad: bad, said: said };
 };
 
-var src = stand + "\n" + ["03-icon-art.js", "03-icons.js", "38-walk.js", "38-advice.js", "38-view3d.js", "39-flows.js", "39-circuit.js"]
+var src = stand + "\n" + ["03-icon-art.js", "03-icons.js", "13-hand-apart.js", "38-walk.js", "38-advice.js", "38-view3d.js", "39-flows.js", "39-circuit.js"]
   .map(part).join("\n") + "\nreturn (" + tests.toString() + ")();";
 var out;
 try { out = new Function(src)(); }                 // eslint-disable-line no-new-func

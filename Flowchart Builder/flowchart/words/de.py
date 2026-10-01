@@ -4749,6 +4749,20 @@ DE = {
     "rl_office": "Arbeitszimmer",
     "rl_dining": "Esszimmer",
     "rl_living": "Wohnzimmer",
+    "ic_all_icons": "Alle Symbole",
+    "ic_sets": "Symbolgruppen",
+    "ic_find_n": "{n} Symbole durchsuchen",
+    "ic_clear": "Suche leeren",
+    "ic_count": "{n} Symbole",
+    "ic_found": "{n} gefunden",
+    "ic_hint": "Klicken zum Hinzufügen · aufs Blatt ziehen",
+    "ic_hint_touch": "Tippen zum Hinzufügen · aufs Blatt ziehen",
+    "ic_show_set": "Nur {set} zeigen",
+    "ic_browse": "Alle Symbole durchsehen…",
+    "ad_overlap": "{a} und {b} stehen an derselben Stelle: in 3D ginge eins durchs andere.",
+    "ad_fix_apart": "Auseinanderrücken",
+    "ad_in_wall": "{what} ragt in die Wand: {room}.",
+    "ad_fix_in": "In den Raum rücken",
 }
 
 speaks("de", "Deutsch", DE)

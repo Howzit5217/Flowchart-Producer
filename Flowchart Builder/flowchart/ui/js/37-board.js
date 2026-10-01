@@ -462,7 +462,11 @@
       var says = el("#run-note");
       if (says) { says.textContent = scene.is.note ? scene.is.note() : ""; }
     } else {
-      runs.forEach(function (b) { if (b.textContent !== TXT.r_run) { b.textContent = TXT.r_run; } });
+      runs.forEach(function (b) {
+        // with a puzzle open, Run is what marks it, and says Check (28-puzzles.js)
+        var word = b.id === "run" && onPuzzle ? (TXT.pz_check || "Check") : TXT.r_run;
+        if (b.textContent !== word) { b.textContent = word; }
+      });
     }
   }
 

@@ -104,7 +104,7 @@
       // out swapped the chart for a stale one and the program for none.
       showCodeSide();
     }
-    dressPuzzleButton();                 // offered only where they are solved
+    dressPuzzleButton();                 // its dot, said again for the new tab
     try { localStorage.setItem("flowchart-mode", toHand ? "hand" : toLang ? "lang" : "code"); }
     catch (e) { /* fine */ }
   }

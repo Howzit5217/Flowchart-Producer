@@ -6,47 +6,181 @@
    One part of the studio's stylesheet; parts.py pours them in order.
    --------------------------------------------------------------------------- */
   /* ---------------------------------------------------- the library -- */
-  /* Under Add a shape: the button, and the icons used last beside it. */
-  .icon-shelf { display: flex; align-items: center; gap: 6px; min-width: 0; }
-  .adders .icon-lib-btn { flex: none; gap: 6px; padding: 5px 10px; }
-  .icon-lib-btn svg, .icon-quick svg.keymark { flex: none; }
-  .icon-lib-btn > svg {
-    width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.5;
-    stroke-linecap: round; stroke-linejoin: round;
+  /* Under Add a shape: the button the whole width of the panel -- the
+     sets' face, its name, how many, a chevron -- and under it the icons used
+     last, each on its square of the paper (11-hand-icons.js). */
+  .icon-shelf { display: flex; flex-direction: column; gap: 7px; min-width: 0; }
+  .adders .btn.icon-lib-btn {
+    width: 100%; justify-content: flex-start; gap: 9px; padding: 7px 10px; border-radius: 9px;
+    transition: border-color .15s ease, background-color .15s ease, color .15s ease;
   }
-  .icon-lib-btn[aria-expanded="true"] { border-color: var(--accent); color: var(--accent); }
-  .icon-recent { display: flex; gap: 4px; min-width: 0; overflow: hidden; }
-  .adders .icon-quick {
-    flex: none; width: 30px; height: 30px; padding: 0; min-width: 0;
-    display: inline-flex; align-items: center; justify-content: center;
+  .icon-lib-btn .ilb-lead {
+    flex: none; width: 24px; height: 24px; border-radius: 7px; display: inline-grid; place-items: center;
+    background: var(--accent-soft); color: var(--accent);
   }
+  .icon-lib-btn svg.iu { width: 15px; height: 15px; }
+  .icon-lib-btn .ilb-name { flex: 1; text-align: left; font-weight: 600; }
+  .icon-lib-btn .icon-count { margin-right: 2px; }
+  .icon-lib-btn svg.ilb-more { width: 11px; height: 11px; color: var(--muted); transition: transform .18s ease; }
+  .icon-lib-btn[aria-expanded="true"] { border-color: var(--accent); background: var(--accent-soft); }
+  .icon-lib-btn[aria-expanded="true"] .ilb-more { color: var(--accent); transform: translateX(2px); }
+  .icon-recent { display: flex; align-items: center; gap: 8px; min-width: 0; }
+  .icon-recent[hidden] { display: none; }
+  .icon-recent-head {
+    flex: none; font-size: 10.5px; letter-spacing: .07em; text-transform: uppercase;
+    color: var(--muted); font-weight: 650;
+  }
+  .icon-recent-row { display: flex; gap: 4px; min-width: 0; overflow: hidden; padding: 2px; margin: -2px; }
+  .adders .icon-quick, .icon-quick {
+    flex: none; padding: 0; border: 0; background: none; cursor: pointer; border-radius: 9px;
+  }
+  .icon-quick .icon-card { transition: transform .15s ease, box-shadow .15s ease; }
+  .icon-quick:is(:hover, :focus-visible) .icon-card {
+    transform: translateY(-1px); box-shadow: 0 0 0 2px var(--accent), 0 3px 8px rgba(16, 24, 40, .18);
+  }
+  .icon-quick:focus-visible { outline: 0; }
 
-  /* The library itself: the search box, the sets, and the tiles. */
-  .menu.icon-lib { width: min(380px, calc(100vw - 16px)); padding: 8px; }
-  .icon-lib-in { display: flex; flex-direction: column; gap: 7px; }
-  .icon-lib-in .icon-find { width: 100%; box-sizing: border-box; }
-  .icon-sets { display: flex; flex-wrap: wrap; gap: 4px; }
-  .menu .icon-sets button.icon-chip {
-    width: auto; padding: 3px 9px; font-size: 12px; border-radius: 999px;
-    border: 1px solid var(--line); color: var(--muted);
+  /* Every icon on a square of the paper, in its own colors: as it will be. */
+  .icon-card {
+    flex: none; display: inline-grid; place-items: center; border-radius: 9px;
+    box-shadow: 0 0 0 1px rgba(16, 24, 40, .1), 0 1px 2px rgba(16, 24, 40, .14);
   }
-  .menu .icon-sets button.icon-chip[aria-pressed="true"] {
-    border-color: var(--accent); color: var(--accent); background: var(--accent-soft);
+  .icon-card svg.icon-tile { display: block; }
+  /* how many a set holds: a small number in a pill */
+  .icon-count {
+    flex: none; min-width: 20px; padding: 1px 6px; border-radius: 999px; font-size: 10.5px;
+    font-weight: 500; font-variant-numeric: tabular-nums; text-align: center; color: var(--muted);
+    background: var(--line-soft);
   }
-  .icon-grid {
-    display: grid; grid-template-columns: repeat(auto-fill, minmax(74px, 1fr)); gap: 2px;
-    max-height: min(54vh, 400px); overflow-y: auto; overscroll-behavior: contain;
+  svg.iu {
+    width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.6;
+    stroke-linecap: round; stroke-linejoin: round; flex: none;
   }
+  svg.icon-glyph { flex: none; display: block; }
+
+  /* The library: its own window, the sets down the side, a search box, the
+     icons under a heading for each set, and along the foot the one pointed
+     at.  Narrow, the sets run across the top. */
+  .menu.icon-lib { padding: 0; overflow: hidden; border-radius: 12px; }
+  .icon-lib-in {
+    display: grid; grid-template-columns: 222px minmax(0, 1fr);
+    width: min(724px, calc(100vw - 24px)); height: min(520px, calc(100vh - 40px));
+  }
+  .icon-side {
+    display: flex; flex-direction: column; gap: 1px; padding: 8px 6px; overflow-y: auto;
+    overscroll-behavior: contain; background: var(--bg); border-right: 1px solid var(--line);
+  }
+  .menu .icon-side button.icon-cat {
+    gap: 8px; padding: 6px 8px; font-size: 12.5px; color: var(--muted); border-radius: 7px;
+    position: relative; flex: none; transition: background-color .15s ease, color .15s ease;
+  }
+  .icon-cat .icon-cat-lead { flex: none; width: 20px; height: 20px; display: inline-grid; place-items: center; }
+  .icon-cat .icon-cat-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .icon-cat .icon-count { background: transparent; padding: 0 2px; min-width: 0; }
+  .menu .icon-side button.icon-cat:hover { background: var(--panel); color: var(--ink); }
+  .menu .icon-side button.icon-cat.on { background: var(--panel); color: var(--ink); font-weight: 600; }
+  .menu .icon-side button.icon-cat.on::before {
+    content: ""; position: absolute; left: 0; top: 7px; bottom: 7px; width: 3px; border-radius: 3px;
+    background: var(--accent);
+  }
+  .icon-cat.on .icon-cat-lead { color: var(--accent); }
+  .icon-cat-rule { flex: none; border: 0; border-top: 1px solid var(--line); margin: 5px 6px; }
+  .icon-main { display: flex; flex-direction: column; min-width: 0; min-height: 0; background: var(--panel); }
+  .icon-top { padding: 10px 12px 6px; }
+  .icon-search { position: relative; display: flex; align-items: center; }
+  .icon-search > svg.iu {
+    position: absolute; left: 10px; width: 15px; height: 15px; color: var(--muted); pointer-events: none;
+  }
+  .icon-search .icon-find { width: 100%; box-sizing: border-box; padding: 7px 32px; border-radius: 9px; }
+  .icon-search .icon-find::-webkit-search-cancel-button { display: none; }
+  .menu .icon-search button.icon-clear {
+    position: absolute; right: 4px; width: 26px; height: 26px; padding: 0; justify-content: center;
+    color: var(--muted); border-radius: 6px;
+  }
+  .menu .icon-search button.icon-clear[hidden] { display: none; }
+  .icon-scroll { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: 0 12px 10px; }
+  .icon-scroll.swap .icon-sec { animation: icon-sec-in .22s var(--ease-soft, ease-out) both; }
+  .icon-scroll.swap .icon-sec:nth-child(2) { animation-delay: .03s; }
+  .icon-scroll.swap .icon-sec:nth-child(n+3) { animation-delay: .06s; }
+  @keyframes icon-sec-in { from { opacity: 0; transform: translateY(4px); } }
+  .icon-sec + .icon-sec { margin-top: 4px; }
+  .icon-sec-head, .menu button.icon-sec-head {
+    position: sticky; top: 0; z-index: 2; display: flex; align-items: center; gap: 7px;
+    width: 100%; padding: 8px 4px 6px; margin: 0; border-radius: 0;
+    background: var(--panel); color: var(--muted); font-size: 11px; font-weight: 650;
+    letter-spacing: .06em; text-transform: uppercase; text-align: left;
+  }
+  .menu button.icon-sec-head:hover { background: var(--panel); color: var(--ink); }
+  .icon-sec-head .icon-sec-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .icon-sec-head .icon-sec-face { display: inline-grid; place-items: center; width: 18px; }
+  .icon-sec-head .icon-count { letter-spacing: 0; text-transform: none; }
+  .icon-sec-head svg.icon-sec-more { width: 11px; height: 11px; opacity: 0; transition: opacity .15s ease, transform .15s ease; }
+  button.icon-sec-head:hover svg.icon-sec-more { opacity: 1; transform: translateX(2px); }
+  .icon-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(80px, 1fr)); gap: 4px; }
   .menu .icon-grid button.icon-cell {
-    flex-direction: column; justify-content: flex-start; gap: 3px;
-    padding: 7px 3px 5px; font-size: 11px; text-align: center; min-width: 0;
+    flex-direction: column; justify-content: flex-start; align-items: center; gap: 5px;
+    padding: 7px 3px 6px; min-width: 0; border-radius: 10px; border: 1px solid transparent;
+    transition: background-color .15s ease, border-color .15s ease;
+  }
+  .menu .icon-grid button.icon-cell:hover { background: var(--accent-soft); }
+  .menu .icon-grid button.icon-cell:focus-visible { outline: 0; border-color: var(--accent); background: var(--accent-soft); }
+  .icon-cell .icon-card { transition: transform .15s ease, box-shadow .15s ease; }
+  .icon-cell:is(:hover, :focus-visible) .icon-card {
+    transform: translateY(-2px); box-shadow: 0 0 0 1px rgba(16, 24, 40, .12), 0 6px 14px rgba(16, 24, 40, .2);
   }
   .icon-cell .icon-name {
-    display: block; width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-    color: var(--muted);
+    display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden;
+    width: 100%; font-size: 11px; line-height: 1.25; text-align: center; color: var(--muted);
+    overflow-wrap: anywhere; min-height: 2.5em;
   }
   .menu .icon-grid button.icon-cell:is(:hover, :focus-visible) .icon-name { color: var(--ink); }
-  .icon-none { margin: 4px 2px; }
+  .icon-none {
+    display: flex; flex-direction: column; align-items: center; gap: 10px; padding: 48px 10px;
+    color: var(--muted); text-align: center;
+  }
+  .icon-none p { margin: 0; }
+  .icon-none svg.icon-none-art { width: 30px; height: 30px; opacity: .55; }
+  .menu .icon-none .btn { width: auto; }
+  .icon-foot {
+    display: flex; align-items: center; justify-content: space-between; gap: 10px;
+    min-height: 48px; padding: 6px 12px; border-top: 1px solid var(--line); background: var(--bg);
+    font-size: 12px; color: var(--muted);
+  }
+  .icon-foot-what { display: flex; align-items: center; gap: 9px; min-width: 0; }
+  .icon-foot-name { display: flex; flex-direction: column; min-width: 0; line-height: 1.25; }
+  .icon-foot-name b { color: var(--ink); font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .icon-foot-name small { font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .icon-foot-hint { flex: none; font-size: 11.5px; text-align: right; }
+  @media (max-width: 640px) {
+    .icon-lib-in { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr); }
+    .icon-side {
+      flex-direction: row; overflow-x: auto; overflow-y: hidden; border-right: 0;
+      border-bottom: 1px solid var(--line); padding: 6px;
+    }
+    .menu .icon-side button.icon-cat { width: auto; }
+    .icon-cat .icon-count, .icon-cat-rule { display: none; }
+    .menu .icon-side button.icon-cat.on::before { left: 8px; right: 8px; top: auto; bottom: 0; width: auto; height: 2px; }
+    .icon-foot-hint { display: none; }
+  }
+
+  /* In the paper's menu: Icons, then the sets -- each with its face and
+     count -- and beside each its icons, in a small grid of tiles. */
+  .menu .mi-lead .mi-face { display: inline-grid; place-items: center; }
+  .icon-menu-search { margin: 2px 2px 5px; }
+  .icon-menu-search .icon-find { padding: 6px 10px 6px 31px; font-size: 13px; border-radius: 8px; }
+  .icon-fly { width: min(356px, calc(100vw - 32px)); padding: 0 3px 2px; }
+  .icon-fly .icon-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr)); max-height: min(56vh, 420px);
+    overflow-y: auto; overscroll-behavior: contain;
+  }
+  .icon-fly-hint {
+    margin: 6px 6px 3px; padding-top: 6px; border-top: 1px solid var(--line-soft);
+    font-size: 11px; color: var(--muted);
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .icon-scroll.swap .icon-sec { animation: none; }
+    .icon-cell .icon-card, .icon-quick .icon-card, .icon-lib-btn .ilb-more { transition: none; }
+  }
 
   /* An icon's ink prints black, as its outline does (05-chart.css). */
   .no-ink svg .node .inked, .no-ink svg .key-shape .inked { fill: #000 !important; }

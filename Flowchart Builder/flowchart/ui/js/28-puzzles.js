@@ -657,10 +657,13 @@
   function dressPuzzleButton() {
     var button = el("#puzzles");
     if (!button) { return; }
-    // Not there while drawing by hand.  Opening a puzzle takes you back to
-    // the pseudocode, so from here the button was a way out dressed as
-    // something to do.
-    button.hidden = byHand;
+    // There on every tab.  It used to be put away while drawing by hand,
+    // since opening a puzzle takes you back to the pseudocode -- but the
+    // page opens on the tab it was left on, so somebody who had last been
+    // drawing found Games in the bar and no Puzzles at all, and took it to
+    // be gone.  A puzzle opened from the Drawing tab goes to the Text tab,
+    // the way a game or an example does, asking first if there is work.
+    button.hidden = false;
     var count = puzzlesDone();
     // The dot was on from the first puzzle solved until all fifty were,
     // which is a progress bar wearing a notification's clothes: it looks

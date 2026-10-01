@@ -4751,6 +4751,20 @@ ES = {
     "rl_office": "Despacho",
     "rl_dining": "Comedor",
     "rl_living": "Sala de estar",
+    "ic_all_icons": "Todos los iconos",
+    "ic_sets": "Grupos de iconos",
+    "ic_find_n": "Buscar entre {n} iconos",
+    "ic_clear": "Borrar la búsqueda",
+    "ic_count": "{n} iconos",
+    "ic_found": "{n} encontrados",
+    "ic_hint": "Haz clic para añadir · arrastra al papel",
+    "ic_hint_touch": "Toca para añadir · arrastra al papel",
+    "ic_show_set": "Mostrar solo {set}",
+    "ic_browse": "Ver todos los iconos…",
+    "ad_overlap": "{a} y {b} están en el mismo sitio: en 3D uno atravesaría al otro.",
+    "ad_fix_apart": "Separarlos",
+    "ad_in_wall": "{what} se mete en la pared: {room}.",
+    "ad_fix_in": "Moverlo dentro de la habitación",
 }
 
 speaks("es", "Español", ES)

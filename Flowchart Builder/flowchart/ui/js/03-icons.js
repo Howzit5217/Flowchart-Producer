@@ -32,6 +32,17 @@
   // A piece of a floor plan, or a room: free to stand on top of one
   // another, as a chair stands half under a table and a door in a wall.
   function isLoose(kind) { return !!(ICONS[kind] && !ICONS[kind].fig); }
+  // What stands on the floor and takes up the room it stands in -- a sofa, a
+  // table, a car, the stairs -- and so shares it with nothing else that
+  // does: not on the paper (13-hand-apart.js), not walked through, and not
+  // standing inside another in 3D (asked for, 2026-10-02: "make sure the 3d
+  // models do not clip into one another").  What lies flat, hangs, stands
+  // on something, or goes in a wall shares its spot as it would in a house.
+  function isSolid(kind) {
+    var icon = ICONS[kind];
+    return !!icon && !icon.area && !icon.fig && !ON_TOP[kind] && !LIES_FLAT[kind] && !FROM_CEILING[kind] &&
+           !ON_THE_WALL[kind] && !SNAP_IN_WALL[kind] && kind !== "i_wall" && kind !== "i_fence";
+  }
 
   // ------------------------------------------------- reading the drawings --
   // Each part's path, read once into its commands and their numbers, so

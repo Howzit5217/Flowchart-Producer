@@ -27,7 +27,14 @@
     // they do in a house -- a chair half under a table, a door in a wall,
     // the lot on the floor of a room -- so nothing is pushed off them and
     // they push nothing (isLoose, 03-icons.js).
-    if (isLoose(a.kind) || isLoose(b.kind)) { return false; }
+    // But two things that take up the floor they stand on (isSolid), or a
+    // person and one of those, keep out of each other: side by side, not
+    // one in the other -- touching is apart.
+    if (isLoose(a.kind) || isLoose(b.kind)) {
+      var sa = isSolid(a.kind), sb = isSolid(b.kind);
+      if (!((sa && (sb || isFigure(b.kind))) || (sb && isFigure(a.kind)))) { return false; }
+      gap = Math.min(gap, -0.5);
+    }
     var p = turned(a), q = turned(b);
     // Clear even of the boxes round them: nothing more to ask.
     if (Math.abs(ax - bx) * 2 >= p.w + q.w + gap * 2 ||
