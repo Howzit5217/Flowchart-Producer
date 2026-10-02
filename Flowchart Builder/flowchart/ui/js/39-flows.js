@@ -21,7 +21,8 @@
   var FLOW_STEP = 220;                   // pixels a second, along an arrow
   var NET_SERVERS = { i_server: true, i_database: true, i_internet: true, cloud: true, store: true };
   var NET_CLIENTS = { i_computer: true, i_laptop: true, i_tablet: true, i_phone: true, i_camera: true };
-  var VEHICLES = { i_car: 160, i_bus: 120, i_truck: 120, i_bike: 80, i_train: 200, i_plane: 320, i_ship: 90 };
+  var VEHICLES = { i_car: 160, i_bus: 120, i_truck: 120, i_bike: 80, i_train: 200, i_plane: 320, i_ship: 90,
+                   i_taxi: 160, i_tram: 130, i_helicopter: 260, i_scooter: 90 };
 
   function flowGraph() {
     var outs = {}, ins = {};

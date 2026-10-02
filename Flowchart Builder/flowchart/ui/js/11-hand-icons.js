@@ -48,7 +48,8 @@
   var ICON_SET_FACE = { ic_people: "i_doctor", ic_rooms: "i_door", ic_living: "i_sofa", ic_bedroom: "i_bed",
                         ic_kitchen: "i_stove", ic_bath: "i_bathtub", ic_decor: "i_plant", ic_walls: "i_picture",
                         ic_tech: "i_tv", ic_outdoor: "i_shrub", ic_devices: "i_laptop", ic_circuit: "i_bulb",
-                        ic_travel: "i_car", ic_space: "i_rocket", ic_things: "i_idea" };
+                        ic_travel: "i_car", ic_space: "i_rocket", ic_things: "i_idea",
+                        ic_fitness: "i_treadmill", ic_utility: "i_workbench" };
   var ICON_UI = {
     all: '<rect x="3" y="3" width="5.5" height="5.5" rx="1.3"/><rect x="11.5" y="3" width="5.5" height="5.5" rx="1.3"/>' +
          '<rect x="3" y="11.5" width="5.5" height="5.5" rx="1.3"/><rect x="11.5" y="11.5" width="5.5" height="5.5" rx="1.3"/>',

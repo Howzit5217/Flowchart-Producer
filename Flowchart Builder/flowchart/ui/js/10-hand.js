@@ -2044,7 +2044,7 @@
       // instead of hanging them off it.
       out.push.apply(out, wordsArt(n.kind, moved.x, moved.y, n.w, n.h, lines, type));
       out.push("</g>");
-      if (joining && picked && n.id !== picked) {
+      if (joining && picked && n.id !== picked && (typeof linksWanted !== "function" || linksWanted(n))) {
         // Somewhere to aim for.  Once a line is being drawn, every other
         // shape puts its own dots out, so joining two up is click a dot,
         // click a dot -- no holding the button down and no aiming at a
@@ -2062,7 +2062,7 @@
         // diamond -- rather than out on the corner of the box round it.
         // Press and drag from one to draw a line, or just click it and then
         // click where it should go.
-        (typeof linksWanted !== "function" || linksWanted() ? ports(n) : []).forEach(function (port, side) {
+        (typeof linksWanted !== "function" || linksWanted(n) ? ports(n) : []).forEach(function (port, side) {
           out.push('<circle class="knob' + (joining ? " lit" : "") +
                    '" data-i="' + n.id + '" data-side="' + side + '" cx="' +
                    (port.x + ox + port.dx * 1.5) + '" cy="' +

@@ -164,12 +164,22 @@
       out.push('<text class="sized" x="' + iconR(cx) + '" y="' + iconR(cy + below) +
                '" text-anchor="middle" font-size="80%" opacity="0.6" stroke="none" fill="#000000">' +
                escaped(floorSays(w, h)) + "</text>");
+      if (mine && planSizesOn() && w >= 120 && h >= 90) {
+        out.push('<text class="sized" x="' + iconR(cx) + '" y="' + iconR(cy + below + 12) +
+                 '" text-anchor="middle" font-size="68%" opacity="0.55" stroke="none" fill="#000000">' +
+                 escaped(planDims(mine)) + "</text>");
+      }
     }
     // Furniture and the rest of a plan named, so a plan reads without
     // knowing every drawing in it (asked for, 2026-10-01: "make sure that
     // things are labeled too and you can turn it off").
     if (mine && !said && !icon.fig && !icon.area && !NO_LABEL[kind] && planLabelsOn()) {
       out.push(labelArt(labelName(kind), cx, cy + (ON_TOP[kind] ? -10 : FROM_CEILING[kind] ? 11 : 0), mine.turn, "tag"));
+      // its size under its name, upright as the name is -- where it fits
+      if (planSizesOn() && !ON_TOP[kind] && !FROM_CEILING[kind] && Math.max(w, h) >= 40 && Math.min(w, h) >= 22) {
+        var tr = (mine.turn || 0) * Math.PI / 180;
+        out.push(labelArt(planDims(mine), cx + 9 * Math.sin(tr), cy + 9 * Math.cos(tr), mine.turn, "tag size-tag"));
+      }
     }
     // A lot, on the paper, says what it comes to (not in the library).
     if (kind === "i_lot" && iconNode && iconNode.kind === "i_lot") { out.push(lotArt(iconNode, cx, cy, w, h)); }
@@ -184,6 +194,10 @@
   var NO_LABEL = { i_door: true, i_door2: true, i_slide: true, i_bifold: true, i_window: true, i_wall: true, i_garagedoor: true };
 
   function planLabelsOn() { return !(style && style.noLabels); }
+  // Sizes written on a plan -- a room's length, width and ceiling under its
+  // area, a piece's width, depth and height under its name (planDims,
+  // 39-design.js): on unless switched off beside Labels.
+  function planSizesOn() { return !(style && style.noSizes) && typeof planDims === "function"; }
 
   // A thing's name as a label: what it is, without how it is drawn --
   // "Car", not "Car (from above)".
@@ -195,7 +209,7 @@
   function labelArt(words, x, y, turn, cls) {
     var spin = turn ? ' transform="rotate(' + iconR(-turn) + " " + iconR(x) + " " + iconR(y) + ')"' : "";
     return '<text class="' + cls + '" x="' + iconR(x) + '" y="' + iconR(y) + '" dy="0.35em" text-anchor="middle" ' +
-           'font-size="' + (cls.indexOf("room-tag") >= 0 ? "92%" : "68%") + '" fill="#000000" ' +
+           'font-size="' + (cls.indexOf("room-tag") >= 0 ? "92%" : cls.indexOf("size-tag") >= 0 ? "55%" : "68%") + '" fill="#000000" ' +
            'stroke="' + (style.sheet || "#ffffff") + '" stroke-width="2.6" stroke-linejoin="round" ' +
            'paint-order="stroke"' + spin + ">" + escaped(words) + "</text>";
   }
@@ -407,11 +421,12 @@
                        i_picture: "face", i_mirror: "face", i_shelf: "face", i_walltv: "face",
                        i_wallclock: "face", i_sconce: "face", i_cabinet: "face", i_hooks: "face",
                        i_radiator: "face", i_hood: "face", i_towelrail: "face", i_medicine: "face",
-                       i_proscreen: "face", i_ac: "face" };
+                       i_proscreen: "face", i_ac: "face", i_whiteboard: "face", i_dartboard: "face", i_evcharger: "face" };
   // Hung on a wall, up out of the way: walked under, not round (38-walk.js).
   var ON_THE_WALL = { i_picture: true, i_mirror: true, i_shelf: true, i_walltv: true,
                       i_wallclock: true, i_sconce: true, i_cabinet: true, i_hooks: true,
-                      i_hood: true, i_towelrail: true, i_medicine: true, i_proscreen: true, i_ac: true };
+                      i_hood: true, i_towelrail: true, i_medicine: true, i_proscreen: true, i_ac: true,
+                      i_whiteboard: true, i_dartboard: true, i_evcharger: true };
   // What stands on top of something else -- a lamp on a table, a kettle on
   // the counter -- and is raised to stand on it in 3D (38-view3d.js).
   var ON_TOP = { i_microwave: true, i_coffeemaker: true, i_toaster: true, i_kettle: true, i_fruitbowl: true,
@@ -421,7 +436,7 @@
   // What hangs from the ceiling (drawn dashed, the way a plan shows what
   // is overhead), and what lies flat on the ground and is walked over.
   var FROM_CEILING = { i_hanging: true, i_pendant: true, i_chandelier: true, i_ceilingfan: true, i_projector: true };
-  var LIES_FLAT = { i_rug: true, i_bathmat: true, i_driveway: true, i_path: true, i_deck: true, i_flowerbed: true };
+  var LIES_FLAT = { i_rug: true, i_bathmat: true, i_driveway: true, i_path: true, i_deck: true, i_flowerbed: true, i_yogamat: true };
   // Ways from one floor of a house to another (38-walk.js).
   var BETWEEN_FLOORS = { i_stairs: true, i_spiral: true, i_elevator: true };
 

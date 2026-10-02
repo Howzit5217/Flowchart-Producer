@@ -885,7 +885,7 @@
           var g = el('.node[data-i="h' + lot[0] + '"]', el("#chart"));
           if (g) { typeInto(g); }
         });
-        if (linksWanted()) {             // not in a floor plan or a sky (39-design.js)
+        if (linksWanted(nodeById(lot[0]))) {   // in a floor plan, rooms and doors only (39-design.js)
           add("join", TXT.connect, function () {
             joining = true; joinFrom = null;
             drawHand(); drawHandPanel();

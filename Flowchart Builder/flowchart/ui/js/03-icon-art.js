@@ -511,6 +511,69 @@
     plan("i_fan", 35, 35, ["o " + C(17.5, 17.5, 17), "t M17.5 17.5 C14 10 15 4 17.5 1.5 M17.5 17.5 C25 14 31 15 33.5 17.5 " +
                            "M17.5 17.5 C21 25 20 31 17.5 33.5 M17.5 17.5 C10 21 4 20 1.5 17.5", "k " + C(17.5, 17.5, 2.5)]);
     plan("i_ac", 80, 20, ["o " + R(0, 0, 80, 20, 4), "t M6 13 H74 M6 16.5 H74"]);
+    // More of a home (asked for, 2026-10-01: "make more icons than what are
+    // there currently"): each from above, its back at the top as the rest.
+    // living and dining
+    plan("i_consoletable", 100, 35, ["o " + R(0, 0, 100, 35, 2), "t " + R(4, 4, 92, 27, 1), "k " + C(35, 25, 1.2) + " " + C(65, 25, 1.2)]);
+    plan("i_sideboard", 150, 45, ["o " + R(0, 0, 150, 45, 1.5), "t M50 0 V45 M100 0 V45", "t M3 40 H147",
+                                  "k " + C(46, 42.5, 1) + " " + C(54, 42.5, 1) + " " + C(96, 42.5, 1) + " " + C(104, 42.5, 1)]);
+    plan("i_chaise", 60, 150, ["o " + R(0, 0, 60, 150, 6), "o " + R(0, 0, 60, 30, 6), "o " + R(0, 0, 9, 95, 3), "t M9 85 H60"]);
+    plan("i_rocker", 60, 80, ["t2 M5 2 C2 30 2 58 7 78 M55 2 C58 30 58 58 53 78", "o " + R(9, 12, 42, 38, 5), "o " + R(9, 3, 42, 11, 3)]);
+    plan("i_hutch", 100, 45, ["o " + R(0, 0, 100, 45, 0), "t M50 0 V45", "t- M3 22 H97", "k " + C(47, 39, 1) + " " + C(53, 39, 1)]);
+    plan("i_barcart", 70, 45, ["o " + R(0, 0, 70, 45, 3), "t " + R(4, 4, 62, 37, 2), "o " + C(15, 22, 4.5) + " " + C(28, 16, 3.4) + " " + C(28, 29, 3.4),
+                               "t2 M-2 8 V37 M72 8 V37"]);
+    plan("i_highchair", 50, 50, ["t M3 3 L11 14 M47 3 L39 14 M3 47 L10 41 M47 47 L40 41", "o " + R(9, 12, 32, 30, 6), "o " + R(5, 38, 40, 10, 4)]);
+    // bedroom
+    plan("i_daybed", 100, 45, ["o " + R(0, 0, 100, 45, 3), "o " + R(0, 0, 100, 8, 3), "o " + R(0, 0, 8, 45, 3) + " " + R(92, 0, 8, 45, 3),
+                               "o " + R(14, 10, 22, 9, 4) + " " + R(64, 10, 22, 9, 4)]);
+    plan("i_floormirror", 60, 10, ["o " + R(0, 0, 60, 6, 1), "t M4 3 H56", "t M8 6 L4 10 M52 6 L56 10"]);
+    plan("i_toybox", 60, 40, ["o " + R(0, 0, 60, 40, 4), "t M0 12 H60", "k " + R(27, 14, 6, 4, 1), "t " + C(16, 26, 4) + " M40 22 L48 30 M48 22 L40 30"]);
+    plan("i_standdesk", 70, 35, ["o " + R(0, 0, 70, 35, 2), "t M7 4 V31 M63 4 V31", "o " + R(24, 4, 22, 5, 1), "t " + R(22, 16, 26, 7, 1)]);
+    plan("i_lshapedesk", 90, 90, ["o M0 0 H90 V35 H35 V90 H0 Z", "o " + R(32, 4, 24, 5, 1), "t " + R(28, 16, 30, 8, 1)]);
+    // kitchen
+    plan("i_oven", 60, 60, ["o " + R(0, 0, 60, 60, 1), "t " + R(5, 5, 50, 22, 1.5), "t " + R(5, 31, 50, 22, 1.5), "t2 M18 56 H42"]);
+    plan("i_winecooler", 60, 60, ["o " + R(0, 0, 60, 60, 1.5), "t " + R(4, 4, 52, 46, 1),
+                                  "t " + C(14, 14, 3) + " " + C(26, 14, 3) + " " + C(38, 14, 3) + " " + C(14, 28, 3) + " " + C(26, 28, 3) + " " + C(38, 28, 3),
+                                  "t2 M48 54 V58"]);
+    plan("i_freezer", 100, 60, ["o " + R(0, 0, 100, 60, 3), "t " + R(4, 4, 92, 52, 2), "t2 M30 56 H70"]);
+    // bathroom
+    plan("i_cornertub", 75, 75, ["o M0 0 H75 V30 C75 55 55 75 30 75 H0 Z", "o M6 6 H69 V28 C69 50 50 69 28 69 H6 Z", "k " + C(16, 16, 1.6)]);
+    plan("i_linencab", 40, 35, ["o " + R(0, 0, 40, 35, 0), "t M20 0 V35", "t- M3 12 H37 M3 23 H37", "k " + C(17, 31, 1) + " " + C(23, 31, 1)]);
+    // on the walls
+    plan("i_whiteboard", 100, 6, ["o " + R(0, 0, 100, 4, 0.5), "t M8 4 V7 M92 4 V7", "t M20 2 H62"]);
+    plan("i_dartboard", 30, 6, ["o " + R(0, 0, 30, 5, 2.5), "k " + C(15, 2.5, 1.2)]);
+    plan("i_evcharger", 25, 10, ["o " + R(0, 0, 25, 7, 2), "t M6 7 C6 11 13 11 13 8"]);
+    // fitness and play
+    plan("i_treadmill", 45, 95, ["o " + R(0, 0, 45, 95, 4), "o " + R(3, 3, 39, 14, 3), "t " + R(7, 24, 31, 66, 3),
+                                 "t M7 36 H38 M7 48 H38 M7 60 H38 M7 72 H38 M7 84 H38"]);
+    plan("i_exbike", 30, 60, ["o " + R(10, 0, 10, 12, 2), "t2 M2 10 H28", "o " + R(11, 12, 8, 38, 3), "o " + E(15, 52, 7, 7.5)]);
+    plan("i_weightbench", 30, 60, ["o " + R(6, 12, 18, 48, 4), "t2 M-2 7 H32", "k " + R(-2, 2, 4, 10, 1) + " " + R(28, 2, 4, 10, 1),
+                                   "t M4 9 V16 M26 9 V16"]);
+    plan("i_yogamat", 30, 90, ["o " + R(0, 0, 30, 90, 3), "o " + R(0, 0, 30, 9, 4.5)]);
+    plan("i_pooltable", 60, 110, ["o " + R(0, 0, 60, 110, 4), "t " + R(6, 6, 48, 98, 2),
+                                  "k " + C(6, 6, 2.6) + " " + C(54, 6, 2.6) + " " + C(4.5, 55, 2.4) + " " + C(55.5, 55, 2.4) + " " + C(6, 104, 2.6) + " " + C(54, 104, 2.6),
+                                  "o " + C(30, 32, 2.2) + " " + C(27, 78, 2.2) + " " + C(33, 78, 2.2) + " " + C(30, 83, 2.2)]);
+    plan("i_pingpong", 70, 130, ["o " + R(0, 0, 70, 130, 1), "t M35 3 V127", "t2 M-3 65 H73"]);
+    plan("i_easel", 40, 40, ["t2 M20 4 L5 38 M20 4 L35 38 M20 4 V38", "o " + R(6, 14, 28, 5, 1)]);
+    plan("i_trampoline", 150, 150, ["o " + C(75, 75, 74), "t " + C(75, 75, 64), "t- " + C(75, 75, 52)]);
+    plan("i_swing", 150, 80, ["t M8 8 L8 72 M142 8 L142 72", "t2 M4 40 H146", "o " + R(38, 34, 24, 12, 2) + " " + R(88, 34, 24, 12, 2)]);
+    // out in the yard
+    plan("i_firepit", 50, 50, ["o " + C(25, 25, 24), "o " + C(25, 25, 16), "t M17 17 L33 33 M33 17 L17 33", "k " + C(25, 25, 3)]);
+    plan("i_lounger", 35, 100, ["o " + R(0, 0, 35, 100, 4), "o " + R(0, 0, 35, 32, 4), "t M0 46 H35 M0 60 H35 M0 74 H35 M0 88 H35"]);
+    plan("i_shed", 120, 100, ["o " + R(0, 0, 120, 100, 0), "t M0 50 H120", "t- M4 4 H116 V96 H4 Z", "k " + R(45, 96, 30, 4, 0)]);
+    plan("i_gazebo", 150, 150, ["o M44 0 H106 L150 44 V106 L106 150 H44 L0 106 V44 Z",
+                                "t M75 0 V150 M0 75 H150 M22 22 L128 128 M128 22 L22 128", "k " + C(75, 75, 3.5)]);
+    plan("i_planter", 60, 25, ["o " + R(0, 0, 60, 25, 2), "o " + C(13, 12.5, 6.5) + " " + C(30, 12.5, 7.5) + " " + C(47, 12.5, 6.5)]);
+    plan("i_birdbath", 30, 30, ["o " + C(15, 15, 14.5), "t " + C(15, 15, 10), "k " + C(15, 15, 2)]);
+    plan("i_lamppost", 16, 16, ["o " + C(8, 8, 7.5), "k " + C(8, 8, 2.5), "t M8 0.5 V3 M8 13 V15.5 M0.5 8 H3 M13 8 H15.5"]);
+    plan("i_mailbox", 20, 14, ["o " + R(0, 0, 20, 14, 5), "t M6 7 H14", "k " + R(15, 1.5, 3, 5, 0.5)]);
+    plan("i_bikerack", 80, 40, ["o " + R(6, 16, 68, 8, 2), "t2 M14 2 V38 M30 2 V38 M46 2 V38 M62 2 V38"]);
+    // garage and utility
+    plan("i_workbench", 120, 60, ["o " + R(0, 0, 120, 60, 1), "t M0 8 H120", "o " + R(6, 14, 24, 16, 2), "t " + R(82, 18, 30, 34, 1), "t M82 30 H112 M82 41 H112"]);
+    plan("i_shelving", 100, 40, ["o " + R(0, 0, 100, 40, 0), "t M0 10 H100 M0 20 H100 M0 30 H100",
+                                 "k " + R(0, 0, 4, 4, 0) + " " + R(96, 0, 4, 4, 0) + " " + R(0, 36, 4, 4, 0) + " " + R(96, 36, 4, 4, 0)]);
+    plan("i_furnace", 60, 60, ["o " + R(0, 0, 60, 60, 1), "t " + R(6, 6, 48, 28, 1), "t M10 42 H50 M10 48 H50 M10 54 H50", "o " + C(30, 20, 6)]);
+    plan("i_toolchest", 60, 45, ["o " + R(0, 0, 60, 45, 2), "t M3 9 H57 M3 17 H57 M3 25 H57 M3 33 H57", "t2 M20 41 H40", "k " + C(54, 4.5, 1.6)]);
     // a house on its land: the lot it stands on, the way to it, round it
     area("i_lot", 750, 1000, function (w, h) {      // 15 m by 20 m, about 49 ft by 66 ft
       var out = ["o " + R(0, 0, w, h, 0), "t-1.6 " + R(0, 0, w, h, 0)];
@@ -597,6 +660,20 @@
     figure("i_solar", ["o M10 7 H38 L44.6 33 H3.4 Z", "t M8.4 16 H39.6 M6 24.6 H42 M19.4 7 L17 33 M28.6 7 L31 33",
                        "t M24 33 V44 M15 44 H33"]);
     figure("i_ground", ["t M24 5 V21", "t2 M10 21 H38", "t2 M15 28 H33", "t2 M20 35 H28"]);
+    // (added 2026-10-01: a cell, a diode, a fuse, two meters and a dimmer --
+    // each worked out in a circuit by 39-circuit.js)
+    figure("i_cell", ["o " + R(20, 4.6, 8, 4.6, 1), "o M15 9 H33 V43 H15 Z", "t M15 16.4 H33",
+                      "t2 M24 23 V33 M19 28 H29"]);
+    figure("i_diode", ["t M2 24 H15 M31 24 H46", "o M15 13 L31 24 L15 35 Z", "t2 M31 13 V35"]);
+    figure("i_fuse", ["t M2 24 H10 M38 24 H46", "o " + R(10, 16.6, 28, 14.8, 7.4),
+                      "t1.4 M13 24 C17 18.6 20.4 29.4 24 24 C27.6 18.6 31 29.4 35 24",
+                      "k " + R(10, 16.6, 4, 14.8, 1) + " " + R(34, 16.6, 4, 14.8, 1)]);
+    figure("i_ammeter", ["t M2 24 H9 M39 24 H46", "o " + C(24, 24, 15),
+                         "t1.8 M18.6 31 L24 16.6 L29.4 31 M20.4 26.4 H27.6"]);
+    figure("i_voltmeter", ["t M2 24 H9 M39 24 H46", "o " + C(24, 24, 15), "t1.8 M18.4 16.6 L24 31.4 L29.6 16.6"]);
+    figure("i_dimmer", ["t M2 24 H9.6 M38.4 24 H46",
+                        "t1.8 M9.6 24 L12 17 L16.8 31 L21.6 17 L26.4 31 L31.2 17 L36 31 L38.4 24",
+                        "t1.6 M11 39 L36 9 M30 9.4 L36 9 L35.6 15"]);
 
     // ------------------------------------------------------ travel and city --
     figure("i_car", ["o M4 30 C4 26 7 24 10 23 L15 15 C16 13.4 18 13 20 13 H31 C33 13 34.4 14 35.4 15.6 L40 23 C43 23.6 45 26 45 29 V33 H4 Z",
@@ -637,7 +714,27 @@
                       "o M24 3.6 C31 3.6 36 8.6 36 14.6 C40.4 16.6 41.4 24 37.2 28 C37.2 33.2 31 36 26 34 H22 C17 36 10.8 33.2 10.8 28 C6.6 24 7.6 16.6 12 14.6 C12 8.6 17 3.6 24 3.6 Z"]);
     figure("i_traffic", ["t2 M24 36 V46", "o " + R(16.6, 3, 14.8, 33, 3),
                          "t " + C(24, 10.6, 3.6) + " " + C(24, 19.6, 3.6), "k " + C(24, 28.6, 3.6)]);
-
+    figure("i_taxi", ["o M4 30 C4 26 7 24 10 23 L15 15 C16 13.4 18 13 20 13 H31 C33 13 34.4 14 35.4 15.6 L40 23 C43 23.6 45 26 45 29 V33 H4 Z",
+                      "o " + R(19.6, 7.4, 9.6, 5.6, 1),
+                      "t M17 22.6 L20 16.2 H25 V22.6 Z M28 22.6 V16.2 H31.4 L35 22.6 Z",
+                      "o " + C(13, 33.6, 4.6) + " " + C(36, 33.6, 4.6), "k " + C(13, 33.6, 1.5) + " " + C(36, 33.6, 1.5)]);
+    figure("i_tram", ["t M24 9 L18 2.6 M24 9 L30 2.6 M14 2.6 H34", "o " + R(8, 9, 32, 27, 4),
+                      "t M12 13 H36 V23 H12 Z M20 13 V23 M28 13 V23", "t M8 29 H40",
+                      "k " + C(15, 38.4, 3) + " " + C(33, 38.4, 3), "t M3 44 H45"]);
+    figure("i_helicopter", ["t2 M5 8 H43 M24 8 V12.6",
+                            "o M10 23 C10 16 17 12.6 25 12.6 C33 12.6 38 18 38 24 C38 30 33 32.6 26 32.6 H17 C12.6 32.6 10 29 10 23 Z",
+                            "o M37 20.4 H46 V24.6 H37 Z", "t M14 22 C14 18 17.6 16.6 22 16.6 V23.6 H14 Z",
+                            "t M15 32.6 V38.6 M30 32.6 V38.6 M8 38.6 H37"]);
+    figure("i_scooter", ["o " + C(10, 37, 5) + " " + C(38, 37, 5), "t2 M10 37 H31 L37 37", "t2 M34.6 37 L30 9 M24.6 9 H35.6"]);
+    figure("i_airport", ["t M6 44 H42", "o M18.6 44 V21 H29.4 V44 Z", "o M13.6 12.6 H34.4 L31 21 H17 Z",
+                         "t M18 16.6 H30 M24 12.6 V4.6", "k " + C(24, 4.6, 1.6)]);
+    figure("i_trainstation", ["o M5 20 L24 7.6 L43 20 V44 H5 Z", "o M18 44 V33 C18 26 30 26 30 33 V44 Z",
+                              "t " + C(24, 18.6, 4.4) + " M24 16 V18.6 L26 20", "t M9 26 H15 M33 26 H39"]);
+    figure("i_park", ["o " + R(12.6, 24, 3.2, 14, 0.6), "o " + C(14.2, 16.6, 9.4),
+                      "t2 M24 32 H45 M25.6 32 V39 M43.4 32 V39", "t2 M24 27 H45", "t M3 41 H45"]);
+    figure("i_cafe", ["o M9 19 H32 V29 C32 36.6 26.6 41 20.6 41 C14.4 41 9 36.6 9 29 Z",
+                      "t2 M32 22 C40.6 22 40.6 32.6 32 32.6",
+                      "t M15 15 C13 12 17 10 15 6 M21 15 C19 12 23 10 21 6 M27 15 C25 12 29 10 27 6", "t2 M5 45 H36"]);
     // --------------------------------------------------------------- space --
     figure("i_rocket", ["o M16 26 L9 35 V40 L16 36 Z", "o M32 26 L39 35 V40 L32 36 Z",
                         "o M24 3 C30 8 32 16 32 26 V34 H16 V26 C16 16 18 8 24 3 Z",
@@ -661,6 +758,17 @@
     figure("i_ufo", ["t- M17.4 32 L12 45 M30.6 32 L36 45", "o M15.6 22.4 C15.6 12.6 32.4 12.6 32.4 22.4 Z",
                      "o " + E(24, 25.4, 20.4, 6.6),
                      "k " + C(11.6, 25.4, 1.4) + " " + C(19.6, 27.6, 1.4) + " " + C(28.4, 27.6, 1.4) + " " + C(36.4, 25.4, 1.4)]);
+    figure("i_comet", ["t1.4 M28.6 18.6 L5 42 M31 21 L12 45.4 M26 16 L3 33.4", "o " + C(33.4, 13.6, 7.4)]);
+    figure("i_asteroid", ["o M14 10 L27 5.6 L38.6 11.6 L43.6 24 L37.6 37.6 L24 42.6 L10.6 37.4 L5.4 24 Z",
+                          "t " + C(19.6, 19.6, 3.2) + " " + C(31, 28, 4.4) + " " + C(18.6, 32, 2.2)]);
+    figure("i_station", ["t M12 24 H36", "o " + R(2, 14, 10, 20, 0.5) + " " + R(36, 14, 10, 20, 0.5),
+                         "t M7 14 V34 M41 14 V34 M2 24 H12 M36 24 H46", "o " + R(18, 17, 12, 14, 2),
+                         "t " + E(24, 24, 17, 5.6)]);
+    figure("i_lander", ["o M17.6 5 H30.4 V12 H17.6 Z", "o M13.6 12 H34.4 L37.6 24 H10.4 Z",
+                        "t1.6 M12.6 24 L6 40 M35.4 24 L42 40 M19 24 L16.4 40 M29 24 L31.6 40",
+                        "t2 M3 40.4 H9.6 M38.4 40.4 H45", "k " + R(21, 7.6, 6, 2.8, 0.6), "t M21 28 L24 34 L27 28"]);
+    figure("i_galaxy", ["t1.6 M24 24 C30 18 40.4 22 38.4 30 C36.4 38.6 24 40.6 17.6 34.4 M24 24 C18 30 7.6 26 9.6 18 C11.6 9.4 24 7.4 30.4 13.6",
+                        "k " + C(24, 24, 3.4), "k " + C(7.6, 38, 1.1) + " " + C(40, 8, 1.1) + " " + C(42, 40.4, 1.3)]);
 
     // ---------------------------------------------------------------- things --
     figure("i_money", ["o " + R(3, 13, 42, 23, 2), "t " + C(24, 24.5, 7.2),
@@ -711,6 +819,24 @@
                       "t M9 38.4 C9 35.8 11 34 13.6 34 H40", "t M19 14 H34 M19 19 H30"]);
     figure("i_megaphone", ["o " + R(4.6, 18, 6.4, 12.6, 1.2), "o M11 18 L34 7.6 V41 L11 30.6 Z",
                            "t M16 31.6 L19.4 40 H23.6 L21.4 33.6", "t M38.6 17.6 C41 21.6 41 27 38.6 31 M42.6 13.6 C46.6 19.6 46.6 29 42.6 35"]);
+    figure("i_gift", ["o " + R(8, 20, 32, 24, 1), "o " + R(6, 14, 36, 7.4, 1), "t2 M24 14 V44",
+                      "t M24 14 C18 5 11 9.6 18 14 M24 14 C30 5 37 9.6 30 14"]);
+    figure("i_target", ["o " + C(24, 24, 19), "t " + C(24, 24, 13) + " " + C(24, 24, 7), "k " + C(24, 24, 2.6),
+                        "t2 M24 24 L41 7 M35 7 H41 V13"]);
+    figure("i_hourglass", ["t2 M10 4.6 H38 M10 43.4 H38",
+                           "o M14 4.6 C14 16 22 20 22 24 C22 28 14 32 14 43.4 H34 C34 32 26 28 26 24 C26 20 34 16 34 4.6 Z",
+                           "k M17 9 H31 C30 14 26.6 17 24 19.4 C21.4 17 18 14 17 9 Z",
+                           "k M17.6 40 C17.6 35.6 24 33 24 33 C24 33 30.4 35.6 30.4 40 Z"]);
+    figure("i_music", ["k " + E(14, 36.4, 6, 4.6) + " " + E(36, 32.4, 6, 4.6), "t2 M19.6 36.4 V9 M41.6 32.4 V5",
+                       "k M19.6 9 L41.6 5 V10.6 L19.6 14.6 Z"]);
+    figure("i_palette", ["oe M24 5 C36 5 44 13 44 22 C44 30 38 32 33 31 C29 30 27 33 29 36 C31 40 28 44 23 44 C12 44 4 36 4 24 C4 13 13 5 24 5 Z " +
+                         C(15.6, 34, 3.4),
+                         "k " + C(14, 21, 3) + " " + C(20.6, 12.6, 3) + " " + C(30.4, 12, 3) + " " + C(37.4, 19.4, 3)]);
+    figure("i_tag", ["o M5.6 22.4 L22 6 H40 C41.2 6 42 6.8 42 8 V26 L25.6 42.4 C24.6 43.4 23 43.4 22 42.4 L5.6 26 C4.6 25 4.6 23.4 5.6 22.4 Z",
+                     "t " + C(34, 14, 3.2), "t M16 26 L24 34 M20 22 L28 30"]);
+    figure("i_magnet", ["o M8 8 H18 V26 C18 30 21 33 24 33 C27 33 30 30 30 26 V8 H40 V26 C40 36 33 43 24 43 C15 43 8 36 8 26 Z",
+                        "k " + R(8, 8, 10, 7, 0) + " " + R(30, 8, 10, 7, 0)]);
+    figure("i_puzzle", ["o M10 14 H18 C17 9 20.6 6 24 6 C27.4 6 31 9 30 14 H38 V22 C43 21 46 24.6 46 28 C46 31.4 43 35 38 34 V42 H10 V34 C15 35 18 31.4 18 28 C18 24.6 15 21 10 22 Z"]);
     return made;
   })();
 
@@ -732,38 +858,50 @@
                   "i_stairs", "i_spiral", "i_elevator"]],
     ["ic_living", ["i_sofa", "i_loveseat", "i_sectional", "i_armchair", "i_recliner", "i_ottoman", "i_beanbag",
                    "i_coffee", "i_sidetable", "i_tvstand", "i_tv", "i_fireplace", "i_piano", "i_bookcase",
-                   "i_aquarium", "i_speaker", "i_rug", "i_lamp", "i_arclamp"]],
+                   "i_aquarium", "i_speaker", "i_rug", "i_lamp", "i_arclamp", "i_chaise", "i_rocker",
+                   "i_consoletable", "i_sideboard"]],
     ["ic_bedroom", ["i_bed", "i_bedking", "i_bed1", "i_bunkbed", "i_crib", "i_nightstand", "i_wardrobe",
-                    "i_dresser", "i_vanitytable", "i_bench", "i_chest", "i_desk", "i_officechair", "i_filing"]],
+                    "i_dresser", "i_vanitytable", "i_bench", "i_chest", "i_desk", "i_officechair", "i_filing",
+                    "i_daybed", "i_floormirror", "i_toybox", "i_standdesk", "i_lshapedesk"]],
     ["ic_closets", ["i_reachin", "i_closetrod", "i_closetshelves", "i_bifold", "i_wardrobe", "i_dresser",
                     "i_shoerack", "i_hamper", "i_hooks", "i_coatrack"]],
     ["ic_kitchen", ["i_counter", "i_island", "i_stove", "i_fridge", "i_kitchensink", "i_dishwasher", "i_pantry",
                     "i_dining", "i_roundtable", "i_chair", "i_stool", "i_trash", "i_microwave", "i_coffeemaker",
-                    "i_toaster", "i_kettle", "i_fruitbowl"]],
+                    "i_toaster", "i_kettle", "i_fruitbowl", "i_oven", "i_winecooler", "i_freezer", "i_hutch",
+                    "i_barcart", "i_highchair"]],
     ["ic_bath", ["i_toilet", "i_sink", "i_vanity", "i_bathtub", "i_shower", "i_bathmat", "i_hamper",
-                 "i_washer", "i_dryer", "i_ironing", "i_dryrack", "i_utilitysink", "i_heater"]],
+                 "i_washer", "i_dryer", "i_ironing", "i_dryrack", "i_utilitysink", "i_heater", "i_cornertub",
+                 "i_linencab"]],
     ["ic_decor", ["i_tablelamp", "i_desklamp", "i_vase", "i_candle", "i_books", "i_frame", "i_basket",
                   "i_monitor", "i_plant", "i_succulent", "i_herbs", "i_palm", "i_cactus", "i_flowers",
                   "i_hanging", "i_pendant", "i_chandelier", "i_ceilingfan"]],
     ["ic_walls", ["i_picture", "i_mirror", "i_shelf", "i_walltv", "i_wallclock", "i_sconce", "i_cabinet",
                   "i_hooks", "i_radiator", "i_hood", "i_towelrail", "i_medicine", "i_cubeshelf",
-                  "i_cornershelf", "i_shoerack", "i_coatrack"]],
+                  "i_cornershelf", "i_shoerack", "i_coatrack", "i_whiteboard", "i_dartboard", "i_evcharger"]],
     ["ic_tech", ["i_tv", "i_walltv", "i_soundbar", "i_console", "i_pc", "i_monitor", "i_speaker",
                  "i_projector", "i_proscreen", "i_recordplayer", "i_fan", "i_ac"]],
     ["ic_outdoor", ["i_lot", "i_driveway", "i_path", "i_deck", "i_fence", "i_hedge", "i_flowerbed",
                     "i_parked", "i_shrub", "i_grill", "i_pool", "i_patio", "i_gardenbench", "i_hottub",
-                    "i_dogbed", "i_cattree"]],
+                    "i_dogbed", "i_cattree", "i_firepit", "i_lounger", "i_gazebo", "i_shed", "i_planter",
+                    "i_birdbath", "i_lamppost", "i_mailbox", "i_bikerack"]],
+    ["ic_fitness", ["i_treadmill", "i_exbike", "i_weightbench", "i_yogamat", "i_pooltable", "i_pingpong",
+                    "i_dartboard", "i_easel", "i_trampoline", "i_swing"]],
+    ["ic_utility", ["i_workbench", "i_shelving", "i_toolchest", "i_furnace", "i_freezer", "i_evcharger",
+                    "i_bikerack"]],
     ["ic_devices", ["i_computer", "i_laptop", "i_tablet", "i_phone", "i_server", "i_database",
                     "i_router", "i_switch", "i_firewall", "i_wifi", "i_internet", "i_tower",
                     "i_printer", "i_camera"]],
     ["ic_circuit", ["i_battery", "i_bulb", "i_switch_on", "i_resistor", "i_capacitor", "i_led",
-                    "i_motor", "i_buzzer", "i_socket", "i_solar", "i_ground"]],
+                    "i_motor", "i_buzzer", "i_socket", "i_solar", "i_ground", "i_cell", "i_diode", "i_fuse",
+                    "i_ammeter", "i_voltmeter", "i_dimmer"]],
     ["ic_travel", ["i_car", "i_bus", "i_truck", "i_bike", "i_train", "i_plane", "i_ship",
                    "i_house", "i_building", "i_shop", "i_school", "i_hospital", "i_factory",
-                   "i_warehouse", "i_tree", "i_traffic"]],
+                   "i_warehouse", "i_tree", "i_traffic", "i_taxi", "i_tram", "i_helicopter", "i_scooter",
+                   "i_airport", "i_trainstation", "i_park", "i_cafe"]],
     ["ic_space", ["i_rocket", "i_satellite", "i_astronaut", "i_sun", "i_earth", "i_moon", "i_planet",
-                  "i_star", "i_telescope", "i_ufo"]],
+                  "i_star", "i_telescope", "i_ufo", "i_comet", "i_asteroid", "i_station", "i_lander", "i_galaxy"]],
     ["ic_things", ["i_zone", "i_money", "i_coins", "i_cart", "i_package", "i_mail", "i_chat", "i_clock",
                    "i_calendar", "i_gear", "i_lock", "i_key", "i_idea", "i_search", "i_check", "i_cross",
-                   "i_warning", "i_flag", "i_heart", "i_trophy", "i_chart", "i_book", "i_megaphone"]]
+                   "i_warning", "i_flag", "i_heart", "i_trophy", "i_chart", "i_book", "i_megaphone", "i_gift",
+                   "i_target", "i_hourglass", "i_music", "i_palette", "i_tag", "i_magnet", "i_puzzle"]]
   ];

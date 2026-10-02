@@ -3019,6 +3019,18 @@ FR = {
     "g_battleship": "Bataille Navale",
     "g_battleship_d": "Coule la flotte ennemie avant qu'elle ne coule la tienne",
     "g_battleship_h": "Chaque camp cache trois navires sur une mer de 6 sur 6. Tire en tapant une lettre et un nombre, par exemple B4. X est un touché et o un raté. Coule tous les navires ennemis avant que l'ennemi ne coule les tiens.",
+    "g_math": "Calcul éclair",
+    "g_math_d": "Huit calculs, avec un bonus pour chaque bonne réponse d'affilée",
+    "g_math_h": "Huit calculs arrivent l'un après l'autre : additions, soustractions et tables de multiplication. Tape chaque réponse. Une bonne réponse rapporte un point de plus que la précédente de la série, alors garde la série en vie.",
+    "g_pig": "Pig",
+    "g_pig_d": "Lance autant que tu l'oses, mais un 1 fait tout perdre",
+    "g_pig_h": "À ton tour, lance le dé autant de fois que tu veux en additionnant ce que tu obtiens. Tape l pour relancer ou g pour garder tes points. Un 1 fait perdre tout ce que tu as gagné pendant ce tour. L'ordinateur joue aussi, et le premier à 50 gagne.",
+    "g_lander": "Alunissage",
+    "g_lander_d": "Brûle juste assez de carburant pour te poser en douceur sur la Lune",
+    "g_lander_h": "Tu pars à 500 m au-dessus de la Lune, en chute. À chaque seconde, tape combien de carburant brûler, de 0 à 20 : plus tu en brûles, plus tu freines, mais le carburant s'épuise. Pose-toi à 5 m par seconde ou moins pour alunir sans danger.",
+    "g_mines": "Démineur",
+    "g_mines_d": "Ouvre chaque case sûre d'un champ de mines, en t'aidant des chiffres",
+    "g_mines_h": "Sept mines sont cachées dans un champ de 6 sur 6 cases. Tape une case comme B4 pour l'ouvrir. Un chiffre indique combien des cases voisines cachent une mine, et une case vide ouvre toutes ses voisines. Tape M et une case, comme MB4, pour marquer une case dont tu es sûr qu'elle cache une mine, ou pour enlever la marque. Ouvre toutes les cases sans mine pour gagner.",
     "g_coin_p": program("""
         Start
         Declare Integer choix
@@ -4086,6 +4098,380 @@ FR = {
             Return cibles[random(0, length(cibles) - 1)]
         End Function
     """),
+    "g_math_p": program("""
+        Start
+        Declare Integer points
+        Declare Integer serie
+        Declare Integer meilleure
+        Declare Integer reponse
+        Declare Integer juste
+        points = 0
+        serie = 0
+        meilleure = 0
+        Display "Calcul éclair : huit calculs. Chaque bonne réponse d'affilée rapporte un point de plus que la précédente"
+        For tour = 1 To 8
+            juste = poseCalcul(tour)
+            Input reponse
+            If reponse = juste Then
+                serie = serie + 1
+                points = points + serie
+                Display "Juste ! Cela fait ", serie, " d'affilée"
+                If serie > meilleure Then
+                    meilleure = serie
+                End If
+            Else
+                Display "Pas tout à fait : c'était ", juste
+                serie = 0
+            End If
+        End For
+        Call montreScore(points, meilleure)
+        Stop
+
+        Function Integer poseCalcul(Integer tour)
+            Declare Integer a
+            Declare Integer b
+            Declare Integer sorte
+            Declare Integer resultat
+            a = random(2, 9 + tour)
+            b = random(2, 9)
+            sorte = random(1, 3)
+            If sorte = 1 Then
+                Display "Calcul ", tour, " : combien font ", a, " + ", b, " ?"
+                resultat = a + b
+            Else If sorte = 2 Then
+                Display "Calcul ", tour, " : combien font ", a + b, " - ", b, " ?"
+                resultat = a
+            Else
+                Display "Calcul ", tour, " : combien font ", a, " x ", b, " ?"
+                resultat = a * b
+            End If
+            Return resultat
+        End Function
+
+        Module montreScore(Integer points, Integer meilleure)
+            Display "Ton score : ", points, " points. Plus longue série de bonnes réponses : ", meilleure
+            If points >= 30 Then
+                Display "Un as du calcul !"
+            Else If points >= 12 Then
+                Display "Bien joué !"
+            Else
+                Display "Continue à t'entraîner et réessaie"
+            End If
+        End Module
+    """),
+    "g_pig_p": program("""
+        Start
+        Declare Integer miens
+        Declare Integer siens
+        miens = 0
+        siens = 0
+        Display "Pig : lance autant que tu l'oses. Un 1 fait perdre tout ce que tu as lancé pendant ce tour. Le premier à 50 gagne"
+        While miens < 50 And siens < 50
+            miens = miens + tonTour(miens)
+            Display "Score : toi ", miens, ", l'ordinateur ", siens
+            If miens < 50 Then
+                siens = siens + tourOrdinateur(siens)
+                Display "Score : toi ", miens, ", l'ordinateur ", siens
+            End If
+        End While
+        If miens >= 50 Then
+            Display "Tu atteins 50 le premier et tu gagnes !"
+        Else
+            Display "L'ordinateur atteint 50 le premier et gagne"
+        End If
+        Stop
+
+        Function Integer tonTour(Integer acquis)
+            Declare Integer gagnes
+            Declare Integer jet
+            Declare String choix
+            Declare Boolean encore
+            gagnes = 0
+            encore = True
+            While encore
+                jet = random(1, 6)
+                If jet = 1 Then
+                    Display "Tu fais un 1 et tu perds les ", gagnes, " points de ce tour"
+                    gagnes = 0
+                    encore = False
+                Else
+                    gagnes = gagnes + jet
+                    Display "Tu fais ", jet, ". Ce tour : ", gagnes, ". En tout : ", acquis + gagnes
+                    If acquis + gagnes >= 50 Then
+                        encore = False
+                    Else
+                        Display "Tape l pour relancer, ou g pour garder"
+                        Input choix
+                        If choix = "g" Or choix = "G" Then
+                            encore = False
+                        End If
+                    End If
+                End If
+            End While
+            Return gagnes
+        End Function
+
+        Function Integer tourOrdinateur(Integer acquis)
+            Declare Integer gagnes
+            Declare Integer jet
+            gagnes = 0
+            jet = 0
+            While jet <> 1 And gagnes < 15 And acquis + gagnes < 50
+                jet = random(1, 6)
+                If jet = 1 Then
+                    gagnes = 0
+                Else
+                    gagnes = gagnes + jet
+                End If
+            End While
+            If jet = 1 Then
+                Display "L'ordinateur fait un 1 et ne marque rien"
+            Else
+                Display "L'ordinateur s'arrête avec ", gagnes, " points"
+            End If
+            Return gagnes
+        End Function
+    """),
+    "g_lander_p": program("""
+        Start
+        Declare Real hauteur
+        Declare Real vitesse
+        Declare Integer carburant
+        Declare Integer secondes
+        Declare Integer poussee
+        hauteur = 500
+        vitesse = 0
+        carburant = 150
+        secondes = 0
+        Display "Alunissage : tu es à 500 m et tu tombes. À chaque seconde, brûle de 0 à 20 unités de carburant pour freiner"
+        Display "Pose-toi à 5 m par seconde ou moins pour alunir sans danger"
+        While hauteur > 0
+            Call montrePanneau(secondes, hauteur, vitesse, carburant)
+            poussee = demandePoussee(carburant)
+            carburant = carburant - poussee
+            vitesse = vitesse + 1.6 - poussee * 0.3
+            hauteur = hauteur - vitesse
+            secondes = secondes + 1
+        End While
+        Call arrivee(vitesse, carburant, secondes)
+        Stop
+
+        Module montrePanneau(Integer secondes, Real hauteur, Real vitesse, Integer carburant)
+            Display "Temps ", secondes, " s. Hauteur ", round(hauteur), " m. Chute à ", round(vitesse, 1), " m/s. Carburant ", carburant
+        End Module
+
+        Function Integer demandePoussee(Integer carburant)
+            Declare Integer poussee
+            poussee = 0
+            If carburant <= 0 Then
+                Display "Plus de carburant !"
+            Else
+                Display "Combien de carburant brûler, de 0 à 20 ?"
+                Input poussee
+                While poussee < 0 Or poussee > 20
+                    Display "Brûle de 0 à 20"
+                    Input poussee
+                End While
+                If poussee > carburant Then
+                    Display "Il ne reste que ", carburant, ", alors tu brûles tout"
+                    poussee = carburant
+                End If
+            End If
+            Return poussee
+        End Function
+
+        Module arrivee(Real vitesse, Integer carburant, Integer secondes)
+            If vitesse <= 5 Then
+                Display "L'Aigle a aluni ! Posé à ", round(vitesse, 1), " m/s après ", secondes, " secondes, avec ", carburant, " de carburant en réserve"
+                If vitesse <= 2 Then
+                    Display "Un alunissage parfait !"
+                End If
+            Else If vitesse <= 12 Then
+                Display "Un alunissage brutal à ", round(vitesse), " m/s. Le module est cabossé, mais tu en sors indemne"
+            Else
+                Display "Tu percutes la surface à ", round(vitesse), " m/s et tu creuses un nouveau cratère"
+            End If
+        End Module
+    """),
+    "g_mines_p": program("""
+        Start
+        Declare Integer ouvertes
+        Declare Integer sures
+        Declare Integer carre
+        Declare String coup
+        Declare String dit
+        Declare Boolean vivant
+        champ = nouveauChamp()
+        vu = nouvelleVue()
+        Call poseMines(champ, 7)
+        sures = 36 - 7
+        ouvertes = 0
+        vivant = True
+        Display "Démineur : 7 mines sont cachées dans un champ de 6 sur 6. Ouvre chaque case sans mine"
+        Display "Tape une case comme B4 pour l'ouvrir, ou M et une case, comme MB4, pour marquer une mine"
+        While vivant And ouvertes < sures
+            Call montreChamp(champ, vu, False)
+            Input coup
+            dit = toUpper(coup)
+            If length(dit) = 3 And substring(dit, 0, 1) = "M" Then
+                carre = carreDe(substring(dit, 1, 3))
+                If carre = -1 Then
+                    Display "Ce n'est pas une case. Essaie par exemple MB4"
+                Else If vu[carre] = "." Then
+                    vu[carre] = "M"
+                Else If vu[carre] = "M" Then
+                    vu[carre] = "."
+                End If
+            Else
+                carre = carreDe(dit)
+                If carre = -1 Then
+                    Display "Ce n'est pas une case. Essaie par exemple B4"
+                Else If vu[carre] <> "." Then
+                    Display "Cette case est déjà ouverte, ou marquée"
+                Else If champ[carre] = -1 Then
+                    vivant = False
+                Else
+                    ouvertes = ouvertes + ouvreDepuis(champ, vu, carre)
+                End If
+            End If
+        End While
+        Call montreChamp(champ, vu, True)
+        If vivant Then
+            Display "Toutes les cases sûres sont ouvertes. Tu as déminé le champ !"
+        Else
+            Display "Boum ! Il y avait une mine sous cette case. Plus de chance la prochaine fois"
+        End If
+        Stop
+
+        Function nouveauChamp()
+            cellules = []
+            For i = 1 To 36
+                append(cellules, 0)
+            End For
+            Return cellules
+        End Function
+
+        Function nouvelleVue()
+            cellules = []
+            For i = 1 To 36
+                append(cellules, ".")
+            End For
+            Return cellules
+        End Function
+
+        Module poseMines(champ, Integer nombre)
+            Declare Integer posees
+            Declare Integer place
+            posees = 0
+            While posees < nombre
+                place = random(0, 35)
+                If champ[place] <> -1 Then
+                    champ[place] = -1
+                    posees = posees + 1
+                End If
+            End While
+            For place = 0 To 35
+                If champ[place] <> -1 Then
+                    champ[place] = minesAutour(champ, place)
+                End If
+            End For
+        End Module
+
+        Function Integer minesAutour(champ, Integer place)
+            Declare Integer nombre
+            Declare Integer r
+            Declare Integer c
+            nombre = 0
+            For dr = -1 To 1
+                For dc = -1 To 1
+                    r = place div 6 + dr
+                    c = place mod 6 + dc
+                    If r >= 0 And r < 6 And c >= 0 And c < 6 Then
+                        If champ[r * 6 + c] = -1 Then
+                            nombre = nombre + 1
+                        End If
+                    End If
+                End For
+            End For
+            Return nombre
+        End Function
+
+        Function Integer ouvreDepuis(champ, vu, Integer debut)
+            Declare Integer nombre
+            Declare Integer place
+            Declare Integer voisine
+            Declare Integer pos
+            Declare Integer r
+            Declare Integer c
+            aFaire = [debut]
+            vu[debut] = texteDe(champ[debut])
+            nombre = 1
+            pos = 0
+            While pos < length(aFaire)
+                place = aFaire[pos]
+                pos = pos + 1
+                If champ[place] = 0 Then
+                    For dr = -1 To 1
+                        For dc = -1 To 1
+                            r = place div 6 + dr
+                            c = place mod 6 + dc
+                            If r >= 0 And r < 6 And c >= 0 And c < 6 Then
+                                voisine = r * 6 + c
+                                If vu[voisine] = "." Then
+                                    vu[voisine] = texteDe(champ[voisine])
+                                    nombre = nombre + 1
+                                    append(aFaire, voisine)
+                                End If
+                            End If
+                        End For
+                    End For
+                End If
+            End While
+            Return nombre
+        End Function
+
+        Function String texteDe(Integer mines)
+            Declare String texte
+            texte = " "
+            If mines > 0 Then
+                texte = "" + mines
+            End If
+            Return texte
+        End Function
+
+        Module montreChamp(champ, vu, Boolean toutes)
+            Declare String ligne
+            Display "    1 2 3 4 5 6"
+            For r = 0 To 5
+                ligne = substring("ABCDEF", r, r + 1) + " |"
+                For c = 0 To 5
+                    If toutes And champ[r * 6 + c] = -1 Then
+                        ligne = ligne + " *"
+                    Else
+                        ligne = ligne + " " + vu[r * 6 + c]
+                    End If
+                End For
+                Display ligne
+            End For
+        End Module
+
+        Function Integer carreDe(String texte)
+            Declare Integer rangee
+            Declare Integer colonne
+            Declare Integer trouve
+            rangee = -1
+            colonne = -1
+            trouve = -1
+            If length(texte) = 2 Then
+                rangee = indexOf("ABCDEF", substring(texte, 0, 1))
+                colonne = indexOf("123456", substring(texte, 1, 2))
+            End If
+            If rangee >= 0 And colonne >= 0 Then
+                trouve = rangee * 6 + colonne
+            End If
+            Return trouve
+        End Function
+    """),
     # ---- icons, and a drawing run as what it is: a home walked through,
     # work passed on, data sent, a circuit switched on, a launch
     # (03-icons.js, 11-hand-icons.js, 37-board.js to 39-orbit.js)
@@ -4225,6 +4611,33 @@ FR = {
     "n_i_socket": "Prise",
     "n_i_solar": "Panneau solaire",
     "n_i_ground": "Masse",
+    "n_i_cell": "Pile",
+    "n_i_diode": "Diode",
+    "n_i_fuse": "Fusible",
+    "n_i_ammeter": "Ampèremètre",
+    "n_i_voltmeter": "Voltmètre",
+    "n_i_dimmer": "Variateur",
+    "n_i_comet": "Comète",
+    "n_i_asteroid": "Astéroïde",
+    "n_i_station": "Station spatiale",
+    "n_i_lander": "Module lunaire",
+    "n_i_galaxy": "Galaxie",
+    "n_i_taxi": "Taxi",
+    "n_i_tram": "Tramway",
+    "n_i_helicopter": "Hélicoptère",
+    "n_i_scooter": "Trottinette",
+    "n_i_airport": "Aéroport",
+    "n_i_trainstation": "Gare",
+    "n_i_park": "Parc",
+    "n_i_cafe": "Café",
+    "n_i_gift": "Cadeau",
+    "n_i_target": "Cible",
+    "n_i_hourglass": "Sablier",
+    "n_i_music": "Musique",
+    "n_i_palette": "Palette de peintre",
+    "n_i_tag": "Étiquette de prix",
+    "n_i_magnet": "Aimant",
+    "n_i_puzzle": "Pièce de puzzle",
     "n_i_car": "Voiture",
     "n_i_bus": "Bus",
     "n_i_truck": "Camion",
@@ -4460,6 +4873,12 @@ FR = {
     "ec_buzzes": "{who} : sonne ({a}).",
     "ec_quiet": "{who} : silence.",
     "ec_drop": "{who} : {v} V à ses bornes, {a}",
+    "ec_conducts": "{who} laisse passer le courant : {a}",
+    "ec_blocks": "{who} bloque le courant : il ne passe que dans l'autre sens",
+    "ec_blown": "{who} a fondu : trop de courant l'a traversé, et le circuit est ouvert",
+    "ec_fuse_ok": "{who} tient : {a} le traversent",
+    "ec_reads_a": "{who} indique {a}",
+    "ec_reads_v": "{who} indique {v} V",
     "ec_loose": "{who} a besoin d’un fil à chaque bout.",
     "ec_sum": "Composants : {parts} · Fils : {wires}",
     "os_empty": "Dessinez un Soleil et quelques planètes pour les mettre en mouvement.",
@@ -4533,6 +4952,25 @@ FR = {
     "hm_icons": "Ajouter une icône depuis Icônes, sous les formes : cliquez-la ou glissez-la sur la feuille ; cherchez-la par son nom",
     "hm_room": "Déplacer une pièce ou un conteneur, et tout ce qu’il contient suit",
     "hm_door": "Placer une porte, une fenêtre ou un tableau près d’un mur, et il s’y encastre",
+    "hm_tie": "Relier des pièces par une flèche, ou par une porte entre elles, et les laisser écartées sur le papier : en 3D elles se rejoignent, une porte dans le mur qui les sépare",
+    "st_open": "Commencer une maison",
+    "st_open_tip": "Agencer une maison meublée en quelques choix : chambres, salles de bains et autres pièces",
+    "st_title": "Commencer une maison",
+    "st_sub": "Choisissez les pièces. Elles sont agencées et meublées, reliées par des flèches ; en 3D elles se rejoignent, une porte entre chacune.",
+    "st_beds": "Chambres",
+    "st_baths": "Salles de bains",
+    "st_open_plan": "Cuisine et salle à manger en une pièce",
+    "st_office": "Un bureau",
+    "st_laundry": "Une buanderie",
+    "st_garage": "Un garage",
+    "st_closet": "Un dressing",
+    "st_spread": "Écartées sur le papier",
+    "st_make": "Créer la maison",
+    "st_made": "{rooms} pièces agencées",
+    "st_main": "Chambre parentale",
+    "st_bed_n": "Chambre {n}",
+    "st_ensuite": "Salle d’eau attenante",
+    "st_hall": "Couloir",
     "hm_run_as": "Lancer fait ce qu’est le dessin : visite une maison, fait passer le travail, envoie des données, allume un circuit, lance une fusée",
     "depth": "Profondeur",
     "depth_tip": "Ombrer chaque forme dans sa propre couleur et lui donner une ombre, pour donner du relief aux couleurs",
@@ -4747,6 +5185,14 @@ FR = {
     "hm_lot": "Placez un Terrain sous la maison et indiquez sa taille et ses reculs dans le panneau : il montre la surface constructible et le jardin",
     "v3_roof": "Toit",
     "v3_roof_tip": "Poser le toit, ou le soulever pour voir l’intérieur",
+    "v3_day": "Jour",
+    "v3_evening": "Soir",
+    "v3_night": "Nuit",
+    "v3_time_tip": "Moment de la journée : jour, soir, ou nuit lumières allumées",
+    "v3_save": "Enregistrer l’image",
+    "v3_save_tip": "Enregistrer ce que montre la vue comme image",
+    "v3_saved": "Image enregistrée",
+    "v3_save_failed": "Ce navigateur ne peut pas enregistrer l’image",
     "v3_labels": "Étiquettes",
     "v3_labels_tip": "Nommer les pièces et ce qu’elles contiennent",
     "v3_2d": "2D",
@@ -4820,6 +5266,128 @@ FR = {
     "hm_dims": "Choisissez un élément du plan pour voir sa taille sur la feuille ; cliquez une taille pour en saisir une autre, comme 2 m",
     "dz_add_how": "Cherchez les icônes ou choisissez un groupe, puis cliquez sur l’une pour l’ajouter ou glissez-la sur la feuille. Choisissez un élément pour voir sa taille et en saisir une autre.",
     "dz_ceil_least": "Un plafond fait au moins {size} de haut.",
+    "mt_head": "Matériaux",
+    "mt_button": "Matériaux",
+    "mt_floor": "Sol",
+    "mt_wall": "Murs intérieurs",
+    "mt_out": "Murs extérieurs",
+    "mt_roof": "Toit",
+    "mt_house": "Toute la maison",
+    "mt_room": "Cette pièce",
+    "mt_plain": "Standard",
+    "mt_none": "Dessinez d’abord les pièces, puis choisissez leurs matériaux.",
+    "mt_boards": "Plancher en bois",
+    "mt_parquet": "Parquet",
+    "mt_tiles": "Carrelage",
+    "mt_marble": "Marbre",
+    "mt_slate": "Ardoise",
+    "mt_carpet": "Moquette",
+    "mt_concrete": "Béton",
+    "mt_paint": "Peinture",
+    "mt_wallpaper": "Papier peint",
+    "mt_panels": "Lambris",
+    "mt_brick": "Brique",
+    "mt_stone": "Pierre",
+    "mt_siding": "Bardage",
+    "mt_stucco": "Enduit",
+    "mt_batten": "Planches et couvre-joints",
+    "mt_shakes": "Bardeaux de cèdre",
+    "mtr_shingles": "Bardeaux",
+    "mtr_tiles": "Tuiles en terre cuite",
+    "mtr_metal": "Métal",
+    "mtr_slate": "Ardoise",
+    "dz_finish": "Finition",
+    "dz_fin_main": "Principal",
+    "dz_fin_trim": "Détails",
+    "dz_fin_plain_tip": "Revenir aux couleurs habituelles",
+    "sizes": "Dimensions",
+    "sizes_tip": "Écrire sur le plan la longueur, la largeur et la hauteur sous plafond de chaque pièce, et la largeur, la profondeur et la hauteur de chaque meuble",
+    "ic_fitness": "Sport et jeux",
+    "ic_utility": "Garage et technique",
+    "n_i_consoletable": "Console",
+    "n_i_sideboard": "Buffet",
+    "n_i_chaise": "Méridienne",
+    "n_i_rocker": "Fauteuil à bascule",
+    "n_i_hutch": "Vaisselier",
+    "n_i_barcart": "Desserte de bar",
+    "n_i_highchair": "Chaise haute",
+    "n_i_daybed": "Lit de repos",
+    "n_i_floormirror": "Miroir sur pied",
+    "n_i_toybox": "Coffre à jouets",
+    "n_i_standdesk": "Bureau debout",
+    "n_i_lshapedesk": "Bureau d’angle",
+    "n_i_oven": "Four encastré",
+    "n_i_winecooler": "Cave à vin",
+    "n_i_freezer": "Congélateur coffre",
+    "n_i_cornertub": "Baignoire d’angle",
+    "n_i_linencab": "Armoire à linge",
+    "n_i_whiteboard": "Tableau blanc",
+    "n_i_dartboard": "Cible de fléchettes",
+    "n_i_evcharger": "Borne de recharge",
+    "n_i_treadmill": "Tapis de course",
+    "n_i_exbike": "Vélo d’appartement",
+    "n_i_weightbench": "Banc de musculation",
+    "n_i_yogamat": "Tapis de yoga",
+    "n_i_pooltable": "Billard",
+    "n_i_pingpong": "Table de ping-pong",
+    "n_i_easel": "Chevalet",
+    "n_i_trampoline": "Trampoline",
+    "n_i_swing": "Portique de balançoire",
+    "n_i_firepit": "Brasero",
+    "n_i_lounger": "Transat",
+    "n_i_gazebo": "Kiosque de jardin",
+    "n_i_shed": "Abri de jardin",
+    "n_i_planter": "Jardinière",
+    "n_i_birdbath": "Bain d’oiseaux",
+    "n_i_lamppost": "Lampadaire d’extérieur",
+    "n_i_mailbox": "Boîte aux lettres",
+    "n_i_bikerack": "Range-vélos",
+    "n_i_workbench": "Établi",
+    "n_i_shelving": "Étagères de rangement",
+    "n_i_toolchest": "Servante d’atelier",
+    "n_i_furnace": "Chaudière",
+    "wk_i_consoletable": "pose les clés sur la console",
+    "wk_i_sideboard": "sort la belle vaisselle",
+    "wk_i_chaise": "s’allonge sur la méridienne",
+    "wk_i_rocker": "se balance dans le fauteuil à bascule",
+    "wk_i_hutch": "admire la porcelaine",
+    "wk_i_barcart": "prépare un cocktail",
+    "wk_i_highchair": "fait manger le bébé",
+    "wk_i_daybed": "s’allonge un moment",
+    "wk_i_floormirror": "vérifie sa tenue",
+    "wk_i_toybox": "range les jouets",
+    "wk_i_standdesk": "travaille debout",
+    "wk_i_lshapedesk": "travaille au bureau d’angle",
+    "wk_i_oven": "fait cuire un gâteau",
+    "wk_i_winecooler": "choisit une bouteille de vin",
+    "wk_i_freezer": "prend quelque chose au congélateur",
+    "wk_i_cornertub": "prend un long bain",
+    "wk_i_linencab": "prend une serviette propre",
+    "wk_i_whiteboard": "écrit au tableau blanc",
+    "wk_i_dartboard": "lance quelques fléchettes",
+    "wk_i_evcharger": "branche la voiture",
+    "wk_i_treadmill": "court sur le tapis",
+    "wk_i_exbike": "pédale sur le vélo d’appartement",
+    "wk_i_weightbench": "soulève des poids",
+    "wk_i_yogamat": "fait du yoga",
+    "wk_i_pooltable": "fait une partie de billard",
+    "wk_i_pingpong": "joue au ping-pong",
+    "wk_i_easel": "peint un tableau",
+    "wk_i_trampoline": "saute sur le trampoline",
+    "wk_i_swing": "se balance sur la balançoire",
+    "wk_i_firepit": "allume le brasero",
+    "wk_i_lounger": "se prélasse au soleil",
+    "wk_i_gazebo": "s’assoit dans le kiosque",
+    "wk_i_shed": "sort la tondeuse",
+    "wk_i_planter": "arrose la jardinière",
+    "wk_i_birdbath": "remplit le bain d’oiseaux",
+    "wk_i_lamppost": "allume la lumière extérieure",
+    "wk_i_mailbox": "relève le courrier",
+    "wk_i_bikerack": "prend son vélo",
+    "wk_i_workbench": "répare quelque chose à l’établi",
+    "wk_i_shelving": "cherche une boîte sur les étagères",
+    "wk_i_toolchest": "prend une clé",
+    "wk_i_furnace": "monte le chauffage",
 }
 
 speaks("fr", "Français", FR)

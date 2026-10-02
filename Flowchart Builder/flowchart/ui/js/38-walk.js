@@ -48,7 +48,17 @@
     i_ac: 500,
     i_grill: 1000, i_pool: 1300, i_patio: 900, i_gardenbench: 800, i_hottub: 1200, i_dogbed: 700,
     i_cattree: 600, i_hedge: 500, i_flowerbed: 600,
-    i_reachin: 800, i_closetrod: 900, i_closetshelves: 700
+    i_reachin: 800, i_closetrod: 900, i_closetshelves: 700,
+    // the second lot of icons (03-icon-art.js)
+    i_consoletable: 500, i_sideboard: 700, i_chaise: 1300, i_rocker: 1100, i_hutch: 700, i_barcart: 900,
+    i_highchair: 800, i_daybed: 1300, i_floormirror: 600, i_toybox: 800, i_standdesk: 1200, i_lshapedesk: 1200,
+    i_oven: 1200, i_winecooler: 700, i_freezer: 700, i_cornertub: 1300, i_linencab: 600,
+    i_whiteboard: 900, i_dartboard: 900, i_evcharger: 800,
+    i_treadmill: 1500, i_exbike: 1400, i_weightbench: 1300, i_yogamat: 1300, i_pooltable: 1300, i_pingpong: 1300,
+    i_easel: 1300, i_trampoline: 1200, i_swing: 1100,
+    i_firepit: 1100, i_lounger: 1300, i_gazebo: 1000, i_shed: 800, i_planter: 600, i_birdbath: 600,
+    i_lamppost: 500, i_mailbox: 700, i_bikerack: 700,
+    i_workbench: 1300, i_shelving: 700, i_toolchest: 800, i_furnace: 600
   };
 
   // ---- doors: open, shut, locked -------------------------------------------
@@ -68,15 +78,16 @@
   // What a room is for, from what is in it, where it was not given a name:
   // the first of these with something of its own in the room.
   var ROOM_FOR = [
-    ["fr_kitchen", ["i_stove", "i_fridge", "i_kitchensink", "i_counter", "i_island", "i_dishwasher", "i_pantry"]],
-    ["fr_bath", ["i_toilet", "i_bathtub", "i_shower", "i_vanity"]],
-    ["fr_bed", ["i_bed", "i_bedking", "i_bed1", "i_bunkbed", "i_crib"]],
+    ["fr_kitchen", ["i_stove", "i_fridge", "i_kitchensink", "i_counter", "i_island", "i_dishwasher", "i_pantry",
+                    "i_oven", "i_winecooler"]],
+    ["fr_bath", ["i_toilet", "i_bathtub", "i_shower", "i_vanity", "i_cornertub"]],
+    ["fr_bed", ["i_bed", "i_bedking", "i_bed1", "i_bunkbed", "i_crib", "i_daybed"]],
     ["fr_laundry", ["i_washer", "i_dryer", "i_ironing", "i_dryrack", "i_utilitysink"]],
-    ["fr_garage", ["i_parked", "i_garagedoor"]],
-    ["fr_office", ["i_desk", "i_officechair", "i_filing", "i_pc"]],
-    ["fr_dining", ["i_dining", "i_roundtable"]],
+    ["fr_garage", ["i_parked", "i_garagedoor", "i_workbench", "i_toolchest", "i_evcharger"]],
+    ["fr_office", ["i_desk", "i_officechair", "i_filing", "i_pc", "i_standdesk", "i_lshapedesk", "i_whiteboard"]],
+    ["fr_dining", ["i_dining", "i_roundtable", "i_hutch", "i_sideboard"]],
     ["fr_living", ["i_sofa", "i_loveseat", "i_sectional", "i_armchair", "i_recliner", "i_tv", "i_tvstand",
-                   "i_fireplace", "i_piano"]],
+                   "i_fireplace", "i_piano", "i_chaise"]],
     // last: a room with nothing in it but clothes is a closet to walk into
     ["fr_closet", ["i_closetrod", "i_closetshelves", "i_reachin", "i_wardrobe", "i_shoerack"]]
   ];
@@ -314,6 +325,9 @@
     });
     plan.floors = floorsOf();
     plan.links = floorLinks(plan.floors);
+    // and rooms drawn apart, joined by an arrow: a way through each wall
+    // where the arrow meets it (39-join.js)
+    if (typeof walkTies === "function") { walkTies(plan); }
     return plan;
   }
 

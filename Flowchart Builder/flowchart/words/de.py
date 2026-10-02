@@ -3017,6 +3017,18 @@ DE = {
     "g_battleship": "Schiffe versenken",
     "g_battleship_d": "Versenke die feindliche Flotte, bevor sie deine versenkt",
     "g_battleship_h": "Beide Seiten verstecken drei Schiffe auf einem Meer von 6 mal 6 Feldern. Schieße, indem du einen Buchstaben und eine Zahl tippst, zum Beispiel B4. X ist ein Treffer und o daneben. Versenke alle feindlichen Schiffe, bevor der Gegner deine versenkt.",
+    "g_math": "Kopfrechnen",
+    "g_math_d": "Acht Aufgaben, mit einem Bonus für jede richtige Antwort in Folge",
+    "g_math_h": "Acht Rechenaufgaben kommen nacheinander: Plus, Minus und das Einmaleins. Tippe jeweils die Antwort ein. Eine richtige Antwort bringt einen Punkt mehr als die vorige in der Serie, also halte die Serie am Laufen.",
+    "g_pig": "Pig",
+    "g_pig_d": "Würfle, so oft du dich traust, aber eine 1 kostet alles",
+    "g_pig_h": "Würfle in deinem Zug so oft du willst und zähle zusammen, was du würfelst. Tippe w, um weiterzuwürfeln, oder h, um anzuhalten und die Punkte zu sichern. Würfelst du eine 1, verlierst du alles aus diesem Zug. Der Computer spielt mit, und wer zuerst 50 hat, gewinnt.",
+    "g_lander": "Mondlandung",
+    "g_lander_d": "Verbrenne gerade genug Treibstoff, um sanft auf dem Mond aufzusetzen",
+    "g_lander_h": "Du beginnst 500 m über dem Mond und fällst. Tippe jede Sekunde ein, wie viel Treibstoff du verbrennst, von 0 bis 20: Je mehr, desto stärker bremst du, aber der Treibstoff geht zur Neige. Setze mit höchstens 5 m pro Sekunde auf, um sicher zu landen.",
+    "g_mines": "Minensucher",
+    "g_mines_d": "Öffne jedes sichere Quadrat eines Minenfelds, mit den Zahlen als Hinweis",
+    "g_mines_h": "Sieben Minen sind in einem Feld aus 6 mal 6 Quadraten versteckt. Tippe ein Quadrat wie B4, um es zu öffnen. Eine Zahl sagt dir, wie viele der Quadrate drumherum eine Mine haben, und ein leeres Quadrat öffnet alle Quadrate um sich herum. Tippe M und ein Quadrat, etwa MB4, um ein Quadrat zu markieren, bei dem du sicher bist, dass dort eine Mine liegt, oder um die Markierung wieder wegzunehmen. Öffne jedes Quadrat ohne Mine, um zu gewinnen.",
     "g_coin_p": program("""
         Start
         Declare Integer wahl
@@ -4084,6 +4096,380 @@ DE = {
             Return ziele[random(0, length(ziele) - 1)]
         End Function
     """),
+    "g_math_p": program("""
+        Start
+        Declare Integer punkte
+        Declare Integer serie
+        Declare Integer beste
+        Declare Integer antwort
+        Declare Integer richtig
+        punkte = 0
+        serie = 0
+        beste = 0
+        Display "Kopfrechnen: acht Aufgaben. Jede richtige Antwort in Folge bringt einen Punkt mehr als die vorige"
+        For runde = 1 To 8
+            richtig = stelleAufgabe(runde)
+            Input antwort
+            If antwort = richtig Then
+                serie = serie + 1
+                punkte = punkte + serie
+                Display "Richtig! Das sind ", serie, " in Folge"
+                If serie > beste Then
+                    beste = serie
+                End If
+            Else
+                Display "Nicht ganz: es war ", richtig
+                serie = 0
+            End If
+        End For
+        Call zeigeErgebnis(punkte, beste)
+        Stop
+
+        Function Integer stelleAufgabe(Integer runde)
+            Declare Integer a
+            Declare Integer b
+            Declare Integer art
+            Declare Integer ergebnis
+            a = random(2, 9 + runde)
+            b = random(2, 9)
+            art = random(1, 3)
+            If art = 1 Then
+                Display "Aufgabe ", runde, ": was ist ", a, " + ", b, "?"
+                ergebnis = a + b
+            Else If art = 2 Then
+                Display "Aufgabe ", runde, ": was ist ", a + b, " - ", b, "?"
+                ergebnis = a
+            Else
+                Display "Aufgabe ", runde, ": was ist ", a, " x ", b, "?"
+                ergebnis = a * b
+            End If
+            Return ergebnis
+        End Function
+
+        Module zeigeErgebnis(Integer punkte, Integer beste)
+            Display "Dein Ergebnis: ", punkte, " Punkte. Längste Serie richtiger Antworten: ", beste
+            If punkte >= 30 Then
+                Display "Ein Rechengenie!"
+            Else If punkte >= 12 Then
+                Display "Gut gemacht!"
+            Else
+                Display "Übe weiter und versuch es noch einmal"
+            End If
+        End Module
+    """),
+    "g_pig_p": program("""
+        Start
+        Declare Integer meine
+        Declare Integer seine
+        meine = 0
+        seine = 0
+        Display "Pig: würfle, so oft du dich traust. Eine 1 kostet alles aus diesem Zug. Wer zuerst 50 hat, gewinnt"
+        While meine < 50 And seine < 50
+            meine = meine + deinZug(meine)
+            Display "Stand: du ", meine, ", der Computer ", seine
+            If meine < 50 Then
+                seine = seine + computerZug(seine)
+                Display "Stand: du ", meine, ", der Computer ", seine
+            End If
+        End While
+        If meine >= 50 Then
+            Display "Du erreichst zuerst 50 und gewinnst!"
+        Else
+            Display "Der Computer erreicht zuerst 50 und gewinnt"
+        End If
+        Stop
+
+        Function Integer deinZug(Integer stand)
+            Declare Integer gesammelt
+            Declare Integer wurf
+            Declare String wahl
+            Declare Boolean weiter
+            gesammelt = 0
+            weiter = True
+            While weiter
+                wurf = random(1, 6)
+                If wurf = 1 Then
+                    Display "Du würfelst eine 1 und verlierst die ", gesammelt, " Punkte aus diesem Zug"
+                    gesammelt = 0
+                    weiter = False
+                Else
+                    gesammelt = gesammelt + wurf
+                    Display "Du würfelst ", wurf, ". In diesem Zug: ", gesammelt, ". Insgesamt: ", stand + gesammelt
+                    If stand + gesammelt >= 50 Then
+                        weiter = False
+                    Else
+                        Display "Tippe w, um weiterzuwürfeln, oder h, um anzuhalten"
+                        Input wahl
+                        If wahl = "h" Or wahl = "H" Then
+                            weiter = False
+                        End If
+                    End If
+                End If
+            End While
+            Return gesammelt
+        End Function
+
+        Function Integer computerZug(Integer stand)
+            Declare Integer gesammelt
+            Declare Integer wurf
+            gesammelt = 0
+            wurf = 0
+            While wurf <> 1 And gesammelt < 15 And stand + gesammelt < 50
+                wurf = random(1, 6)
+                If wurf = 1 Then
+                    gesammelt = 0
+                Else
+                    gesammelt = gesammelt + wurf
+                End If
+            End While
+            If wurf = 1 Then
+                Display "Der Computer würfelt eine 1 und bekommt nichts"
+            Else
+                Display "Der Computer hält an mit ", gesammelt, " Punkten"
+            End If
+            Return gesammelt
+        End Function
+    """),
+    "g_lander_p": program("""
+        Start
+        Declare Real hoehe
+        Declare Real tempo
+        Declare Integer treibstoff
+        Declare Integer sekunden
+        Declare Integer schub
+        hoehe = 500
+        tempo = 0
+        treibstoff = 150
+        sekunden = 0
+        Display "Mondlandung: du bist 500 m hoch und fällst. Verbrenne jede Sekunde 0 bis 20 Einheiten Treibstoff, um zu bremsen"
+        Display "Setze mit höchstens 5 m pro Sekunde auf, um sicher zu landen"
+        While hoehe > 0
+            Call zeigeAnzeige(sekunden, hoehe, tempo, treibstoff)
+            schub = frageSchub(treibstoff)
+            treibstoff = treibstoff - schub
+            tempo = tempo + 1.6 - schub * 0.3
+            hoehe = hoehe - tempo
+            sekunden = sekunden + 1
+        End While
+        Call landung(tempo, treibstoff, sekunden)
+        Stop
+
+        Module zeigeAnzeige(Integer sekunden, Real hoehe, Real tempo, Integer treibstoff)
+            Display "Zeit ", sekunden, " s. Höhe ", round(hoehe), " m. Fallen mit ", round(tempo, 1), " m/s. Treibstoff ", treibstoff
+        End Module
+
+        Function Integer frageSchub(Integer treibstoff)
+            Declare Integer schub
+            schub = 0
+            If treibstoff <= 0 Then
+                Display "Kein Treibstoff mehr!"
+            Else
+                Display "Wie viel Treibstoff verbrennen, von 0 bis 20?"
+                Input schub
+                While schub < 0 Or schub > 20
+                    Display "Verbrenne 0 bis 20"
+                    Input schub
+                End While
+                If schub > treibstoff Then
+                    Display "Nur noch ", treibstoff, " übrig, also verbrennst du alles"
+                    schub = treibstoff
+                End If
+            End If
+            Return schub
+        End Function
+
+        Module landung(Real tempo, Integer treibstoff, Integer sekunden)
+            If tempo <= 5 Then
+                Display "Der Adler ist gelandet! Aufgesetzt mit ", round(tempo, 1), " m/s nach ", sekunden, " Sekunden, mit ", treibstoff, " Treibstoff übrig"
+                If tempo <= 2 Then
+                    Display "Eine perfekte Landung!"
+                End If
+            Else If tempo <= 12 Then
+                Display "Eine harte Landung mit ", round(tempo), " m/s. Die Fähre hat Beulen, aber du steigst unverletzt aus"
+            Else
+                Display "Du schlägst mit ", round(tempo), " m/s auf und machst einen neuen Krater"
+            End If
+        End Module
+    """),
+    "g_mines_p": program("""
+        Start
+        Declare Integer offen
+        Declare Integer sicher
+        Declare Integer quadrat
+        Declare String zug
+        Declare String gesagt
+        Declare Boolean lebendig
+        feld = neuesFeld()
+        gezeigt = neueAnsicht()
+        Call legeMinen(feld, 7)
+        sicher = 36 - 7
+        offen = 0
+        lebendig = True
+        Display "Minensucher: 7 Minen sind in einem Feld aus 6 mal 6 versteckt. Öffne jedes Quadrat ohne Mine"
+        Display "Tippe ein Quadrat wie B4, um es zu öffnen, oder M und ein Quadrat, etwa MB4, um eine Mine zu markieren"
+        While lebendig And offen < sicher
+            Call zeigeFeld(feld, gezeigt, False)
+            Input zug
+            gesagt = toUpper(zug)
+            If length(gesagt) = 3 And substring(gesagt, 0, 1) = "M" Then
+                quadrat = quadratVon(substring(gesagt, 1, 3))
+                If quadrat = -1 Then
+                    Display "Das ist kein Quadrat. Versuch etwas wie MB4"
+                Else If gezeigt[quadrat] = "." Then
+                    gezeigt[quadrat] = "M"
+                Else If gezeigt[quadrat] = "M" Then
+                    gezeigt[quadrat] = "."
+                End If
+            Else
+                quadrat = quadratVon(gesagt)
+                If quadrat = -1 Then
+                    Display "Das ist kein Quadrat. Versuch etwas wie B4"
+                Else If gezeigt[quadrat] <> "." Then
+                    Display "Dieses Quadrat ist schon offen oder markiert"
+                Else If feld[quadrat] = -1 Then
+                    lebendig = False
+                Else
+                    offen = offen + oeffneAb(feld, gezeigt, quadrat)
+                End If
+            End If
+        End While
+        Call zeigeFeld(feld, gezeigt, True)
+        If lebendig Then
+            Display "Jedes sichere Quadrat ist offen. Du hast das Feld geräumt!"
+        Else
+            Display "Bumm! Unter diesem Quadrat lag eine Mine. Beim nächsten Mal mehr Glück"
+        End If
+        Stop
+
+        Function neuesFeld()
+            zellen = []
+            For i = 1 To 36
+                append(zellen, 0)
+            End For
+            Return zellen
+        End Function
+
+        Function neueAnsicht()
+            zellen = []
+            For i = 1 To 36
+                append(zellen, ".")
+            End For
+            Return zellen
+        End Function
+
+        Module legeMinen(feld, Integer anzahl)
+            Declare Integer gelegt
+            Declare Integer stelle
+            gelegt = 0
+            While gelegt < anzahl
+                stelle = random(0, 35)
+                If feld[stelle] <> -1 Then
+                    feld[stelle] = -1
+                    gelegt = gelegt + 1
+                End If
+            End While
+            For stelle = 0 To 35
+                If feld[stelle] <> -1 Then
+                    feld[stelle] = minenRundum(feld, stelle)
+                End If
+            End For
+        End Module
+
+        Function Integer minenRundum(feld, Integer stelle)
+            Declare Integer anzahl
+            Declare Integer r
+            Declare Integer c
+            anzahl = 0
+            For dr = -1 To 1
+                For dc = -1 To 1
+                    r = stelle div 6 + dr
+                    c = stelle mod 6 + dc
+                    If r >= 0 And r < 6 And c >= 0 And c < 6 Then
+                        If feld[r * 6 + c] = -1 Then
+                            anzahl = anzahl + 1
+                        End If
+                    End If
+                End For
+            End For
+            Return anzahl
+        End Function
+
+        Function Integer oeffneAb(feld, gezeigt, Integer anfang)
+            Declare Integer anzahl
+            Declare Integer stelle
+            Declare Integer nachbar
+            Declare Integer pos
+            Declare Integer r
+            Declare Integer c
+            liste = [anfang]
+            gezeigt[anfang] = textVon(feld[anfang])
+            anzahl = 1
+            pos = 0
+            While pos < length(liste)
+                stelle = liste[pos]
+                pos = pos + 1
+                If feld[stelle] = 0 Then
+                    For dr = -1 To 1
+                        For dc = -1 To 1
+                            r = stelle div 6 + dr
+                            c = stelle mod 6 + dc
+                            If r >= 0 And r < 6 And c >= 0 And c < 6 Then
+                                nachbar = r * 6 + c
+                                If gezeigt[nachbar] = "." Then
+                                    gezeigt[nachbar] = textVon(feld[nachbar])
+                                    anzahl = anzahl + 1
+                                    append(liste, nachbar)
+                                End If
+                            End If
+                        End For
+                    End For
+                End If
+            End While
+            Return anzahl
+        End Function
+
+        Function String textVon(Integer minen)
+            Declare String text
+            text = " "
+            If minen > 0 Then
+                text = "" + minen
+            End If
+            Return text
+        End Function
+
+        Module zeigeFeld(feld, gezeigt, Boolean alles)
+            Declare String zeile
+            Display "    1 2 3 4 5 6"
+            For r = 0 To 5
+                zeile = substring("ABCDEF", r, r + 1) + " |"
+                For c = 0 To 5
+                    If alles And feld[r * 6 + c] = -1 Then
+                        zeile = zeile + " *"
+                    Else
+                        zeile = zeile + " " + gezeigt[r * 6 + c]
+                    End If
+                End For
+                Display zeile
+            End For
+        End Module
+
+        Function Integer quadratVon(String text)
+            Declare Integer reihe
+            Declare Integer spalte
+            Declare Integer gefunden
+            reihe = -1
+            spalte = -1
+            gefunden = -1
+            If length(text) = 2 Then
+                reihe = indexOf("ABCDEF", substring(text, 0, 1))
+                spalte = indexOf("123456", substring(text, 1, 2))
+            End If
+            If reihe >= 0 And spalte >= 0 Then
+                gefunden = reihe * 6 + spalte
+            End If
+            Return gefunden
+        End Function
+    """),
     # ---- icons, and a drawing run as what it is: a home walked through,
     # work passed on, data sent, a circuit switched on, a launch
     # (03-icons.js, 11-hand-icons.js, 37-board.js to 39-orbit.js)
@@ -4223,6 +4609,33 @@ DE = {
     "n_i_socket": "Steckdose",
     "n_i_solar": "Solarmodul",
     "n_i_ground": "Masse",
+    "n_i_cell": "Zelle",
+    "n_i_diode": "Diode",
+    "n_i_fuse": "Sicherung",
+    "n_i_ammeter": "Amperemeter",
+    "n_i_voltmeter": "Voltmeter",
+    "n_i_dimmer": "Dimmer",
+    "n_i_comet": "Komet",
+    "n_i_asteroid": "Asteroid",
+    "n_i_station": "Raumstation",
+    "n_i_lander": "Mondfähre",
+    "n_i_galaxy": "Galaxie",
+    "n_i_taxi": "Taxi",
+    "n_i_tram": "Straßenbahn",
+    "n_i_helicopter": "Hubschrauber",
+    "n_i_scooter": "Roller",
+    "n_i_airport": "Flughafen",
+    "n_i_trainstation": "Bahnhof",
+    "n_i_park": "Park",
+    "n_i_cafe": "Café",
+    "n_i_gift": "Geschenk",
+    "n_i_target": "Zielscheibe",
+    "n_i_hourglass": "Sanduhr",
+    "n_i_music": "Musik",
+    "n_i_palette": "Farbpalette",
+    "n_i_tag": "Preisschild",
+    "n_i_magnet": "Magnet",
+    "n_i_puzzle": "Puzzleteil",
     "n_i_car": "Auto",
     "n_i_bus": "Bus",
     "n_i_truck": "Lkw",
@@ -4458,6 +4871,12 @@ DE = {
     "ec_buzzes": "{who}: summt ({a}).",
     "ec_quiet": "{who}: still.",
     "ec_drop": "{who}: {v} V Spannung, {a}",
+    "ec_conducts": "{who} lässt den Strom durch: {a}",
+    "ec_blocks": "{who} sperrt den Strom: Er kommt nur andersherum durch",
+    "ec_blown": "{who} ist durchgebrannt: Es floss zu viel Strom, und der Stromkreis ist offen",
+    "ec_fuse_ok": "{who} hält: {a} fließen hindurch",
+    "ec_reads_a": "{who} zeigt {a}",
+    "ec_reads_v": "{who} zeigt {v} V",
     "ec_loose": "{who} braucht an jedem Ende einen Draht.",
     "ec_sum": "Bauteile: {parts} · Drähte: {wires}",
     "os_empty": "Zeichne eine Sonne und ein paar Planeten, um sie in Bewegung zu setzen.",
@@ -4531,6 +4950,25 @@ DE = {
     "hm_icons": "Ein Symbol aus Symbole hinzufügen, unter den Formen: antippen oder aufs Blatt ziehen; nach Namen suchen",
     "hm_room": "Einen Raum oder Bereich verschieben, und alles darin wandert mit",
     "hm_door": "Eine Tür, ein Fenster oder ein Bild an eine Wand setzen, und es passt sich in die Wand ein",
+    "hm_tie": "Räume mit einem Pfeil oder über eine Tür dazwischen verbinden und auf dem Papier auseinander lassen: in 3D stoßen sie aneinander, mit einer Tür in der Wand dazwischen",
+    "st_open": "Haus anlegen",
+    "st_open_tip": "Ein eingerichtetes Haus aus wenigen Angaben anlegen: Schlafzimmer, Bäder und weitere Räume",
+    "st_title": "Haus anlegen",
+    "st_sub": "Räume wählen. Sie werden angelegt und eingerichtet, mit Pfeilen verbunden; in 3D rücken sie zusammen, mit einer Tür dazwischen.",
+    "st_beds": "Schlafzimmer",
+    "st_baths": "Bäder",
+    "st_open_plan": "Küche und Essbereich in einem Raum",
+    "st_office": "Ein Arbeitszimmer",
+    "st_laundry": "Eine Waschküche",
+    "st_garage": "Eine Garage",
+    "st_closet": "Ein begehbarer Kleiderschrank",
+    "st_spread": "Auf dem Papier auseinander",
+    "st_make": "Haus anlegen",
+    "st_made": "{rooms} Räume angelegt",
+    "st_main": "Elternschlafzimmer",
+    "st_bed_n": "Schlafzimmer {n}",
+    "st_ensuite": "Eigenes Bad",
+    "st_hall": "Flur",
     "hm_run_as": "Starten macht, was die Zeichnung ist: geht durch ein Haus, gibt Arbeit weiter, sendet Daten, schaltet einen Stromkreis ein, startet eine Rakete",
     "depth": "Tiefe",
     "depth_tip": "Jede Form in ihrer eigenen Farbe schattieren und ihr einen Schatten geben, damit Farben plastisch wirken",
@@ -4745,6 +5183,14 @@ DE = {
     "hm_lot": "Ein Grundstück unter das Haus legen und im Bereich Größe und Abstände eingeben: es zeigt die Baufläche und den Garten",
     "v3_roof": "Dach",
     "v3_roof_tip": "Dach aufsetzen oder abheben, um hineinzusehen",
+    "v3_day": "Tag",
+    "v3_evening": "Abend",
+    "v3_night": "Nacht",
+    "v3_time_tip": "Tageszeit: Tag, Abend oder Nacht mit Licht an",
+    "v3_save": "Bild speichern",
+    "v3_save_tip": "Die Ansicht als Bild speichern",
+    "v3_saved": "Bild gespeichert",
+    "v3_save_failed": "Dieser Browser kann das Bild nicht speichern",
     "v3_labels": "Beschriftung",
     "v3_labels_tip": "Räume und ihren Inhalt benennen",
     "v3_2d": "2D",
@@ -4818,6 +5264,128 @@ DE = {
     "hm_dims": "Ein Teil des Grundrisses anklicken, um seine Größe auf dem Blatt zu sehen; eine Größe anklicken, um eine andere einzugeben, z. B. 2 m",
     "dz_add_how": "Symbole suchen oder eine Gruppe wählen, dann eins anklicken oder aufs Blatt ziehen. Etwas anklicken, um seine Größe zu sehen und eine neue einzugeben.",
     "dz_ceil_least": "Eine Decke ist mindestens {size} hoch.",
+    "mt_head": "Materialien",
+    "mt_button": "Materialien",
+    "mt_floor": "Boden",
+    "mt_wall": "Innenwände",
+    "mt_out": "Außenwände",
+    "mt_roof": "Dach",
+    "mt_house": "Ganzes Haus",
+    "mt_room": "Dieser Raum",
+    "mt_plain": "Standard",
+    "mt_none": "Zuerst Räume zeichnen, dann ihre Materialien wählen.",
+    "mt_boards": "Holzdielen",
+    "mt_parquet": "Parkett",
+    "mt_tiles": "Fliesen",
+    "mt_marble": "Marmor",
+    "mt_slate": "Schiefer",
+    "mt_carpet": "Teppichboden",
+    "mt_concrete": "Beton",
+    "mt_paint": "Farbe",
+    "mt_wallpaper": "Tapete",
+    "mt_panels": "Holzpaneele",
+    "mt_brick": "Ziegel",
+    "mt_stone": "Naturstein",
+    "mt_siding": "Stülpschalung",
+    "mt_stucco": "Putz",
+    "mt_batten": "Boden-Deckel-Schalung",
+    "mt_shakes": "Zedernschindeln",
+    "mtr_shingles": "Schindeln",
+    "mtr_tiles": "Tonziegel",
+    "mtr_metal": "Metall",
+    "mtr_slate": "Schiefer",
+    "dz_finish": "Ausführung",
+    "dz_fin_main": "Haupt",
+    "dz_fin_trim": "Details",
+    "dz_fin_plain_tip": "Zurück zu den üblichen Farben",
+    "sizes": "Maße",
+    "sizes_tip": "Länge, Breite und Deckenhöhe jedes Raums und Breite, Tiefe und Höhe jedes Möbels auf den Grundriss schreiben",
+    "ic_fitness": "Fitness & Spiel",
+    "ic_utility": "Garage & Technik",
+    "n_i_consoletable": "Konsolentisch",
+    "n_i_sideboard": "Sideboard",
+    "n_i_chaise": "Chaiselongue",
+    "n_i_rocker": "Schaukelstuhl",
+    "n_i_hutch": "Vitrinenschrank",
+    "n_i_barcart": "Barwagen",
+    "n_i_highchair": "Hochstuhl",
+    "n_i_daybed": "Tagesbett",
+    "n_i_floormirror": "Standspiegel",
+    "n_i_toybox": "Spielzeugkiste",
+    "n_i_standdesk": "Stehschreibtisch",
+    "n_i_lshapedesk": "Eckschreibtisch",
+    "n_i_oven": "Einbaubackofen",
+    "n_i_winecooler": "Weinkühlschrank",
+    "n_i_freezer": "Gefriertruhe",
+    "n_i_cornertub": "Eckbadewanne",
+    "n_i_linencab": "Wäscheschrank",
+    "n_i_whiteboard": "Whiteboard",
+    "n_i_dartboard": "Dartscheibe",
+    "n_i_evcharger": "Wallbox",
+    "n_i_treadmill": "Laufband",
+    "n_i_exbike": "Heimtrainer",
+    "n_i_weightbench": "Hantelbank",
+    "n_i_yogamat": "Yogamatte",
+    "n_i_pooltable": "Billardtisch",
+    "n_i_pingpong": "Tischtennisplatte",
+    "n_i_easel": "Staffelei",
+    "n_i_trampoline": "Trampolin",
+    "n_i_swing": "Schaukelgerüst",
+    "n_i_firepit": "Feuerschale",
+    "n_i_lounger": "Sonnenliege",
+    "n_i_gazebo": "Pavillon",
+    "n_i_shed": "Gartenhaus",
+    "n_i_planter": "Pflanzkasten",
+    "n_i_birdbath": "Vogeltränke",
+    "n_i_lamppost": "Laternenpfahl",
+    "n_i_mailbox": "Briefkasten",
+    "n_i_bikerack": "Fahrradständer",
+    "n_i_workbench": "Werkbank",
+    "n_i_shelving": "Lagerregal",
+    "n_i_toolchest": "Werkzeugwagen",
+    "n_i_furnace": "Heizkessel",
+    "wk_i_consoletable": "legt die Schlüssel auf den Konsolentisch",
+    "wk_i_sideboard": "holt das gute Geschirr heraus",
+    "wk_i_chaise": "streckt sich auf der Chaiselongue aus",
+    "wk_i_rocker": "schaukelt im Schaukelstuhl",
+    "wk_i_hutch": "bewundert das Porzellan",
+    "wk_i_barcart": "mixt ein Getränk",
+    "wk_i_highchair": "füttert das Baby",
+    "wk_i_daybed": "legt sich kurz hin",
+    "wk_i_floormirror": "prüft das Outfit im Spiegel",
+    "wk_i_toybox": "räumt die Spielsachen weg",
+    "wk_i_standdesk": "arbeitet im Stehen",
+    "wk_i_lshapedesk": "arbeitet am Eckschreibtisch",
+    "wk_i_oven": "backt einen Kuchen",
+    "wk_i_winecooler": "sucht eine Flasche Wein aus",
+    "wk_i_freezer": "holt etwas aus der Gefriertruhe",
+    "wk_i_cornertub": "nimmt ein langes Bad",
+    "wk_i_linencab": "holt ein frisches Handtuch",
+    "wk_i_whiteboard": "schreibt ans Whiteboard",
+    "wk_i_dartboard": "wirft ein paar Darts",
+    "wk_i_evcharger": "steckt das Auto ein",
+    "wk_i_treadmill": "läuft eine Runde",
+    "wk_i_exbike": "fährt auf dem Heimtrainer",
+    "wk_i_weightbench": "stemmt Gewichte",
+    "wk_i_yogamat": "macht Yoga",
+    "wk_i_pooltable": "spielt eine Runde Billard",
+    "wk_i_pingpong": "spielt Tischtennis",
+    "wk_i_easel": "malt ein Bild",
+    "wk_i_trampoline": "springt auf dem Trampolin",
+    "wk_i_swing": "schaukelt",
+    "wk_i_firepit": "zündet die Feuerschale an",
+    "wk_i_lounger": "legt sich in die Sonne",
+    "wk_i_gazebo": "setzt sich in den Pavillon",
+    "wk_i_shed": "holt den Rasenmäher heraus",
+    "wk_i_planter": "gießt den Pflanzkasten",
+    "wk_i_birdbath": "füllt die Vogeltränke",
+    "wk_i_lamppost": "schaltet das Außenlicht ein",
+    "wk_i_mailbox": "sieht in den Briefkasten",
+    "wk_i_bikerack": "holt das Fahrrad",
+    "wk_i_workbench": "repariert etwas an der Werkbank",
+    "wk_i_shelving": "sucht eine Kiste im Regal",
+    "wk_i_toolchest": "holt einen Schraubenschlüssel",
+    "wk_i_furnace": "dreht die Heizung auf",
 }
 
 speaks("de", "Deutsch", DE)

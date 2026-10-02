@@ -39,7 +39,8 @@ var stand = [
   "function drawAdders() {} function drawHandPanel() {} function drawHand() {} function setMode() {}",
   "function handRecall() { return false; } function boardName() { return 'home'; }",
   "var document = { addEventListener: function () {}, body: { classList: { toggle: function () {} } } };",
-  "var SCENES = {};"
+  "var SCENES = {};",
+  "function keepUndo() {} function showReport() {} function handSays() {} var chart = null;"
 ].join("\n");
 
 var tests = function () {
@@ -271,6 +272,174 @@ var tests = function () {
         "a door by a corner cut the wall round it: " + JSON.stringify(own));
   said.push("sizes typed and kept to what holds them");
 
+  // ---- a piece added goes where it would go in a home (39-design.js)
+  hand.links = [];
+  hand.nodes = [{ id: 1, kind: "i_room", x: 0, y: 0, w: 300, h: 220, text: "Bedroom" },
+                { id: 2, kind: "i_room", x: 300, y: 0, w: 300, h: 220, text: "Bath" },
+                { id: 3, kind: "i_bed", x: 0, y: -49, text: "" },
+                { id: 4, kind: "i_door", x: -60, y: 85, w: 50, h: 50, text: "" }];
+  hand.nodes.forEach(function (n) { if (!n.w) { measure(n); } });
+  function added(kind) {
+    var n = { id: hand.nodes.length + 10, kind: kind, text: "", x: 2000, y: 2000 };
+    measure(n);
+    hand.nodes.push(n);
+    placeWell(n, null);
+    return n;
+  }
+  var stand2 = added("i_nightstand"), loo = added("i_toilet"), robe = added("i_wardrobe");
+  var bedNow = nodeById(3);
+  check(Math.abs(stand2.y - (bedNow.y - bedNow.h / 2 + stand2.h / 2)) < 1 &&
+        Math.abs(Math.abs(stand2.x - bedNow.x) - (bedNow.w + stand2.w) / 2) < 4, "a nightstand not by the bed's head: " + [stand2.x, stand2.y]);
+  check(insideArea(nodeById(2), loo.x, loo.y) && !insideArea(nodeById(1), loo.x, loo.y), "a toilet not put in the bathroom");
+  check(insideArea(nodeById(1), robe.x, robe.y), "a wardrobe not put in the bedroom");
+  hand.nodes.forEach(function (a) {
+    hand.nodes.forEach(function (b) {
+      if (a.id < b.id && isSolid(a.kind) && isSolid(b.kind) && boxesOverlap(a, b)) { check(false, a.kind + " put on " + b.kind); }
+    });
+  });
+  said.push("pieces added where they go");
+
+  // ---- every piece of a home made in 3D (38-models.js): made without a
+  // fault, of real numbers, and about where the piece stands
+  var unmade = [], badly = [];
+  Object.keys(ICONS).forEach(function (kind) {
+    if (V3_HIGH[kind] === undefined && !V3_ON[kind] && !V3_DROP[kind] && !V3_WALL[kind]) { return; }
+    if (!MODELS[kind]) { unmade.push(kind); return; }
+    var n = { id: 1, kind: kind, text: "", x: 0, y: 0 };
+    measure(n);
+    var H = pieceHigh(n) * FLOOR_PX, M = modelMaker(0, 0, 0, 0), out;
+    try { MODELS[kind](M, n.w, n.h, Math.max(1, H), {}, n, { cord: 20 }); out = M.done(); }
+    catch (e) { badly.push(kind + " (" + e.message + ")"); return; }
+    var reach = 0.9 * FLOOR_PX, bad = !out.length;
+    out.forEach(function (f) {
+      for (var i = 0; i < f.mesh.p.length; i += 3) {
+        var x = f.mesh.p[i], y = f.mesh.p[i + 1], z = f.mesh.p[i + 2];
+        if (!isFinite(x) || !isFinite(y) || !isFinite(z) || Math.abs(x) > n.w / 2 + reach || Math.abs(y) > n.h / 2 + reach ||
+            z < -(V3_WALL[kind] || V3_DROP[kind] ? 0.8 : 0.15) * FLOOR_PX || z > H + 2.6 * FLOOR_PX + 20) { bad = true; }
+      }
+    });
+    if (bad) { badly.push(kind); }
+  });
+  check(!unmade.length, "pieces with no 3D model: " + unmade.join(", "));
+  // and every piece that stands counted as furniture: walked to, checked
+  var uncounted = Object.keys(V3_HIGH).filter(function (k) {
+    return ICONS[k] && WALK_DO[k] === undefined && !LIES_FLAT[k] && k !== "i_pool" && k !== "i_driveway" && k !== "i_path";
+  });
+  check(!uncounted.length, "pieces not counted as furniture: " + uncounted.join(", "));
+  hand.nodes = [{ id: 1, kind: "i_room", x: 0, y: 0, w: 300, h: 300, text: "" }, { id: 2, kind: "i_workbench", x: 0, y: -100, text: "" },
+                { id: 3, kind: "i_treadmill", x: 80, y: 60, text: "" }];
+  hand.nodes.forEach(function (n) { if (!n.w) { measure(n); } });
+  var shop = walkPlan();
+  check(shop.pieces.length === 2 && roomKind(shop, nodeById(1)) === "garage", "a workbench's room not a garage, or not counted: " +
+        shop.pieces.length + " " + roomKind(shop, nodeById(1)));
+  check(!badly.length, "3D models made wrong: " + badly.join(", "));
+  said.push(Object.keys(MODELS).length + " pieces made in 3D");
+
+  // ---- rooms drawn apart, joined by arrows: put together in 3D
+  hand.nodes = [{ id: 1, kind: "i_room", x: 0, y: 0, w: 300, h: 200, text: "" },
+                { id: 2, kind: "i_room", x: 520, y: 30, w: 200, h: 200, text: "" },
+                { id: 3, kind: "i_room", x: 20, y: 420, w: 240, h: 160, text: "" },
+                { id: 4, kind: "i_door", x: 10, y: 260, w: 50, h: 50, text: "" },
+                { id: 5, kind: "i_stove", x: 560, y: 60, text: "" },
+                { id: 6, kind: "i_bed", x: 20, y: 440, text: "" }];
+  hand.nodes.forEach(function (n) { if (!n.w) { measure(n); } });
+  hand.links = [{ id: 1, from: 1, to: 2, label: "" }, { id: 2, from: 1, to: 4, label: "" }, { id: 3, from: 4, to: 3, label: "" }];
+  hand.next = 7;
+  var J = tieLayout(), bx = J.boxes;
+  check(J.any && Math.abs(bx[2].l - bx[1].r) < 0.5 && Math.min(bx[2].b, bx[1].b) - Math.max(bx[2].t, bx[1].t) >= 59,
+        "the kitchen did not come up against the living room: " + JSON.stringify([bx[1], bx[2]]));
+  check(Math.abs(bx[3].t - bx[1].b) < 0.5 && Math.min(bx[3].r, bx[1].r) - Math.max(bx[3].l, bx[1].l) >= 59,
+        "the bedroom did not come up under it: " + JSON.stringify(bx[3]));
+  check(J.moves[5] && near(J.moves[5].x, 560 + J.delta[2][0]) && near(J.moves[5].y, 60 + J.delta[2][1]), "the stove was left behind");
+  var between = J.moves[4], under = tieWall(bx[1], bx[3]);
+  check(between && under && between.turn === 180 &&
+        tieInWall({ kind: "i_door", x: between.x, y: between.y, w: 50, h: 50, turn: 180 }, 0, 0, under),
+        "the door drawn between them is not in the wall between: " + JSON.stringify(between));
+  check(J.made.length === 1 && J.made[0].node.turn === 90 && near(J.made[0].node.x, bx[1].r + 25),
+        "no door where the arrow had none: " + JSON.stringify(J.made));
+  var real = hand, whole = tieHand(1);
+  check(whole && whole.links.length === 0 && whole.nodes.length === real.nodes.length + 1, "put together, the arrows are still there");
+  function reaches(plan, a, b) {         // from the middle of one to a corner of the other, clear of the bed
+    return !!walkWay(plan, cellOf(plan, a.x, a.y), [cellOf(plan, b.x - b.w / 2 + 25, b.y - b.h / 2 + 25)]);
+  }
+  hand = whole;
+  var inside3d = walkPlan();
+  check(inside3d.joins.filter(function (j) { return j.rooms.length === 2; }).length === 2 &&
+        reaches(inside3d, nodeById(1), nodeById(2)) && reaches(inside3d, nodeById(1), nodeById(3)),
+        "put together, the rooms cannot be walked between");
+  hand = real;
+  var onPaper = walkPlan();
+  check(reaches(onPaper, nodeById(1), nodeById(2)) && reaches(onPaper, nodeById(1), nodeById(3)) &&
+        onPaper.joins.filter(function (j) { return j.door.id === 4; })[0].rooms.length === 2,
+        "on the paper, the walk does not follow the arrows");
+  check(tieCovers(nodeById(1), 162, 0) && !tieCovers(nodeById(1), -162, 0), "a wall the kitchen comes against still looks outside");
+  var arrows = hand.links;
+  hand.links = [];
+  check(!reaches(walkPlan(), nodeById(1), nodeById(2)), "the walk went through a wall");
+  hand.links = arrows;
+  // pushed together, the arrow becomes a door; pulled apart, a door an arrow
+  hand.nodes = [{ id: 1, kind: "i_room", x: 0, y: 0, w: 300, h: 200, text: "" },
+                { id: 2, kind: "i_room", x: 250, y: 0, w: 200, h: 200, text: "" }];
+  hand.links = [{ id: 1, from: 1, to: 2, label: "" }];
+  hand.next = 3;
+  tieTidy();
+  var put = hand.nodes.filter(function (n) { return n.kind === "i_door"; })[0];
+  check(!hand.links.length && put && doorIn(put, nodeById(1)) && doorIn(put, nodeById(2)), "pushed together, still an arrow and no door");
+  tieWas = tieDoors();
+  nodeById(2).x += 350; put.x += 350;
+  check(tieApart([2]) && hand.links.length === 1 && hand.links[0].from === 1 && hand.links[0].to === 2,
+        "pulled apart, nothing joins them: " + JSON.stringify(hand.links));
+  J = tieLayout();
+  check(!J.made.length && near(J.boxes[2].l, J.boxes[1].r) && J.moves[put.id] && near(J.moves[put.id].x, put.x - 350),
+        "put together again, not at its own door: " + JSON.stringify([J.boxes[2], J.moves[put.id], J.made]));
+  // added: a room joined to the one before it, a door between two to both
+  var later = { id: 9, kind: "i_room", x: 0, y: 330, w: 200, h: 160, text: "" };
+  hand.nodes.push(later);
+  check(tieNew(later, nodeById(1)) && hand.links.some(function (l) { return l.from === 1 && l.to === 9; }),
+        "a new room was not joined to the room before it");
+  var mid = { id: 10, kind: "i_door", x: 0, y: 175, w: 50, h: 50, text: "" };
+  hand.nodes.push(mid);
+  check(tieNew(mid, null) && hand.links.filter(function (l) { return l.from === 10 || l.to === 10; }).length === 2,
+        "a door put down between two rooms was not joined to both");
+  check(tieable(nodeById(1)) && tieable(mid) && !tieable({ kind: "i_sofa" }) && !tieAllowed(nodeById(1), { kind: "i_sofa" }),
+        "arrows offered to the furniture of a floor plan");
+  hand.links = [];
+  said.push("rooms drawn apart, put together");
+
+  // ---- Start a house: laid out, furnished, nothing left to put right
+  [true, false].forEach(function (spread) {
+    hand.nodes = []; hand.links = []; hand.next = 1;
+    starterMake({ beds: 3, baths: 2, open: false, office: true, laundry: true, garage: true, closet: true, spread: spread });
+    var rooms = hand.nodes.filter(function (n) { return n.kind === "i_room"; });
+    check(rooms.length === 13, "Start a house made " + rooms.length + " rooms, not 13");
+    var tips = homeAdvice().map(function (t) { return t.text; });
+    check(!tips.length, "Start a house left things to put right (" + (spread ? "spread" : "together") + "): " + tips.join(" / "));
+    // and every piece it was to put in, in
+    var lack = [];
+    starterLast.forEach(function (one) {
+      var spec = STARTER_ROOMS[one.kind], have = hand.nodes.filter(function (n) {
+        return n !== one.room && insideArea(one.room, n.x, n.y, -14);
+      }).map(function (n) { return n.kind; });
+      spec.wall.concat(spec.mid).forEach(function (k) {
+        var at = -1;
+        k.split("|").some(function (c) { at = have.indexOf(c); return at >= 0; });
+        if (at >= 0) { have.splice(at, 1); } else { lack.push(one.kind + ": " + k); }
+      });
+    });
+    check(!lack.length, "Start a house left out " + lack.join(", "));
+    var plan = walkPlan(), joined = {};
+    plan.joins.forEach(function (j) { j.rooms.forEach(function (r) { joined[r.id] = true; }); });
+    check(rooms.every(function (r) { return joined[r.id]; }), "a room of the house made has no way in");
+    if (spread) {
+      check(hand.links.length >= 13 && tieLayout().any, "spread out, the house made is not joined by arrows");
+    } else {
+      check(!hand.links.some(function (l) { return nodeById(l.from).kind === "i_room" && nodeById(l.to).kind === "i_room"; }),
+            "put together, arrows are still left between rooms");
+    }
+  });
+  hand.nodes = []; hand.links = [];
+  said.push("a house started, spread out and put together");
+
   // ---- circuits, worked out
   function circuit(nodes, links) {
     hand.nodes = nodes; hand.links = links;
@@ -298,12 +467,32 @@ var tests = function () {
   var s5 = circuit([{ id: 1, kind: "i_battery", text: "9 V", x: 0, y: 0 }, { id: 2, kind: "i_switch_on", text: "", x: 100, y: 0 }],
                    [{ from: 1, to: 2 }, { from: 2, to: 1 }]);
   check(s5.short, "a battery shorted by a switch was not a short");
+  // the parts added later: a fuse melts on a short, a diode one way only,
+  // the meters read what goes through and across
+  circuitBlown = {};
+  var s6 = circuit([{ id: 1, kind: "i_battery", text: "9 V", x: 0, y: 0 }, { id: 2, kind: "i_fuse", text: "2 A", x: 100, y: 0 }],
+                   [{ from: 1, to: 2 }, { from: 2, to: 1 }]);
+  check(circuitBlown[2] && !s6.short && !s6.flows, "a fuse across a battery did not melt");
+  circuitBlown = {};
+  var s7 = circuit([{ id: 1, kind: "i_battery", text: "9 V", x: 0, y: 0 }, { id: 2, kind: "i_resistor", text: "100", x: 100, y: 0 },
+                    { id: 3, kind: "i_diode", text: "", x: 200, y: 0 }],
+                   [{ from: 1, to: 2 }, { from: 2, to: 3 }, { from: 3, to: 1 }]);
+  check(Math.abs(partOf(s7, 3).amps - 8.3 / 100.8) < 1e-3, "a diode the right way round: " + partOf(s7, 3).amps);
+  var s8 = circuit([{ id: 1, kind: "i_battery", text: "9 V", x: 0, y: 0 }, { id: 2, kind: "i_resistor", text: "100", x: 100, y: 0 },
+                    { id: 3, kind: "i_diode", text: "", x: 200, y: 0 }],
+                   [{ from: 2, to: 1 }, { from: 2, to: 3 }, { from: 3, to: 1 }]);   // + into its cathode
+  check(Math.abs(partOf(s8, 3).amps) < 1e-6, "current through a diode the wrong way round");
+  var s9 = circuit([{ id: 1, kind: "i_battery", text: "9 V", x: 0, y: 0 }, { id: 2, kind: "i_ammeter", text: "", x: 100, y: 0 },
+                    { id: 3, kind: "i_dimmer", text: "300", x: 200, y: 0 }, { id: 4, kind: "i_voltmeter", text: "", x: 200, y: 100 }],
+                   [{ from: 1, to: 2 }, { from: 2, to: 3 }, { from: 3, to: 1 }, { from: 3, to: 4 }, { from: 4, to: 3 }]);
+  check(Math.abs(partOf(s9, 2).amps - 9 / 300.31) < 1e-4 && Math.abs(Math.abs(partOf(s9, 4).volts) - 9 * 300 / 300.31) < 0.01,
+        "the meters read wrong: " + partOf(s9, 2).amps + " A, " + partOf(s9, 4).volts + " V");
   said.push("circuits worked out");
 
   return { bad: bad, said: said };
 };
 
-var src = stand + "\n" + ["03-icon-art.js", "03-icons.js", "13-hand-apart.js", "38-walk.js", "38-advice.js", "38-view3d.js", "39-flows.js", "39-circuit.js", "39-design.js"]
+var src = stand + "\n" + ["03-icon-art.js", "03-icons.js", "13-hand-apart.js", "38-walk.js", "38-advice.js", "38-view3d.js", "38-models.js", "39-flows.js", "39-circuit.js", "39-design.js", "39-join.js", "39-starter.js"]
   .map(part).join("\n") + "\nreturn (" + tests.toString() + ")();";
 var out;
 try { out = new Function(src)(); }                 // eslint-disable-line no-new-func

@@ -3015,6 +3015,18 @@ EN = {
     "g_battleship": "Battleship",
     "g_battleship_d": "Sink the enemy fleet before it sinks yours",
     "g_battleship_h": "Both sides hide three ships on a 6 by 6 sea. Fire by typing a letter and a number, like B4. X is a hit and o is a miss. Sink every enemy ship before the enemy sinks yours.",
+    "g_math": "Quick Math",
+    "g_math_d": "Eight sums against the clock, with a bonus for each right answer in a row",
+    "g_math_h": "Eight sums come up one at a time: adding, taking away and times tables. Type each answer. A right answer scores one point more than the last one in a row did, so keep a streak going.",
+    "g_pig": "Pig",
+    "g_pig_d": "Roll as often as you dare, but a 1 loses the lot",
+    "g_pig_h": "Roll the die as many times as you like on your turn, adding up what you roll. Type r to roll again or h to hold and bank your points. Roll a 1 and you lose everything from that turn. The computer plays too, and the first to 50 wins.",
+    "g_lander": "Lunar Lander",
+    "g_lander_d": "Burn just enough fuel to touch down gently on the moon",
+    "g_lander_h": "You start 500 m above the moon, falling. Each second, type how much fuel to burn, from 0 to 20: the more you burn, the more you slow down, but the fuel runs out. Touch down at 5 m a second or less to land safely.",
+    "g_mines": "Minesweeper",
+    "g_mines_d": "Open every safe square of a minefield, using the numbers as clues",
+    "g_mines_h": "Seven mines are hidden in a field of 6 by 6 squares. Type a square like B4 to open it. A number tells you how many of the squares around it hold a mine, and an empty square opens all the squares around it. Type F and a square, like FB4, to put a flag on a square you are sure is a mine, or to take the flag off again. Open every square without a mine to win.",
     "g_coin_p": program("""
         Start
         Declare Integer pick
@@ -4082,6 +4094,380 @@ EN = {
             Return targets[random(0, length(targets) - 1)]
         End Function
     """),
+    "g_math_p": program("""
+        Start
+        Declare Integer score
+        Declare Integer streak
+        Declare Integer best
+        Declare Integer answer
+        Declare Integer right
+        score = 0
+        streak = 0
+        best = 0
+        Display "Quick Math: eight sums. Every right answer in a row scores one more than the last"
+        For turn = 1 To 8
+            right = askSum(turn)
+            Input answer
+            If answer = right Then
+                streak = streak + 1
+                score = score + streak
+                Display "Right! That is ", streak, " in a row"
+                If streak > best Then
+                    best = streak
+                End If
+            Else
+                Display "Not quite: it was ", right
+                streak = 0
+            End If
+        End For
+        Call showScore(score, best)
+        Stop
+
+        Function Integer askSum(Integer turn)
+            Declare Integer a
+            Declare Integer b
+            Declare Integer kind
+            Declare Integer result
+            a = random(2, 9 + turn)
+            b = random(2, 9)
+            kind = random(1, 3)
+            If kind = 1 Then
+                Display "Sum ", turn, ": what is ", a, " + ", b, "?"
+                result = a + b
+            Else If kind = 2 Then
+                Display "Sum ", turn, ": what is ", a + b, " - ", b, "?"
+                result = a
+            Else
+                Display "Sum ", turn, ": what is ", a, " x ", b, "?"
+                result = a * b
+            End If
+            Return result
+        End Function
+
+        Module showScore(Integer score, Integer best)
+            Display "Your score: ", score, " points. Longest run of right answers: ", best
+            If score >= 30 Then
+                Display "A math whiz!"
+            Else If score >= 12 Then
+                Display "Well done!"
+            Else
+                Display "Keep practicing and try again"
+            End If
+        End Module
+    """),
+    "g_pig_p": program("""
+        Start
+        Declare Integer mine
+        Declare Integer theirs
+        mine = 0
+        theirs = 0
+        Display "Pig: roll as often as you dare. A 1 loses everything you rolled that turn. First to 50 wins"
+        While mine < 50 And theirs < 50
+            mine = mine + yourTurn(mine)
+            Display "Score: you ", mine, ", the computer ", theirs
+            If mine < 50 Then
+                theirs = theirs + computerTurn(theirs)
+                Display "Score: you ", mine, ", the computer ", theirs
+            End If
+        End While
+        If mine >= 50 Then
+            Display "You reach 50 first and win!"
+        Else
+            Display "The computer reaches 50 first and wins"
+        End If
+        Stop
+
+        Function Integer yourTurn(Integer score)
+            Declare Integer kept
+            Declare Integer roll
+            Declare String choice
+            Declare Boolean going
+            kept = 0
+            going = True
+            While going
+                roll = random(1, 6)
+                If roll = 1 Then
+                    Display "You rolled a 1 and lose the ", kept, " points from this turn"
+                    kept = 0
+                    going = False
+                Else
+                    kept = kept + roll
+                    Display "You rolled ", roll, ". This turn: ", kept, ". In all: ", score + kept
+                    If score + kept >= 50 Then
+                        going = False
+                    Else
+                        Display "Type r to roll again, or h to hold"
+                        Input choice
+                        If choice = "h" Or choice = "H" Then
+                            going = False
+                        End If
+                    End If
+                End If
+            End While
+            Return kept
+        End Function
+
+        Function Integer computerTurn(Integer score)
+            Declare Integer kept
+            Declare Integer roll
+            kept = 0
+            roll = 0
+            While roll <> 1 And kept < 15 And score + kept < 50
+                roll = random(1, 6)
+                If roll = 1 Then
+                    kept = 0
+                Else
+                    kept = kept + roll
+                End If
+            End While
+            If roll = 1 Then
+                Display "The computer rolled a 1 and scores nothing"
+            Else
+                Display "The computer holds with ", kept, " points"
+            End If
+            Return kept
+        End Function
+    """),
+    "g_lander_p": program("""
+        Start
+        Declare Real height
+        Declare Real speed
+        Declare Integer fuel
+        Declare Integer seconds
+        Declare Integer burn
+        height = 500
+        speed = 0
+        fuel = 150
+        seconds = 0
+        Display "Lunar Lander: you are 500 m up and falling. Each second, burn 0 to 20 units of fuel to slow down"
+        Display "Touch down at 5 m a second or less to land safely"
+        While height > 0
+            Call showPanel(seconds, height, speed, fuel)
+            burn = askBurn(fuel)
+            fuel = fuel - burn
+            speed = speed + 1.6 - burn * 0.3
+            height = height - speed
+            seconds = seconds + 1
+        End While
+        Call landing(speed, fuel, seconds)
+        Stop
+
+        Module showPanel(Integer seconds, Real height, Real speed, Integer fuel)
+            Display "Time ", seconds, " s. Height ", round(height), " m. Falling at ", round(speed, 1), " m/s. Fuel ", fuel
+        End Module
+
+        Function Integer askBurn(Integer fuel)
+            Declare Integer burn
+            burn = 0
+            If fuel <= 0 Then
+                Display "Out of fuel!"
+            Else
+                Display "How much fuel to burn, from 0 to 20?"
+                Input burn
+                While burn < 0 Or burn > 20
+                    Display "Burn 0 to 20"
+                    Input burn
+                End While
+                If burn > fuel Then
+                    Display "Only ", fuel, " left, so that is all you burn"
+                    burn = fuel
+                End If
+            End If
+            Return burn
+        End Function
+
+        Module landing(Real speed, Integer fuel, Integer seconds)
+            If speed <= 5 Then
+                Display "The Eagle has landed! Down at ", round(speed, 1), " m/s after ", seconds, " seconds, with ", fuel, " fuel left"
+                If speed <= 2 Then
+                    Display "A perfect landing!"
+                End If
+            Else If speed <= 12 Then
+                Display "A hard landing at ", round(speed), " m/s. The lander is dented, but you walk away"
+            Else
+                Display "You hit the surface at ", round(speed), " m/s and make a new crater"
+            End If
+        End Module
+    """),
+    "g_mines_p": program("""
+        Start
+        Declare Integer opened
+        Declare Integer safe
+        Declare Integer square
+        Declare String move
+        Declare String said
+        Declare Boolean alive
+        field = newField()
+        shown = newShown()
+        Call layMines(field, 7)
+        safe = 36 - 7
+        opened = 0
+        alive = True
+        Display "Minesweeper: 7 mines are hidden in a field of 6 by 6. Open every square without a mine"
+        Display "Type a square like B4 to open it, or F and a square, like FB4, to flag a mine"
+        While alive And opened < safe
+            Call showField(field, shown, False)
+            Input move
+            said = toUpper(move)
+            If length(said) = 3 And substring(said, 0, 1) = "F" Then
+                square = squareOf(substring(said, 1, 3))
+                If square = -1 Then
+                    Display "That is not a square. Try something like FB4"
+                Else If shown[square] = "." Then
+                    shown[square] = "F"
+                Else If shown[square] = "F" Then
+                    shown[square] = "."
+                End If
+            Else
+                square = squareOf(said)
+                If square = -1 Then
+                    Display "That is not a square. Try something like B4"
+                Else If shown[square] <> "." Then
+                    Display "That square is open already, or flagged"
+                Else If field[square] = -1 Then
+                    alive = False
+                Else
+                    opened = opened + openFrom(field, shown, square)
+                End If
+            End If
+        End While
+        Call showField(field, shown, True)
+        If alive Then
+            Display "Every safe square is open. You cleared the field!"
+        Else
+            Display "Boom! That square had a mine under it. Better luck next time"
+        End If
+        Stop
+
+        Function newField()
+            cells = []
+            For i = 1 To 36
+                append(cells, 0)
+            End For
+            Return cells
+        End Function
+
+        Function newShown()
+            cells = []
+            For i = 1 To 36
+                append(cells, ".")
+            End For
+            Return cells
+        End Function
+
+        Module layMines(field, Integer total)
+            Declare Integer laid
+            Declare Integer spot
+            laid = 0
+            While laid < total
+                spot = random(0, 35)
+                If field[spot] <> -1 Then
+                    field[spot] = -1
+                    laid = laid + 1
+                End If
+            End While
+            For spot = 0 To 35
+                If field[spot] <> -1 Then
+                    field[spot] = minesAround(field, spot)
+                End If
+            End For
+        End Module
+
+        Function Integer minesAround(field, Integer spot)
+            Declare Integer total
+            Declare Integer r
+            Declare Integer c
+            total = 0
+            For dr = -1 To 1
+                For dc = -1 To 1
+                    r = spot div 6 + dr
+                    c = spot mod 6 + dc
+                    If r >= 0 And r < 6 And c >= 0 And c < 6 Then
+                        If field[r * 6 + c] = -1 Then
+                            total = total + 1
+                        End If
+                    End If
+                End For
+            End For
+            Return total
+        End Function
+
+        Function Integer openFrom(field, shown, Integer origin)
+            Declare Integer total
+            Declare Integer spot
+            Declare Integer near
+            Declare Integer at
+            Declare Integer r
+            Declare Integer c
+            todo = [origin]
+            shown[origin] = textOf(field[origin])
+            total = 1
+            at = 0
+            While at < length(todo)
+                spot = todo[at]
+                at = at + 1
+                If field[spot] = 0 Then
+                    For dr = -1 To 1
+                        For dc = -1 To 1
+                            r = spot div 6 + dr
+                            c = spot mod 6 + dc
+                            If r >= 0 And r < 6 And c >= 0 And c < 6 Then
+                                near = r * 6 + c
+                                If shown[near] = "." Then
+                                    shown[near] = textOf(field[near])
+                                    total = total + 1
+                                    append(todo, near)
+                                End If
+                            End If
+                        End For
+                    End For
+                End If
+            End While
+            Return total
+        End Function
+
+        Function String textOf(Integer mines)
+            Declare String text
+            text = " "
+            If mines > 0 Then
+                text = "" + mines
+            End If
+            Return text
+        End Function
+
+        Module showField(field, shown, Boolean all)
+            Declare String line
+            Display "    1 2 3 4 5 6"
+            For r = 0 To 5
+                line = substring("ABCDEF", r, r + 1) + " |"
+                For c = 0 To 5
+                    If all And field[r * 6 + c] = -1 Then
+                        line = line + " *"
+                    Else
+                        line = line + " " + shown[r * 6 + c]
+                    End If
+                End For
+                Display line
+            End For
+        End Module
+
+        Function Integer squareOf(String text)
+            Declare Integer row
+            Declare Integer col
+            Declare Integer found
+            row = -1
+            col = -1
+            found = -1
+            If length(text) = 2 Then
+                row = indexOf("ABCDEF", substring(text, 0, 1))
+                col = indexOf("123456", substring(text, 1, 2))
+            End If
+            If row >= 0 And col >= 0 Then
+                found = row * 6 + col
+            End If
+            Return found
+        End Function
+    """),
     # ---- icons, and a drawing run as what it is: a home walked through,
     # work passed on, data sent, a circuit switched on, a launch
     # (03-icons.js, 11-hand-icons.js, 37-board.js to 39-orbit.js)
@@ -4221,6 +4607,33 @@ EN = {
     "n_i_socket": "Outlet",
     "n_i_solar": "Solar panel",
     "n_i_ground": "Ground",
+    "n_i_cell": "Cell",
+    "n_i_diode": "Diode",
+    "n_i_fuse": "Fuse",
+    "n_i_ammeter": "Ammeter",
+    "n_i_voltmeter": "Voltmeter",
+    "n_i_dimmer": "Dimmer",
+    "n_i_comet": "Comet",
+    "n_i_asteroid": "Asteroid",
+    "n_i_station": "Space station",
+    "n_i_lander": "Lunar lander",
+    "n_i_galaxy": "Galaxy",
+    "n_i_taxi": "Taxi",
+    "n_i_tram": "Streetcar",
+    "n_i_helicopter": "Helicopter",
+    "n_i_scooter": "Scooter",
+    "n_i_airport": "Airport",
+    "n_i_trainstation": "Train station",
+    "n_i_park": "Park",
+    "n_i_cafe": "Café",
+    "n_i_gift": "Gift",
+    "n_i_target": "Target",
+    "n_i_hourglass": "Hourglass",
+    "n_i_music": "Music",
+    "n_i_palette": "Paint palette",
+    "n_i_tag": "Price tag",
+    "n_i_magnet": "Magnet",
+    "n_i_puzzle": "Puzzle piece",
     "n_i_car": "Car",
     "n_i_bus": "Bus",
     "n_i_truck": "Truck",
@@ -4456,6 +4869,12 @@ EN = {
     "ec_buzzes": "{who}: buzzing ({a}).",
     "ec_quiet": "{who}: silent.",
     "ec_drop": "{who}: {v} V across it, {a}",
+    "ec_conducts": "{who} lets the current through: {a}",
+    "ec_blocks": "{who} blocks the current: it only lets it through the other way",
+    "ec_blown": "{who} melted: too much current went through it, and the circuit is open",
+    "ec_fuse_ok": "{who} holds: {a} through it",
+    "ec_reads_a": "{who} reads {a}",
+    "ec_reads_v": "{who} reads {v} V",
     "ec_loose": "{who} needs a wire at each end.",
     "ec_sum": "Parts: {parts} · Wires: {wires}",
     "os_empty": "Draw a Sun and some planets to set them going.",
@@ -4529,6 +4948,25 @@ EN = {
     "hm_icons": "Add an icon from Icons, under the shapes: press it, or drag it onto the paper; search it by name",
     "hm_room": "Move a room or a container, and everything in it moves too",
     "hm_door": "Put a door, a window or a picture by a wall, and it fits itself into the wall",
+    "hm_tie": "Join rooms with an arrow, or with a door between them, and keep them apart on the paper: in 3D they meet, with a door in the wall between",
+    "st_open": "Start a house",
+    "st_open_tip": "Lay out a furnished house from a few choices: bedrooms, bathrooms and other rooms",
+    "st_title": "Start a house",
+    "st_sub": "Pick the rooms. They are laid out and furnished, joined by arrows; in 3D they come together, a door between each.",
+    "st_beds": "Bedrooms",
+    "st_baths": "Bathrooms",
+    "st_open_plan": "Kitchen and dining in one room",
+    "st_office": "An office",
+    "st_laundry": "A laundry room",
+    "st_garage": "A garage",
+    "st_closet": "A walk-in closet",
+    "st_spread": "Spread out on the paper",
+    "st_make": "Make the house",
+    "st_made": "{rooms} rooms laid out",
+    "st_main": "Main bedroom",
+    "st_bed_n": "Bedroom {n}",
+    "st_ensuite": "En suite",
+    "st_hall": "Hall",
     "hm_run_as": "Run does what the drawing is: walks through a home, passes work on, sends data, switches a circuit on, launches a rocket",
     "depth": "Depth",
     "depth_tip": "Shade every shape in its own color and give it a shadow, so colors look solid",
@@ -4743,6 +5181,14 @@ EN = {
     "hm_lot": "Put a Lot under the house and give it its size and setbacks in the panel: it shows the room to build and the yard left",
     "v3_roof": "Roof",
     "v3_roof_tip": "Put the roof on, or lift it off to see inside",
+    "v3_day": "Day",
+    "v3_evening": "Evening",
+    "v3_night": "Night",
+    "v3_time_tip": "Time of day: day, evening, or night with the lights on",
+    "v3_save": "Save picture",
+    "v3_save_tip": "Save what the view shows as a picture",
+    "v3_saved": "Picture saved",
+    "v3_save_failed": "This browser can’t save the picture",
     "v3_labels": "Labels",
     "v3_labels_tip": "Name the rooms and what is in them",
     "v3_2d": "2D",
@@ -4816,6 +5262,128 @@ EN = {
     "hm_dims": "Pick a piece of a floor plan to see its size on the paper; press a size to type another, like 6' 8\" or 2 m",
     "dz_add_how": "Search the icons, or pick a set, then click one to add it or drag it onto the paper. Pick something to see its size, and type a new one.",
     "dz_ceil_least": "A ceiling is at least {size} high.",
+    "mt_head": "Materials",
+    "mt_button": "Materials",
+    "mt_floor": "Floor",
+    "mt_wall": "Walls inside",
+    "mt_out": "Outside walls",
+    "mt_roof": "Roof",
+    "mt_house": "Whole house",
+    "mt_room": "This room",
+    "mt_plain": "Standard",
+    "mt_none": "Draw rooms first, then pick what they are made of.",
+    "mt_boards": "Wood boards",
+    "mt_parquet": "Parquet",
+    "mt_tiles": "Tiles",
+    "mt_marble": "Marble",
+    "mt_slate": "Slate",
+    "mt_carpet": "Carpet",
+    "mt_concrete": "Concrete",
+    "mt_paint": "Paint",
+    "mt_wallpaper": "Wallpaper",
+    "mt_panels": "Wood panels",
+    "mt_brick": "Brick",
+    "mt_stone": "Stone",
+    "mt_siding": "Siding",
+    "mt_stucco": "Stucco",
+    "mt_batten": "Board and batten",
+    "mt_shakes": "Cedar shakes",
+    "mtr_shingles": "Shingles",
+    "mtr_tiles": "Clay tiles",
+    "mtr_metal": "Metal",
+    "mtr_slate": "Slate",
+    "dz_finish": "Finish",
+    "dz_fin_main": "Main",
+    "dz_fin_trim": "Trim",
+    "dz_fin_plain_tip": "Back to the colors it usually comes in",
+    "sizes": "Sizes",
+    "sizes_tip": "Write each room's length, width and ceiling height, and each piece's width, depth and height, on a floor plan",
+    "ic_fitness": "Fitness & play",
+    "ic_utility": "Garage & utility",
+    "n_i_consoletable": "Console table",
+    "n_i_sideboard": "Sideboard",
+    "n_i_chaise": "Chaise lounge",
+    "n_i_rocker": "Rocking chair",
+    "n_i_hutch": "China cabinet",
+    "n_i_barcart": "Bar cart",
+    "n_i_highchair": "High chair",
+    "n_i_daybed": "Daybed",
+    "n_i_floormirror": "Floor mirror",
+    "n_i_toybox": "Toy box",
+    "n_i_standdesk": "Standing desk",
+    "n_i_lshapedesk": "Corner desk",
+    "n_i_oven": "Wall oven",
+    "n_i_winecooler": "Wine cooler",
+    "n_i_freezer": "Chest freezer",
+    "n_i_cornertub": "Corner bathtub",
+    "n_i_linencab": "Linen cabinet",
+    "n_i_whiteboard": "Whiteboard",
+    "n_i_dartboard": "Dartboard",
+    "n_i_evcharger": "EV charger",
+    "n_i_treadmill": "Treadmill",
+    "n_i_exbike": "Exercise bike",
+    "n_i_weightbench": "Weight bench",
+    "n_i_yogamat": "Yoga mat",
+    "n_i_pooltable": "Pool table",
+    "n_i_pingpong": "Ping-pong table",
+    "n_i_easel": "Easel",
+    "n_i_trampoline": "Trampoline",
+    "n_i_swing": "Swing set",
+    "n_i_firepit": "Fire pit",
+    "n_i_lounger": "Sun lounger",
+    "n_i_gazebo": "Gazebo",
+    "n_i_shed": "Garden shed",
+    "n_i_planter": "Planter box",
+    "n_i_birdbath": "Birdbath",
+    "n_i_lamppost": "Lamp post",
+    "n_i_mailbox": "Mailbox",
+    "n_i_bikerack": "Bike rack",
+    "n_i_workbench": "Workbench",
+    "n_i_shelving": "Storage shelving",
+    "n_i_toolchest": "Tool chest",
+    "n_i_furnace": "Furnace",
+    "wk_i_consoletable": "drops the keys on the console table",
+    "wk_i_sideboard": "gets out the good plates",
+    "wk_i_chaise": "stretches out on the chaise",
+    "wk_i_rocker": "rocks in the rocking chair",
+    "wk_i_hutch": "admires the china",
+    "wk_i_barcart": "mixes a drink",
+    "wk_i_highchair": "feeds the baby",
+    "wk_i_daybed": "lies down for a while",
+    "wk_i_floormirror": "checks their outfit",
+    "wk_i_toybox": "puts the toys away",
+    "wk_i_standdesk": "works standing up",
+    "wk_i_lshapedesk": "works at the corner desk",
+    "wk_i_oven": "bakes a cake",
+    "wk_i_winecooler": "chooses a bottle of wine",
+    "wk_i_freezer": "gets something from the freezer",
+    "wk_i_cornertub": "has a long soak",
+    "wk_i_linencab": "gets a fresh towel",
+    "wk_i_whiteboard": "writes on the whiteboard",
+    "wk_i_dartboard": "throws a few darts",
+    "wk_i_evcharger": "plugs in the car",
+    "wk_i_treadmill": "goes for a run",
+    "wk_i_exbike": "rides the exercise bike",
+    "wk_i_weightbench": "lifts some weights",
+    "wk_i_yogamat": "does some yoga",
+    "wk_i_pooltable": "plays a game of pool",
+    "wk_i_pingpong": "plays ping-pong",
+    "wk_i_easel": "paints a picture",
+    "wk_i_trampoline": "bounces on the trampoline",
+    "wk_i_swing": "goes on the swing",
+    "wk_i_firepit": "lights the fire pit",
+    "wk_i_lounger": "lies in the sun",
+    "wk_i_gazebo": "sits in the gazebo",
+    "wk_i_shed": "gets the lawnmower out",
+    "wk_i_planter": "waters the planter",
+    "wk_i_birdbath": "fills the birdbath",
+    "wk_i_lamppost": "turns on the outside light",
+    "wk_i_mailbox": "checks the mail",
+    "wk_i_bikerack": "gets their bike",
+    "wk_i_workbench": "fixes something at the workbench",
+    "wk_i_shelving": "finds a box on the shelves",
+    "wk_i_toolchest": "gets a wrench",
+    "wk_i_furnace": "turns up the heat",
 }
 
 speaks("en", "English", EN)

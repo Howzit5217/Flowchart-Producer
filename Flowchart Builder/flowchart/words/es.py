@@ -3019,6 +3019,18 @@ ES = {
     "g_battleship": "Batalla Naval",
     "g_battleship_d": "Hunde la flota enemiga antes de que hunda la tuya",
     "g_battleship_h": "Cada lado esconde tres barcos en un mar de 6 por 6. Dispara escribiendo una letra y un número, como B4. X es tocado y o es agua. Hunde todos los barcos enemigos antes de que el enemigo hunda los tuyos.",
+    "g_math": "Cálculo rápido",
+    "g_math_d": "Ocho cuentas, con premio por cada acierto seguido",
+    "g_math_h": "Salen ocho cuentas, una tras otra: sumas, restas y tablas de multiplicar. Escribe cada respuesta. Un acierto vale un punto más que el anterior de la racha, así que mantén la racha.",
+    "g_pig": "Pig",
+    "g_pig_d": "Tira tantas veces como te atrevas, pero un 1 lo pierde todo",
+    "g_pig_h": "En tu turno tira el dado tantas veces como quieras, sumando lo que sacas. Escribe t para tirar otra vez o p para plantarte y guardar los puntos. Si sacas un 1, pierdes todo lo de ese turno. La computadora también juega, y gana quien llegue primero a 50.",
+    "g_lander": "Alunizaje",
+    "g_lander_d": "Quema el combustible justo para posarte con suavidad en la Luna",
+    "g_lander_h": "Empiezas a 500 m sobre la Luna, cayendo. Cada segundo, escribe cuánto combustible quemar, de 0 a 20: cuanto más quemas, más frenas, pero el combustible se acaba. Pósate a 5 m por segundo o menos para alunizar sin peligro.",
+    "g_mines": "Buscaminas",
+    "g_mines_d": "Abre cada casilla segura de un campo de minas, con los números como pistas",
+    "g_mines_h": "Hay siete minas escondidas en un campo de 6 por 6 casillas. Escribe una casilla como B4 para abrirla. Un número te dice cuántas de las casillas de alrededor tienen una mina, y una casilla vacía abre todas las de alrededor. Escribe M y una casilla, como MB4, para marcar una casilla donde estás seguro de que hay una mina, o para quitar la marca. Abre todas las casillas sin mina para ganar.",
     "g_coin_p": program("""
         Start
         Declare Integer eleccion
@@ -4086,6 +4098,380 @@ ES = {
             Return objetivos[random(0, length(objetivos) - 1)]
         End Function
     """),
+    "g_math_p": program("""
+        Start
+        Declare Integer puntos
+        Declare Integer racha
+        Declare Integer mejor
+        Declare Integer respuesta
+        Declare Integer correcta
+        puntos = 0
+        racha = 0
+        mejor = 0
+        Display "Cálculo rápido: ocho cuentas. Cada acierto seguido vale un punto más que el anterior"
+        For ronda = 1 To 8
+            correcta = pideCuenta(ronda)
+            Input respuesta
+            If respuesta = correcta Then
+                racha = racha + 1
+                puntos = puntos + racha
+                Display "¡Correcto! Llevas ", racha, " seguidas"
+                If racha > mejor Then
+                    mejor = racha
+                End If
+            Else
+                Display "Casi: era ", correcta
+                racha = 0
+            End If
+        End For
+        Call muestraPuntos(puntos, mejor)
+        Stop
+
+        Function Integer pideCuenta(Integer ronda)
+            Declare Integer a
+            Declare Integer b
+            Declare Integer tipo
+            Declare Integer resultado
+            a = random(2, 9 + ronda)
+            b = random(2, 9)
+            tipo = random(1, 3)
+            If tipo = 1 Then
+                Display "Cuenta ", ronda, ": ¿cuánto es ", a, " + ", b, "?"
+                resultado = a + b
+            Else If tipo = 2 Then
+                Display "Cuenta ", ronda, ": ¿cuánto es ", a + b, " - ", b, "?"
+                resultado = a
+            Else
+                Display "Cuenta ", ronda, ": ¿cuánto es ", a, " x ", b, "?"
+                resultado = a * b
+            End If
+            Return resultado
+        End Function
+
+        Module muestraPuntos(Integer puntos, Integer mejor)
+            Display "Tu puntuación: ", puntos, " puntos. Racha más larga de aciertos: ", mejor
+            If puntos >= 30 Then
+                Display "¡Un genio de los números!"
+            Else If puntos >= 12 Then
+                Display "¡Bien hecho!"
+            Else
+                Display "Sigue practicando y vuelve a intentarlo"
+            End If
+        End Module
+    """),
+    "g_pig_p": program("""
+        Start
+        Declare Integer mios
+        Declare Integer suyos
+        mios = 0
+        suyos = 0
+        Display "Pig: tira tantas veces como te atrevas. Un 1 pierde todo lo de ese turno. Gana quien llegue primero a 50"
+        While mios < 50 And suyos < 50
+            mios = mios + tuTurno(mios)
+            Display "Marcador: tú ", mios, ", la computadora ", suyos
+            If mios < 50 Then
+                suyos = suyos + turnoComputadora(suyos)
+                Display "Marcador: tú ", mios, ", la computadora ", suyos
+            End If
+        End While
+        If mios >= 50 Then
+            Display "¡Llegas primero a 50 y ganas!"
+        Else
+            Display "La computadora llega primero a 50 y gana"
+        End If
+        Stop
+
+        Function Integer tuTurno(Integer marcador)
+            Declare Integer guardados
+            Declare Integer tirada
+            Declare String eleccion
+            Declare Boolean sigue
+            guardados = 0
+            sigue = True
+            While sigue
+                tirada = random(1, 6)
+                If tirada = 1 Then
+                    Display "Sacas un 1 y pierdes los ", guardados, " puntos de este turno"
+                    guardados = 0
+                    sigue = False
+                Else
+                    guardados = guardados + tirada
+                    Display "Sacas ", tirada, ". Este turno: ", guardados, ". En total: ", marcador + guardados
+                    If marcador + guardados >= 50 Then
+                        sigue = False
+                    Else
+                        Display "Escribe t para tirar otra vez, o p para plantarte"
+                        Input eleccion
+                        If eleccion = "p" Or eleccion = "P" Then
+                            sigue = False
+                        End If
+                    End If
+                End If
+            End While
+            Return guardados
+        End Function
+
+        Function Integer turnoComputadora(Integer marcador)
+            Declare Integer guardados
+            Declare Integer tirada
+            guardados = 0
+            tirada = 0
+            While tirada <> 1 And guardados < 15 And marcador + guardados < 50
+                tirada = random(1, 6)
+                If tirada = 1 Then
+                    guardados = 0
+                Else
+                    guardados = guardados + tirada
+                End If
+            End While
+            If tirada = 1 Then
+                Display "La computadora saca un 1 y no suma nada"
+            Else
+                Display "La computadora se planta con ", guardados, " puntos"
+            End If
+            Return guardados
+        End Function
+    """),
+    "g_lander_p": program("""
+        Start
+        Declare Real altura
+        Declare Real velocidad
+        Declare Integer combustible
+        Declare Integer segundos
+        Declare Integer quema
+        altura = 500
+        velocidad = 0
+        combustible = 150
+        segundos = 0
+        Display "Alunizaje: estás a 500 m de altura y cayendo. Cada segundo, quema de 0 a 20 unidades de combustible para frenar"
+        Display "Pósate a 5 m por segundo o menos para alunizar sin peligro"
+        While altura > 0
+            Call muestraPanel(segundos, altura, velocidad, combustible)
+            quema = pideQuema(combustible)
+            combustible = combustible - quema
+            velocidad = velocidad + 1.6 - quema * 0.3
+            altura = altura - velocidad
+            segundos = segundos + 1
+        End While
+        Call aterrizaje(velocidad, combustible, segundos)
+        Stop
+
+        Module muestraPanel(Integer segundos, Real altura, Real velocidad, Integer combustible)
+            Display "Tiempo ", segundos, " s. Altura ", round(altura), " m. Cayendo a ", round(velocidad, 1), " m/s. Combustible ", combustible
+        End Module
+
+        Function Integer pideQuema(Integer combustible)
+            Declare Integer quema
+            quema = 0
+            If combustible <= 0 Then
+                Display "¡Sin combustible!"
+            Else
+                Display "¿Cuánto combustible quemar, de 0 a 20?"
+                Input quema
+                While quema < 0 Or quema > 20
+                    Display "Quema de 0 a 20"
+                    Input quema
+                End While
+                If quema > combustible Then
+                    Display "Solo quedan ", combustible, ", así que quemas todo"
+                    quema = combustible
+                End If
+            End If
+            Return quema
+        End Function
+
+        Module aterrizaje(Real velocidad, Integer combustible, Integer segundos)
+            If velocidad <= 5 Then
+                Display "¡El Águila ha alunizado! A ", round(velocidad, 1), " m/s tras ", segundos, " segundos, con ", combustible, " de combustible de sobra"
+                If velocidad <= 2 Then
+                    Display "¡Un alunizaje perfecto!"
+                End If
+            Else If velocidad <= 12 Then
+                Display "Un alunizaje duro a ", round(velocidad), " m/s. El módulo queda abollado, pero sales caminando"
+            Else
+                Display "Chocas contra la superficie a ", round(velocidad), " m/s y haces un cráter nuevo"
+            End If
+        End Module
+    """),
+    "g_mines_p": program("""
+        Start
+        Declare Integer abiertas
+        Declare Integer seguras
+        Declare Integer casilla
+        Declare String jugada
+        Declare String dicho
+        Declare Boolean vivo
+        campo = campoNuevo()
+        visto = vistaNueva()
+        Call ponMinas(campo, 7)
+        seguras = 36 - 7
+        abiertas = 0
+        vivo = True
+        Display "Buscaminas: hay 7 minas escondidas en un campo de 6 por 6. Abre todas las casillas sin mina"
+        Display "Escribe una casilla como B4 para abrirla, o M y una casilla, como MB4, para marcar una mina"
+        While vivo And abiertas < seguras
+            Call muestraCampo(campo, visto, False)
+            Input jugada
+            dicho = toUpper(jugada)
+            If length(dicho) = 3 And substring(dicho, 0, 1) = "M" Then
+                casilla = casillaDe(substring(dicho, 1, 3))
+                If casilla = -1 Then
+                    Display "Eso no es una casilla. Prueba algo como MB4"
+                Else If visto[casilla] = "." Then
+                    visto[casilla] = "M"
+                Else If visto[casilla] = "M" Then
+                    visto[casilla] = "."
+                End If
+            Else
+                casilla = casillaDe(dicho)
+                If casilla = -1 Then
+                    Display "Eso no es una casilla. Prueba algo como B4"
+                Else If visto[casilla] <> "." Then
+                    Display "Esa casilla ya está abierta o marcada"
+                Else If campo[casilla] = -1 Then
+                    vivo = False
+                Else
+                    abiertas = abiertas + abreDesde(campo, visto, casilla)
+                End If
+            End If
+        End While
+        Call muestraCampo(campo, visto, True)
+        If vivo Then
+            Display "Todas las casillas seguras están abiertas. ¡Limpiaste el campo!"
+        Else
+            Display "¡Bum! Esa casilla tenía una mina debajo. Más suerte la próxima vez"
+        End If
+        Stop
+
+        Function campoNuevo()
+            celdas = []
+            For i = 1 To 36
+                append(celdas, 0)
+            End For
+            Return celdas
+        End Function
+
+        Function vistaNueva()
+            celdas = []
+            For i = 1 To 36
+                append(celdas, ".")
+            End For
+            Return celdas
+        End Function
+
+        Module ponMinas(campo, Integer cuantas)
+            Declare Integer puestas
+            Declare Integer sitio
+            puestas = 0
+            While puestas < cuantas
+                sitio = random(0, 35)
+                If campo[sitio] <> -1 Then
+                    campo[sitio] = -1
+                    puestas = puestas + 1
+                End If
+            End While
+            For sitio = 0 To 35
+                If campo[sitio] <> -1 Then
+                    campo[sitio] = minasAlrededor(campo, sitio)
+                End If
+            End For
+        End Module
+
+        Function Integer minasAlrededor(campo, Integer sitio)
+            Declare Integer cuantas
+            Declare Integer r
+            Declare Integer c
+            cuantas = 0
+            For dr = -1 To 1
+                For dc = -1 To 1
+                    r = sitio div 6 + dr
+                    c = sitio mod 6 + dc
+                    If r >= 0 And r < 6 And c >= 0 And c < 6 Then
+                        If campo[r * 6 + c] = -1 Then
+                            cuantas = cuantas + 1
+                        End If
+                    End If
+                End For
+            End For
+            Return cuantas
+        End Function
+
+        Function Integer abreDesde(campo, visto, Integer inicio)
+            Declare Integer cuantas
+            Declare Integer sitio
+            Declare Integer vecina
+            Declare Integer pos
+            Declare Integer r
+            Declare Integer c
+            pendientes = [inicio]
+            visto[inicio] = textoDe(campo[inicio])
+            cuantas = 1
+            pos = 0
+            While pos < length(pendientes)
+                sitio = pendientes[pos]
+                pos = pos + 1
+                If campo[sitio] = 0 Then
+                    For dr = -1 To 1
+                        For dc = -1 To 1
+                            r = sitio div 6 + dr
+                            c = sitio mod 6 + dc
+                            If r >= 0 And r < 6 And c >= 0 And c < 6 Then
+                                vecina = r * 6 + c
+                                If visto[vecina] = "." Then
+                                    visto[vecina] = textoDe(campo[vecina])
+                                    cuantas = cuantas + 1
+                                    append(pendientes, vecina)
+                                End If
+                            End If
+                        End For
+                    End For
+                End If
+            End While
+            Return cuantas
+        End Function
+
+        Function String textoDe(Integer minas)
+            Declare String texto
+            texto = " "
+            If minas > 0 Then
+                texto = "" + minas
+            End If
+            Return texto
+        End Function
+
+        Module muestraCampo(campo, visto, Boolean todas)
+            Declare String linea
+            Display "    1 2 3 4 5 6"
+            For r = 0 To 5
+                linea = substring("ABCDEF", r, r + 1) + " |"
+                For c = 0 To 5
+                    If todas And campo[r * 6 + c] = -1 Then
+                        linea = linea + " *"
+                    Else
+                        linea = linea + " " + visto[r * 6 + c]
+                    End If
+                End For
+                Display linea
+            End For
+        End Module
+
+        Function Integer casillaDe(String texto)
+            Declare Integer fila
+            Declare Integer columna
+            Declare Integer hallada
+            fila = -1
+            columna = -1
+            hallada = -1
+            If length(texto) = 2 Then
+                fila = indexOf("ABCDEF", substring(texto, 0, 1))
+                columna = indexOf("123456", substring(texto, 1, 2))
+            End If
+            If fila >= 0 And columna >= 0 Then
+                hallada = fila * 6 + columna
+            End If
+            Return hallada
+        End Function
+    """),
     # ---- icons, and a drawing run as what it is: a home walked through,
     # work passed on, data sent, a circuit switched on, a launch
     # (03-icons.js, 11-hand-icons.js, 37-board.js to 39-orbit.js)
@@ -4225,6 +4611,33 @@ ES = {
     "n_i_socket": "Enchufe",
     "n_i_solar": "Panel solar",
     "n_i_ground": "Toma de tierra",
+    "n_i_cell": "Pila",
+    "n_i_diode": "Diodo",
+    "n_i_fuse": "Fusible",
+    "n_i_ammeter": "Amperímetro",
+    "n_i_voltmeter": "Voltímetro",
+    "n_i_dimmer": "Regulador",
+    "n_i_comet": "Cometa",
+    "n_i_asteroid": "Asteroide",
+    "n_i_station": "Estación espacial",
+    "n_i_lander": "Módulo lunar",
+    "n_i_galaxy": "Galaxia",
+    "n_i_taxi": "Taxi",
+    "n_i_tram": "Tranvía",
+    "n_i_helicopter": "Helicóptero",
+    "n_i_scooter": "Patinete",
+    "n_i_airport": "Aeropuerto",
+    "n_i_trainstation": "Estación de tren",
+    "n_i_park": "Parque",
+    "n_i_cafe": "Cafetería",
+    "n_i_gift": "Regalo",
+    "n_i_target": "Diana",
+    "n_i_hourglass": "Reloj de arena",
+    "n_i_music": "Música",
+    "n_i_palette": "Paleta de pintor",
+    "n_i_tag": "Etiqueta de precio",
+    "n_i_magnet": "Imán",
+    "n_i_puzzle": "Pieza de puzle",
     "n_i_car": "Coche",
     "n_i_bus": "Autobús",
     "n_i_truck": "Camión",
@@ -4460,6 +4873,12 @@ ES = {
     "ec_buzzes": "{who}: suena ({a}).",
     "ec_quiet": "{who}: en silencio.",
     "ec_drop": "{who}: {v} V, {a}",
+    "ec_conducts": "{who} deja pasar la corriente: {a}",
+    "ec_blocks": "{who} bloquea la corriente: solo la deja pasar en el otro sentido",
+    "ec_blown": "{who} se fundió: pasó demasiada corriente, y el circuito quedó abierto",
+    "ec_fuse_ok": "{who} aguanta: pasan {a}",
+    "ec_reads_a": "{who} marca {a}",
+    "ec_reads_v": "{who} marca {v} V",
     "ec_loose": "{who} necesita un cable en cada extremo.",
     "ec_sum": "Componentes: {parts} · Cables: {wires}",
     "os_empty": "Dibuja un Sol y algunos planetas para ponerlos en marcha.",
@@ -4533,6 +4952,25 @@ ES = {
     "hm_icons": "Añade un icono desde Iconos, bajo las formas: púlsalo o arrástralo al papel; búscalo por su nombre",
     "hm_room": "Mueve una habitación o un contenedor, y todo lo que contiene se mueve con él",
     "hm_door": "Pon una puerta, una ventana o un cuadro junto a una pared, y se encaja en ella",
+    "hm_tie": "Une habitaciones con una flecha, o con una puerta entre ellas, y déjalas separadas en el papel: en 3D se juntan, con una puerta en la pared de en medio",
+    "st_open": "Empezar una casa",
+    "st_open_tip": "Crear una casa amueblada con unas pocas opciones: dormitorios, baños y otras habitaciones",
+    "st_title": "Empezar una casa",
+    "st_sub": "Elige las habitaciones. Se distribuyen y amueblan, unidas con flechas; en 3D se juntan, con una puerta entre cada una.",
+    "st_beds": "Dormitorios",
+    "st_baths": "Baños",
+    "st_open_plan": "Cocina y comedor en una sola habitación",
+    "st_office": "Un despacho",
+    "st_laundry": "Un lavadero",
+    "st_garage": "Un garaje",
+    "st_closet": "Un vestidor",
+    "st_spread": "Separadas en el papel",
+    "st_make": "Crear la casa",
+    "st_made": "{rooms} habitaciones distribuidas",
+    "st_main": "Dormitorio principal",
+    "st_bed_n": "Dormitorio {n}",
+    "st_ensuite": "Baño en suite",
+    "st_hall": "Pasillo",
     "hm_run_as": "Ejecutar hace lo que es el dibujo: recorre una casa, pasa el trabajo, envía datos, enciende un circuito, lanza un cohete",
     "depth": "Profundidad",
     "depth_tip": "Sombrea cada forma en su propio color y dale una sombra, para que los colores tengan volumen",
@@ -4747,6 +5185,14 @@ ES = {
     "hm_lot": "Pon una Parcela bajo la casa y da su tamaño y retranqueos en el panel: muestra el espacio para construir y el jardín que queda",
     "v3_roof": "Tejado",
     "v3_roof_tip": "Poner el tejado, o quitarlo para ver el interior",
+    "v3_day": "Día",
+    "v3_evening": "Tarde",
+    "v3_night": "Noche",
+    "v3_time_tip": "Hora del día: día, tarde o noche con las luces encendidas",
+    "v3_save": "Guardar imagen",
+    "v3_save_tip": "Guardar lo que muestra la vista como imagen",
+    "v3_saved": "Imagen guardada",
+    "v3_save_failed": "Este navegador no puede guardar la imagen",
     "v3_labels": "Etiquetas",
     "v3_labels_tip": "Nombrar las habitaciones y lo que hay en ellas",
     "v3_2d": "2D",
@@ -4820,6 +5266,128 @@ ES = {
     "hm_dims": "Elige una pieza del plano para ver su tamaño en el papel; pulsa un tamaño para escribir otro, como 2 m",
     "dz_add_how": "Busca los iconos o elige un grupo; luego haz clic en uno para añadirlo o arrástralo al papel. Elige algo para ver su tamaño y escribir otro.",
     "dz_ceil_least": "Un techo mide al menos {size} de alto.",
+    "mt_head": "Materiales",
+    "mt_button": "Materiales",
+    "mt_floor": "Suelo",
+    "mt_wall": "Paredes interiores",
+    "mt_out": "Paredes exteriores",
+    "mt_roof": "Tejado",
+    "mt_house": "Toda la casa",
+    "mt_room": "Esta habitación",
+    "mt_plain": "Estándar",
+    "mt_none": "Dibuja primero las habitaciones y luego elige sus materiales.",
+    "mt_boards": "Tarima de madera",
+    "mt_parquet": "Parqué",
+    "mt_tiles": "Baldosas",
+    "mt_marble": "Mármol",
+    "mt_slate": "Pizarra",
+    "mt_carpet": "Moqueta",
+    "mt_concrete": "Hormigón",
+    "mt_paint": "Pintura",
+    "mt_wallpaper": "Papel pintado",
+    "mt_panels": "Paneles de madera",
+    "mt_brick": "Ladrillo",
+    "mt_stone": "Piedra",
+    "mt_siding": "Revestimiento de tablas",
+    "mt_stucco": "Estuco",
+    "mt_batten": "Tabla y listón",
+    "mt_shakes": "Tejuelas de cedro",
+    "mtr_shingles": "Tejas asfálticas",
+    "mtr_tiles": "Tejas de barro",
+    "mtr_metal": "Metal",
+    "mtr_slate": "Pizarra",
+    "dz_finish": "Acabado",
+    "dz_fin_main": "Principal",
+    "dz_fin_trim": "Detalles",
+    "dz_fin_plain_tip": "Volver a los colores de siempre",
+    "sizes": "Medidas",
+    "sizes_tip": "Escribir en el plano el largo, el ancho y la altura del techo de cada habitación, y el ancho, el fondo y la altura de cada mueble",
+    "ic_fitness": "Ejercicio y juego",
+    "ic_utility": "Garaje y servicio",
+    "n_i_consoletable": "Mesa consola",
+    "n_i_sideboard": "Aparador",
+    "n_i_chaise": "Chaise longue",
+    "n_i_rocker": "Mecedora",
+    "n_i_hutch": "Vitrina",
+    "n_i_barcart": "Carrito de bar",
+    "n_i_highchair": "Trona",
+    "n_i_daybed": "Diván cama",
+    "n_i_floormirror": "Espejo de pie",
+    "n_i_toybox": "Baúl de juguetes",
+    "n_i_standdesk": "Escritorio de pie",
+    "n_i_lshapedesk": "Escritorio en L",
+    "n_i_oven": "Horno de pared",
+    "n_i_winecooler": "Vinoteca",
+    "n_i_freezer": "Congelador horizontal",
+    "n_i_cornertub": "Bañera de esquina",
+    "n_i_linencab": "Armario de ropa blanca",
+    "n_i_whiteboard": "Pizarra blanca",
+    "n_i_dartboard": "Diana",
+    "n_i_evcharger": "Cargador de coche",
+    "n_i_treadmill": "Cinta de correr",
+    "n_i_exbike": "Bicicleta estática",
+    "n_i_weightbench": "Banco de pesas",
+    "n_i_yogamat": "Esterilla de yoga",
+    "n_i_pooltable": "Mesa de billar",
+    "n_i_pingpong": "Mesa de ping-pong",
+    "n_i_easel": "Caballete",
+    "n_i_trampoline": "Cama elástica",
+    "n_i_swing": "Columpio",
+    "n_i_firepit": "Fogata",
+    "n_i_lounger": "Tumbona",
+    "n_i_gazebo": "Cenador",
+    "n_i_shed": "Caseta de jardín",
+    "n_i_planter": "Jardinera",
+    "n_i_birdbath": "Bebedero para pájaros",
+    "n_i_lamppost": "Farola",
+    "n_i_mailbox": "Buzón",
+    "n_i_bikerack": "Aparcabicicletas",
+    "n_i_workbench": "Banco de trabajo",
+    "n_i_shelving": "Estantería",
+    "n_i_toolchest": "Carro de herramientas",
+    "n_i_furnace": "Caldera",
+    "wk_i_consoletable": "deja las llaves en la consola",
+    "wk_i_sideboard": "saca la vajilla buena",
+    "wk_i_chaise": "se tumba en la chaise longue",
+    "wk_i_rocker": "se mece en la mecedora",
+    "wk_i_hutch": "admira la vajilla",
+    "wk_i_barcart": "prepara una bebida",
+    "wk_i_highchair": "da de comer al bebé",
+    "wk_i_daybed": "se recuesta un rato",
+    "wk_i_floormirror": "se mira el conjunto",
+    "wk_i_toybox": "guarda los juguetes",
+    "wk_i_standdesk": "trabaja de pie",
+    "wk_i_lshapedesk": "trabaja en el escritorio en L",
+    "wk_i_oven": "hornea un pastel",
+    "wk_i_winecooler": "elige una botella de vino",
+    "wk_i_freezer": "saca algo del congelador",
+    "wk_i_cornertub": "se da un baño largo",
+    "wk_i_linencab": "coge una toalla limpia",
+    "wk_i_whiteboard": "escribe en la pizarra",
+    "wk_i_dartboard": "lanza unos dardos",
+    "wk_i_evcharger": "enchufa el coche",
+    "wk_i_treadmill": "sale a correr en la cinta",
+    "wk_i_exbike": "pedalea en la bicicleta estática",
+    "wk_i_weightbench": "levanta pesas",
+    "wk_i_yogamat": "hace yoga",
+    "wk_i_pooltable": "juega al billar",
+    "wk_i_pingpong": "juega al ping-pong",
+    "wk_i_easel": "pinta un cuadro",
+    "wk_i_trampoline": "salta en la cama elástica",
+    "wk_i_swing": "se columpia",
+    "wk_i_firepit": "enciende la fogata",
+    "wk_i_lounger": "toma el sol",
+    "wk_i_gazebo": "se sienta en el cenador",
+    "wk_i_shed": "saca el cortacésped",
+    "wk_i_planter": "riega la jardinera",
+    "wk_i_birdbath": "llena el bebedero",
+    "wk_i_lamppost": "enciende la farola",
+    "wk_i_mailbox": "mira el buzón",
+    "wk_i_bikerack": "coge la bicicleta",
+    "wk_i_workbench": "arregla algo en el banco de trabajo",
+    "wk_i_shelving": "busca una caja en la estantería",
+    "wk_i_toolchest": "coge una llave inglesa",
+    "wk_i_furnace": "sube la calefacción",
 }
 
 speaks("es", "Español", ES)

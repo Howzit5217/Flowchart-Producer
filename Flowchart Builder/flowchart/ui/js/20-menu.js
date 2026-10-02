@@ -16,6 +16,7 @@
     all('[aria-expanded="true"]').forEach(function (b) {
       if (b.id === "more" || b.id === "hand-info" || b.classList.contains("set-btn") ||
           b.classList.contains("icon-lib-btn") ||   // the icons' library (11-hand-icons.js)
+          b.classList.contains("dz-find") || b.classList.contains("dz-set") ||   // and a design's (39-design.js)
           b.closest(".menu")) {          // and a row whose menu went with it
         b.setAttribute("aria-expanded", "false");
       }
@@ -673,7 +674,7 @@
           if (g) { typeInto(g); }
         } },
       // joined to others only where arrows mean something (39-design.js)
-      linksWanted() ? { icon: "join", name: TXT.connect, go: function () {
+      linksWanted(node) ? { icon: "join", name: TXT.connect, go: function () {
           joining = true; joinFrom = null; drawHandPanel();
         } } : null,
       // what the + under it does (13-hand-more.js) -- a program's

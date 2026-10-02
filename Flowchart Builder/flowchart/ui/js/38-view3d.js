@@ -55,12 +55,19 @@
                   i_fan: 1.2, i_grill: 1.0, i_pool: 0.02, i_patio: 0.75, i_gardenbench: 0.45, i_hottub: 0.9,
                   i_dogbed: 0.25, i_cattree: 1.5, i_driveway: 0.03, i_path: 0.03, i_deck: 0.15,
                   i_flowerbed: 0.25, i_hedge: 1.1,
-                  i_reachin: 2.4, i_closetrod: 1.8, i_closetshelves: 2.0 };
+                  i_reachin: 2.4, i_closetrod: 1.8, i_closetshelves: 2.0,
+                  i_consoletable: 0.8, i_sideboard: 0.85, i_chaise: 0.8, i_rocker: 1.05, i_hutch: 2.0, i_barcart: 0.85,
+                  i_highchair: 1.0, i_daybed: 0.8, i_floormirror: 1.7, i_toybox: 0.5, i_standdesk: 1.1, i_lshapedesk: 0.75,
+                  i_oven: 2.1, i_winecooler: 0.85, i_freezer: 0.85, i_cornertub: 0.55, i_linencab: 1.8,
+                  i_treadmill: 1.4, i_exbike: 1.2, i_weightbench: 0.45, i_yogamat: 0.01, i_pooltable: 0.8, i_pingpong: 0.76,
+                  i_easel: 1.6, i_trampoline: 0.9, i_swing: 2.1, i_firepit: 0.4, i_lounger: 0.4, i_gazebo: 2.8, i_shed: 2.3,
+                  i_planter: 0.5, i_birdbath: 0.8, i_lamppost: 2.4, i_mailbox: 1.1, i_bikerack: 0.8,
+                  i_workbench: 0.9, i_shelving: 1.8, i_toolchest: 1.0, i_furnace: 1.4 };
   var V3_ROUND = { i_plant: true, i_lamp: true, i_shrub: true, i_stool: true, i_trash: true, i_heater: true,
                    i_sidetable: true, i_beanbag: true, i_palm: true, i_cactus: true, i_flowers: true,
                    i_coatrack: true, i_fan: true, i_dogbed: true, i_tablelamp: true, i_vase: true,
                    i_candle: true, i_succulent: true, i_fruitbowl: true, i_hanging: true, i_pendant: true,
-                   i_chandelier: true, i_ceilingfan: true };
+                   i_chandelier: true, i_ceilingfan: true, i_firepit: true, i_trampoline: true, i_birdbath: true, i_lamppost: true };
   // How tall what stands on something else is (it stands on the tallest
   // thing under it, 03-icons.js ON_TOP); and how far below the ceiling
   // what hangs from it reaches.
@@ -75,7 +82,8 @@
                   i_walltv: [1.1, 1.75], i_wallclock: [1.9, 2.3], i_sconce: [1.72, 1.95],
                   i_cabinet: [1.45, 2.2], i_hooks: [1.6, 1.72], i_radiator: [0.12, 0.7],
                   i_hood: [1.55, 2.2], i_towelrail: [0.95, 1.05], i_medicine: [1.3, 1.9],
-                  i_proscreen: [0.9, 2.2], i_ac: [2.0, 2.3] };
+                  i_proscreen: [0.9, 2.2], i_ac: [2.0, 2.3], i_whiteboard: [0.9, 2.0], i_dartboard: [1.5, 1.95],
+                  i_evcharger: [0.9, 1.3] };
   var PERSON_TALL = 1.7;
 
   function v3Mix(a, b, k) {             // a color k of the way from a to b
@@ -542,6 +550,8 @@
         return;
       }
       if (n.kind === "i_floor" || n.kind === "i_zone") { return; }
+      // made in 3D, by WebGL (38-models.js): a sofa of cushions, not a box
+      if (typeof v3ModelPut === "function" && v3ModelPut(faces, n, under, ceilAt)) { return; }
       if (ON_TOP[n.kind] && V3_ON[n.kind]) {
         var z0 = under(n) * FLOOR_PX;
         roundOrBox(n, z0, z0 + pieceHigh(n) * FLOOR_PX, { piece: true, tex: v3Texture(n), color: look.fill, edge: look.line });
@@ -753,7 +763,7 @@
       roofPlan(floors, show, wallTop).forEach(function (R) {
         var look = simLook(R.room);
         roofFaces(faces, R, (1 - roofV) * 2.5 * FLOOR_PX,
-                  { roof: true, color: v3Mix(look.line, simSheet(), 0.55), edge: look.line,
+                  { roof: true, color: v3Mix(look.line, simSheet(), 0.55), edge: look.line, room: R.room,
                     alpha: roofV, late: roofV < 0.999 || !!V3.tw.roofV });
       });
     }
@@ -1103,6 +1113,7 @@
     }
     var items = [];
     model.faces.forEach(function (f) {
+      if (f.mesh || (f.how && f.how.ghost)) { return; }   // WebGL's alone (38-models.js)
       var dot;
       if (inside) {
         var p0 = f.pts[0];

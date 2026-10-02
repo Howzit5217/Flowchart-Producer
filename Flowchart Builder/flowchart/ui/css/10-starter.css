@@ -1,0 +1,14 @@
+  /* ---------------------------------------------- Start a house (39-starter.js) --
+     The choices, in the same card the page asks what you are making in:
+     how many, on segments; which rooms, on switches; then Make it. */
+  .st-card { width: min(460px, 100%); text-align: left; }
+  .st-card h2, .st-card .make-sub { text-align: center; }
+  .st-rows { display: grid; gap: 0; }
+  .st-row {
+    display: flex; align-items: center; justify-content: space-between; gap: 12px;
+    padding: 8px 0; font-size: 13px;
+  }
+  .st-row + .st-row { border-top: 1px solid var(--line-soft); }
+  .st-seg .seg-btn { min-width: 34px; }
+  .st-go { display: flex; justify-content: flex-end; gap: 8px; margin-top: 18px; }
+  #hand-house[hidden] { display: none; }

@@ -14,7 +14,8 @@
   // one with none takes off from the planet it is on and goes round it.
   // Stars twinkle.  It goes on until it is stopped, and the 3D view
   // (38-view3d.js) shows the same sky as it goes.
-  var ORBIT_BODIES = { i_sun: true, i_earth: true, i_planet: true, i_moon: true };
+  var ORBIT_BODIES = { i_sun: true, i_earth: true, i_planet: true, i_moon: true, i_comet: true, i_asteroid: true };
+  var SMALL_BODIES = { i_comet: true, i_asteroid: true };   // round the sun, but nothing goes round them
   var ORBIT_YEAR = 9;                    // seconds round, for a planet 200 pixels out
   var orbitAt = {};                      // id -> where it is now, while it runs
   var orbitTick = 0;                     // goes up as it moves, for the 3D view
@@ -32,7 +33,7 @@
     var middle = bodies.filter(function (n) { return n.kind === "i_sun"; })
                        .sort(function (p, q) { return size(q) - size(p); })[0] ||
                  bodies.slice().sort(function (p, q) { return size(q) - size(p); })[0] || null;
-    var planets = bodies.filter(function (n) { return n !== middle && n.kind !== "i_moon" && n.kind !== "i_sun"; });
+    var planets = bodies.filter(function (n) { return n !== middle && n.kind !== "i_moon" && n.kind !== "i_sun" && !SMALL_BODIES[n.kind]; });
     function nearest(n, among) {
       var best = null, d = Infinity;
       among.forEach(function (m) {
@@ -107,7 +108,7 @@
     // planet nearest it; a UFO wanders; the rest stand where they are
     var craft = sky.others.map(function (n) {
       var c = { n: n, legs: hand.links.filter(function (l) { return l.from === n.id; }) };
-      if (n.kind === "i_satellite" || (n.kind === "i_rocket" && !c.legs.length)) {
+      if (n.kind === "i_satellite" || n.kind === "i_station" || (n.kind === "i_rocket" && !c.legs.length)) {
         var home = sky.nearest(n, sky.bodies.map(function (b) { return b.n; }));
         if (home) {
           c.around = home;

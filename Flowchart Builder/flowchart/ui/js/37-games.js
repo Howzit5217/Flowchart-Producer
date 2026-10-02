@@ -24,9 +24,9 @@
   // game out for itself (g_coin_p for g_coin), with its name (g_coin), a
   // line saying what it is (g_coin_d) and how to play it (g_coin_h).  They
   // come smallest first, the last four being the big ones.
-  var GAMES = ["g_coin", "g_highlow", "g_sticks", "g_dice", "g_hangman", "g_codebreak",
-               "g_dungeon", "g_connect", "g_blackjack", "g_battleship"];
-  var BIG_GAMES = 4;
+  var GAMES = ["g_coin", "g_highlow", "g_sticks", "g_dice", "g_math", "g_pig", "g_hangman", "g_codebreak",
+               "g_lander", "g_dungeon", "g_connect", "g_blackjack", "g_battleship", "g_mines"];
+  var BIG_GAMES = 5;
 
   // One of them, in the language the page is in.
   function gameText(key) { return TXT[key + "_p"] || ""; }

@@ -192,6 +192,7 @@
     [[["click"], ["drag"]], "hm_icons"],     // the library (11-hand-icons.js)
     [[["drag"]], "hm_room"],                 // a room carries its furniture (03-icons.js)
     [[["drag"]], "hm_door"],                 // into the wall it is put by (snapToWalls)
+    [[["dot"]], "hm_tie"],                   // rooms apart, joined in 3D (39-join.js)
     [[["drag"]], "hm_floors"],               // a storey to a Floor, stairs between (38-walk.js)
     [[["click"]], "hm_lot"],                 // a lot's size and setbacks (lotMeasure, 03-icons.js)
     [[["click"]], "hm_dims"],                // a size on the paper, typed over (39-design.js)
@@ -223,11 +224,13 @@
     // only what this drawing is for (39-design.js): a program's arrows and
     // next steps, or a design's rooms, walls, floors, lot and sizes
     var FLOW_ONLY = { hm_join: 1, hp_next: 1, hm_rule: 1 };
-    var DESIGN_ONLY = { hm_room: 1, hm_door: 1, hm_floors: 1, hm_lot: 1, hm_run_as: 1, hm_dims: 1 };
+    var DESIGN_ONLY = { hm_room: 1, hm_door: 1, hm_tie: 1, hm_floors: 1, hm_lot: 1, hm_run_as: 1, hm_dims: 1 };
     var designing = typeof designMode === "function" && designMode();
+    var plan = designing && boardName() === "home";   // arrows join rooms there (39-join.js)
     var mouse = HAND_HOW.filter(function (row) {
       var key = typeof row === "string" ? row : row[1];
-      if (designing) { return !FLOW_ONLY[key] || (key === "hm_join" && linksWanted()); }
+      if (key === "hm_tie") { return plan; }
+      if (designing) { return !FLOW_ONLY[key] || (key === "hm_join" && !plan && linksWanted()); }
       return !DESIGN_ONLY[key];
     }).map(function (row) {
       return typeof row === "string" ? listed[row] : row;

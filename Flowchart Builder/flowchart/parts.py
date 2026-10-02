@@ -22,7 +22,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 # The stylesheet, in order.
 CSS = ["css/01-base.css", "css/02-bar.css", "css/03-layout.css",
        "css/04-panel.css", "css/05-chart.css", "css/06-screens.css",
-       "css/07-motion.css", "css/08-icons.css", "css/09-design.css"]
+       "css/07-motion.css", "css/08-icons.css", "css/09-design.css", "css/10-starter.css"]
 
 # The script.  These run inside one function and share everything between
 # them, so this order is the order they happen in: a later part may use what
@@ -44,8 +44,8 @@ JS = ["js/01-start.js", "js/02-paint.js", "js/02-read.js", "js/02-depth.js", "js
       "js/25-keys.js", "js/26-motion.js", "js/27-mend.js", "js/27-ask.js",
       "js/28-puzzles.js", "js/29-saves.js", "js/30-blocks.js", "js/31-app.js",
       "js/32-code-side.js", "js/33-told.js", "js/34-tests.js", "js/35-wipe.js", "js/36-sync.js",
-      "js/37-games.js", "js/37-board.js", "js/38-walk.js", "js/38-advice.js", "js/38-view3d.js", "js/38-view3d-gl.js",
-      "js/39-flows.js", "js/39-circuit.js", "js/39-orbit.js", "js/39-design.js", "js/99-go.js"]
+      "js/37-games.js", "js/37-board.js", "js/38-walk.js", "js/38-advice.js", "js/38-view3d.js", "js/38-models.js", "js/38-view3d-gl.js", "js/38-view3d-more.js",
+      "js/39-flows.js", "js/39-circuit.js", "js/39-orbit.js", "js/39-design.js", "js/39-join.js", "js/39-starter.js", "js/99-go.js"]
 
 # Each part of the page carries a header saying what it is and that it is
 # one part of something; the page itself wants the part, not the header.

@@ -102,10 +102,13 @@
                  { name: "right", across: false, line: r, from: t, to: b, into: -1 }];
     edges.forEach(function (e) {
       e.len = e.to - e.from;
+      // (and not against a room an arrow joins it to, once the house is
+      // put together in 3D: 39-join.js)
       e.outside = [0.25, 0.5, 0.75].every(function (f) {
         var at = e.from + e.len * f, out = e.line - e.into * 12;
         var x = e.across ? at : out, y = e.across ? out : at;
-        return !plan.rooms.some(function (o) { return o !== room && insideArea(o, x, y); });
+        return !plan.rooms.some(function (o) { return o !== room && insideArea(o, x, y); }) &&
+               !(typeof tieCovers === "function" && tieCovers(room, x, y));
       });
     });
     return edges;
@@ -122,9 +125,14 @@
       taken.push([lo - 6, lo + (e.across ? t.w : t.h) + 6]);
     });
     taken.sort(function (p, q) { return p[0] - q[0]; });
-    var gaps = [], at = e.from + 12;
-    taken.forEach(function (s) { if (s[0] > at) { gaps.push([at, s[0]]); } at = Math.max(at, s[1]); });
-    if (e.to - 12 > at) { gaps.push([at, e.to - 12]); }
+    // (only along this wall: a door further along the same line, past its
+    // end, made a gap that ran on out of the room, and a window went there)
+    var gaps = [], at = e.from + 12, end = e.to - 12;
+    taken.forEach(function (s) {
+      if (s[0] > at && at < end) { gaps.push([at, Math.min(s[0], end)]); }
+      at = Math.max(at, s[1]);
+    });
+    if (end > at) { gaps.push([at, end]); }
     return gaps;
   }
 

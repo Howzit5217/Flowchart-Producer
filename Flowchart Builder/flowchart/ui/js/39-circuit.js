@@ -31,10 +31,21 @@
     i_motor:    { ohms: 10, turn: 0.9 },
     i_buzzer:   { ohms: 40, buzz: 0.1 },
     i_capacitor: { open: true },
-    i_switch_on: { swtch: true }
+    i_switch_on: { swtch: true },
+    // (added 2026-10-01) one cell; a diode that lets current one way only;
+    // a fuse that melts past its amps ("2 A") and opens the circuit; a meter
+    // of current, put in the wire, and one of volts, put across a part; and
+    // a dimmer, a resistance its words set like a resistor's
+    i_cell:      { source: 1.5, inner: 0.2 },
+    i_diode:     { diode: 0.7, ohms: 0.5 },
+    i_fuse:      { ohms: 0.05, fuse: 2 },
+    i_ammeter:   { ohms: 0.01, meter: "a" },
+    i_voltmeter: { ohms: 1e7, meter: "v" },
+    i_dimmer:    { ohms: 50, valued: true }
   };
   var SHORT_AMPS = 15;                   // past this, it is a short circuit
   var circuitOpen = {};                  // switches opened while it runs
+  var circuitBlown = {};                 // fuses melted while it runs
 
   // A number from the words on a part, with k (thousand), M (million) or
   // m (thousandth) after it.
@@ -124,13 +135,14 @@
         if (p.wires < 2 || p.pa === p.pb && !p.is.source) { return; }
         if (p.is.open) { return; }
         if (p.is.swtch) { if (switchShut(p.n)) { live.push({ p: p, g: 1 / 0.01 }); } return; }
+        if (p.is.fuse && circuitBlown[p.n.id]) { return; }
         if (p.is.source) { vsrc.push({ p: p, v: circuitValue(p.n.text, p.is.source), r: p.is.inner }); return; }
         if (p.is.diode) {
           if (off[p.n.id]) { return; }
           vsrc.push({ p: p, v: -p.is.diode, r: p.is.ohms, diode: true });
           return;
         }
-        var ohms = p.n.kind === "i_resistor" ? circuitValue(p.n.text, p.is.ohms) : p.is.ohms;
+        var ohms = p.n.kind === "i_resistor" || p.is.valued ? circuitValue(p.n.text, p.is.ohms) : p.is.ohms;
         live.push({ p: p, g: 1 / Math.max(1e-6, ohms) });
       });
       // unknowns: every point but the reference, then every source's current
@@ -158,11 +170,16 @@
       var x = circuitGauss(A, z);
       if (!x) { return { none: true, parts: c.parts }; }
       function volts(pt) { return pt === ref ? 0 : x[idx[pt]]; }
+      var again = false;
       live.forEach(function (e) {
         e.p.volts = volts(e.p.pa) - volts(e.p.pb);
         e.p.amps = e.p.volts * e.g;                  // from its first end to its second
+        // more through a fuse than it is made for: it melts, and the sum
+        // is done again without it
+        if (e.p.is.fuse && Math.abs(e.p.amps) > circuitValue(e.p.n.text, e.p.is.fuse)) {
+          circuitBlown[e.p.n.id] = true; again = true;
+        }
       });
-      var again = false;
       vsrc.forEach(function (s, m) {
         // the current out of the plus end, round, and back in at the minus
         // (x is the current through it from its plus end to its minus,
@@ -211,6 +228,7 @@
   // ---- shown ----------------------------------------------------------------------
   async function circuitRun() {
     circuitOpen = {};
+    circuitBlown = {};
     var c = circuitRead();
     if (!c.parts.some(function (p) { return p.is.source; })) { simSay(TXT.ec_no_source, "warn"); return; }
     var solved = null, flows = [], marks = {};
@@ -336,13 +354,22 @@
         simSay(say(on ? "ec_buzzes" : "ec_quiet", { who: who, a: amps(p.amps) }));
       } else if (p.is.swtch) {
         simSay(say(switchShut(p.n) ? "ec_closed" : "ec_opened", { who: who }));
-      } else if (p.n.kind === "i_resistor" && on) {
+      } else if (p.is.fuse) {
+        simSay(say(circuitBlown[p.n.id] ? "ec_blown" : "ec_fuse_ok", { who: who, a: amps(p.amps) }),
+               circuitBlown[p.n.id] ? "bad" : "");
+      } else if (p.is.meter) {
+        simSay(p.is.meter === "v" ? say("ec_reads_v", { who: who, v: Math.abs(p.volts).toFixed(2) })
+                                  : say("ec_reads_a", { who: who, a: amps(p.amps) }));
+      } else if (p.is.diode) {
+        simSay(say(on ? "ec_conducts" : "ec_blocks", { who: who, a: amps(p.amps) }));
+      } else if ((p.n.kind === "i_resistor" || p.is.valued) && on) {
         simSay(say("ec_drop", { who: who, v: Math.abs(p.volts).toFixed(2), a: amps(p.amps) }));
       }
     });
   }
 
   function circuitCheck() {
+    circuitBlown = {};
     var c = circuitRead(), found = [];
     if (!c.parts.some(function (p) { return p.is.source; })) { found.push({ text: TXT.ec_no_source }); }
     c.parts.forEach(function (p) {

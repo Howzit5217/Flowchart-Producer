@@ -97,7 +97,9 @@
     "uniform vec3 uFogCol; uniform float uFogNear; uniform float uFogFar;",
     "uniform sampler2D uTex; uniform float uUseTex; uniform float uDecal; uniform float uRound; uniform float uBill;",
     "uniform sampler2D uShadow; uniform float uShadowOn; uniform float uAlpha; uniform float uPx; uniform float uTime;",
-    "uniform vec2 uFade; uniform vec2 uMid; uniform float uIndoor; uniform float uDress;",
+    "uniform vec2 uFade; uniform vec2 uMid; uniform float uIndoor; uniform float uDress; uniform vec3 uLamp;",
+    "uniform float uNight; uniform float uGlow;",       // how dark it is out (38-view3d-more.js); a window lit from in
+    "uniform vec4 uRooms[16]; uniform float uRoomN;",   // after dark, each room's ceiling light: where, and how far it reaches
     "varying vec3 vPos; varying vec3 vNorm; varying vec4 vColor; varying vec2 vUv; varying float vPat; varying vec4 vSun;",
     "float hash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }",
     "float noise(vec2 p) {",
@@ -136,6 +138,7 @@
     "  if (uBill < 0.5 && dot(n, toEye) < 0.0) { n = -n; }",
     "  vec3 base = vColor.rgb; float a = vColor.a;",
     "  vec2 m = vPos.xy / uPx; float h = vPos.z / uPx;",
+    "  float along = dot(m, normalize(vec2(-n.y, n.x) + vec2(0.0001, 0.0)));",
     "  if (k > 0.5 && k < 1.5) {",                     // shingles, course over course, joints staggered
     "    vec2 t = normalize(vec2(-n.y, n.x) + vec2(0.0001, 0.0));",
     "    float row = h / 0.2, along = dot(m, t) / 0.32 + 0.5 * mod(floor(row), 2.0);",
@@ -172,25 +175,146 @@
     "  } else if (k > 12.5 && k < 13.5) {",            // boards along an outside wall
     "    float row = fract(h / 0.18);",
     "    base *= 0.9 + 0.1 * smoothstep(0.0, 0.18, row);",
+    // what the things in a home are made of (38-models.js), in their own
+    // numbers (vUv, metres along and across each part)
+    "  } else if (k > 19.5 && k < 20.5) {",            // fabric: a fine weave
+    "    vec2 q = vUv * 260.0;",
+    "    base *= 0.9 + 0.05 * (0.5 + 0.5 * sin(q.x) * sin(q.y)) + 0.07 * noise(vUv * 26.0);",
+    "  } else if (k > 20.5 && k < 21.5) {",            // wood: its grain along the part
+    "    float g = noise(vec2(vUv.x * 2.5, vUv.y * 55.0)) * 0.65 + noise(vec2(vUv.x * 8.0, vUv.y * 150.0)) * 0.35;",
+    "    base *= 0.84 + 0.13 * smoothstep(0.3, 0.7, fract(g * 3.5)) + 0.05 * noise(vUv * 7.0);",
+    "  } else if (k > 21.5 && k < 22.5) {",            // brushed metal
+    "    base *= 0.965 + 0.035 * noise(vec2(vUv.x * 2.0, vUv.y * 160.0));",
+    "  } else if (k > 24.5 && k < 25.5) {",            // stone: veined
+    "    float vein = abs(sin((vUv.x * 0.7 + vUv.y * 0.4) * 6.0 + noise(vUv * 2.6) * 6.0 + noise(vUv * 11.0) * 1.4));",
+    "    base *= 0.95 + 0.06 * noise(vUv * 18.0);",
+    "    base = mix(base * 0.87, base, smoothstep(0.0, 0.035, vein));",
+    "  } else if (k > 25.5 && k < 26.5) {",            // leather: a fine grain
+    "    base *= 0.9 + 0.1 * noise(vUv * 170.0) + 0.04 * noise(vUv * 12.0);",
+    "  } else if (k > 28.5 && k < 29.5) {",            // linen: soft creases
+    "    base *= 0.93 + 0.06 * noise(vUv * 11.0) + 0.03 * noise(vUv * 80.0);",
+    "  } else if (k > 29.5 && k < 30.5) {",            // earth
+    "    base *= 0.78 + 0.32 * noise(vUv * 80.0);",
+    "  } else if (k > 32.5 && k < 33.5) {",            // wicker, woven
+    "    vec2 q = vUv * 60.0; float cell = mod(floor(q.x) + floor(q.y), 2.0);",
+    "    base *= 0.78 + 0.28 * sin((cell > 0.5 ? fract(q.x) : fract(q.y)) * 3.14159);",
+    // what a house is made of (HOUSE_MATS, 38-models.js), by where it is
+    "  } else if (k > 39.5 && k < 40.5) {",            // brick, in stretcher bond
+    "    float row = h / 0.077, al = along / 0.23 + 0.5 * mod(floor(row), 2.0);",
+    "    if (abs(n.z) > 0.7) { row = m.y / 0.11; al = m.x / 0.23 + 0.5 * mod(floor(row), 2.0); }",
+    "    float joint = smoothstep(0.0, 0.1, fract(row)) * smoothstep(1.0, 0.9, fract(row)) * smoothstep(0.0, 0.04, fract(al)) * smoothstep(1.0, 0.96, fract(al));",
+    "    vec3 brick = base * (0.8 + 0.32 * hash(floor(vec2(al, row)))) * (0.94 + 0.09 * noise(m * 37.0 + h * 21.0));",
+    "    base = mix(vec3(0.79, 0.77, 0.73), brick, joint);",
+    "  } else if (k > 40.5 && k < 41.5) {",            // stone, laid in courses
+    "    float row = h / 0.21, al = along / (0.32 + 0.2 * hash(vec2(floor(row), 7.0))) + hash(vec2(floor(row), 3.0));",
+    "    float joint = smoothstep(0.0, 0.07, fract(row)) * smoothstep(1.0, 0.93, fract(row)) * smoothstep(0.0, 0.035, fract(al)) * smoothstep(1.0, 0.965, fract(al));",
+    "    vec3 st = base * (0.78 + 0.3 * hash(floor(vec2(al, row)))) * (0.9 + 0.14 * noise(m * 11.0 + h * 9.0));",
+    "    base = mix(base * 0.55, st, joint);",
+    "  } else if (k > 41.5 && k < 42.5) {",            // stucco: rough plaster
+    "    base *= 0.93 + 0.07 * noise(vec2(along, h) * 28.0) + 0.04 * noise(vec2(along, h) * 95.0);",
+    "  } else if (k > 42.5 && k < 43.5) {",            // boards up and down, battens over the joints
+    "    float j = fract(along / 0.3);",
+    "    base *= 0.86 + 0.12 * smoothstep(0.0, 0.05, j) * smoothstep(1.0, 0.88, j) + 0.04 * noise(vec2(along * 3.0, h * 18.0));",
+    "  } else if (k > 43.5 && k < 44.5) {",            // clay tiles, rolling across the roof
+    "    float row = h / 0.24, al = along / 0.22;",
+    "    base *= (0.76 + 0.24 * abs(sin(al * 3.14159))) * (0.82 + 0.18 * smoothstep(0.0, 0.22, fract(row))) * (0.94 + 0.1 * hash(floor(vec2(al, row))));",
+    "  } else if (k > 44.5 && k < 45.5) {",            // a metal roof, its standing seams
+    "    float sea = fract(along / 0.45);",
+    "    base *= 0.9 + 0.16 * smoothstep(0.9, 0.95, sea) * smoothstep(1.0, 0.96, sea) + 0.03 * noise(vec2(along, h) * 4.0);",
+    "  } else if (k > 45.5 && k < 46.5) {",            // slate, small and dark
+    "    float row = h / 0.13, al = along / 0.24 + 0.5 * mod(floor(row), 2.0);",
+    "    base *= (0.8 + 0.2 * smoothstep(0.0, 0.18, fract(row))) * (0.92 + 0.08 * smoothstep(0.0, 0.05, fract(al))) * (0.88 + 0.2 * hash(floor(vec2(al, row))));",
+    "  } else if (k > 46.5 && k < 47.5) {",            // carpet, its pile
+    "    base *= 0.9 + 0.08 * noise(m * 190.0) + 0.05 * noise(m * 4.0);",
+    "  } else if (k > 47.5 && k < 48.5) {",            // parquet, laid in a basket weave
+    "    vec2 cell = floor(m / 0.45), f = fract(m / 0.45); float across = mod(cell.x + cell.y, 2.0) > 0.5 ? f.x : f.y;",
+    "    float plank = floor(across * 3.0), seam = smoothstep(0.0, 0.04, fract(across * 3.0)) * smoothstep(0.0, 0.015, min(f.x, f.y));",
+    "    base *= (0.88 + 0.14 * hash(cell * 3.0 + plank)) * (0.93 + 0.07 * seam);",
+    "  } else if (k > 48.5 && k < 49.5) {",            // marble, in big slabs
+    "    vec2 tile = fract(m / 0.6); float vein = abs(sin((m.x * 1.7 + m.y) * 4.0 + noise(m * 3.0) * 6.0));",
+    "    base = mix(base * 0.8, base, smoothstep(0.0, 0.09, vein));",
+    "    base *= 0.95 + 0.05 * smoothstep(0.0, 0.012, min(tile.x, tile.y));",
+    "  } else if (k > 49.5 && k < 50.5) {",            // slate flags
+    "    vec2 cell = floor(m / 0.4), f = fract(m / 0.4);",
+    "    base *= (0.84 + 0.2 * hash(cell)) * (0.88 + 0.12 * smoothstep(0.0, 0.025, min(f.x, f.y))) * (0.95 + 0.07 * noise(m * 12.0));",
+    "  } else if (k > 50.5 && k < 51.5) {",            // wallpaper: a stripe
+    "    float st = fract(along / 0.16);",
+    "    base *= 0.95 + 0.05 * smoothstep(0.45, 0.5, st) * smoothstep(1.0, 0.95, st) + 0.02 * noise(vec2(along, h) * 60.0);",
+    "  } else if (k > 51.5 && k < 52.5) {",            // wood panelling, upright
+    "    float j = fract(along / 0.14), g = noise(vec2(along * 9.0, h * 1.5));",
+    "    base *= (0.86 + 0.1 * smoothstep(0.0, 0.05, j)) * (0.9 + 0.12 * g) * (0.95 + 0.08 * hash(vec2(floor(along / 0.14), 2.0)));",
+    "  } else if (k > 52.5 && k < 53.5) {",            // tiles on a wall, in a brick bond
+    "    float row = h / 0.075, al = along / 0.15 + 0.5 * mod(floor(row), 2.0);",
+    "    float grout = smoothstep(0.0, 0.08, fract(row)) * smoothstep(1.0, 0.92, fract(row)) * smoothstep(0.0, 0.04, fract(al)) * smoothstep(1.0, 0.96, fract(al));",
+    "    base = mix(vec3(0.77, 0.77, 0.75), base, grout);",
+    "  } else if (k > 53.5 && k < 54.5) {",            // cedar shakes, course over course
+    "    float row = h / 0.18, al = along / (0.12 + 0.1 * hash(vec2(floor(row), 5.0))) + 0.5 * mod(floor(row), 2.0);",
+    "    base *= (0.8 + 0.2 * smoothstep(0.0, 0.25, fract(row))) * (0.9 + 0.1 * smoothstep(0.0, 0.06, fract(al))) * (0.85 + 0.25 * hash(floor(vec2(al, row))));",
     "  }",
     "  base = mix(vColor.rgb, base, uDress);",          // flat on the paper, plain as it is drawn
     "  if (uUseTex > 0.5 && uBill < 0.5) {",
     "    if (uDecal > 0.5) { base = tex.rgb; a = tex.a; } else { base = mix(base, tex.rgb, tex.a); }",
     "  }",
     "  vec3 col;",
-    "  if (uBill > 0.5) { col = tex.rgb * (0.82 + 0.25 * max(uSunDir.z, 0.0)); a = 1.0; }",
+    "  if (uBill > 0.5) { col = tex.rgb * (0.82 + 0.25 * max(uSunDir.z, 0.0)) * (1.0 - 0.55 * uNight * (1.0 - uIndoor)); a = 1.0; }",
     "  else {",
     "    float sun = lit(n);",
     "    vec3 amb = mix(uGroundAmb, uSkyAmb, n.z * 0.5 + 0.5);",
+    "    vec3 toLight = uSunDir, lightCol = uSunCol * 1.5 * min(1.0, sun * 4.0);",
     "    if (uIndoor > 0.5) {",                         // indoors: light from every side, a lamp's warmth, and
-    "      amb = mix(vec3(0.74, 0.71, 0.66), vec3(0.88, 0.87, 0.86), n.z * 0.5 + 0.5);",
-    "      amb += vec3(0.16, 0.15, 0.13) * max(dot(n, toEye), 0.0);",   // what faces you a little brighter
+    "      amb = mix(vec3(0.6, 0.58, 0.54), vec3(0.74, 0.73, 0.72), n.z * 0.5 + 0.5);",
+    "      amb += vec3(0.12, 0.11, 0.1) * max(dot(n, toEye), 0.0);",   // what faces you a little brighter
+    // the light in the middle of the ceiling, falling off across the room:
+    // what gives the things in it their shape
+    "      vec3 lv = uLamp - vPos; float ld = max(length(lv), 1.0);",
+    "      toLight = lv / ld; ld /= uPx;",
+    "      amb += vec3(0.4, 0.37, 0.31) * max(dot(n, toLight), 0.0) / (1.0 + ld * ld * 0.05);",
+    "      lightCol = vec3(0.75, 0.7, 0.6) / (1.0 + ld * ld * 0.05);",
+    // after dark the daylight goes from the room, and the lamp is all there is
+    "      amb *= mix(1.0, 0.68, uNight); amb += vec3(0.1, 0.08, 0.04) * uNight * max(dot(n, toLight), 0.0);",
+    "      lightCol *= 1.0 + 0.3 * uNight;",
     "    }",
     "    col = mix(base, base * (amb + uSunCol * sun), uDress);",
+    // after dark, seen from out of doors: every room's light on
+    "    if (uNight > 0.01 && uIndoor < 0.5) {",
+    "      float warm = 0.0;",
+    "      for (int i = 0; i < 16; i++) {",
+    "        if (float(i) >= uRoomN) { break; }",
+    "        vec3 rl = uRooms[i].xyz - vPos; float rd = max(length(rl), 1.0);",
+    "        warm += max(dot(n, rl / rd), 0.0) * (1.0 - smoothstep(uRooms[i].w * 0.55, uRooms[i].w * 1.05, rd));",
+    "      }",
+    "      col += base * vec3(0.95, 0.78, 0.5) * min(warm, 1.2) * uNight * uDress * 0.9;",
+    "    }",
+    // a shine, on what is smooth: china, steel, a screen, polished stone
+    "    float gloss = 0.0, shin = 20.0;",
+    "    if (k > 20.5 && k < 21.5) { gloss = 0.1; shin = 22.0; }",
+    "    else if (k > 21.5 && k < 22.5) { gloss = 0.4; shin = 30.0; }",
+    "    else if (k > 22.5 && k < 23.5) { gloss = 0.9; shin = 80.0; }",
+    "    else if (k > 23.5 && k < 24.5) { gloss = 0.5; shin = 55.0; }",
+    "    else if (k > 24.5 && k < 25.5) { gloss = 0.32; shin = 45.0; }",
+    "    else if (k > 25.5 && k < 26.5) { gloss = 0.24; shin = 22.0; }",
+    "    else if (k > 26.5 && k < 27.5) { gloss = 0.22; shin = 34.0; }",
+    "    else if (k > 27.5 && k < 28.5) { gloss = 0.75; shin = 90.0; }",
+    "    else if ((k > 6.5 && k < 7.5) || (k > 52.5 && k < 53.5)) { gloss = 0.28; shin = 50.0; }",
+    "    else if (k > 48.5 && k < 49.5) { gloss = 0.38; shin = 60.0; }",
+    "    else if ((k > 1.5 && k < 2.5) || (k > 47.5 && k < 48.5)) { gloss = 0.1; shin = 18.0; }",
+    "    else if (k > 44.5 && k < 45.5) { gloss = 0.3; shin = 26.0; }",
+    "    if (gloss > 0.0) {",
+    "      vec3 hv = normalize(toLight + toEye);",
+    "      col += lightCol * gloss * pow(max(dot(n, hv), 0.0), shin) * uDress;",
+    "    }",
+    "    if (k > 22.5 && k < 23.5) {",                    // chrome: the room, or the sky, in it
+    "      vec3 r = reflect(-toEye, n);",
+    "      vec3 env = uIndoor > 0.5 ? mix(vec3(0.38, 0.36, 0.34), vec3(0.95, 0.94, 0.92), r.z * 0.5 + 0.5)",
+    "                               : mix(uGroundAmb, vec3(0.8, 0.88, 0.97), smoothstep(-0.2, 0.6, r.z));",
+    "      col = mix(col, env * (0.55 + 0.45 * base), 0.55 * uDress);",
+    "    }",
+    "    if (k > 30.5 && k < 31.5) { col = mix(col, base * (1.08 + 0.9 * uNight), uDress); }",   // a lamp's shade, lit from inside -- glowing, at night
     "    if (k > 8.5 && k < 9.5) {",                     // the sky in the water
     "      vec3 r = reflect(-toEye, n); col += vec3(0.25) * pow(max(dot(r, uSunDir), 0.0), 60.0);",
     "    }",
     "  }",
+    "  if (uGlow > 0.0) { col = mix(col, vec3(1.0, 0.8, 0.5), uGlow); a = max(a, 0.9 * uGlow); }",   // the lights on inside
     "  float d = uOrtho > 0.5 ? 0.0 : length(uEye - vPos);",
     "  float fog = clamp((d - uFogNear) / (uFogFar - uFogNear), 0.0, 1.0);",
     "  col = mix(col, uFogCol, fog * fog * (3.0 - 2.0 * fog));",
@@ -211,6 +335,7 @@
     "#endif",
     "uniform vec3 uRight; uniform vec3 uUp; uniform vec3 uAhead; uniform vec2 uTan; uniform float uFlat;",
     "uniform vec3 uZenith; uniform vec3 uHorizon; uniform vec3 uBelow; uniform vec3 uSunDir; uniform float uTime;",
+    "uniform vec3 uSunGlow; uniform vec3 uCloud; uniform float uNight;",   // the sun's (or the moon's) light, the clouds', the stars
     "varying vec2 vXY;",
     "float hash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }",
     "float noise(vec2 p) {",
@@ -227,12 +352,20 @@
     "  vec3 col = up < 0.0 ? mix(uHorizon, uBelow, smoothstep(0.0, 0.08, -up))",
     "                      : mix(uHorizon, uZenith, pow(smoothstep(0.0, 0.6, up), 0.7));",
     "  float s = max(dot(dir, uSunDir), 0.0);",
-    "  col += vec3(1.0, 0.95, 0.82) * (pow(s, 600.0) * 1.2 + pow(s, 12.0) * 0.18);",
+    "  col += uSunGlow * (pow(s, 600.0) * 1.2 + pow(s, 12.0) * 0.18 * (1.0 - 0.7 * uNight));",
     "  if (up > 0.01) {",
     "    vec2 p = dir.xy / up * 1.2 + vec2(uTime * 0.01, 0.0);",
     "    float c = noise(p) * 0.55 + noise(p * 2.1) * 0.3 + noise(p * 4.3) * 0.15;",
     "    float cover = smoothstep(0.55, 0.78, c) * smoothstep(0.01, 0.2, up);",
-    "    col = mix(col, vec3(1.0), cover * 0.75);",
+    "    if (uNight > 0.0) {",                            // the stars, where no cloud is over them
+    // (cells of the sky's own sphere, each a point of light or not: cut
+    // flat across the sky they drew out into streaks near the top)
+    "      vec3 c3 = floor(dir * 300.0);",
+    "      vec2 g = vec2(c3.x * 7.13 + c3.z * 1.31, c3.y * 3.71 - c3.z * 2.17);",
+    "      float st = step(0.9982, hash(g)) * (0.45 + 0.55 * hash(g + 7.0));",
+    "      col += vec3(st) * uNight * smoothstep(0.02, 0.3, up) * (1.0 - cover);",
+    "    }",
+    "    col = mix(col, uCloud, cover * 0.75);",
     "  }",
     "  gl_FragColor = vec4(col, 1.0);",
     "}"].join("\n");
@@ -399,6 +532,45 @@
     return !rooms.some(function (r) { return insideArea(r.n, x - r.dx, y - r.dy); });
   }
 
+  // What each part of a model is made of, as the shader's pattern.
+  var GL3_MAT = { fabric: 20, wood: 21, metal: 22, chrome: 23, ceramic: 24, stone: 25, leather: 26, plastic: 27,
+                  screen: 28, linen: 29, soil: 30, glow: 31, rubber: 32, wicker: 33, leaves: 8, water: 9, bark: 11,
+                  concrete: 10, plain: 0 };
+  // A model's mesh (38-models.js), in its own numbers, put where the piece
+  // stands -- and kept so, while it stays there: walking round, the house
+  // is drawn sixty times a second and its furniture does not move.
+  function gl3Mesh(B, f) {
+    var how = f.how, m = f.mesh, xf = m.xf || [0, 0, 1, 0, 0];
+    var ox = f.pts[0][0] - m.base[0], oy = f.pts[0][1] - m.base[1], oz = f.pts[0][2] - m.base[2];
+    var batch = how.glass ? B.get("glass", { blend: true, late: true })
+              : how.shade ? B.get("shade", { blend: true, late: true, noDepthWrite: true }) : B.get("models", {});
+    var key = xf.join(",") + "|" + ox + "," + oy + "," + oz;
+    if (!m.made || m.made.key !== key) {
+      var col = gl3Rgb(how.color), pat = how.glass ? 0 : (GL3_MAT[how.mat] || 0), alpha = how.glass ? 0.3 : 1;
+      var P = m.p, N = m.n, U = m.uv, A = m.a, c = xf[2], s = xf[3], count = P.length / 3;
+      var out = new Float32Array(count * GL3_STRIDE);
+      for (var i = 0, o = 0; i < count; i++, o += GL3_STRIDE) {
+        var lx = P[i * 3], ly = P[i * 3 + 1], nx = N[i * 3], ny = N[i * 3 + 1];
+        out[o] = xf[0] + lx * c - ly * s + ox; out[o + 1] = xf[1] + lx * s + ly * c + oy; out[o + 2] = xf[4] + P[i * 3 + 2] + oz;
+        out[o + 3] = nx * c - ny * s; out[o + 4] = nx * s + ny * c; out[o + 5] = N[i * 3 + 2];
+        out[o + 6] = col[0]; out[o + 7] = col[1]; out[o + 8] = col[2]; out[o + 9] = A ? A[i] : alpha;
+        out[o + 10] = U[i * 2]; out[o + 11] = U[i * 2 + 1]; out[o + 12] = pat;
+      }
+      m.made = { key: key, data: out };
+    }
+    (batch.chunks || (batch.chunks = [])).push(m.made.data);
+  }
+  // A batch as one array: its faces' vertices, then its models' kept ones.
+  function gl3Join(x) {
+    if (!x.chunks || !x.chunks.length) { return new Float32Array(x.v); }
+    var total = x.v.length;
+    x.chunks.forEach(function (c) { total += c.length; });
+    var out = new Float32Array(total), at = x.v.length;
+    out.set(x.v);
+    x.chunks.forEach(function (c) { out.set(c, at); at += c.length; });
+    return out;
+  }
+
   // The model's faces, sorted into batches.
   function gl3Faces(G, model, B, ink, sheet, dress) {
     var inkC = gl3Rgb(ink), sheetC = gl3Rgb(sheet), floorPats = new Map();
@@ -408,21 +580,36 @@
       var fl = floors.length ? floorAt(floors, r.x, r.y) : null;
       return { n: r, dx: fl ? fl.dx : 0, dy: fl ? fl.dy : 0 };
     });
+    var made = typeof houseMat === "function";
     model.faces.forEach(function (f) {
       var how = f.how || {};
+      if (how.ghost) { return; }          // what walking bumps into, unseen
+      if (f.mesh) { gl3Mesh(B, f); return; }
       var base = gl3Rgb(how.color || sheet), edge = how.edge ? gl3Rgb(how.edge) : inkC, a = 1, pat = PAT.plain;
       if (how.wall && f.top) { base = edge; }
       else if (how.wall && f.side && f.node && f.node.kind === "i_room") {
         // painted walls: a warm white, tinted by the room's own outline;
-        // the side that faces the garden boarded
-        base = gl3Mix(base, [0.97, 0.95, 0.91], 0.55 * dress);
-        if (gl3Outside(f, rooms)) { pat = PAT.siding; base = gl3Mix(base, [0.93, 0.9, 0.84], 0.4 * dress); }
+        // the side that faces the garden boarded -- or what the house was
+        // made of, picked (HOUSE_MATS, 38-models.js)
+        var out = gl3Outside(f, rooms), wm = made ? houseMat(f.node, out ? "out" : "wall") : null;
+        if (wm) { pat = wm.pat; base = gl3Mix(base, gl3Rgb(wm.color), dress); }
+        else {
+          base = gl3Mix(base, [0.97, 0.95, 0.91], 0.55 * dress);
+          if (out) { pat = PAT.siding; base = gl3Mix(base, [0.93, 0.9, 0.84], 0.4 * dress); }
+        }
       }
       else if (how.dark) { base = gl3Mix(edge, [0, 0, 0], 0.15); }
-      else if (how.roof) { pat = PAT.roof; }
+      else if (how.roof) {
+        var rm = made && how.room ? houseMat(how.room, "roof") : null;
+        pat = rm ? rm.pat : PAT.roof;
+        if (rm) { base = gl3Mix(base, gl3Rgb(rm.color), dress); }
+      }
       else if (f.ground) {
         pat = PAT.lawn;
         base = gl3Mix(base, gl3Mix(gl3Mix(base, [0.42, 0.62, 0.3], 0.55), sheetC, 0.15), dress);
+      } else if (how.floor && made && how.room && houseMat(how.room, "floor")) {
+        var fm = houseMat(how.room, "floor");
+        pat = fm.pat; base = gl3Mix(base, gl3Rgb(fm.color), dress);
       } else if (how.floor) {
         if (how.room && !floorPats.has(how.room)) { floorPats.set(how.room, gl3FloorPat(how.room)); }
         pat = how.room ? floorPats.get(how.room) : PAT.boards;
@@ -542,6 +729,15 @@
         var q = lotLocal(p);
         return Math.abs(q[0]) < lot.w / 2 + 60 && q[1] > -lot.h / 2 - 60 && q[1] < hy + walkW + roadW + 90;
       });
+      // street lamps along the kerb, every 18 m: a post, and a lamp that
+      // glows after dark (38-view3d-more.js)
+      var post = gl3Mix([0.33, 0.34, 0.36], sheetC, 0.1), lampC = [1.0, 0.93, 0.76], every = 18 * FLOOR_PX;
+      for (var lx = -Math.floor(reach / every) * every + every / 2; lx < reach; lx += every) {
+        var foot = lotWorld(lx, hy + walkW - 0.35 * FLOOR_PX, 0);
+        gl3Prism(v, foot, 0.07 * FLOOR_PX, 0.05 * FLOOR_PX, 0, 4.2 * FLOOR_PX, 6, post, PAT.plain);
+        gl3Prism(v, foot, 0.05 * FLOOR_PX, 0.24 * FLOOR_PX, 4.0 * FLOOR_PX, 4.25 * FLOOR_PX, 8, post, PAT.plain);
+        gl3Prism(v, foot, 0.2 * FLOOR_PX, 0.16 * FLOOR_PX, 3.95 * FLOOR_PX, 4.02 * FLOOR_PX, 8, lampC, 31);
+      }
     }
     keepOff.push(function (p) { return p[0] > x0 - 120 && p[0] < x1 + 120 && p[1] > y0 - 120 && p[1] < y1 + 120; });
     // trees, round about, and a few bushes nearer
@@ -684,8 +880,8 @@
     };
   }
   // The sun's own view, a box round everything that can throw a shadow.
-  function gl3SunView(b) {
-    var L = GL3_SUN, f = [-L[0], -L[1], -L[2]];
+  function gl3SunView(b, sun) {
+    var L = sun || GL3_SUN, f = [-L[0], -L[1], -L[2]];
     var r = [f[1], -f[0], 0], rl = Math.hypot(r[0], r[1]) || 1;
     r = [r[0] / rl, r[1] / rl, 0];
     var u = [r[1] * f[2] - r[2] * f[1], r[2] * f[0] - r[0] * f[2], r[0] * f[1] - r[1] * f[0]];
@@ -730,6 +926,9 @@
     // far as its walls are up, so it rises out of the drawing and lies
     // back down into it
     var dress = inside ? 1 : Math.max(0, Math.min(1, V3.rise === undefined ? 1 : V3.rise));
+    // the time of day: where the sun (or the moon) is, and the light and the
+    // sky it gives (38-view3d-more.js)
+    var sky = gl3SkyNow(), sun = sky.sun;
     try {
       var scenery = gl3Scenery(G, model, inside, sheet);
       var B = gl3Batches();
@@ -768,13 +967,14 @@
       var shadows = G.shadowOk && b.x0 !== Infinity && !flatish && !(inside && V3.inRoom);
       var sunMvp = gl3Mat([1, 0, 0, 0], [0, 1, 0, 0], [0, 0, 1, 0], [0, 0, 0, 1]);
       if (shadows) {
-        var grow = 500;
-        sunMvp = gl3SunView({ x0: b.x0 - grow, x1: b.x1 + grow, y0: b.y0 - grow, y1: b.y1 + grow, z0: -10, z1: b.z1 + 50 });
+        // a low sun throws long shadows: room round the house for them
+        var grow = 300 + b.z1 * Math.min(4, Math.hypot(sun[0], sun[1]) / Math.max(0.15, sun[2]));
+        sunMvp = gl3SunView({ x0: b.x0 - grow, x1: b.x1 + grow, y0: b.y0 - grow, y1: b.y1 + grow, z0: -10, z1: b.z1 + 50 }, sun);
       }
 
       // the batches as arrays, once
-      var batches = B.all.filter(function (x) { return x.v.length; });
-      batches.forEach(function (x) { x.data = new Float32Array(x.v); });
+      var batches = B.all.filter(function (x) { return x.v.length || (x.chunks && x.chunks.length); });
+      batches.forEach(function (x) { x.data = gl3Join(x); });
 
       // ---- the sun's view: everything solid, how near the sun ----------------
       if (shadows) {
@@ -801,9 +1001,9 @@
 
       // ---- the picture ------------------------------------------------------------
       gl.viewport(0, 0, W, H);
-      var zenith = gl3Mix(sheetC, gl3Mix([0.36, 0.58, 0.86], sheetC, 0.18), dress);
-      var horizon = gl3Mix(sheetC, gl3Mix([0.82, 0.88, 0.93], sheetC, 0.25), dress);
-      var below = gl3Mix([0.46, 0.6, 0.38], sheetC, 0.2);
+      var zenith = gl3Mix(sheetC, gl3Mix(sky.zenith, sheetC, 0.18 * (1 - sky.night)), dress);
+      var horizon = gl3Mix(sheetC, gl3Mix(sky.horizon, sheetC, 0.25 * (1 - sky.night)), dress);
+      var below = gl3Mix(sky.below, sheetC, 0.2 * (1 - sky.night));
       gl.clearColor(horizon[0], horizon[1], horizon[2], 1);
       gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
       // the sky
@@ -818,7 +1018,8 @@
       }
       gl.uniform3fv(sk.uZenith, zenith); gl.uniform3fv(sk.uHorizon, horizon);
       gl.uniform3fv(sk.uBelow, inside ? below : gl3Mix(horizon, gl3Mix(horizon, [0.55, 0.6, 0.62], 0.3), dress));
-      gl.uniform3fv(sk.uSunDir, GL3_SUN); gl.uniform1f(sk.uTime, time);
+      gl.uniform3fv(sk.uSunDir, sun); gl.uniform1f(sk.uTime, time);
+      gl.uniform3fv(sk.uSunGlow, sky.glow); gl.uniform3fv(sk.uCloud, sky.cloud); gl.uniform1f(sk.uNight, sky.night * dress);
       gl.bindBuffer(gl.ARRAY_BUFFER, G.skyBuf);
       gl.enableVertexAttribArray(sk.aXY);
       gl.vertexAttribPointer(sk.aXY, 2, gl.FLOAT, false, 8, 0);
@@ -830,11 +1031,13 @@
       gl.useProgram(P.p);
       gl.uniformMatrix4fv(U.uMvp, false, mvp);
       gl.uniformMatrix4fv(U.uSunMvp, false, sunMvp);
-      gl.uniform3fv(U.uSunDir, GL3_SUN);
+      gl.uniform3fv(U.uSunDir, sun);
       var indoorDim = inside && V3.inRoom ? 0.3 : 1;
-      gl.uniform3fv(U.uSunCol, [0.62 * indoorDim, 0.6 * indoorDim, 0.55 * indoorDim]);
-      gl.uniform3fv(U.uSkyAmb, inside && V3.inRoom ? [0.78, 0.78, 0.8] : [0.58, 0.62, 0.68]);
-      gl.uniform3fv(U.uGroundAmb, [0.42, 0.42, 0.4]);
+      gl.uniform3fv(U.uSunCol, [sky.sunCol[0] * indoorDim, sky.sunCol[1] * indoorDim, sky.sunCol[2] * indoorDim]);
+      gl.uniform3fv(U.uSkyAmb, inside && V3.inRoom ? [0.78, 0.78, 0.8] : gl3Mix([0.58, 0.62, 0.68], sky.skyAmb, dress));
+      gl.uniform3fv(U.uGroundAmb, gl3Mix([0.42, 0.42, 0.4], sky.groundAmb, dress));
+      gl.uniform1f(U.uNight, sky.night * dress);
+      gl.uniform1f(U.uGlow, 0);
       gl.uniform3fv(U.uEye, eye || [0, 0, 0]);
       gl.uniform3fv(U.uToward, toward);
       gl.uniform1f(U.uOrtho, inside ? 0 : 1);
@@ -845,6 +1048,26 @@
       gl.uniform1f(U.uTime, time);
       gl.uniform1f(U.uShadowOn, shadows ? 1 : 0);
       gl.uniform1f(U.uIndoor, inside && V3.inRoom ? 1 : 0);
+      // the light in the room walked in: the middle of its ceiling
+      var lamp = [0, 0, 0];
+      if (inside && V3.inRoom) {
+        var lr = V3.inRoom, lf = typeof floorsOf === "function" ? floorAt(floorsOf(), lr.x, lr.y) : null;
+        lamp = [lr.x + (lf ? lf.dx : 0), lr.y + (lf ? lf.dy : 0), (lf ? lf.z : 0) + (ceilOf(lr) - 0.35) * FLOOR_PX];
+      }
+      if (U.uLamp) { gl.uniform3fv(U.uLamp, lamp); }
+      // after dark, a light under every room's ceiling (the first sixteen)
+      if (U["uRooms[0]"] && sky.night > 0.01) {
+        var fl3 = typeof floorsOf === "function" ? floorsOf() : [], lights = new Float32Array(64), nl = 0;
+        hand.nodes.forEach(function (r) {
+          if (r.kind !== "i_room" || nl >= 16) { return; }
+          var rf = fl3.length ? floorAt(fl3, r.x, r.y) : null, stack = inside ? 1 : dress;
+          lights.set([r.x + (rf ? rf.dx * stack : 0), r.y + (rf ? rf.dy * stack : 0),
+                      (rf ? rf.z : 0) + (ceilOf(r) - 0.4) * FLOOR_PX, Math.max(r.w, r.h) * 0.62 + 30], nl * 4);
+          nl++;
+        });
+        gl.uniform4fv(U["uRooms[0]"], lights);
+        gl.uniform1f(U.uRoomN, nl);
+      } else if (U.uRoomN) { gl.uniform1f(U.uRoomN, 0); }
       gl.uniform1f(U.uDress, dress);
       gl.uniform2fv(U.uMid, scenery.mid);
       gl.activeTexture(gl.TEXTURE1); gl.bindTexture(gl.TEXTURE_2D, G.shadowTex); gl.uniform1i(U.uShadow, 1);
@@ -862,6 +1085,7 @@
         gl.uniform1f(U.uBill, how.bill ? 1 : 0);
         gl.uniform1f(U.uAlpha, how.alpha === undefined ? 1 : how.alpha);
         gl.uniform2fv(U.uFade, how.fade || [0, 0]);
+        gl.uniform1f(U.uGlow, how.glow || 0);
         if (how.blend) { gl.enable(gl.BLEND); gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA); } else { gl.disable(gl.BLEND); }
         gl.depthMask(!how.noDepthWrite);
         gl.drawArrays(mode, 0, data.length / GL3_STRIDE);
@@ -878,8 +1102,12 @@
       gl.disable(gl.POLYGON_OFFSET_FILL);
       batches.forEach(function (x) { if (x.how.lines) { draw(x.data, { blend: true, noDepthWrite: true }, gl.LINES); } });
       // and what can be seen through, last
+      // (the windows lit from inside, after dark, looked at from out of doors)
+      var lit = inside && V3.inRoom ? 0 : sky.night * dress * 0.85;
       batches.forEach(function (x) {
-        if (x.how.blend && !x.how.decal) { draw(x.data, { blend: true, noDepthWrite: true }, gl.TRIANGLES); }
+        if (x.how.blend && !x.how.decal) {
+          draw(x.data, { blend: true, noDepthWrite: true, glow: x.key === "glass" ? lit : 0 }, gl.TRIANGLES);
+        }
       });
       gl.depthMask(true);
       [0, 1, 2, 3, 4].forEach(function (i) { gl.disableVertexAttribArray(i); });

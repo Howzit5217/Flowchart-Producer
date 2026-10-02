@@ -3250,18 +3250,28 @@ GAME_PLAYS = {
                     ["20", "3", "1", "2", "1", "20", "2", "1"] * 4 + ["2"] * 10],
     "g_battleship": [["Z9"] + [r + c for r in "ABCDEF" for c in "123456"],
                      [r + c for c in "135246" for r in "abcdef"]],
+    "g_math": [["12"] * 8, ["x", "3", "100", "7", "8", "9", "10", "11", "12", "13"]],
+    "g_pig": [["{roll}"] * 300, ["{hold}"] * 300, ["{roll}", "{roll}", "{hold}"] * 100],
+    "g_lander": [["0"] * 60, ["5"] * 120, ["30", "-2", "20"] + ["8"] * 80,
+                 ["0"] * 10 + ["20"] * 7 + ["5"] * 60],
+    "g_mines": [["Z9", "{flag}A1", "{flag}A1", "{flag}b2", "{flag}b2"] + [r + c for r in "ABCDEF" for c in "123456"],
+                [r + c for c in "135246" for r in "abcdef"]],
 }
 # The winning walk through the dungeon is 13 moves in every language.
 GAME_ENDS = {("g_dungeon", 0): " 13 "}
 GAME_SAID = {
     "en": {"n": "n", "s": "s", "e": "e", "w": "w", "look": "look", "take": "take",
-           "bag": "bag", "help": "help"},
+           "bag": "bag", "help": "help",
+           "roll": "r", "hold": "h", "flag": "F"},
     "de": {"n": "n", "s": "s", "e": "o", "w": "w", "look": "schau", "take": "nimm",
-           "bag": "tasche", "help": "hilfe"},
+           "bag": "tasche", "help": "hilfe",
+           "roll": "w", "hold": "h", "flag": "M"},
     "es": {"n": "n", "s": "s", "e": "e", "w": "o", "look": "mira", "take": "toma",
-           "bag": "bolsa", "help": "ayuda"},
+           "bag": "bolsa", "help": "ayuda",
+           "roll": "t", "hold": "p", "flag": "M"},
     "fr": {"n": "n", "s": "s", "e": "e", "w": "o", "look": "regarde", "take": "prends",
-           "bag": "sac", "help": "aide"},
+           "bag": "sac", "help": "aide",
+           "roll": "l", "hold": "g", "flag": "M"},
 }
 
 
@@ -3312,7 +3322,7 @@ def _():
                     drawn += 1
                 said = GAME_SAID.get(code, GAME_SAID["en"])
                 for n, plays in enumerate(GAME_PLAYS.get(key, [])):
-                    typed = [said.get(t[1:-1], t) if t.startswith("{") else t for t in plays]
+                    typed = [re.sub(r"\{(\w+)\}", lambda m: said.get(m.group(1), m.group(0)), t) for t in plays]
                     for seed in (1, 2):
                         games.append({"name": "%s %s, play %d at seed %d" % (code, key, n + 1, seed),
                                       "ast": read_as_data(text), "typed": typed, "seed": seed,
