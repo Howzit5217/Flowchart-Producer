@@ -1029,16 +1029,58 @@
   // from -- the whole design, and the type the shapes' words are set in
   // (a person's arms are placed by its name) -- and handed out again until
   // either changes.  Nothing that asks changes what it is handed.
-  var routedLast = { key: null, routes: null };
+  var routedLast = { key: null, routes: null, signs: null, ends: null };
+  // (2026-10-01: "when there is a lot of stuff it is really laggy")  And a
+  // change that cannot move an arrow keeps them all as they were: only
+  // shapes no arrow starts or ends at moved -- a sofa in a room -- and none
+  // of them now lying across an arrow.  Dragging a piece round a floor plan
+  // of two houses re-routed every arrow at every step of the mouse.
+  function routeSigns() {
+    var signs = {};
+    hand.nodes.forEach(function (n) {
+      signs[n.id] = [n.x, n.y, n.w, n.h, n.turn || 0, n.kind, n.text || "", n.pin || "", n.parent || ""].join("|");
+    });
+    return signs;
+  }
+  function routesStillFit(signs, ends) {
+    var last = routedLast;
+    if (!last.routes || !last.signs || last.ends !== ends) { return false; }
+    var moved = [], id;
+    for (id in signs) { if (signs[id] !== last.signs[id]) { moved.push(+id); } }
+    for (id in last.signs) { if (signs[id] === undefined) { return false; } }
+    if (!moved.length || moved.length > 40) { return false; }
+    var linked = {};
+    hand.links.forEach(function (l) { linked[l.from] = linked[l.to] = true; });
+    return moved.every(function (mid) {
+      if (linked[mid]) { return false; }
+      var n = nodeById(mid);
+      if (!n || isArea(n.kind)) { return false; }
+      var q = turned(n), l = n.x - q.w / 2 - 6, r = n.x + q.w / 2 + 6, t = n.y - q.h / 2 - 6, b = n.y + q.h / 2 + 6;
+      return !last.routes.some(function (pts) {
+        if (!pts) { return false; }
+        for (var i = 0; i + 1 < pts.length; i++) {
+          var p = pts[i], s = pts[i + 1];
+          if (Math.max(p[0], s[0]) >= l && Math.min(p[0], s[0]) <= r && Math.max(p[1], s[1]) >= t && Math.min(p[1], s[1]) <= b) { return true; }
+        }
+        return false;
+      });
+    });
+  }
   function routeAll() {
     var key;
     try { key = JSON.stringify(hand) + "|" + JSON.stringify(style); }
     catch (e) { key = null; }
     if (key !== null && key === routedLast.key) { return routedLast.routes; }
+    var signs = routeSigns(), ends;
+    try { ends = JSON.stringify(hand.links) + "|" + JSON.stringify(style); } catch (e) { ends = null; }
+    if (ends !== null && routesStillFit(signs, ends)) {
+      routedLast = { key: key, routes: routedLast.routes, signs: signs, ends: ends };
+      return routedLast.routes;
+    }
     routeScene = { lanes: shapeLanes(), near: shapesNear([]) };
     try {
       var routes = routeEvery();
-      routedLast = { key: key, routes: routes };
+      routedLast = { key: key, routes: routes, signs: signs, ends: ends };
       return routes;
     } finally { routeScene = null; }
   }
@@ -1859,6 +1901,7 @@
   // else.  (The top stays put: that is where the flow starts from.)
   var handOrigin = { x: 0, y: 0 };
   var handPaper = null;                  // the drawing that was drawn last
+  var handLastPaper = null;              // and its size and its 0,0, for keepStill
   // The least paper a drawing is given, and the paper kept past its
   // furthest shape (Tidy up centres a small chart on the least of it).
   var HAND_LEAST_W = 520, HAND_LEAST_H = 280, HAND_PAD = 40;
@@ -1913,7 +1956,13 @@
     var tall = Math.round(maxy + pad + key.tall);
     // Where the design's 0,0 is on the screen before this drawing replaces
     // the last, so the view can be kept still over it afterwards.
-    var before = handPaper && handPaper === chart ? handScreenX() : null;
+    // (only where the paper grows or its 0,0 moves: reading where it is
+    // makes the browser lay the whole drawing out, twice a drawing -- most
+    // of the time a piece being dragged round a big plan took, 2026-10-01)
+    var same = handLastPaper && handLastPaper.wide === wide && handLastPaper.tall === tall &&
+               handLastPaper.ox === ox && handLastPaper.oy === oy;
+    var before = handPaper && handPaper === chart && !same ? handScreenX() : null;
+    handLastPaper = { wide: wide, tall: tall, ox: ox, oy: oy };
 
     var out = ['<svg xmlns="http://www.w3.org/2000/svg" id="chart" width="' +
                wide + '" height="' + tall + '" viewBox="0 0 ' + wide + ' ' +
@@ -2105,6 +2154,8 @@
       out.push('<path class="guide" d="' + d + '" fill="none"/>');
     });
     out.push("</g></svg>");
+    var stageNow = el("#stage");          // (read while the page is laid out: eyeAt, 02-paint.js)
+    if (stageNow) { eyeKept = { top: stageNow.scrollTop, room: stageNow.scrollHeight - stageNow.clientHeight, at: performance.now() }; }
     el("#sheet").innerHTML = out.join("\n");
     handOrigin = { x: ox, y: oy };
     bind();

@@ -75,7 +75,7 @@
       if (!g) { g = { level: R.level, z: R.z, rects: [], room: R.room }; groups.push(g); }
       g.rects.push(R);
     });
-    var E = ROOF_EAVE * FLOOR_PX;
+    var E = houseEave() * FLOOR_PX;
     groups.forEach(function (g) {
       var XS = roofLines(g.rects, "x0", "x1"), YS = roofLines(g.rects, "y0", "y1"), X = XS.lines, Y = YS.lines;
       var snapped = g.rects.map(function (R) { return { x0: XS.snap(R.x0), x1: XS.snap(R.x1), y0: YS.snap(R.y0), y1: YS.snap(R.y1) }; });
@@ -108,7 +108,10 @@
       // all as steep as each other: as steep as the widest may be
       var half = 0;
       boxes.forEach(function (B) { half = Math.max(half, Math.min(B.x1 - B.x0, B.y1 - B.y0) / 2); });
-      var slope = half > 0 ? Math.min(ROOF_PITCH, ROOF_RIDGE * FLOOR_PX / half) : ROOF_PITCH;
+      // (as steep as the house's style has it, and as high, 39-styles.js)
+      var pitch = typeof stylePitch === "function" ? stylePitch() : ROOF_PITCH;
+      var ridge = typeof styleRidge === "function" ? styleRidge() : ROOF_RIDGE;
+      var slope = half > 0 ? Math.min(pitch, ridge * FLOOR_PX / half) : pitch;
       function covered(x, y) { return boxes.some(function (B) { return x > B.x0 && x < B.x1 && y > B.y0 && y < B.y1; }); }
       boxes.forEach(function (B, n) {
         function open(pts) {
@@ -152,95 +155,194 @@
     runs.forEach(function (r) { r.b = Math.min(r.b, r.side === "n" || r.side === "s" ? R.x1 : R.y1); });
     return runs;
   }
-  // Worked out again only when the rooms or the roof's rectangles change:
-  // the view draws sixty times a second while it moves.
-  var roofKept = { key: null, out: null };
+  // ---- what is roofed ------------------------------------------------------------------
+  // (2026-10-01: "the weird openings of the home in the center and the black
+  // voids")  roofPlan (38-view3d.js) roofs a room, or leaves it to the floor
+  // over it, by where its middle is: a hall wider than the floor upstairs
+  // was left open to the sky where it stuck out -- and looked down into, it
+  // was black, its floor not drawn under a roof.  Here each room is roofed
+  // wherever nothing is built over it, the part sticking out from under a
+  // smaller floor as well, a rectangle at a time.
+  function roofOpenParts(p, covers) {
+    var xs = [p.x0, p.x1], ys = [p.y0, p.y1];
+    covers.forEach(function (c) {
+      [c.x0, c.x1].forEach(function (v) { if (v > p.x0 + 3 && v < p.x1 - 3) { xs.push(v); } });
+      [c.y0, c.y1].forEach(function (v) { if (v > p.y0 + 3 && v < p.y1 - 3) { ys.push(v); } });
+    });
+    function lines(v) { v.sort(function (a, b) { return a - b; }); return v.filter(function (x, i) { return !i || x - v[i - 1] > 1; }); }
+    xs = lines(xs); ys = lines(ys);
+    var out = [], last = [];
+    for (var j = 0; j + 1 < ys.length; j++) {
+      var row = [], run = null, cy = (ys[j] + ys[j + 1]) / 2;
+      for (var i = 0; i + 1 < xs.length; i++) {
+        var cx = (xs[i] + xs[i + 1]) / 2;
+        var open = !covers.some(function (c) { return cx > c.x0 && cx < c.x1 && cy > c.y0 && cy < c.y1; });
+        if (open && !run) { run = { x0: xs[i], x1: xs[i + 1], y0: ys[j], y1: ys[j + 1] }; row.push(run); }
+        else if (open) { run.x1 = xs[i + 1]; }
+        else { run = null; }
+      }
+      // a strip as wide as the one over it goes on down with it
+      row = row.map(function (r) {
+        var above = last.filter(function (q) { return Math.abs(q.x0 - r.x0) < 0.5 && Math.abs(q.x1 - r.x1) < 0.5 && Math.abs(q.y1 - r.y0) < 0.5; })[0];
+        if (above) { above.y1 = r.y1; return above; }
+        out.push(r);
+        return r;
+      });
+      last = row;
+    }
+    return out.filter(function (r) { return r.x1 - r.x0 >= 10 && r.y1 - r.y0 >= 10; });
+  }
+  // How far a roof hangs out past its walls: as far as the style has it.
+  function houseEave() { return typeof styleEave === "function" ? styleEave() : ROOF_EAVE; }
+  function roofRooms(floors, upTo, wallTop, base) {
+    var E = houseEave() * FLOOR_PX, out = [];
+    var placed = hand.nodes.filter(function (n) { return n.kind === "i_room"; }).map(function (r) {
+      var f = floors.length ? floorAt(floors, r.x, r.y) : null, q = turned(r), dx = f ? f.dx : 0, dy = f ? f.dy : 0;
+      return { r: r, f: f, level: f ? f.level : 0, x0: r.x + dx - q.w / 2, x1: r.x + dx + q.w / 2, y0: r.y + dy - q.h / 2, y1: r.y + dy + q.h / 2 };
+    });
+    placed.forEach(function (p) {
+      var r = p.r;
+      if ((r.turn || 0) % 90) { return; }                 // at a slant: roofed as roofPlan roofs it
+      if (upTo !== null && upTo !== undefined && p.f && p.level > upTo) { return; }
+      // a room inside a room (a closet) is under that one's roof
+      if (placed.some(function (o) { return o !== p && o.r.w * o.r.h > r.w * r.h && insideArea(o.r, r.x, r.y); })) { return; }
+      var covers = placed.filter(function (o) {
+        return o.level > p.level && o.x0 < p.x1 - 1 && o.x1 > p.x0 + 1 && o.y0 < p.y1 - 1 && o.y1 > p.y0 + 1;
+      });
+      var z = (p.f ? p.f.z : 0) + wallTop(r);
+      roofOpenParts(p, covers).forEach(function (b) {
+        out.push({ x0: b.x0, x1: b.x1, y0: b.y0, y1: b.y1, z: z, level: p.level, turn: 0, room: r });
+      });
+    });
+    // side by side, and as long as each other: one rectangle, one roof
+    for (var joined = true; joined;) {
+      joined = false;
+      for (var i = 0; i < out.length && !joined; i++) {
+        for (var j = i + 1; j < out.length && !joined; j++) {
+          var a = out[i], b = out[j];
+          if (a.level !== b.level || Math.abs(a.z - b.z) > 1) { continue; }
+          var row = Math.abs(a.y0 - b.y0) <= 6 && Math.abs(a.y1 - b.y1) <= 6 && (Math.abs(a.x1 - b.x0) <= 6 || Math.abs(b.x1 - a.x0) <= 6);
+          var col = Math.abs(a.x0 - b.x0) <= 6 && Math.abs(a.x1 - b.x1) <= 6 && (Math.abs(a.y1 - b.y0) <= 6 || Math.abs(b.y1 - a.y0) <= 6);
+          if (!row && !col) { continue; }
+          a.x0 = Math.min(a.x0, b.x0); a.x1 = Math.max(a.x1, b.x1); a.y0 = Math.min(a.y0, b.y0); a.y1 = Math.max(a.y1, b.y1);
+          out.splice(j, 1);
+          joined = true;
+        }
+      }
+    }
+    // the eaves: out over every side that nothing stands against
+    out.forEach(function (R) {
+      function open(pts) { return pts.every(function (pt) { return !houseBuilt(floors, pt[0], pt[1], R.level); }); }
+      var mx = [0.2, 0.5, 0.8].map(function (k) { return R.x0 + (R.x1 - R.x0) * k; });
+      var my = [0.2, 0.5, 0.8].map(function (k) { return R.y0 + (R.y1 - R.y0) * k; });
+      R.eave = { n: open(mx.map(function (x) { return [x, R.y0 - 8]; })) ? E : 0, s: open(mx.map(function (x) { return [x, R.y1 + 8]; })) ? E : 0,
+                 w: open(my.map(function (y) { return [R.x0 - 8, y]; })) ? E : 0, e: open(my.map(function (y) { return [R.x1 + 8, y]; })) ? E : 0 };
+    });
+    return base.filter(function (R) { return R.turn; }).concat(out);
+  }
+
+  // Worked out again only when the rooms change: the view draws sixty
+  // times a second while it moves.  (Kept by each room's id: while 3D
+  // runs, the rooms are the house put together's copies, 39-join.js.)
+  var roofKept = { key: null, out: null }, houseFloorsNow = [];
   if (typeof roofPlan === "function") {
     var roofPlanPieces = roofPlan;
     roofPlan = function (floors, upTo, wallTop) {
-      var rects = roofPlanPieces.apply(this, arguments);
-      var one = houseOpt("roof") === "one", gut = !!houseOpt("gutters");
-      if (!one && !gut) { return rects; }
+      var base = roofPlanPieces.apply(this, arguments);
+      houseFloorsNow = floors || [];
       try {
-        var key = (one ? "1" : "0") + (gut ? "1" : "0") + "|" + rects.map(function (R) {
-          var e = R.eave || {};
-          return [R.x0, R.x1, R.y0, R.y1, R.z, R.level, R.turn || 0, e.n, e.s, e.w, e.e].map(function (v) { return Math.round((v || 0) * 10); }).join(",");
-        }).join(";") + "|" + hand.nodes.map(function (r) {
-          return r.kind === "i_room" || r.kind === "i_floor" ? [r.x, r.y, r.w, r.h, r.turn || 0, r.text || ""].join(",") : "";
-        }).join(";");
+        // (a roof of a style's shape is one roof: 39-styles.js -- over rooms
+        // laid side by side for the flat ones, whose slabs must not overlap)
+        var shape = typeof styleRoofShape === "function" ? styleRoofShape() : "hip";
+        var one = houseOpt("roof") === "one" || shape !== "hip", gut = !!houseOpt("gutters");
+        var whole = one && !STYLE_FLATS[shape];
+        var key = (one ? "1" : "0") + (gut ? "1" : "0") + shape + houseEave() + (typeof stylePitch === "function" ? stylePitch() : "") +
+                  "|" + upTo + "|" + hand.nodes.map(function (r) {
+          return r.kind === "i_room" || r.kind === "i_floor" ? [r.id, r.x, r.y, r.w, r.h, r.turn || 0, r.ceil || 0, r.text || ""].join(",") : "";
+        }).join(";") + "|" + base.filter(function (R) { return R.turn; }).length;
         if (roofKept.key !== key) {
-          var made = one ? roofWhole(rects, floors) : rects.slice();
-          // each kept as where it came from: a rectangle of the plan, or a
-          // roof of the whole made from the first of its group's
-          var out = made.map(function (R) {
-            var idx = rects.indexOf(R), kept = idx >= 0 ? { idx: idx } : Object.assign({}, R, { src: rects.indexOf(R.cover ? rects.filter(function (q) { return q.room === R.room; })[0] : null) });
-            kept.runs = gut ? roofRuns(R, floors) : null;
-            return kept;
-          });
-          roofKept = { key: key, out: out };
+          var rects = roofRooms(floors, upTo, wallTop, base);
+          var made = whole ? roofWhole(rects, floors) : rects;
+          made.forEach(function (R) { R.runs = gut ? roofRuns(R, floors) : null; R.roomId = R.room && R.room.id; });
+          roofKept = { key: key, out: made };
         }
-        return roofKept.out.map(function (k) {
-          var R = k.idx !== undefined ? rects[k.idx] : Object.assign({}, k, { room: k.src >= 0 ? rects[k.src].room : k.room });
-          R.runs = k.runs;
-          return R;
+        return roofKept.out.map(function (R) {
+          var room = nodeById(R.roomId);
+          return Object.assign({}, R, { room: room || R.room });
         });
-      } catch (e) { return rects; }
+      } catch (e) { return base; }
     };
   }
 
   // ---- gutters, and what runs down from them ------------------------------------------
-  // A gutter along every open eave, a downpipe at each end of it down the
-  // wall to a splash block (and one in the middle of a long one), drawn
-  // with the roof, coming and going with it.
-  var GUTTER = "#e9e8e3";
+  // Along every open eave a fascia board and a gutter on it, carried round
+  // the corners; a downpipe from it down the wall to a splash block at the
+  // corners of the house (and along a long wall), only where it comes down
+  // to open ground -- one over a lower roof drains onto it -- and only one
+  // at a corner however many roofs meet there.  Drawn with the roof,
+  // coming and going with it.
+  var GUTTER = "#dedbd4", FASCIA = "#f3f1ec";
+  var houseSpouts = [];                  // the downpipes drawn so far, this picture
   function gutterFaces(faces, R, lift, how) {
     if (!R.runs || !R.runs.length) { return; }
     var W = R.x1 - R.x0, D = R.y1 - R.y0, half = Math.min(W, D) / 2;
     var rise = R.k ? half * R.k : Math.min(half * ROOF_PITCH, ROOF_RIDGE * FLOOR_PX), k = R.k || (half > 0 ? rise / half : 0);
-    var z = R.z + lift + (R.bias || 0), P = FLOOR_PX, gw = 0.13 * P, gh = 0.12 * P, pipe = 0.045 * P;
-    var look = { piece: true, color: GUTTER, edge: v3Mix(GUTTER, "#000000", 0.35), alpha: how.alpha, late: how.late };
-    var spouts = [];
+    var z = R.z + lift + (R.bias || 0), P = FLOOR_PX, gw = 0.12 * P, gh = 0.1 * P, fh = 0.16 * P, pipe = 0.035 * P;
+    var look = { piece: true, color: GUTTER, edge: v3Mix(GUTTER, "#000000", 0.3), alpha: how.alpha, late: how.late };
+    var board = { piece: true, color: FASCIA, edge: v3Mix(FASCIA, "#000000", 0.25), alpha: how.alpha, late: how.late };
     R.runs.forEach(function (r) {
       var e = R.eave[r.side], zE = z - e * k, across = r.side === "n" || r.side === "s";
-      var out = r.side === "n" ? -1 : r.side === "s" ? 1 : r.side === "w" ? -1 : 1;
+      var out = r.side === "n" || r.side === "w" ? -1 : 1;
       var line = r.side === "n" ? R.y0 : r.side === "s" ? R.y1 : r.side === "w" ? R.x0 : R.x1;
       // carried round the corner where the eave on the next side is open too
       var lo = r.a, hi = r.b, lo0 = across ? R.x0 : R.y0, hi0 = across ? R.x1 : R.y1;
       var before = across ? R.eave.w : R.eave.n, after = across ? R.eave.e : R.eave.s;
-      if (Math.abs(lo - lo0) < 1) { lo -= before; }
-      if (Math.abs(hi - hi0) < 1) { hi += after; }
-      var o0 = line + out * e, o1 = line + out * (e + gw);
-      var base = across ? [[lo, o0], [hi, o0], [hi, o1], [lo, o1]] : [[o0, lo], [o1, lo], [o1, hi], [o0, hi]];
-      v3Prism(faces, base, zE - gh, zE, look);
-      // downpipes: at each end of a gutter along the front or the back, and
-      // every 12 m or so between; down the wall, a turn out at the foot
-      if (!across && (Math.abs(r.a - lo0) < 1 || Math.abs(r.b - hi0) < 1)) { return; }
-      var ends = [lo + Math.min(0.3 * P, (hi - lo) / 2), hi - Math.min(0.3 * P, (hi - lo) / 2)];
-      var many = Math.floor((hi - lo) / (12 * P));
-      for (var m = 1; m <= many; m++) { ends.push(lo + (hi - lo) * m / (many + 1)); }
+      var atLo = Math.abs(lo - lo0) < 1, atHi = Math.abs(hi - hi0) < 1;
+      if (atLo) { lo -= before; }
+      if (atHi) { hi += after; }
+      function box(a0, a1, b0, b1, z0, z1, l) {
+        var pts = across ? [[a0, b0], [a1, b0], [a1, b1], [a0, b1]] : [[b0, a0], [b1, a0], [b1, a1], [b0, a1]];
+        v3Prism(faces, pts, z0, z1, l || look);
+      }
+      function span(u, v) { return [Math.min(u, v), Math.max(u, v)]; }
+      var fb = span(line + out * (e - 0.025 * P), line + out * e);           // the fascia, the eave's edge
+      box(lo, hi, fb[0], fb[1], zE - fh, zE + 0.02 * P, board);
+      var gb = span(line + out * e, line + out * (e + gw));                   // the gutter on it
+      box(lo, hi, gb[0], gb[1], zE - gh - 0.02 * P, zE - 0.02 * P);
+      // downpipes: at the corners of the front and the back, and along a long wall
+      var ends = [];
+      if (across) {
+        if (atLo) { ends.push(lo0 + 0.25 * P); }
+        if (atHi) { ends.push(hi0 - 0.25 * P); }
+      }
+      var many = Math.floor((r.b - r.a) / (11 * P));
+      for (var m = 1; m <= many; m++) { ends.push(r.a + (r.b - r.a) * m / (many + 1)); }
       ends.forEach(function (at) {
-        if (spouts.some(function (s) { return Math.abs(s[0] - at) < 0.8 * P && s[1] === r.side; })) { return; }
-        spouts.push([at, r.side]);
-        var wallOut = line + out * 0.07 * P, foot = 0.12 * P;     // down to the ground, from any floor
-        function box(a0, a1, b0, b1, z0, z1) {
-          var pts = across ? [[a0, b0], [a1, b0], [a1, b1], [a0, b1]] : [[b0, a0], [b1, a0], [b1, a1], [b0, a1]];
-          v3Prism(faces, pts, z0, z1, look);
-        }
-        var p0 = wallOut - pipe, p1 = wallOut + pipe;
-        box(at - pipe, at + pipe, Math.min(p0, p1), Math.max(p0, p1), foot, zE - gh);     // down the wall
-        var g0 = wallOut, g1 = line + out * (e + gw / 2);
-        box(at - pipe * 0.8, at + pipe * 0.8, Math.min(g0, g1), Math.max(g0, g1), zE - gh - pipe * 1.6, zE - gh);   // out to the gutter
-        var s0 = wallOut, s1 = wallOut + out * 0.35 * P;
-        box(at - pipe, at + pipe, Math.min(s0, s1), Math.max(s0, s1), foot - 0.02 * P, foot + pipe * 1.4);   // the turn out at the foot
-        var b0 = wallOut + out * 0.25 * P, b1 = wallOut + out * 0.85 * P;
-        box(at - 0.15 * P, at + 0.15 * P, Math.min(b0, b1), Math.max(b0, b1), 0, 0.03 * P);   // the splash block
+        var wallOut = line + out * 0.06 * P;
+        var gx = across ? at : wallOut, gy = across ? wallOut : at;
+        if (houseSpouts.some(function (s) { return Math.hypot(s[0] - gx, s[1] - gy) < 1.2 * P; })) { return; }
+        // down to the ground, unless what is under it is a roof lower down
+        var fx = across ? at : line + out * 0.3 * P, fy = across ? line + out * 0.3 * P : at;
+        if (houseBuilt(houseFloorsNow, fx, fy, 0)) { return; }
+        houseSpouts.push([gx, gy]);
+        var foot = 0.1 * P, p = span(wallOut - pipe, wallOut + pipe);
+        box(at - pipe, at + pipe, p[0], p[1], foot + pipe * 2, zE - gh - pipe * 2);                         // down the wall
+        var g = span(wallOut, line + out * (e + gw / 2));
+        box(at - pipe * 0.9, at + pipe * 0.9, g[0], g[1], zE - gh - pipe * 2, zE - gh);                     // up into the gutter
+        var t = span(wallOut, wallOut + out * 0.3 * P);
+        box(at - pipe, at + pipe, t[0], t[1], foot, foot + pipe * 2);                                       // the turn out at the foot
+        var sb = span(wallOut + out * 0.22 * P, wallOut + out * 0.8 * P);
+        box(at - 0.14 * P, at + 0.14 * P, sb[0], sb[1], 0, 0.03 * P, board);                               // the splash block
       });
     });
   }
   if (typeof roofFaces === "function") {
     var roofFacesBare = roofFaces;
     roofFaces = function (faces, R, lift, how) {
-      var out = roofFacesBare.apply(this, arguments);
+      // a roof in one piece without the edges of the slopes the rest hide
+      // (they were drawn across it, stray lines over the top)
+      if (R.k && how) { how = Object.assign({}, how, { bare: true }); }
+      var out = roofFacesBare.call(this, faces, R, lift, how);
       try { gutterFaces(faces, R, lift, how || {}); } catch (e) { /* the roof without them */ }
       return out;
     };
@@ -444,6 +546,7 @@
   if (typeof v3Build === "function") {
     var v3BuildHouse = v3Build;
     v3Build = function () {
+      houseSpouts = [];                  // a downpipe a corner, counted afresh each picture
       var model = v3BuildHouse.apply(this, arguments);
       houseLightsNow = [];
       if (!V3 || V3.scene === "space" || !tieHomeLike()) { landCard(null); return model; }
@@ -617,6 +720,103 @@
     return said + " " + (houseOpt("gutters") ? TXT.wx_gutters : TXT.wx_no_gutters);
   }
 
+  // ---- the view's bar, put together -------------------------------------------------------------
+  // (2026-10-01: "the UI of those buttons on the top looks rushed and not
+  // put together")  The view's buttons in groups -- walking through; how it
+  // is looked at; what is shown; the time, the materials and the settings;
+  // what is done -- each with a line picture of what it does, the words
+  // beside it where there is room and under the pointer where there is not;
+  // and the hint off the bar, in a corner of the picture.
+  var HOUSE_ICONS = {
+    run: '<path d="M7 4.6v10.8l8.4-5.4z"/>',
+    walk: '<circle cx="11" cy="3.8" r="1.6"/><path d="M9.6 7.2 7 9.6l1 3.4M9.6 7.2l2.6 1.8 2.4.2M9.6 7.2l-.4 5.2 2.6 2.6.6 3.4M9.2 12.4 7.4 15.8l-2 1.8"/>',
+    above: '<path d="M2.5 10s2.8-5 7.5-5 7.5 5 7.5 5-2.8 5-7.5 5-7.5-5-7.5-5z"/><circle cx="10" cy="10" r="2.3"/>',
+    flat: '<rect x="3.5" y="3.5" width="13" height="13" rx="1.5"/><path d="M3.5 10.5h7m0-7v13M10.5 13h6"/>',
+    cube: '<path d="M10 2.6 16.6 6.3v7.4L10 17.4 3.4 13.7V6.3z"/><path d="M3.4 6.3 10 10l6.6-3.7M10 10v7.4"/>',
+    roof: '<path d="M2.6 10.4 10 3.6l7.4 6.8"/><path d="M5 8.6v7.8h10V8.6"/><path d="M8.4 16.4v-4h3.2v4"/>',
+    labels: '<path d="M3.5 4.5h7.2l5.8 5.5-5.8 5.5H3.5z"/><circle cx="7" cy="10" r="1.2"/>',
+    low: '<path d="M3 16.5h14M3 12.5h14M3 8.5h14M3 8.5v8M17 8.5v8M7.6 8.5v4M12.4 8.5v4M10 12.5v4M5.3 12.5v4M14.7 12.5v4"/>',
+    level: '<path d="M3 13.8 10 17l7-3.2"/><path d="M3 10.4 10 13.6l7-3.2"/><path d="M10 3.4 17 6.8 10 10 3 6.8z"/>',
+    fit: '<path d="M7.5 3.5h-4v4M12.5 3.5h4v4M7.5 16.5h-4v-4M12.5 16.5h4v-4"/>',
+    advice: '<path d="M7.2 12.6c-1.4-1-2.2-2.5-2.2-4.2a5 5 0 0 1 10 0c0 1.7-.8 3.2-2.2 4.2v1.8H7.2z"/><path d="M7.6 16.6h4.8"/>',
+    day: '<circle cx="10" cy="10" r="3.4"/><path d="M10 2.6v2M10 15.4v2M2.6 10h2M15.4 10h2M4.8 4.8l1.4 1.4M13.8 13.8l1.4 1.4M4.8 15.2l1.4-1.4M13.8 6.2l1.4-1.4"/>',
+    evening: '<path d="M3 14.6h14M5.6 14.6a4.4 4.4 0 0 1 8.8 0"/><path d="M10 5.4v2.2M4.6 8.4l1.4 1.2M15.4 8.4 14 9.6M6.4 17.4h7.2"/>',
+    night: '<path d="M15.6 12.4A6.2 6.2 0 0 1 7.6 4.4a6.2 6.2 0 1 0 8 8z"/>',
+    save: '<path d="M3 6.6h3l1.4-2h5.2l1.4 2h3v9H3z"/><circle cx="10" cy="11" r="2.8"/>',
+    mats: '<path d="M10 3a7 7 0 1 0 0 14c1.2 0 1.6-.8 1.2-1.6-.6-1.2.2-2.2 1.4-2.2h1.6A2.8 2.8 0 0 0 17 10.4 7.2 7.2 0 0 0 10 3z"/><circle cx="6.6" cy="9" r="1"/><circle cx="9.4" cy="6.2" r="1"/><circle cx="13" cy="7.4" r="1"/>',
+    set: '<path d="M4 5.5h7M14 5.5h2M4 10h2M9 10h7M4 14.5h7M14 14.5h2"/><circle cx="12.5" cy="5.5" r="1.5"/><circle cx="7.5" cy="10" r="1.5"/><circle cx="12.5" cy="14.5" r="1.5"/>',
+    gutter: '<path d="M2.6 8.6 10 3.4l7.4 5.2"/><path d="M2.4 9.4h15.2v1.8H2.4zM15.4 11.2v5.4h1.8"/>',
+    lantern: '<path d="M7 6h6v8H7zM6 6h8M8.4 6 10 3.4 11.6 6M8 16h4"/><path d="M10 8.4v3.2"/>',
+    street: '<path d="M6 3.4 3.4 16.6M14 3.4l2.6 13.2M10 4.4v2M10 9v2M10 13.6v2"/>',
+    land: '<path d="M3.4 6.4 10 3.4l6.6 3v9.2L10 18.6 3.4 15.6z"/><path d="M6.6 9.4v4M13.4 9.4v4"/>',
+    tree: '<path d="M10 17v-4.4"/><path d="M10 2.8 5 9.4h2.6L4.4 13.4h11.2l-3.2-4H15z"/>',
+    drop: '<path d="M10 3.2s4.6 5.2 4.6 8.4a4.6 4.6 0 0 1-9.2 0C5.4 8.4 10 3.2 10 3.2z"/>',
+    wx_clear: '<circle cx="10" cy="10" r="3.6"/><path d="M10 2.4v2.2M10 15.4v2.2M2.4 10h2.2M15.4 10h2.2M4.6 4.6l1.6 1.6M13.8 13.8l1.6 1.6M4.6 15.4l1.6-1.6M13.8 6.2l1.6-1.6"/>',
+    wx_cloudy: '<path d="M6 15.4h8.4a3.2 3.2 0 0 0 .4-6.4 4.6 4.6 0 0 0-8.8-.8A3.6 3.6 0 0 0 6 15.4z"/>',
+    wx_rain: '<path d="M6 12.4h8.4a3 3 0 0 0 .4-6 4.4 4.4 0 0 0-8.4-.8A3.4 3.4 0 0 0 6 12.4z"/><path d="M7 14.6l-.8 2M10.4 14.6l-.8 2M13.8 14.6l-.8 2"/>',
+    wx_storm: '<path d="M6 11.6h8.4a3 3 0 0 0 .4-6 4.4 4.4 0 0 0-8.4-.8A3.4 3.4 0 0 0 6 11.6z"/><path d="M10.6 11.6 8.6 14.8h2.6l-1.6 3"/>',
+    wx_snow: '<path d="M10 2.8v14.4M3.8 6.4l12.4 7.2M3.8 13.6l12.4-7.2"/><path d="M8.4 3.8 10 5.2l1.6-1.4M8.4 16.2 10 14.8l1.6 1.4"/>',
+    wx_fog: '<path d="M3.4 7h13.2M5 10h10M3.4 13h13.2M6.4 16h7.2"/>',
+    bed: '<path d="M2.6 15.6V5.4M2.6 12.4h14.8v3.2M2.6 10h14.8v2.4M5 10V8.2a1.4 1.4 0 0 1 1.4-1.4h2.4A1.4 1.4 0 0 1 10.2 8.2V10"/>',
+    bath: '<path d="M2.6 10h14.8v2.2a3.6 3.6 0 0 1-3.6 3.6H6.2a3.6 3.6 0 0 1-3.6-3.6zM4.4 10V5a1.8 1.8 0 0 1 3.4-.8M5.6 15.8l-.8 1.6M14.4 15.8l.8 1.6"/>',
+    floor1: '<path d="M2.6 10.4 10 4.4l7.4 6M4.6 9v7.4h10.8V9M8.6 16.4v-3.6h2.8v3.6"/>',
+    floor2: '<path d="M3 8.2 10 2.8l7 5.4M4.6 7v9.4h10.8V7M4.6 11.4h10.8M8.6 16.4v-3h2.8v3M7 9.2h1.6M11.4 9.2H13"/>',
+    basement: '<path d="M2.6 7.4 10 2.6l7.4 4.8M4.6 6.2v5.6h10.8V6.2M2 11.8h16"/><path d="M5.6 13.6h8.8v3.8H5.6z" stroke-dasharray="1.6 1.4"/>',
+    kitchen: '<path d="M3.4 8.6h13.2v1.8a5 5 0 0 1-5 5H8.4a5 5 0 0 1-5-5zM10 8.6V5.4M7 6.2l-.6-2M13 6.2l.6-2M2.4 8.6h1M16.6 8.6h1"/>',
+    office: '<path d="M2.6 9h14.8M4.4 9v7.4M15.6 9v7.4M6 9V3.6h8V9M8.6 12h2.8"/>',
+    laundry: '<rect x="4" y="3" width="12" height="14" rx="1.6"/><circle cx="10" cy="11" r="3.4"/><path d="M6.4 5.6h1.4M10 5.6h3.6"/>',
+    car: '<path d="M3.4 12.4 5 7.6a1.8 1.8 0 0 1 1.7-1.2h6.6a1.8 1.8 0 0 1 1.7 1.2l1.6 4.8v3.4H3.4zM3.4 12.4h13.2"/><circle cx="6.4" cy="15.2" r="1.2"/><circle cx="13.6" cy="15.2" r="1.2"/>',
+    closet: '<path d="M10 5.4a1.6 1.6 0 1 0-1.6-1.6M10 5.4v1.4L3 12.2a.9.9 0 0 0 .6 1.6h12.8a.9.9 0 0 0 .6-1.6L10 6.8"/>',
+    spread: '<rect x="2.6" y="3" width="5.4" height="4.6" rx=".8"/><rect x="12" y="3" width="5.4" height="4.6" rx=".8"/><rect x="7.2" y="12.4" width="5.6" height="4.6" rx=".8"/><path d="M8 5.3h4M10 7.6v4.8"/>',
+    shuffle: '<path d="M3 6h3.2c3.6 0 4 8 7.6 8H17M3 14h3.2c1.4 0 2.2-1.2 2.9-2.6M11 8.6c.7-1.4 1.5-2.6 2.8-2.6H17M14.8 3.8 17 6l-2.2 2.2M14.8 11.8 17 14l-2.2 2.2"/>'
+  };
+  function houseIcon(name) {
+    return '<svg class="v3-ico" viewBox="0 0 20 20" aria-hidden="true">' + (HOUSE_ICONS[name] || HOUSE_ICONS.cube) + "</svg>";
+  }
+  var V3_GROUPS = [["run"], ["mode", "flat"], ["roof", "labels", "low", "level"], ["time", "mats", "set"], ["advice", "fit", "save"]];
+  function v3DressBar() {
+    if (!V3 || !V3.box) { return; }
+    var bar = el(".v3-bar", V3.box);
+    if (!bar) { return; }
+    var shut = el('[data-v3="shut"]', bar);
+    if (!bar.dataset.dressed) {
+      bar.dataset.dressed = "1";
+      bar.classList.add("v3-bar-dressed");
+      V3_GROUPS.forEach(function (keys, i) {
+        var g = document.createElement("div");
+        g.className = "v3-group";
+        g.dataset.group = String(i);
+        bar.insertBefore(g, shut);
+      });
+      var hint = el(".v3-hint", bar);
+      if (hint) { hint.classList.add("v3-hint-foot"); V3.box.appendChild(hint); }
+    }
+    // each button in its group, in order -- those put in the bar since too
+    V3_GROUPS.forEach(function (keys, i) {
+      var g = el('.v3-group[data-group="' + i + '"]', bar);
+      var late = keys.some(function (k) { var b = el('[data-v3="' + k + '"]', bar); return b && b.parentNode !== g; });
+      if (late) { keys.forEach(function (k) { var b = el('[data-v3="' + k + '"]', bar); if (b) { g.appendChild(b); } }); }
+    });
+    // anything else put in the bar (by other parts): with the tools
+    all(".v3-bar > button", V3.box).forEach(function (b) {
+      if (b !== shut) { el('.v3-group[data-group="3"]', bar).appendChild(b); }
+    });
+    all("[data-v3]", bar).forEach(function (b) {
+      var key = b.dataset.v3;
+      if (key === "shut") { return; }
+      var name = key === "mode" ? (V3.mode === "walk" ? "above" : "walk")
+               : key === "flat" ? (V3.flat ? "cube" : "flat")
+               : key === "time" ? (["day", "evening", "night"][V3.todAim || 0] || "day") : key;
+      var lbl = el(".v3-lbl", b), text = lbl ? lbl.textContent : b.textContent;
+      if (lbl && b.dataset.dressedAs === name + "|" + text) { return; }
+      b.innerHTML = houseIcon(name) + '<span class="v3-lbl"></span>';
+      b.lastChild.textContent = text;
+      b.dataset.dressedAs = name + "|" + text;
+      if (!b.title) { b.title = text; }
+      if (!b.getAttribute("aria-label")) { b.setAttribute("aria-label", text); }
+    });
+  }
+
   // ---- Settings, over the view ------------------------------------------------------------------
   function houseSetButton() {
     if (!V3 || !V3.box || V3.scene === "space") { return; }
@@ -629,7 +829,7 @@
     btn.setAttribute("aria-expanded", "false");
     btn.setAttribute("aria-haspopup", "dialog");
     var mats = el('[data-v3="mats"]', bar);
-    bar.insertBefore(btn, mats ? mats.nextSibling : el(".v3-hint", bar));
+    if (mats) { mats.parentNode.insertBefore(btn, mats.nextSibling); } else { bar.insertBefore(btn, el('[data-v3="shut"]', bar)); }
     var sheet = document.createElement("div");
     sheet.className = "v3-mats v3-set";
     sheet.hidden = true;
@@ -644,48 +844,118 @@
       h.textContent = text;
       sheet.appendChild(h);
     }
-    function flip(key, label, on, set) {
-      var row = document.createElement("label");
-      row.className = "switch wide";
-      row.innerHTML = '<span></span><input type="checkbox">';
-      row.firstChild.textContent = label;
-      var box = row.lastChild;
-      box.checked = on;
-      box.onchange = function () { set(box.checked); draw(); };
-      sheet.appendChild(row);
+    // (2026-10-01: "the menus just have a ton of toggles", "the weather menu
+    // also looks really bad")  Each setting a tile -- its picture and its
+    // name, lit while it is on -- and the weather six pictures to pick from,
+    // what it does to the house said under them.
+    function tiles(list) {
+      var grid = document.createElement("div");
+      grid.className = "hs-tiles";
+      list.forEach(function (t) {
+        var b = document.createElement("button");
+        b.type = "button";
+        b.className = "hs-tile";
+        b.setAttribute("aria-pressed", t.on ? "true" : "false");
+        b.innerHTML = houseIcon(t.icon) + '<span class="hs-tile-name"></span><span class="hs-tile-tick" aria-hidden="true">' +
+                      '<svg viewBox="0 0 16 16"><path d="M3.5 8.4 6.6 11.3 12.5 4.9"/></svg></span>';
+        b.querySelector(".hs-tile-name").textContent = t.label;
+        if (t.off) { b.disabled = true; b.title = t.off; }
+        b.onclick = function () { t.set(!t.on); draw(); };
+        grid.appendChild(b);
+      });
+      sheet.appendChild(grid);
+    }
+    // (2026-10-02, the land, the lamps, the neighbors and a house's style
+    // added: one long sheet of them was too much) In four tabs -- the house,
+    // the land, the street, the weather -- the one last looked at kept.
+    var HS_TABS = ["house", "land", "street", "weather"];
+    function tabNow() {
+      try { var t = localStorage.getItem("flowchart-3d-settab"); if (HS_TABS.indexOf(t) >= 0) { return t; } } catch (e) { /* none kept */ }
+      return "house";
     }
     function draw() {
+      var keepScroll = sheet.scrollTop;
       sheet.innerHTML = "";
-      head(TXT.hs_house);
-      flip("roof", TXT.st_roof_one, houseOpt("roof") === "one", function (v) { houseSetOpt("roof", v ? "one" : ""); });
-      flip("gutters", TXT.hs_gutters, !!houseOpt("gutters"), function (v) { houseSetOpt("gutters", v); });
-      flip("porch", TXT.hs_porch, !!houseOpt("porch"), function (v) { houseSetOpt("porch", v); });
-      head(TXT.hs_outside);
-      flip("street", TXT.hs_street, !!houseOpt("street"), function (v) { houseSetOpt("street", v); });
-      flip("land", TXT.hs_land, !!houseOpt("land"), function (v) { houseSetOpt("land", v); });
-      flip("trees", TXT.hs_trees, !!houseOpt("trees"), function (v) { houseSetOpt("trees", v); });
+      var tab = tabNow(), strip = document.createElement("div");
+      strip.className = "hs-tabs";
+      strip.setAttribute("role", "tablist");
+      HS_TABS.forEach(function (t) {
+        var b = document.createElement("button");
+        b.type = "button";
+        b.className = "hs-tab";
+        b.setAttribute("role", "tab");
+        b.setAttribute("aria-selected", t === tab ? "true" : "false");
+        b.textContent = TXT["hs_tab_" + t];
+        b.onclick = function () {
+          try { localStorage.setItem("flowchart-3d-settab", t); } catch (e) { /* this visit only */ }
+          draw();
+          sheet.scrollTop = 0;
+        };
+        strip.appendChild(b);
+      });
+      sheet.appendChild(strip);
+      if (tab === "house") {
+        if (typeof styleSection === "function") { styleSection(sheet, head, draw); }
+        head(TXT.hs_house);
+        tiles([
+          { icon: "roof", label: TXT.st_roof_one, on: houseOpt("roof") === "one", set: function (v) { houseSetOpt("roof", v ? "one" : ""); } },
+          { icon: "gutter", label: TXT.hs_gutters, on: !!houseOpt("gutters"), set: function (v) { houseSetOpt("gutters", v); } },
+          { icon: "lantern", label: TXT.hs_porch, on: !!houseOpt("porch"), set: function (v) { houseSetOpt("porch", v); } }
+        ]);
+        if (typeof insideSection === "function") { insideSection(sheet, head, tiles, draw); }
+        sheet.scrollTop = keepScroll;
+        return;
+      }
+      if (tab === "land") {
+        head(TXT.ws_head);
+        worldPicker(sheet, WORLD_SCAPES, worldScape(), "ws_", function (k) { houseSetOpt("scape", k); draw(); });
+        head(TXT.hs_outside);
+        tiles([
+          { icon: "land", label: TXT.hs_land, on: !!houseOpt("land"), set: function (v) { houseSetOpt("land", v); } },
+          { icon: "tree", label: TXT.hs_trees, on: !!houseOpt("trees"), set: function (v) { houseSetOpt("trees", v); } },
+          { icon: "bound", label: TXT.hs_bound, on: !!houseOpt("bound"), set: function (v) { houseSetOpt("bound", v); } }
+        ]);
+        sheet.scrollTop = keepScroll;
+        return;
+      }
+      if (tab === "street") {
+        var noStreet = houseOpt("street") ? "" : TXT.hs_needs_street;
+        head(TXT.hs_outside);
+        tiles([
+          { icon: "street", label: TXT.hs_street, on: !!houseOpt("street"), set: function (v) { houseSetOpt("street", v); } },
+          { icon: "hood", label: TXT.hs_hood, on: !!houseOpt("hood"), off: noStreet, set: function (v) { houseSetOpt("hood", v); } },
+          { icon: "folk", label: TXT.hs_folk, on: !!houseOpt("folk"), off: noStreet, set: function (v) { houseSetOpt("folk", v); } }
+        ]);
+        head(TXT.wl_head);
+        var lamps = worldPicker(sheet, WORLD_LAMPS, worldLampKind(), "wl_", function (k) { houseSetOpt("lamps", k); draw(); });
+        if (noStreet) { all("button", lamps).forEach(function (b) { b.disabled = true; b.title = noStreet; }); }
+        sheet.scrollTop = keepScroll;
+        return;
+      }
       head(TXT.hs_weather);
-      var seg = document.createElement("div");
-      seg.className = "seg v3-weather-seg";
-      seg.setAttribute("role", "radiogroup");
-      seg.setAttribute("aria-label", TXT.hs_weather);
+      var grid = document.createElement("div");
+      grid.className = "hs-weather";
+      grid.setAttribute("role", "radiogroup");
+      grid.setAttribute("aria-label", TXT.hs_weather);
       WEATHERS.forEach(function (w) {
         var b = document.createElement("button");
         b.type = "button";
         var on = weatherNow() === w;
-        b.className = "seg-btn" + (on ? " on" : "");
+        b.className = "hs-wx" + (on ? " on" : "");
         b.setAttribute("role", "radio");
         b.setAttribute("aria-checked", on ? "true" : "false");
-        b.textContent = TXT["wx_" + w];
+        b.innerHTML = houseIcon("wx_" + w) + "<span></span>";
+        b.lastChild.textContent = TXT["wx_" + w];
         b.onclick = function () { weatherSet(w); draw(); };
-        seg.appendChild(b);
+        grid.appendChild(b);
       });
-      sheet.appendChild(seg);
+      sheet.appendChild(grid);
       var says = weatherSays();
       if (says) {
         var p = document.createElement("p");
-        p.className = "v3-set-says";
-        p.textContent = says;
+        p.className = "hs-note";
+        p.innerHTML = houseIcon(weatherNow() === "snow" ? "wx_snow" : "drop") + "<span></span>";
+        p.lastChild.textContent = says;
         sheet.appendChild(p);
       }
     }
@@ -718,14 +988,14 @@
       var was = V3;
       var out = v3OpenHouse.apply(this, arguments);
       try {
-        if (V3 && V3 !== was) { houseSetButton(); houseSetWords(); weatherRun(); }
+        if (V3 && V3 !== was) { houseSetButton(); houseSetWords(); weatherRun(); v3DressBar(); }
       } catch (e) { /* the view works without them */ }
       return out;
     };
     var v3WordsHouse = v3Words;
     v3Words = function () {
       var out = v3WordsHouse.apply(this, arguments);
-      try { houseSetButton(); houseSetWords(); } catch (e) { /* fine */ }
+      try { houseSetButton(); houseSetWords(); v3DressBar(); } catch (e) { /* fine */ }
       return out;
     };
   }
@@ -766,6 +1036,7 @@
     var made = { id: hand.next++, kind: "i_floor", text: name, x: 0, y: 0, w: 140, h: 46 };
     measure(made);
     made.text = name; made.own = true;
+    if (ground.bldg !== undefined) { made.bldg = ground.bldg; }   // this house's, not another's (38-walk.js)
     made.w = ground.w; made.h = ground.h;
     made.x = Math.round(right + 240 + made.w / 2); made.y = ground.y;
     hand.nodes.unshift(made);

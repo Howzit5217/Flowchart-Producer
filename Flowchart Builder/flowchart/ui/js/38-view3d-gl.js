@@ -143,7 +143,7 @@
     "  vec3 n = normalize(vNorm);",
     "  vec3 toEye = uOrtho > 0.5 ? uToward : normalize(uEye - vPos);",
     "  if (uBill < 0.5 && dot(n, toEye) < 0.0) { n = -n; }",
-    "  vec3 base = vColor.rgb; float a = vColor.a;",
+    "  vec3 base = vColor.rgb; float a = vColor.a; vec3 emit = vec3(0.0);",
     "  vec2 m = vPos.xy / uPx; float h = vPos.z / uPx;",
     "  float along = dot(m, normalize(vec2(-n.y, n.x) + vec2(0.0001, 0.0)));",
     "  if (k > 0.5 && k < 1.5) {",                     // shingles, course over course, joints staggered
@@ -316,6 +316,43 @@
     "    vec2 sp = vec2(along, h / 0.55), fs = fract(sp), cg = fract(sp * vec2(6.0, 4.0));",
     "    float frame = smoothstep(0.0, 0.03, fs.x) * smoothstep(1.0, 0.97, fs.x) * smoothstep(0.0, 0.05, fs.y) * smoothstep(1.0, 0.95, fs.y);",
     "    base = mix(vec3(0.78, 0.8, 0.82), base * (0.85 + 0.15 * smoothstep(0.0, 0.06, min(cg.x, cg.y))), frame);",
+    // the land round about (39-world.js), and what is built on it
+    "  } else if (k > 70.5 && k < 71.5) {",            // sand: fine grains, and ripples the wind left
+    "    float rip = sin(dot(m, vec2(0.8, 0.6)) * 6.0 + noise(m * 0.5) * 5.0);",
+    "    base *= 0.95 + 0.03 * rip * n.z + 0.05 * noise(m * 17.0) + 0.05 * noise(m * 0.21);",
+    "  } else if (k > 71.5 && k < 72.5) {",            // snow lying: soft drifts, a glint here and there
+    "    base *= 0.95 + 0.04 * noise(m * 0.35) + 0.02 * noise(m * 3.0);",
+    "    emit += vec3(0.5) * step(0.993, hash(floor(m * 30.0))) * max(dot(n, uSunDir), 0.0) * (1.0 - uNight);",
+    "  } else if (k > 72.5 && k < 73.5) {",            // rock: in layers, cracked, darker in the cracks
+    "    float layer = noise(vec2(along * 0.6, h * 3.0)) * 0.55 + noise(m * 2.3 + h) * 0.45;",
+    "    base *= 0.72 + 0.4 * layer;",
+    "  } else if (k > 73.5 && k < 74.5) {",            // a mountain far off: forest low down, then rock and scree, snow on top
+    "    float rough = noise(m * 0.04) * 0.5 + noise(m * 0.13) * 0.3 + noise(vec2(along * 0.09, h * 0.35)) * 0.2;",
+    "    base *= 0.72 + 0.4 * rough;",
+    "    float wood = 1.0 - smoothstep(26.0, 44.0, h + 14.0 * noise(m * 0.05));",
+    "    base = mix(base, vec3(0.2, 0.31, 0.22) * (0.8 + 0.4 * noise(m * 0.2)), wood * 0.85);",
+    "    float cap = smoothstep(72.0, 88.0, h + 22.0 * noise(m * 0.03) - 18.0 * (1.0 - n.z));",
+    "    base = mix(base, vec3(0.93, 0.95, 0.98) * (0.9 + 0.1 * noise(m * 0.3)), cap);",
+    "  } else if (k > 74.5 && k < 75.5) {",            // half-timbered: plaster between dark oak posts, rails and braces
+    "    vec2 cg2 = vec2(along / 1.1, h / 1.35); vec2 cf = fract(cg2); vec2 ci = floor(cg2);",
+    "    float flip = step(0.5, hash(ci)); float dg = abs(mix(cf.x, 1.0 - cf.x, flip) - cf.y);",
+    "    float wood = max(max(step(cf.x, 0.11), step(cf.y, 0.08)), step(dg, 0.07) * step(0.35, hash(ci + 7.0)));",
+    "    base = mix(base * (0.95 + 0.05 * noise(m * 4.0)), vec3(0.21, 0.15, 0.11) * (0.9 + 0.2 * noise(m * 9.0)), wood);",
+    "  } else if (k > 75.5 && k < 76.5) {",            // a tower's windows, floor over floor -- some lit after dark
+    "    vec2 tg = vec2(along / 2.6, h / 3.3); vec2 tf = fract(tg);",
+    "    float win = step(0.16, tf.x) * step(tf.x, 0.84) * step(0.22, tf.y) * step(tf.y, 0.86) * (1.0 - step(0.9, n.z));",
+    "    float on = step(0.52, hash(floor(tg) + floor(vPos.xy / 211.0)));",
+    "    base = mix(base, vec3(0.2, 0.25, 0.31) + 0.12 * vec3(max(dot(reflect(-toEye, n), uSunDir), 0.0)), win * 0.85);",
+    "    emit += vec3(1.0, 0.84, 0.55) * win * on * uNight * 0.9;",
+    "  } else if (k > 76.5 && k < 77.5) {",            // a window of a house across the way: the sky in it, a lamp behind it at night
+    "    float lamp = step(0.4, hash(floor(vPos.xy / 37.0) + floor(h)));",
+    "    base = mix(base, vec3(0.62, 0.72, 0.82), pow(1.0 - abs(dot(n, toEye)), 2.0) * 0.6);",
+    "    emit += vec3(1.0, 0.8, 0.5) * lamp * uNight * 0.85;",
+    "  }",
+    // far off, a fine pattern -- brick, shingles, boards -- shimmered: it
+    // fades to its own color as it goes (walking round, 39-world.js)
+    "  if (uOrtho < 0.5 && ((k > 0.5 && k < 1.5) || (k > 12.5 && k < 13.5) || (k > 39.5 && k < 46.5) || (k > 53.5 && k < 54.5) || (k > 63.5 && k < 66.5))) {",
+    "    base = mix(base, vColor.rgb * 0.9, smoothstep(24.0, 75.0, length(uEye - vPos) / uPx) * 0.85);",
     "  }",
     "  base = mix(vColor.rgb, base, uDress);",          // flat on the paper, plain as it is drawn
     "  if (uUseTex > 0.5 && uBill < 0.5) {",
@@ -338,6 +375,7 @@
     "      lightCol = vec3(0.75, 0.7, 0.6) / (1.0 + ld * ld * 0.05);",
     // after dark the daylight goes from the room, and the lamp is all there is
     "      amb *= mix(1.0, 0.68, uNight); amb += vec3(0.1, 0.08, 0.04) * uNight * max(dot(n, toLight), 0.0);",
+    "      if (uLamp.z < -1.0e5) { amb *= mix(1.0, 0.3, uNight); }",          // its light switched off: dark, after dark
     "      lightCol *= 1.0 + 0.3 * uNight;",
     "    }",
     "    col = mix(base, base * (amb + uSunCol * sun), uDress);",
@@ -383,6 +421,16 @@
     "      vec3 r = reflect(-toEye, n); col += vec3(0.25) * pow(max(dot(r, uSunDir), 0.0), 60.0);",
     "    }",
     "  }",
+    // glass: the sky in it, more of it the flatter it is looked at, the
+    // sun caught in it -- and through it, what is behind it
+    "  if (k > 69.5 && k < 70.5) {",
+    "    float fr = pow(1.0 - abs(dot(n, toEye)), 3.0);",
+    "    vec3 sky = mix(uFogCol, vec3(0.78, 0.86, 0.95), 0.35) * (1.0 - 0.75 * uNight);",
+    "    col = mix(base * 0.55, sky, 0.35 + 0.5 * fr);",
+    "    col += vec3(1.0, 0.97, 0.9) * pow(max(dot(reflect(-toEye, n), uSunDir), 0.0), 60.0) * 0.8 * (1.0 - uNight) * uDress;",
+    "    a = clamp(0.28 + 0.55 * fr, 0.0, 0.9);",
+    "  }",
+    "  col += emit * uDress;",                         // what gives its own light: a lit window far off, a glint of snow
     "  if (uGlow > 0.0) { col = mix(col, vec3(1.0, 0.8, 0.5), uGlow); a = max(a, 0.9 * uGlow); }",   // the lights on inside
     "  float d = uOrtho > 0.5 ? 0.0 : length(uEye - vPos);",
     "  float fog = clamp((d - uFogNear) / (uFogFar - uFogNear), 0.0, 1.0);",
@@ -609,14 +657,24 @@
   // A model's mesh (38-models.js), in its own numbers, put where the piece
   // stands -- and kept so, while it stays there: walking round, the house
   // is drawn sixty times a second and its furniture does not move.
+  var gl3MeshKept = new WeakMap();
   function gl3Mesh(B, f) {
     var how = f.how, m = f.mesh, xf = m.xf || [0, 0, 1, 0, 0];
     var ox = f.pts[0][0] - m.base[0], oy = f.pts[0][1] - m.base[1], oz = f.pts[0][2] - m.base[2];
     var batch = how.glass ? B.get("glass", { blend: true, late: true })
               : how.shade ? B.get("shade", { blend: true, late: true, noDepthWrite: true }) : B.get("models", {});
-    var key = xf.join(",") + "|" + ox + "," + oy + "," + oz;
+    // (a light switched off, a screen switched on, walking round: 39-inside.js)
+    var lightOff = how.mat === "glow" && f.node && typeof useLightOff === "function" && useLightOff(f.node);
+    var screenOn = how.mat === "screen" && f.node && typeof useOn === "function" && useOn(f.node);
+    var key = xf.join(",") + "|" + ox + "," + oy + "," + oz + (lightOff ? "|off" : "") + (screenOn ? "|on" : "");
+    // (kept by the model's own points, which last from picture to picture -- the
+    // wrapper round them is new each time it is put up, so kept on that, it never was)
+    var kept = gl3MeshKept.get(m.p);
+    if (kept && kept.key === key) { m.made = kept; }
     if (!m.made || m.made.key !== key) {
       var col = gl3Rgb(how.color), pat = how.glass ? 0 : (GL3_MAT[how.mat] || 0), alpha = how.glass ? 0.3 : 1;
+      if (lightOff) { pat = 0; col = gl3Mix(col, [0.42, 0.42, 0.4], 0.55); }
+      if (screenOn) { pat = 31; col = [0.34, 0.5, 0.72]; }     // a picture's blue glow, not a white sheet
       var P = m.p, N = m.n, U = m.uv, A = m.a, c = xf[2], s = xf[3], count = P.length / 3;
       var out = new Float32Array(count * GL3_STRIDE);
       for (var i = 0, o = 0; i < count; i++, o += GL3_STRIDE) {
@@ -627,6 +685,7 @@
         out[o + 10] = U[i * 2]; out[o + 11] = U[i * 2 + 1]; out[o + 12] = pat;
       }
       m.made = { key: key, data: out };
+      gl3MeshKept.set(m.p, m.made);
     }
     (batch.chunks || (batch.chunks = [])).push(m.made.data);
   }
@@ -684,8 +743,10 @@
         if (snowy) { base = gl3Mix(base, SNOW, 0.82 * snowy * Math.max(0, Math.min(1, f.n[2] * 1.4))); }
       }
       else if (f.ground) {
-        pat = PAT.lawn;
-        base = gl3Mix(base, gl3Mix(gl3Mix(base, [0.42, 0.62, 0.3], 0.55), sheetC, 0.15), dress);
+        // a lawn, mown -- or what grows in a garden where the land is sand or snow (39-world.js)
+        var lawn = typeof worldLawn === "function" ? worldLawn() : null;
+        pat = lawn ? lawn.pat : PAT.lawn;
+        base = gl3Mix(base, gl3Mix(gl3Mix(base, lawn ? lawn.color : [0.42, 0.62, 0.3], lawn ? 0.75 : 0.55), sheetC, 0.15), dress);
         if (wet) { base = gl3Mix(base, [0.12, 0.2, 0.1], 0.22 * wet); }
         if (snowy) { base = gl3Mix(base, SNOW, 0.86 * snowy); }
       } else if (how.floor && made && how.room && houseMat(how.room, "floor")) {
@@ -707,7 +768,7 @@
       var batch;
       if (how.glass) {
         batch = B.get("glass", { blend: true, late: true });
-        base = gl3Mix(sheetC, [0.62, 0.78, 0.9], 0.6); a = 0.32;
+        base = gl3Mix(sheetC, [0.5, 0.64, 0.72], 0.75); a = 0.32; pat = 70;
       } else if (seen < 0.999 || how.late) {
         batch = B.get("fading", { blend: true, late: true });
         a = seen;
@@ -729,7 +790,7 @@
       gl3Poly(batch.v, f.pts, f.n, base, a, uvs, pat);
       // its edges, the way a plan draws them -- not round the glass, a
       // picture laid on top, or the lawn
-      if (!how.glass && !how.decal && !f.ground) {
+      if (!how.glass && !how.decal && !f.ground && !how.bare) {
         var line = B.get("lines", { lines: true });
         gl3Lines(line.v, f.pts, edge, (how.floor || how.ceiling ? 0.22 : how.roof ? 0.3 : 0.42) * seen);
       }
@@ -787,13 +848,6 @@
     if (gl3SnowNow) { grass = gl3Mix(grass, [0.93, 0.94, 0.97], 0.88 * gl3SnowNow); }
     else if (typeof houseWet === "function" && houseWet()) { grass = gl3Mix(grass, [0.16, 0.26, 0.12], 0.25); }
     var groundR = walk ? GL3_FAR * 0.9 : radius * 2.3 + 600;
-    // the ground, a wide disc
-    var ring = [];
-    for (var k = 0; k < 64; k++) {
-      var t = k / 64 * Math.PI * 2;
-      ring.push([mid[0] + Math.cos(t) * groundR, mid[1] + Math.sin(t) * groundR, -3]);
-    }
-    gl3Poly(v, ring, [0, 0, 1], grass, 1, null, PAT.grass);
     // which spots are taken: the plot, the house, the road
     var keepOff = [];
     function lotLocal(p) {
@@ -805,6 +859,19 @@
       return [lot.x + lx * Math.cos(a) - ly * Math.sin(a), lot.y + lx * Math.sin(a) + ly * Math.cos(a), z];
     }
     var walkW = 1.6 * FLOOR_PX, roadW = 7 * FLOOR_PX;
+    // what the land is like round about -- grass, sand, snow, the sea --
+    // picked in the view's Settings (39-world.js); or a wide disc of grass
+    var land = { mid: mid, groundR: groundR, grass: grass, sheetC: sheetC, walk: walk, rnd: rnd, keepOff: keepOff,
+                 lot: lot, lotLocal: lot ? lotLocal : null, lotWorld: lot ? lotWorld : null,
+                 hy: lot ? lot.h / 2 : 0, walkW: walkW, roadW: roadW, bounds: [x0, x1, y0, y1], radius: radius };
+    if (!(typeof worldGround === "function" && worldGround(v, land))) {
+      var ring = [];
+      for (var k = 0; k < 64; k++) {
+        var t = k / 64 * Math.PI * 2;
+        ring.push([mid[0] + Math.cos(t) * groundR, mid[1] + Math.sin(t) * groundR, -3]);
+      }
+      gl3Poly(v, ring, [0, 0, 1], grass, 1, null, PAT.grass);
+    }
     if (lot) {
       // the road along the plot's front (its foot edge), and the pavement
       // between the two, as far as can be seen each way
@@ -818,33 +885,46 @@
               [[-reach / FLOOR_PX, -3.5], [reach / FLOOR_PX, -3.5], [reach / FLOOR_PX, 3.5], [-reach / FLOOR_PX, 3.5]], PAT.road);
       keepOff.push(function (p) {
         var q = lotLocal(p);
-        return Math.abs(q[0]) < lot.w / 2 + 60 && q[1] > -lot.h / 2 - 60 && q[1] < hy + walkW + roadW + 90;
+        // the street and its pavement all the way along, not only in front
+        // of the lot (2026-10-01: "trees ... appearing in the middle of the
+        // road or sidewalk"), and the lot itself
+        if (q[1] > hy - 60 && q[1] < hy + walkW + roadW + 90) { return true; }
+        return Math.abs(q[0]) < lot.w / 2 + 60 && q[1] > -lot.h / 2 - 60 && q[1] < hy;
       });
       // street lamps along the kerb, every 18 m: a post, and a lamp that
-      // glows after dark (38-view3d-more.js)
+      // glows after dark (38-view3d-more.js) -- or of the design picked
+      // (39-world.js)
       var post = gl3Mix([0.33, 0.34, 0.36], sheetC, 0.1), lampC = [1.0, 0.93, 0.76], every = 18 * FLOOR_PX;
-      for (var lx = -Math.floor(reach / every) * every + every / 2; lx < reach; lx += every) {
-        var foot = lotWorld(lx, hy + walkW - 0.35 * FLOOR_PX, 0);
-        gl3Prism(v, foot, 0.07 * FLOOR_PX, 0.05 * FLOOR_PX, 0, 4.2 * FLOOR_PX, 6, post, PAT.plain);
-        gl3Prism(v, foot, 0.05 * FLOOR_PX, 0.24 * FLOOR_PX, 4.0 * FLOOR_PX, 4.25 * FLOOR_PX, 8, post, PAT.plain);
-        gl3Prism(v, foot, 0.2 * FLOOR_PX, 0.16 * FLOOR_PX, 3.95 * FLOOR_PX, 4.02 * FLOOR_PX, 8, lampC, 31);
+      if (!(typeof worldLamps === "function" && worldLamps(v, land, reach))) {
+        for (var lx = -Math.floor(reach / every) * every + every / 2; lx < reach; lx += every) {
+          var foot = lotWorld(lx, hy + walkW - 0.35 * FLOOR_PX, 0);
+          gl3Prism(v, foot, 0.07 * FLOOR_PX, 0.05 * FLOOR_PX, 0, 4.2 * FLOOR_PX, 6, post, PAT.plain);
+          gl3Prism(v, foot, 0.05 * FLOOR_PX, 0.24 * FLOOR_PX, 4.0 * FLOOR_PX, 4.25 * FLOOR_PX, 8, post, PAT.plain);
+          gl3Prism(v, foot, 0.2 * FLOOR_PX, 0.16 * FLOOR_PX, 3.95 * FLOOR_PX, 4.02 * FLOOR_PX, 8, lampC, 31);
+        }
       }
       // and joined to the house: paths from its doors, its drive over the pavement
       if (typeof houseStreetBits === "function") { houseStreetBits(v, lot, lotWorld, lotLocal, hy, walkW, sheetC); }
     }
     keepOff.push(function (p) { return p[0] > x0 - 120 && p[0] < x1 + 120 && p[1] > y0 - 120 && p[1] < y1 + 120; });
+    // the houses next door and across the street, if wanted (39-world.js)
+    if (typeof worldHood === "function") { worldHood(v, land); }
     // trees, round about, and a few bushes nearer
     var inner = Math.max(x1 - x0, y1 - y0) / 2 + 200, outer = walk ? radius + 4400 : Math.max(inner + 200, groundR - 160);
     var count = walk ? 70 : Math.round(Math.min(46, 14 + (outer - inner) / 60));
     if (typeof houseOpt === "function" && !houseOpt("trees")) { count = 0; }
-    for (var i = 0, tries = 0; i < count && tries < count * 12; tries++) {
-      var ang = rnd() * Math.PI * 2, far = inner + Math.pow(rnd(), 0.8) * (outer - inner);
-      var at = [mid[0] + Math.cos(ang) * far, mid[1] + Math.sin(ang) * far];
-      if (keepOff.some(function (off) { return off(at); })) { continue; }
-      gl3Tree(v, at, rnd, sheetC, rnd() < 0.3);
-      i++;
+    if (!(typeof worldGrow === "function" && worldGrow(v, land, inner, outer, count))) {
+      for (var i = 0, tries = 0; i < count && tries < count * 12; tries++) {
+        var ang = rnd() * Math.PI * 2, far = inner + Math.pow(rnd(), 0.8) * (outer - inner);
+        var at = [mid[0] + Math.cos(ang) * far, mid[1] + Math.sin(ang) * far];
+        if (keepOff.some(function (off) { return off(at); })) { continue; }
+        gl3Tree(v, at, rnd, sheetC, rnd() < 0.3);
+        i++;
+      }
     }
-    if (walk) {
+    if (walk && typeof worldHorizon === "function" && worldHorizon(v, land)) {
+      // the skyline the land picked has (39-world.js)
+    } else if (walk) {
       // hills, far off, all the way round
       var hills = [], n = 72, rIn = GL3_FAR * 0.3, rOut = GL3_FAR * 0.5;
       for (var h = 0; h <= n; h++) {
@@ -1011,6 +1091,20 @@
   }
 
   // Draws a home into the view; false if it cannot, and the old way is used.
+  // What is drawn next, onto the GPU: the house afresh every time, but the
+  // land round it -- trees by the hundred in a forest -- once, and kept
+  // there while it stays the same.
+  function gl3Upload(G, data) {
+    var gl = G.gl;
+    if (G.scenery && data === G.scenery.verts) {
+      if (!G.sceneBuf) { G.sceneBuf = gl.createBuffer(); }
+      gl.bindBuffer(gl.ARRAY_BUFFER, G.sceneBuf);
+      if (G.sceneBufFor !== data) { gl.bufferData(gl.ARRAY_BUFFER, data, gl.STATIC_DRAW); G.sceneBufFor = data; }
+      return;
+    }
+    gl.bindBuffer(gl.ARRAY_BUFFER, G.buf);
+    gl.bufferData(gl.ARRAY_BUFFER, data, gl.DYNAMIC_DRAW);
+  }
   function v3GlDraw(model, inside) {
     var G = gl3Ready();
     if (!G) { return false; }
@@ -1034,6 +1128,11 @@
       // which way is "across" for those standing: across the screen
       var right = inside ? [-Math.sin(V3.me.head), Math.cos(V3.me.head)] : [Math.cos(V3.yaw), -Math.sin(V3.yaw)];
       gl3Stand(G, model, B, right);
+      // people out walking, cars going by (39-world.js): drawn, but not what the view is fitted to
+      if (model.passing) {
+        gl3Faces(G, { faces: model.passing.faces }, B, ink, sheet, dress);
+        gl3Stand(G, { stand: model.passing.stand }, B, right);
+      }
       // the camera
       var mvp, eye = null, toward = [0, 0, 1], cam = null;
       if (inside) {
@@ -1090,8 +1189,7 @@
         gl.useProgram(G.depth.p);
         gl.uniformMatrix4fv(G.depth.at.uSunMvp, false, sunMvp);
         function cast(data) {
-          gl.bindBuffer(gl.ARRAY_BUFFER, G.buf);
-          gl.bufferData(gl.ARRAY_BUFFER, data, gl.DYNAMIC_DRAW);
+          gl3Upload(G, data);
           var loc = G.depth.at.aPos;
           gl.enableVertexAttribArray(loc);
           gl.vertexAttribPointer(loc, 3, gl.FLOAT, false, GL3_STRIDE * 4, 0);
@@ -1162,6 +1260,7 @@
       if (inside && V3.inRoom) {
         var lr = V3.inRoom, lf = typeof floorsOf === "function" ? floorAt(floorsOf(), lr.x, lr.y) : null;
         lamp = [lr.x + (lf ? lf.dx : 0), lr.y + (lf ? lf.dy : 0), (lf ? lf.z : 0) + (ceilOf(lr) - 0.35) * FLOOR_PX];
+        if (typeof useDark === "function" && useDark(lr)) { lamp = [lr.x, lr.y, -1e6]; }   // switched off: no lamp at all
       }
       if (U.uLamp) { gl.uniform3fv(U.uLamp, lamp); }
       // after dark, a light under every room's ceiling (the first sixteen)
@@ -1174,6 +1273,7 @@
         });
         hand.nodes.forEach(function (r) {
           if (r.kind !== "i_room" || nl >= 24) { return; }
+          if (typeof useDark === "function" && useDark(r)) { return; }     // its light switched off (39-inside.js)
           var rf = fl3.length ? floorAt(fl3, r.x, r.y) : null, stack = inside ? 1 : dress;
           lights.set([r.x + (rf ? rf.dx * stack : 0), r.y + (rf ? rf.dy * stack : 0),
                       (rf ? rf.z : 0) + (ceilOf(r) - 0.4) * FLOOR_PX, Math.max(r.w, r.h) * 0.62 + 30], nl * 4);
@@ -1189,8 +1289,7 @@
       gl.enable(gl.DEPTH_TEST); gl.depthFunc(gl.LEQUAL);
       gl.enable(gl.POLYGON_OFFSET_FILL); gl.polygonOffset(1, 2);
       function draw(data, how, mode) {
-        gl.bindBuffer(gl.ARRAY_BUFFER, G.buf);
-        gl.bufferData(gl.ARRAY_BUFFER, data, gl.DYNAMIC_DRAW);
+        gl3Upload(G, data);
         gl3Bind(gl, P, GL3_STRIDE);
         gl.bindTexture(gl.TEXTURE_2D, how.tex || G.white);
         gl.uniform1f(U.uUseTex, how.tex ? 1 : 0);

@@ -40,6 +40,7 @@
   var BOARD_OF_SET = { ic_people: "team", ic_rooms: "home", ic_living: "home", ic_bedroom: "home",
                        ic_kitchen: "home", ic_bath: "home", ic_decor: "home", ic_walls: "home",
                        ic_tech: "home", ic_outdoor: "home", ic_closets: "home", ic_fitness: "home", ic_utility: "home",
+                       ic_store: "home", ic_power: "home",
                        ic_devices: "network",
                        ic_circuit: "circuit", ic_travel: "city", ic_space: "space",
                        ic_things: "flow" };

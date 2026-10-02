@@ -341,7 +341,9 @@
             plaster: [60, "#e9e2d4"], shiplap: [61, "#f4f2ec"], beadboard: [62, "#eef0ea"], concrete: [63, "#b6b4ae"] },
     out: { siding: [13, "#ede8dc"], brick: [40, "#a65a44"], stone: [41, "#b9b1a3"], stucco: [42, "#efe7d6"],
            boards: [43, "#8e6f52"], shakes: [54, "#9a7a5a"],
-           logs: [64, "#8a6340"], cladding: [65, "#c9cdd0"], corrugated: [66, "#9aa3a8"], concrete: [63, "#b6b4ae"] },
+           logs: [64, "#8a6340"], cladding: [65, "#c9cdd0"], corrugated: [66, "#9aa3a8"], concrete: [63, "#b6b4ae"],
+           // (2026-10-02, for the Tudor style, 39-styles.js) plaster between dark oak posts
+           timber: [75, "#efe6d2"] },
     roof: { shingles: [1, "#5d6166"], tiles: [44, "#b5603f"], metal: [45, "#4f5a63"], slate: [46, "#4a4f57"],
             thatch: [67, "#b59a62"], woodshakes: [54, "#8f6f4f"], green: [68, "#6f8f4a"], solar: [69, "#263850"] }
   };
@@ -365,6 +367,7 @@
     beadboard: ["#eef0ea", "#dde6e0", "#e8e1d4", "#a9bcc4"],
     logs: ["#8a6340", "#a5784c", "#6b4a2f", "#c19a6b"], cladding: ["#c9cdd0", "#3f464c", "#d8d2c4", "#8a948f"],
     corrugated: ["#9aa3a8", "#7a2e2a", "#2f4a3c", "#c9ced3"],
+    timber: ["#efe6d2", "#f6f1e6", "#e6d6b8", "#dcd2c4"],
     roofthatch: ["#b59a62", "#9c8452", "#c9b07a"], roofwoodshakes: ["#8f6f4f", "#7a5f45", "#a8876a"],
     roofgreen: ["#6f8f4a", "#5a7a3c", "#8a9c5a"], roofsolar: ["#263850", "#1d2a3a", "#2f3b44"]
   };
@@ -1742,6 +1745,14 @@
     }
     mCord(M, H, X, C.main);
   });
+  // An air vent, flush with the ceiling: a frame, and its slats (2026-10-01:
+  // "the ceilings have nothing on them ... no AC vents")
+  mDef("i_vent", function (M, W, D, H, C) {
+    C = mPick(C, "#f1f1ef", "#c9ccd0");
+    var met = M.mat("metal", C.main), slat = M.mat("metal", C.frame);
+    M.box(-W / 2, W / 2, -D / 2, D / 2, H - 0.6 * cm, H, met, 0.3 * cm);
+    for (var i = 1; i < 6; i++) { M.box(-W / 2 + 2 * cm, W / 2 - 2 * cm, -D / 2 + i * D / 6 - 0.6 * cm, -D / 2 + i * D / 6 + 0.6 * cm, H - 1.1 * cm, H - 0.6 * cm, slat); }
+  });
   mDef("i_ceilingfan", function (M, W, D, H, C, n, X) {
     C = mPick(C, "#f2f2f0", "#8a6240");
     var body = M.mat("metal", C.main), R = Math.min(W, D) / 2;
@@ -1855,8 +1866,10 @@
     var top = mPot(M, 0, 0, R * 0.55, Math.min(H * 0.4, 35 * cm), M.mat("ceramic", C.main));
     // stems up from the earth, each ending in a few broad leaves
     for (var s = 0; s < 7; s++) {
+      // (leaning out no further than its leaves stay over its own floor: against a
+      // wall, a plant's leaves went 10 cm into it -- 2026-10-02)
       var a = s / 7 * Math.PI * 2 + rnd() * 0.6, lean = 0.25 + rnd() * 0.45, len = (H - top) * (0.6 + rnd() * 0.35);
-      var tip = [Math.cos(a) * R * lean * 1.4, Math.sin(a) * R * lean * 1.4, top + len];
+      var tip = [Math.cos(a) * R * lean, Math.sin(a) * R * lean, top + len];
       M.tube([0, 0, top], tip, 0.45 * cm, M.mat("leaves", mShade(C.frame, -0.2)), 4);
       M.push().move(tip[0], tip[1], tip[2]).turn(a * 180 / Math.PI).tiltY(40 + rnd() * 30);
       M.ball(0, 0, R * 0.22, R * 0.16, R * 0.07, R * 0.3, M.mat("leaves", mShade(C.frame, (rnd() - 0.5) * 0.3)), { seg: 5 });
@@ -2599,6 +2612,168 @@
         M.box(x, x + 22 * cm, -D / 2 + 3 * cm, D / 2 - 3 * cm, z + 2 * cm, z + 2 * cm + bh, M.mat(rnd() < 0.5 ? "plastic" : "wicker", rnd() < 0.5 ? C.frame : "#7f8a93"), 1 * cm);
       }
     }
+  });
+  // ---- a shop, an office, a school (2026-10-02) ------------------------------
+  var M_GOODS = ["#c7372f", "#2f4f8f", "#f2c94c", "#3f8f4f", "#e07a2f", "#f4f2ee", "#7a3f8f", "#2f8f8f", "#d9c7a6", "#8f2f4f"];
+  // Shelving down an aisle: a base, a pegboard spine, shelves both sides,
+  // and on them packets, boxes and tins in every color.
+  mDef("i_gondola", function (M, W, D, H, C, n) {
+    C = mPick(C, "#e9e8e4", "#c9ced3");
+    var met = M.mat("metal", C.main), rnd = mRand((n && n.id) || 7);
+    M.box(-W / 2, W / 2, -D / 2 + 2 * cm, D / 2 - 2 * cm, 0, 12 * cm, M.mat("metal", "#5d6166"));
+    M.box(-W / 2, W / 2, -2.5 * cm, 2.5 * cm, 12 * cm, H, met);
+    [-W / 2, W / 2 - 2 * cm].forEach(function (x) { M.box(x, x + 2 * cm, -D / 2 + 1 * cm, D / 2 - 1 * cm, 0, H - 6 * cm, met); });
+    var shelves = 4, gap = (H - 24 * cm) / shelves;
+    for (var k = 0; k <= shelves; k++) {
+      var z = 12 * cm + k * gap;
+      [[-D / 2 + 1 * cm, -2.5 * cm], [2.5 * cm, D / 2 - 1 * cm]].forEach(function (side, si) {
+        M.box(-W / 2 + 2 * cm, W / 2 - 2 * cm, side[0], side[1], z, z + 1.5 * cm, met);
+        if (k === shelves) { return; }
+        for (var x = -W / 2 + 3 * cm; x < W / 2 - 10 * cm;) {
+          var pw = (8 + rnd() * 9) * cm, ph = Math.min(gap - 5 * cm, (12 + rnd() * 18) * cm), col = M_GOODS[Math.floor(rnd() * M_GOODS.length)];
+          var front = si ? side[1] - 1 * cm : side[0] + 1 * cm, back = si ? side[0] + 2 * cm : side[1] - 2 * cm;
+          if (x + pw > W / 2 - 3 * cm) { break; }
+          M.box(x, x + pw - 0.6 * cm, Math.min(front, back), Math.max(front, back), z + 1.5 * cm, z + 1.5 * cm + ph, M.mat("plastic", col), 0.6 * cm);
+          x += pw;
+        }
+      });
+    }
+  });
+  // A checkout: the counter, the belt, the till's screen, the lane's lit
+  // number on a pole, and the cashier's stool.
+  mDef("i_checkout", function (M, W, D, H, C) {
+    C = mPick(C, "#3f464c", "#d8d5cf");
+    var body = M.mat("plastic", C.main), y1 = -D / 2 + D * 0.62, H0 = Math.min(H, 92 * cm);
+    M.box(-W / 2, W / 2, -D / 2, y1, 0, H0 - 4 * cm, body, 1 * cm);
+    M.box(-W / 2 + 2 * cm, W * 0.15, -D / 2 + 5 * cm, y1 - 5 * cm, H0 - 4 * cm, H0 - 2 * cm, M.mat("rubber", "#1d1f22"));
+    M.box(W * 0.15, W / 2, -D / 2, y1, H0 - 4 * cm, H0, M.mat("metal", "#b9bec3"), 0.5 * cm);
+    M.box(W * 0.27, W * 0.43, -D / 2 + 8 * cm, -D / 2 + 30 * cm, H0, H0 + 9 * cm, M.mat("plastic", "#2a2c2e"), 1 * cm);
+    M.push().move(W * 0.35, -D / 2 + 18 * cm, H0 + 9 * cm).tiltX(-14);
+    M.box(-15 * cm, 15 * cm, -1 * cm, 1 * cm, 0, 24 * cm, M.mat("screen", "#1b2a3a"), 0.5 * cm);
+    M.pop();
+    M.cyl(W / 2 - 6 * cm, -D / 2 + 6 * cm, H0, H0 + 105 * cm, 2 * cm, M.mat("metal", "#8f959b"), { seg: 10 });
+    M.box(W / 2 - 18 * cm, W / 2 + 6 * cm, -D / 2 + 1 * cm, -D / 2 + 11 * cm, H0 + 105 * cm, H0 + 128 * cm, M.mat("glow", "#ffe9b0"), 1 * cm);
+    M.cyl(W * 0.35, D / 2 - 14 * cm, 0, 60 * cm, 2.5 * cm, M.mat("chrome", "#c9ced3"), { seg: 10 });
+    M.cyl(W * 0.35, D / 2 - 14 * cm, 58 * cm, 65 * cm, 17 * cm, M.mat("leather", "#2a2c2e"), { seg: 16 });
+  });
+  // A cooler: lit inside, shelves of bottles, behind two glass doors.
+  mDef("i_cooler", function (M, W, D, H, C, n) {
+    C = mPick(C, "#2a2c2e", "#c9ced3");
+    var body = M.mat("metal", C.main), rnd = mRand((n && n.id) || 11), y1 = D / 2 - 3 * cm;
+    M.box(-W / 2, W / 2, -D / 2, -D / 2 + 3 * cm, 0, H, body);
+    M.box(-W / 2, -W / 2 + 3 * cm, -D / 2, y1, 0, H, body);
+    M.box(W / 2 - 3 * cm, W / 2, -D / 2, y1, 0, H, body);
+    M.box(-W / 2, W / 2, -D / 2, y1, 0, 14 * cm, body);
+    M.box(-W / 2, W / 2, -D / 2, y1, H - 18 * cm, H, body);
+    M.box(-W / 2 + 4 * cm, W / 2 - 4 * cm, y1 - 0.4 * cm, y1 + 0.4 * cm, H - 15 * cm, H - 4 * cm, M.mat("glow", "#d9ecff"));
+    M.box(-W / 2 + 3 * cm, W / 2 - 3 * cm, -D / 2 + 3 * cm, -D / 2 + 3.4 * cm, 14 * cm, H - 18 * cm, M.mat("glow", "#eef6ff"));
+    var rows = 5, gap = (H - 32 * cm) / rows;
+    for (var k = 0; k < rows; k++) {
+      var z = 14 * cm + k * gap;
+      M.box(-W / 2 + 3 * cm, W / 2 - 3 * cm, -D / 2 + 3 * cm, y1 - 4 * cm, z, z + 1.2 * cm, M.mat("chrome", "#c9ced3"));
+      var col = M_GOODS[Math.floor(rnd() * M_GOODS.length)], bh = Math.min(gap - 6 * cm, (20 + rnd() * 8) * cm);
+      for (var x = -W / 2 + 7 * cm; x < W / 2 - 6 * cm; x += 7.5 * cm) {
+        if (rnd() < 0.12) { continue; }
+        M.cyl(x, y1 - 12 * cm, z + 1.2 * cm, z + 1.2 * cm + bh, 3 * cm, M.mat("plastic", rnd() < 0.7 ? col : M_GOODS[Math.floor(rnd() * M_GOODS.length)]),
+              { seg: 6, r1: 1.4 * cm });
+      }
+    }
+    [[-W / 2 + 1 * cm, -0.5 * cm], [0.5 * cm, W / 2 - 1 * cm]].forEach(function (d, i) {
+      M.box(d[0], d[1], y1, y1 + 1.2 * cm, 14 * cm, H - 18 * cm, M.mat("glass", "#cfe3ee"));
+      M.box(i ? d[0] + 2 * cm : d[1] - 4 * cm, i ? d[0] + 4 * cm : d[1] - 2 * cm, y1 + 1.2 * cm, y1 + 3.5 * cm, H * 0.3, H * 0.7, M.mat("chrome", C.frame), 0.6 * cm);
+    });
+  });
+  // A table of crates, each full of fruit or vegetables.
+  mDef("i_display", function (M, W, D, H, C, n) {
+    C = mPick(C, "#a5784c", "#6e4a32");
+    var wood = M.mat("wood", C.main), dark = M.mat("wood", C.frame), rnd = mRand((n && n.id) || 5), top = H - 22 * cm;
+    [[-1, -1], [1, -1], [1, 1], [-1, 1]].forEach(function (s) {
+      M.box(s[0] * (W / 2 - 3 * cm) - 2.5 * cm, s[0] * (W / 2 - 3 * cm) + 2.5 * cm, s[1] * (D / 2 - 3 * cm) - 2.5 * cm, s[1] * (D / 2 - 3 * cm) + 2.5 * cm, 0, top, dark);
+    });
+    M.box(-W / 2, W / 2, -D / 2, D / 2, top - 4 * cm, top, wood, 0.8 * cm);
+    var fruit = ["#c7372f", "#e8892f", "#f2d24c", "#6aa64a", "#7a3f8f", "#8f2f2f", "#a6c94c"];
+    var cw = W / 3, cd = D / 2;
+    for (var i = 0; i < 3; i++) {
+      for (var j = 0; j < 2; j++) {
+        var x0 = -W / 2 + i * cw + 2 * cm, y0 = -D / 2 + j * cd + 2 * cm, x1 = x0 + cw - 4 * cm, y1 = y0 + cd - 4 * cm;
+        M.box(x0, x1, y0, y1, top, top + 4 * cm, wood);
+        M.box(x0, x0 + 1.2 * cm, y0, y1, top, top + 14 * cm, wood); M.box(x1 - 1.2 * cm, x1, y0, y1, top, top + 14 * cm, wood);
+        M.box(x0, x1, y0, y0 + 1.2 * cm, top, top + 14 * cm, wood); M.box(x0, x1, y1 - 1.2 * cm, y1, top, top + 14 * cm, wood);
+        var col = M.mat("leaves", fruit[Math.floor(rnd() * fruit.length)]), r = 4 * cm;
+        for (var fx = x0 + r + 1.5 * cm; fx < x1 - r; fx += 2 * r) {
+          for (var fy = y0 + r + 1.5 * cm; fy < y1 - r; fy += 2 * r) {
+            M.ball(fx + (rnd() - 0.5) * cm, fy + (rnd() - 0.5) * cm, top + 8 * cm + rnd() * 3 * cm, r, r, r * 0.9, col, { seg: 3 });
+          }
+        }
+      }
+    }
+  });
+  // A till for a counter: its drawer, its keys, its screen.
+  mDef("i_register", function (M, W, D, H, C) {
+    C = mPick(C, "#2a2c2e", "#c9ced3");
+    M.box(-W / 2, W / 2, -D / 2 + D * 0.2, D / 2, 0, H * 0.32, M.mat("plastic", C.main), 0.8 * cm);
+    M.push().move(0, D * 0.15, H * 0.32).tiltX(10);
+    M.box(-W / 2 + 2 * cm, W / 2 - 2 * cm, -D * 0.25, D * 0.3, 0, H * 0.1, M.mat("plastic", "#5d6166"), 0.5 * cm);
+    M.pop();
+    M.push().move(0, -D / 2 + 6 * cm, H * 0.32).tiltX(-12);
+    M.box(-W * 0.4, W * 0.4, -1 * cm, 1 * cm, 0, H * 0.66, M.mat("screen", "#1b2a3a"), 0.4 * cm);
+    M.pop();
+  });
+  // A pupil's desk, a shelf under it for books, and the chair in front of it.
+  mDef("i_schooldesk", function (M, W, D, H, C) {
+    C = mPick(C, "#c9a273", "#3f6a8a");
+    var top = M.mat("wood", C.main), met = M.mat("metal", "#8f959b"), seatM = M.mat("plastic", C.frame);
+    var y1 = -D / 2 + D * 0.53;
+    [[-W / 2 + 3 * cm, -D / 2 + 3 * cm], [W / 2 - 3 * cm, -D / 2 + 3 * cm], [-W / 2 + 3 * cm, y1 - 3 * cm], [W / 2 - 3 * cm, y1 - 3 * cm]].forEach(function (p) {
+      M.tube([p[0], p[1], 0], [p[0], p[1], H - 3 * cm], 1.2 * cm, met, 8);
+    });
+    M.box(-W / 2, W / 2, -D / 2, y1, H - 3 * cm, H, top, 0.6 * cm);
+    M.box(-W / 2 + 2 * cm, W / 2 - 2 * cm, -D / 2 + 3 * cm, y1 - 8 * cm, H - 18 * cm, H - 16.5 * cm, met);
+    var cy = y1 + (D / 2 - y1) / 2 + 2 * cm, seat = 42 * cm, sw = Math.min(W * 0.32, 20 * cm);
+    [[-sw + 2 * cm, cy - 14 * cm], [sw - 2 * cm, cy - 14 * cm], [-sw + 2 * cm, cy + 14 * cm], [sw - 2 * cm, cy + 14 * cm]].forEach(function (p) {
+      M.tube([p[0], p[1], 0], [p[0], p[1], seat - 2 * cm], 1 * cm, met, 8);
+    });
+    M.box(-sw, sw, cy - 17 * cm, cy + 17 * cm, seat - 2 * cm, seat, seatM, 1 * cm);
+    M.box(-sw, sw, D / 2 - 3 * cm, D / 2, seat + 12 * cm, seat + 36 * cm, seatM, 1 * cm);
+    M.tube([-sw + 2 * cm, D / 2 - 1.5 * cm, seat], [-sw + 2 * cm, D / 2 - 1.5 * cm, seat + 14 * cm], 0.9 * cm, met, 6);
+    M.tube([sw - 2 * cm, D / 2 - 1.5 * cm, seat], [sw - 2 * cm, D / 2 - 1.5 * cm, seat + 14 * cm], 0.9 * cm, met, 6);
+  });
+  // On the wall, as big as they are, whatever size they are drawn: a socket
+  // (two sets of slots), a switch (its rocker), the breaker panel (its door
+  // and its catch).
+  mDef("i_outlet", function (M, W, D, H, C) {
+    C = mPick(C, "#f4f2ee", "#2a2c2e");
+    var y0 = -D / 2, plate = M.mat("plastic", C.main), slot = M.mat("plastic", C.frame);
+    M.box(-3.6 * cm, 3.6 * cm, y0, y0 + 0.7 * cm, 0, 11.6 * cm, plate, 0.3 * cm);
+    [3.2, 8.2].forEach(function (z) {
+      M.box(-1.8 * cm, 1.8 * cm, y0 + 0.7 * cm, y0 + 1.1 * cm, (z - 1.6) * cm, (z + 1.6) * cm, plate, 0.4 * cm);
+      M.box(-1.1 * cm, -0.8 * cm, y0 + 1.1 * cm, y0 + 1.15 * cm, (z - 0.5) * cm, (z + 0.9) * cm, slot);
+      M.box(0.8 * cm, 1.1 * cm, y0 + 1.1 * cm, y0 + 1.15 * cm, (z - 0.5) * cm, (z + 0.9) * cm, slot);
+    });
+  });
+  mDef("i_lightswitch", function (M, W, D, H, C) {
+    C = mPick(C, "#f4f2ee", "#e2e0da");
+    var y0 = -D / 2;
+    M.box(-3.6 * cm, 3.6 * cm, y0, y0 + 0.7 * cm, 0, 11.6 * cm, M.mat("plastic", C.main), 0.3 * cm);
+    M.push().move(0, y0 + 0.7 * cm, 5.8 * cm).tiltX(-6);
+    M.box(-1.6 * cm, 1.6 * cm, 0, 0.9 * cm, -3.2 * cm, 3.2 * cm, M.mat("plastic", C.frame), 0.4 * cm);
+    M.pop();
+  });
+  mDef("i_breaker", function (M, W, D, H, C) {
+    C = mPick(C, "#c9ced3", "#5d6166");
+    var y0 = -D / 2, w = Math.min(W / 2, 22 * cm), body = M.mat("metal", C.main);
+    M.box(-w, w, y0, y0 + 9 * cm, 0, H, body, 0.8 * cm);
+    M.box(-w + 1.5 * cm, w - 1.5 * cm, y0 + 9 * cm, y0 + 9.4 * cm, 1.5 * cm, H - 1.5 * cm, body, 0.3 * cm);
+    M.box(w - 6 * cm, w - 3 * cm, y0 + 9.4 * cm, y0 + 10.6 * cm, H * 0.45, H * 0.55, M.mat("plastic", C.frame), 0.3 * cm);
+    M.box(-w + 4 * cm, -w + 14 * cm, y0 + 9.4 * cm, y0 + 9.6 * cm, H - 9 * cm, H - 5 * cm, M.mat("plastic", "#f4f2ee"));
+  });
+  // A post, floor to ceiling, holding up the beam over an opening.
+  mDef("i_post", function (M, W, D, H, C) {
+    C = mPick(C, "#efede8", "#d8d5cf");
+    var body = M.mat("plastic", C.main);
+    M.box(-W / 2 - 1.5 * cm, W / 2 + 1.5 * cm, -D / 2 - 1.5 * cm, D / 2 + 1.5 * cm, 0, 10 * cm, M.mat("plastic", C.frame), 0.4 * cm);
+    M.box(-W / 2, W / 2, -D / 2, D / 2, 10 * cm, H - 8 * cm, body, 0.5 * cm);
+    M.box(-W / 2 - 1.5 * cm, W / 2 + 1.5 * cm, -D / 2 - 1.5 * cm, D / 2 + 1.5 * cm, H - 8 * cm, H, M.mat("plastic", C.frame), 0.4 * cm);
   });
   mDef("i_toolchest", function (M, W, D, H, C) {
     C = mPick(C, "#c7372f", "#dfe3e8");

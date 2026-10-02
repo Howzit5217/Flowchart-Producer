@@ -68,7 +68,15 @@
                        fr_garage: "garage", fr_office: "office", fr_dining: "dining", fr_living: "living",
                        fr_closet: "closet" };
 
+  // (a room of another kind of building -- a shop floor, an office, a
+    // restroom -- is what Start a house made it for, 39-types.js: a
+    // reception's counter does not make it a kitchen)
+  var ROOM_USE = { restroom: "bath", cafekitchen: "kitchen", flatbath: "bath", flatbed: "bed", flatbed2: "bed", flat: "multi",
+                   sales: "work", boutique: "work", cafe: "work", reception: "work", staff: "work", meeting: "work",
+                   openoffice: "work", classroom: "work", lobby: "hall", landing: "hall", lift: "closet", stock: "closet",
+                   fitting: "closet", kitchenette: "work" };
   function roomKind(plan, room) {
+    if (room.use && ROOM_USE[room.use]) { return ROOM_USE[room.use]; }
     var said = String(room.text || "");
     for (var k = 0; k < ROOM_CALLED.length; k++) { if (ROOM_CALLED[k][1].test(said)) { return ROOM_CALLED[k][0]; } }
     var kinds = plan.pieces.filter(function (p) { return roomAt(plan, p.x, p.y) === room; })
@@ -86,6 +94,7 @@
     var kinds = plan.pieces.filter(function (p) { return roomAt(plan, p.x, p.y) === room; })
                            .map(function (p) { return p.kind; });
     var uses = roomUses(kinds), kind = roomKind(plan, room);
+    if (kind === "work" || kind === "hall") { return {}; }
     if (kind !== "multi" && kind !== "room") { uses[kind] = true; }
     return uses;
   }
@@ -156,6 +165,73 @@
     };
   }
 
+  // What stands where nobody can get to it from the way in: walked from
+  // just inside the front door, up and down the stairs, every square of
+  // floor reached -- a piece with none of them beside it is boxed in.  (A
+  // room with no way in at all is said once, by the check.)  Also asked by
+  // Start a house, which takes back what it put down that boxed something in.
+  function boxedPieces(plan) {
+    var out = [];
+    if (!plan.cells || !plan.rooms.length) { return out; }
+    var start = null;
+    var front = plan.joins.filter(function (j) { return j.rooms.length === 1 && !j.locked; })[0];
+    if (front) {
+      var r0 = front.rooms[0], dx = front.door.x - r0.x, dy = front.door.y - r0.y, l0 = Math.hypot(dx, dy) || 1;
+      start = cellOf(plan, front.door.x + dx / l0 * 60, front.door.y + dy / l0 * 60);
+    } else { start = cellOf(plan, plan.rooms[0].x, plan.rooms[0].y); }
+    var reach = new Uint8Array(plan.cells.length), todo = [start];
+    reach[start] = 1;
+    // the two ends of each flight of stairs: reached one, reached both
+    var ends = plan.links.map(function (pair) { return [cellsUnder(plan, pair[0]), cellsUnder(plan, pair[1])]; });
+    for (var round = 0; round <= ends.length; round++) {
+      while (todo.length) {
+        var i = todo.pop(), c = i % plan.cols, r = Math.floor(i / plan.cols);
+        [[1, 0], [-1, 0], [0, 1], [0, -1]].forEach(function (s) {
+          var cc = c + s[0], rr = r + s[1];
+          if (cc < 0 || rr < 0 || cc >= plan.cols || rr >= plan.rows) { return; }
+          var j = rr * plan.cols + cc;
+          if (!reach[j] && (plan.cells[j] === 0 || plan.cells[j] === 3)) { reach[j] = 1; todo.push(j); }
+        });
+      }
+      ends.forEach(function (two) {
+        [0, 1].forEach(function (e) {
+          if (!two[e].some(function (k) { return reach[k]; })) { return; }
+          two[1 - e].forEach(function (k) { if (!reach[k]) { reach[k] = 1; todo.push(k); } });
+        });
+      });
+      if (!todo.length) { break; }
+    }
+    plan.pieces.forEach(function (p) {
+      var room = roomAt(plan, p.x, p.y);
+      // (what stands on something -- a screen on a desk, a till on a counter -- is reached with it)
+      if (!room || ON_THE_WALL[p.kind] || ON_TOP[p.kind] || p.kind === "i_rug") { return; }
+      if (besideOf(plan, p).some(function (i) { return reach[i]; })) { return; }
+      if (!plan.joins.some(function (j) { return j.rooms.indexOf(room) >= 0 && !j.locked; })) { return; }
+      out.push({ p: p, room: room });
+    });
+    return out;
+  }
+
+  // The room a piece needs in front of it, in metres: to pull a drawer out,
+  // swing an appliance's door, sit at a desk.  Its front is the way it faces
+  // (its own +y turned, as it is put against a wall).
+  var FRONT_ROOM = { i_dresser: 0.6, i_nightstand: 0.35, i_wardrobe: 0.7, i_chest: 0.45, i_sideboard: 0.5, i_hutch: 0.5,
+                     i_filing: 0.6, i_fridge: 0.8, i_dishwasher: 0.7, i_stove: 0.7, i_oven: 0.8, i_washer: 0.7, i_dryer: 0.7,
+                     i_linencab: 0.5, i_toolchest: 0.6, i_freezer: 0.7, i_winecooler: 0.5, i_reachin: 0.6, i_desk: 0.6,
+                     i_vanity: 0.5, i_bookcase: 0.35, i_tvstand: 0.3, i_consoletable: 0.3 };
+  function frontRoom(p) {
+    var c = FRONT_ROOM[p.kind];
+    if (!c) { return null; }
+    var t = (p.turn || 0) * Math.PI / 180, ux = -Math.sin(t), uy = Math.cos(t), d = p.h / 2 + c * FLOOR_PX / 2;
+    return { kind: p.kind, x: p.x + ux * d, y: p.y + uy * d, w: p.w * 0.9, h: c * FLOOR_PX, turn: p.turn || 0 };
+  }
+  // what, standing in front of a drawer, stops it: what stands on the
+  // floor -- not a rug, nor what hangs, nor a chair pushed in at a desk
+  function blocksFront(o) {
+    return !ON_THE_WALL[o.kind] && !LIES_FLAT[o.kind] && !FROM_CEILING[o.kind] && !ON_TOP[o.kind] &&
+           o.kind !== "i_rug" && o.kind !== "i_officechair" && o.kind !== "i_chair" && o.kind !== "i_stool" && !isFigure(o.kind);
+  }
+
   // Whether two shapes' boxes (upright or a quarter round) come within gap.
   function boxesTouch(a, b, gap) {
     var p = turned(a), q = turned(b);
@@ -188,6 +264,10 @@
   }
 
   function fixed(says, go) { return go ? { auto: true, says: says, go: go } : null; }
+  // a light on its ceiling: a pendant, a chandelier, a fan with its lamp (hung things are not walked to, so not pieces)
+  function ceilingLit(room) {
+    return hand.nodes.some(function (n) { return (n.kind === "i_pendant" || n.kind === "i_chandelier" || n.kind === "i_ceilingfan") && insideArea(room, n.x, n.y); });
+  }
 
   function homeAdvice() {
     var plan = walkPlan(), tips = [];
@@ -212,8 +292,8 @@
       if (!lit && /^(bed|living|kitchen|office|dining|multi)$/.test(kind)) {
         tip(say(uses[room.id].bed ? "ad_window_bed" : "ad_window", { room: name }), room.id,
             fixed(TXT.ad_fix_window, intoOutsideWall(plan, room, "i_window")));
-      } else if (!lit && !inRoom(room, ["i_lamp", "i_sconce", "i_nightstand"]).length && kind !== "garage" &&
-                 kind !== "closet") {
+      } else if (!lit && !inRoom(room, ["i_lamp", "i_sconce", "i_nightstand"]).length && !ceilingLit(room) &&
+                 kind !== "garage" && kind !== "closet") {
         tip(say("ad_dark", { room: name }), room.id, fixed(TXT.ad_fix_light, alongWall(plan, room, "i_sconce")));
       }
       // what a kitchen cannot do without
@@ -270,6 +350,15 @@
             if (n) { n.x = Math.round(flip.x * 2) / 2; n.y = Math.round(flip.y * 2) / 2; n.turn = flip.turn; }
           } : null));
     });
+    // drawers and doors that cannot open: something standing in the room
+    // in front of them that they need (2026-10-01, "if drawers are blocked
+    // also flag that")
+    plan.pieces.forEach(function (p) {
+      var zone = frontRoom(p);
+      if (!zone) { return; }
+      var hit = plan.pieces.filter(function (o) { return o !== p && blocksFront(o) && boxesTouch(zone, o, -2); })[0];
+      if (hit) { tip(say("ad_front_blocked", { what: kindName(p.kind), by: kindName(hit.kind) }), p.id); }
+    });
     // a bathroom opening straight into the kitchen
     plan.joins.forEach(function (j) {
       if (j.rooms.length !== 2) { return; }
@@ -279,45 +368,9 @@
       if (bath && kitchen) { tip(say("ad_bath_kitchen", { bath: names[bath.id], kitchen: names[kitchen.id] }), j.door.id); }
     });
     // furniture nobody can get to, from the way in
-    if (plan.cells) {
-      var start = null;
-      var front = plan.joins.filter(function (j) { return j.rooms.length === 1 && !j.locked; })[0];
-      if (front) {
-        var r0 = front.rooms[0], dx = front.door.x - r0.x, dy = front.door.y - r0.y, l0 = Math.hypot(dx, dy) || 1;
-        start = cellOf(plan, front.door.x + dx / l0 * 60, front.door.y + dy / l0 * 60);
-      } else { start = cellOf(plan, plan.rooms[0].x, plan.rooms[0].y); }
-      var reach = new Uint8Array(plan.cells.length), todo = [start];
-      reach[start] = 1;
-      // the two ends of each flight of stairs: reached one, reached both
-      var ends = plan.links.map(function (pair) { return [cellsUnder(plan, pair[0]), cellsUnder(plan, pair[1])]; });
-      for (var round = 0; round <= ends.length; round++) {
-        while (todo.length) {
-          var i = todo.pop(), c = i % plan.cols, r = Math.floor(i / plan.cols);
-          [[1, 0], [-1, 0], [0, 1], [0, -1]].forEach(function (s) {
-            var cc = c + s[0], rr = r + s[1];
-            if (cc < 0 || rr < 0 || cc >= plan.cols || rr >= plan.rows) { return; }
-            var j = rr * plan.cols + cc;
-            if (!reach[j] && (plan.cells[j] === 0 || plan.cells[j] === 3)) { reach[j] = 1; todo.push(j); }
-          });
-        }
-        ends.forEach(function (two) {
-          [0, 1].forEach(function (e) {
-            if (!two[e].some(function (k) { return reach[k]; })) { return; }
-            two[1 - e].forEach(function (k) { if (!reach[k]) { reach[k] = 1; todo.push(k); } });
-          });
-        });
-        if (!todo.length) { break; }
-      }
-      plan.pieces.forEach(function (p) {
-        var room = roomAt(plan, p.x, p.y);
-        if (!room || ON_THE_WALL[p.kind] || p.kind === "i_rug") { return; }
-        if (!besideOf(plan, p).some(function (i) { return reach[i]; })) {
-          // a room with no way in at all is said once, by the check
-          if (!plan.joins.some(function (j) { return j.rooms.indexOf(room) >= 0 && !j.locked; })) { return; }
-          tip(say("ad_boxed_in", { what: kindName(p.kind), room: names[room.id] }), p.id);
-        }
-      });
-    }
+    boxedPieces(plan).forEach(function (b) {
+      tip(say("ad_boxed_in", { what: kindName(b.p.kind), room: names[b.room.id] }), b.p.id);
+    });
     stairAdvice(plan, tip);
     lotAdvice(plan, tip);
     garageAdvice(plan, tip);
@@ -384,7 +437,8 @@
   }
   function wallAdvice(plan, tip) {
     hand.nodes.forEach(function (n) {
-      if (!isSolid(n.kind) || ((n.turn || 0) % 90)) { return; }
+      // (a post stands in the line of the wall taken out, holding up its beam: 39-inside.js)
+      if (!isSolid(n.kind) || ((n.turn || 0) % 90) || n.kind === "i_post") { return; }
       var room = roomAt(plan, n.x, n.y);
       if (!room || ((room.turn || 0) % 90)) { return; }
       var f = roomInside(room), t = turned(n);
@@ -433,8 +487,8 @@
   }
   function upstairsFor(plan, stair) {
     var floors = plan.floors, f = floorAt(floors, stair.x, stair.y);
-    if (f && floors[floors.indexOf(f) + 1]) {
-      var next = floors[floors.indexOf(f) + 1];
+    if (f && floorOver(floors, f)) {
+      var next = floorOver(floors, f);
       return function () {
         var top = adviceAdd(stair.kind, Math.round(stair.x + f.dx - next.dx), Math.round(stair.y + f.dy - next.dy), stair.turn);
         top.w = stair.w; top.h = stair.h; top.own = true;

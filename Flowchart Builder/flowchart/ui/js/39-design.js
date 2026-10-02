@@ -1577,6 +1577,13 @@
         for (i = 1; i < 4; i++) { line(x + i * 19.5 / 4, y, x + i * 19.5 / 4, y + 12.5, shade(0.18), 0.6); }
         line(x, y + 6.2, x + 19.5, y + 6.2, shade(0.18), 0.6);
       } }
+    } else if (kind === "timber") {
+      // half-timbered: dark oak posts, rails and a brace or two over the plaster
+      speckle(80, 0.06);
+      g.fillStyle = "#3a2a20";
+      for (x = 1; x < S; x += 14) { g.fillRect(x, 0, 3, S); }
+      for (y = 0; y < S; y += 21) { g.fillRect(0, y, S, 3); }
+      line(4, 3, 15, 21, "#3a2a20", 2.6); line(29, 24, 18, 42, "#3a2a20", 2.6);
     } else if (kind === "woodshakes") {
       for (y = 0, r = 0; y < S; y += 9, r++) {
         for (x = (r % 2) * -5; x < S; x += 5 + rnd() * 6) { g.fillStyle = shade((rnd() - 0.5) * 0.24); g.fillRect(x + 0.5, y, 5, 8); }
@@ -1782,7 +1789,8 @@
     btn.setAttribute("aria-expanded", "false");
     btn.textContent = TXT.mt_button;
     var after = el('[data-v3="labels"]', bar);
-    bar.insertBefore(btn, after ? after.nextSibling : null);
+    // (after Labels, wherever it is now: the bar puts its buttons in groups, 39-house.js)
+    (after ? after.parentNode : bar).insertBefore(btn, after ? after.nextSibling : null);
     var sheet = document.createElement("div");
     sheet.className = "v3-mats";
     sheet.hidden = true;

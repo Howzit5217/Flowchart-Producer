@@ -45,7 +45,7 @@ JS = ["js/01-start.js", "js/02-paint.js", "js/02-read.js", "js/02-depth.js", "js
       "js/28-puzzles.js", "js/29-saves.js", "js/30-blocks.js", "js/31-app.js",
       "js/32-code-side.js", "js/33-told.js", "js/34-tests.js", "js/35-wipe.js", "js/36-sync.js",
       "js/37-games.js", "js/37-board.js", "js/38-walk.js", "js/38-advice.js", "js/38-view3d.js", "js/38-models.js", "js/38-view3d-gl.js", "js/38-view3d-more.js",
-      "js/39-flows.js", "js/39-circuit.js", "js/39-orbit.js", "js/39-design.js", "js/39-join.js", "js/39-starter.js", "js/39-house.js", "js/99-go.js"]
+      "js/39-flows.js", "js/39-circuit.js", "js/39-orbit.js", "js/39-design.js", "js/39-join.js", "js/39-starter.js", "js/39-house.js", "js/39-world.js", "js/39-styles.js", "js/39-types.js", "js/39-inside.js", "js/39-xray.js", "js/99-go.js"]
 
 # Each part of the page carries a header saying what it is and that it is
 # one part of something; the page itself wants the part, not the header.

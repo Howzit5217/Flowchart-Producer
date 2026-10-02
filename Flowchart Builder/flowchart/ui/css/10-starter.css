@@ -11,32 +11,74 @@
   .st-row + .st-row { border-top: 1px solid var(--line-soft); }
   .st-seg .seg-btn { min-width: 34px; }
   .st-go { display: flex; justify-content: flex-end; gap: 8px; margin-top: 18px; }
+  /* the choices beside the house they make: steppers, tiles, and the plan */
+  .st-card.st-wide { width: min(940px, 100%); }
+  .st-body { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr); gap: 20px; text-align: left; align-items: start; }
+  @media (max-width: 780px) { .st-body { grid-template-columns: 1fr; } .st-look { order: -1; } }
+  .st-head { margin: 14px 0 6px; font-size: 11px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; color: var(--muted); }
+  .st-pick > .st-head:first-child { margin-top: 0; }
+  .st-step {
+    display: flex; align-items: center; gap: 10px; padding: 7px 8px 7px 11px; margin-bottom: 6px;
+    border: 1px solid var(--line); border-radius: 10px; background: var(--panel);
+  }
+  .st-step > .v3-ico { width: 20px; height: 20px; color: var(--accent); }
+  .st-step-name { flex: 1; font-size: 13px; font-weight: 600; }
+  .st-step-ctl { display: inline-flex; align-items: center; gap: 4px; }
+  .st-step-ctl output { min-width: 26px; text-align: center; font-size: 15px; font-weight: 700; font-variant-numeric: tabular-nums; }
+  .st-step-btn {
+    width: 30px; height: 30px; display: grid; place-items: center; padding: 0; border-radius: 8px;
+    border: 1px solid var(--line); background: var(--panel); color: var(--ink); cursor: pointer;
+  }
+  .st-step-btn:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); }
+  .st-step-btn:disabled { opacity: .35; cursor: default; }
+  .st-step-btn svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; }
+  .st-tiles { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
+  .st-tile { min-height: 72px; }
+  .st-look {
+    position: sticky; top: 0; display: flex; flex-direction: column; gap: 10px; padding: 12px;
+    border: 1px solid var(--line); border-radius: 12px; background: color-mix(in srgb, var(--accent-soft) 35%, var(--panel));
+  }
+  .st-look-pic { aspect-ratio: 4 / 3; display: grid; place-items: center; }
+  .st-sketch { width: 100%; height: 100%; }
+  .st-sketch .sk-room { stroke: var(--ink); stroke-width: .07; stroke-opacity: .65; }
+  .st-sketch .sk-day { fill: color-mix(in srgb, #e9b872 42%, var(--panel)); }
+  .st-sketch .sk-night { fill: color-mix(in srgb, #8fb6e8 42%, var(--panel)); }
+  .st-sketch .sk-wet { fill: color-mix(in srgb, #7fd0c8 42%, var(--panel)); }
+  .st-sketch .sk-hall { fill: color-mix(in srgb, var(--line) 70%, var(--panel)); }
+  .st-sketch .sk-car { fill: color-mix(in srgb, #9aa3ad 42%, var(--panel)); }
+  .st-sketch .sk-name { fill: var(--ink); text-anchor: middle; dominant-baseline: central; font-weight: 600; }
+  .st-sketch .sk-floor { fill: var(--muted); font-size: .72px; font-weight: 700; letter-spacing: .04em; }
+  .st-look-foot { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+  .st-look-sum { font-size: 12.5px; color: var(--muted); }
+  .st-shuffle { gap: 6px; }
+  .st-shuffle .v3-ico { width: 15px; height: 15px; }
   #hand-house[hidden], #hand-floors[hidden] { display: none; }
 
   /* ------------------------------ what Check says (12-check.js, 37-board.js) --
      (2026-10-01: "format it in a better way because it looks really
      unpolished")  A home's numbers as tiles, a number over what it counts;
      all clear as a green badge with a tick; what was just done as a quiet
-     note under it. */
+     note under it -- one 10px gap above each, the tiles' as their bottom's
+     (it was 2px over them and 10px under), and a tile padded evenly. */
   #report .scene-stats {
-    display: grid; grid-template-columns: minmax(0, .9fr) minmax(0, 1.15fr) minmax(0, 1.55fr); gap: 6px; margin: 2px 0 8px;
+    display: grid; grid-template-columns: minmax(0, .9fr) minmax(0, 1.15fr) minmax(0, 1.55fr); gap: 6px; margin: 10px 0 0;
   }
   #report .scene-stat {
-    display: flex; flex-direction: column; gap: 2px; min-width: 0; padding: 8px 9px 7px;
+    display: flex; flex-direction: column; gap: 4px; min-width: 0; padding: 9px 10px;
     border: 1px solid var(--line-soft); border-radius: 9px;
     background: color-mix(in srgb, var(--accent-soft) 60%, var(--panel));
   }
   #report .scene-stat b {
-    font-size: 17px; font-weight: 650; line-height: 1.15; color: var(--ink); font-variant-numeric: tabular-nums;
+    font-size: 17px; font-weight: 650; line-height: 1; color: var(--ink); font-variant-numeric: tabular-nums;
     white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
   }
   #report .scene-stat b small { font-size: 11px; font-weight: 600; color: var(--muted); }
   #report .scene-stat span {
-    font-size: 11.5px; font-weight: 600; color: var(--muted);
+    font-size: 11.5px; font-weight: 600; line-height: 1.2; color: var(--muted);
     white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
   }
   #report .report-ok {
-    display: inline-flex; align-items: center; gap: 7px; margin: 2px 0 0; padding: 4px 11px 4px 5px;
+    display: flex; width: fit-content; align-items: center; gap: 7px; margin: 10px 0 0; padding: 4px 11px 4px 5px;
     border-radius: 999px; font-size: 12.5px; font-weight: 600;
     color: var(--good); background: color-mix(in srgb, var(--good) 11%, var(--panel));
   }
@@ -45,7 +87,7 @@
     background: var(--good); fill: none; stroke: var(--panel); stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round;
   }
   #report .report-note {
-    display: block; margin: 8px 0 0; padding: 6px 10px; font-size: 12.5px; color: var(--ink);
+    display: block; margin: 10px 0 0; padding: 6px 10px; font-size: 12.5px; color: var(--ink);
     border-left: 3px solid var(--accent); border-radius: 4px 8px 8px 4px; background: var(--accent-soft);
     animation: report-note-in .25s ease-out both;
   }
@@ -78,10 +120,95 @@
      On the right, where Materials keeps the left; the weather on segments;
      what is falling over the picture; what the land comes to, in a corner. */
   .v3-set { left: auto; right: 10px; }
-  .v3-set .switch.wide { padding: 7px 0; }
-  .v3-weather-seg { display: flex; flex-wrap: wrap; margin: 6px 0 4px; }
-  .v3-weather-seg .seg-btn { flex: 1 1 auto; }
-  .v3-set-says { margin: 8px 0 2px; font-size: 12px; line-height: 1.45; color: var(--muted); }
+  .v3-set { width: min(340px, calc(100% - 20px)); }
+  /* each setting a tile: its picture and its name, lit and ticked while on */
+  .hs-tiles, .hs-weather { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; margin: 6px 0 4px; }
+  .hs-tile {
+    position: relative; display: flex; flex-direction: column; align-items: flex-start; gap: 8px; min-height: 76px;
+    padding: 10px 10px 9px; border: 1px solid var(--line); border-radius: 10px; background: var(--panel); color: var(--muted);
+    font: inherit; font-size: 12px; font-weight: 600; line-height: 1.25; text-align: left; cursor: pointer;
+    transition: border-color var(--quick, .15s) ease, background-color var(--quick, .15s) ease, color var(--quick, .15s) ease;
+  }
+  .hs-tile .v3-ico { width: 20px; height: 20px; }
+  .hs-tile:hover, .hs-wx:hover { border-color: color-mix(in srgb, var(--accent) 45%, var(--line)); }
+  .hs-tile[aria-pressed="true"] { border-color: var(--accent); background: var(--accent-soft); color: var(--ink); }
+  .hs-tile[aria-pressed="true"] .v3-ico { color: var(--accent); }
+  .hs-tile-tick {
+    position: absolute; top: 7px; right: 7px; width: 16px; height: 16px; border-radius: 50%;
+    background: var(--accent); display: none; place-items: center;
+  }
+  .hs-tile[aria-pressed="true"] .hs-tile-tick { display: grid; }
+  .hs-tile[disabled], .hs-wx[disabled] { opacity: .45; cursor: default; }
+  .hs-tile[disabled]:hover, .hs-wx[disabled]:hover { border-color: var(--line); }
+  /* the sheet in four tabs: the house, the land, the street, the weather */
+  .hs-tabs {
+    position: sticky; top: 0; z-index: 1; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 2px;
+    margin: 8px 0 6px; padding: 3px; border-radius: 10px; background: color-mix(in srgb, var(--line) 60%, var(--panel));
+    box-shadow: 0 -8px 0 var(--panel);
+  }
+  .hs-tab {
+    border: 0; border-radius: 8px; background: transparent; color: var(--muted); font: inherit; font-size: 12px; font-weight: 600;
+    padding: 6px 2px; cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .hs-tab:hover { color: var(--ink); }
+  .hs-tab[aria-selected="true"] { background: var(--panel); color: var(--ink); box-shadow: 0 1px 2px rgba(0, 0, 0, .14); }
+  .hs-pick .hs-wx { padding: 9px 3px 8px; font-size: 11.5px; text-align: center; line-height: 1.2; }
+  .hs-tile-tick svg { width: 12px; height: 12px; fill: none; stroke: #ffffff; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
+  /* the weather: six pictures */
+  .hs-wx {
+    display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 11px 4px 9px;
+    border: 1px solid var(--line); border-radius: 10px; background: var(--panel); color: var(--muted);
+    font: inherit; font-size: 12px; font-weight: 600; cursor: pointer;
+    transition: border-color var(--quick, .15s) ease, background-color var(--quick, .15s) ease, color var(--quick, .15s) ease;
+  }
+  .hs-wx .v3-ico { width: 26px; height: 26px; stroke-width: 1.4; }
+  .hs-wx.on { border-color: var(--accent); background: var(--accent-soft); color: var(--accent); }
+  .hs-note {
+    display: flex; gap: 8px; align-items: flex-start; margin: 8px 0 2px; padding: 9px 10px; border-radius: 9px;
+    background: var(--accent-soft); color: var(--ink); font-size: 12px; line-height: 1.45;
+  }
+  .hs-note .v3-ico { color: var(--accent); margin-top: 1px; }
+
+  /* ------------------------------------------- the 3D view's bar, in groups (39-house.js) --
+     (2026-10-01: "the UI of those buttons on the top looks rushed")  Floating
+     groups of buttons, each a line picture and its name; the names only
+     under the pointer where the view is narrow; the hint in the picture. */
+  .view3d .v3-bar.v3-bar-dressed { gap: 8px; align-items: center; }
+  .v3-group {
+    display: inline-flex; align-items: center; gap: 2px; padding: 3px; pointer-events: auto;
+    background: color-mix(in srgb, var(--panel) 94%, transparent); border: 1px solid var(--line); border-radius: 12px;
+    box-shadow: 0 1px 2px rgba(16, 24, 40, .08), 0 6px 18px rgba(16, 24, 40, .12);
+    -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px);
+  }
+  .v3-group:not(:has(> :not([hidden]))) { display: none; }
+  .v3-bar .v3-group .btn {
+    height: 30px; padding: 0 10px; gap: 6px; border: 1px solid transparent; border-radius: 9px; background: transparent;
+    color: var(--ink); box-shadow: none; font-size: 12.5px; font-weight: 560; white-space: nowrap;
+  }
+  .v3-bar .v3-group .btn:hover { background: var(--accent-soft); }
+  .v3-bar .v3-group .btn[aria-pressed="true"], .v3-bar .v3-group .btn[aria-expanded="true"],
+  .v3-bar .v3-group .btn.primary:not([data-v3="run"]) { background: var(--accent-soft); color: var(--accent); border-color: transparent; }
+  .v3-bar .v3-group .btn[data-v3="run"] { background: var(--accent); color: #ffffff; padding: 0 13px; }
+  .v3-bar .v3-group .btn[data-v3="run"]:hover { filter: brightness(1.08); }
+  .v3-ico { width: 16px; height: 16px; flex: none; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+  .view3d .v3-bar-dressed .v3-shut {
+    width: 38px; height: 38px; border-radius: 12px; border: 1px solid var(--line);
+    background: color-mix(in srgb, var(--panel) 94%, transparent); box-shadow: 0 1px 2px rgba(16, 24, 40, .08), 0 6px 18px rgba(16, 24, 40, .12);
+  }
+  /* as wide as the view is, not the window: the panel beside it takes some */
+  .view3d { container-type: inline-size; }
+  @container (max-width: 1180px) {
+    .v3-bar .v3-group .btn:not([data-v3="run"]) .v3-lbl { display: none; }
+    .v3-bar .v3-group .btn { padding: 0 8px; }
+  }
+  @container (max-width: 560px) {
+    .v3-bar .v3-group .btn[data-v3="run"] .v3-lbl { display: none; }
+  }
+  .view3d .v3-hint.v3-hint-foot {
+    position: absolute; left: 50%; bottom: 12px; transform: translateX(-50%); max-width: calc(100% - 40px);
+    pointer-events: none; opacity: .88; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .view3d.walking .v3-hint.v3-hint-foot { bottom: 64px; }
   .view3d .v3-weather { position: absolute; left: 0; top: 0; width: 100%; height: 100%; pointer-events: none; }
   .v3-land {
     position: absolute; left: 10px; bottom: 10px; max-width: min(380px, calc(100% - 20px));
@@ -91,3 +218,69 @@
   }
   .v3-land-head { font-size: 11px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; color: var(--muted); }
   @media (prefers-reduced-motion: reduce) { .v3-land { animation: none; } }
+
+  /* ---- a house's style (39-styles.js): the one there now, and the rest by where they are from */
+  .sy-art { width: 44px; height: 30px; fill: none; stroke: currentColor; stroke-width: 1.25; stroke-linecap: round; stroke-linejoin: round; flex: none; }
+  .sy-now {
+    display: flex; align-items: center; gap: 10px; margin: 6px 0 4px; padding: 8px 10px; border: 1px solid var(--line);
+    border-radius: 10px; background: var(--panel); color: var(--ink);
+  }
+  .sy-now .sy-art { width: 52px; height: 36px; color: var(--accent); }
+  .sy-now-words { display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1; font-size: 12px; color: var(--muted); }
+  .sy-now-words b { font-size: 13px; color: var(--ink); font-weight: 650; }
+  .sy-gallery { margin: 4px 0 6px; }
+  .sy-region { margin: 10px 0 4px; font-size: 11px; font-weight: 650; color: var(--muted); }
+  .sy-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
+  .sy-tile {
+    display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 8px 4px 7px; border: 1px solid var(--line);
+    border-radius: 10px; background: var(--panel); color: var(--muted); font: inherit; font-size: 11.5px; font-weight: 600;
+    line-height: 1.2; text-align: center; cursor: pointer;
+  }
+  .sy-tile:hover { border-color: color-mix(in srgb, var(--accent) 45%, var(--line)); color: var(--ink); }
+  .sy-tile.on { border-color: var(--accent); background: var(--accent-soft); color: var(--accent); }
+  .sy-shapes .sy-art { width: 34px; height: 24px; }
+  @media (prefers-reduced-motion: reduce) { .sy-tile { transition: none; } }
+
+  /* ---- what to build (39-types.js): a row of chips, and the style between two arrows */
+  .ty-chips { display: flex; flex-wrap: wrap; gap: 6px; margin: 6px 0 2px; }
+  .ty-chip {
+    display: inline-flex; align-items: center; gap: 6px; padding: 6px 10px 6px 8px; border: 1px solid var(--line);
+    border-radius: 999px; background: var(--panel); color: var(--muted); font: inherit; font-size: 12px; font-weight: 600; cursor: pointer;
+  }
+  .ty-chip .v3-ico { width: 16px; height: 16px; }
+  .ty-chip:hover { border-color: color-mix(in srgb, var(--accent) 45%, var(--line)); color: var(--ink); }
+  .ty-chip.on { border-color: var(--accent); background: var(--accent-soft); color: var(--accent); }
+  .ty-style {
+    display: flex; align-items: center; gap: 10px; margin: 6px 0 2px; padding: 6px 8px; border: 1px solid var(--line);
+    border-radius: 10px; background: var(--panel);
+  }
+  .ty-style-pic .sy-art { width: 48px; height: 33px; color: var(--accent); }
+  .ty-style-words { display: flex; flex-direction: column; gap: 1px; flex: 1; min-width: 0; font-size: 12px; color: var(--muted); }
+  .ty-style-words b { font-size: 13px; color: var(--ink); font-weight: 650; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+  /* ---- a room's walls (39-inside.js): a switch a side, what an opening needs under it */
+  .dz-walls { margin-top: 12px; }
+  .dz-wall-row { padding: 6px 0; }
+  .dz-wall-row > span { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+  .dz-wall-row small { color: var(--muted); font-size: 11.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .dz-wall-row input:disabled + * , .dz-wall-row:has(input:disabled) { opacity: .6; }
+  .dz-wall-says {
+    margin: 2px 0 6px; padding: 7px 9px; border-radius: 8px; background: var(--accent-soft); color: var(--ink);
+    font-size: 11.5px; line-height: 1.45;
+  }
+
+  /* ---- inside the walls (39-xray.js): what each color is, each a switch */
+  .v3-xray {
+    position: absolute; left: 10px; top: 60px; z-index: 6; width: min(250px, calc(100% - 20px)); padding: 8px 12px 10px;
+    border: 1px solid var(--line); border-radius: 12px; background: color-mix(in srgb, var(--panel) 94%, transparent);
+    box-shadow: var(--shadow); color: var(--ink); animation: dz-pop .16s ease-out both;
+  }
+  .v3-xray-head { margin: 2px 0 4px; font-size: 11px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; color: var(--muted); }
+  .v3-xray-row { padding: 4px 0; font-size: 12.5px; }
+  .v3-xray-row > span { display: inline-flex; align-items: center; gap: 7px; }
+  .v3-xray-row .v3-ico { width: 16px; height: 16px; color: var(--muted); }
+  .v3-xray-row em { font-style: normal; }
+  .v3-xray-dot { width: 10px; height: 10px; border-radius: 50%; flex: none; box-shadow: 0 0 0 1px rgba(0, 0, 0, .25) inset; }
+  .v3-xray-wire { width: 100%; margin-top: 8px; }
+  .view3d .v3-bar [data-v3="xray"][aria-pressed="true"] { border-color: var(--accent); }
+  @media (prefers-reduced-motion: reduce) { .v3-xray { animation: none; } }

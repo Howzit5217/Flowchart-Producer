@@ -426,10 +426,39 @@
         if (aboard.length) { crowd = crowdOf([node.id].concat(aboard)); }
       }
 
+      // (2026-10-01: "when there is a lot of stuff it is really laggy")  On a
+      // big plan the whole of it is drawn again only every so often while a
+      // shape is carried, and once the mouse rests; between, what is being
+      // carried is slid along where it was drawn last.
+      var lastFull = 0, trailing = null, drawnAt = {};
+      function carriedNodes() { return crowd ? crowd.map(function (c) { return c.node; }) : [node]; }
+      function noteDrawn() { carriedNodes().forEach(function (n) { if (n) { drawnAt[n.id] = { x: n.x, y: n.y }; } }); }
+      function slideCarried() {
+        var chartNow = el("#chart");
+        if (!chartNow) { return false; }
+        return carriedNodes().every(function (n) {
+          var g = n && el('.node[data-i="h' + n.id + '"]', chartNow), was = n && drawnAt[n.id];
+          if (!g || !was) { return false; }
+          if (g.dataset.t0 === undefined) { g.dataset.t0 = g.getAttribute("transform") || ""; }
+          g.setAttribute("transform", "translate(" + (n.x - was.x) + " " + (n.y - was.y) + ") " + g.dataset.t0);
+          return true;
+        });
+      }
       function paint() {
         if (waiting) { return; }
         waiting = true;
-        requestAnimationFrame(function () { waiting = false; drawHand(); });
+        requestAnimationFrame(function () {
+          waiting = false;
+          if (hand.nodes.length > 150 && !grip && performance.now() - lastFull < 150 && slideCarried()) {
+            clearTimeout(trailing);
+            trailing = setTimeout(function () { trailing = null; lastFull = performance.now(); drawHand(); noteDrawn(); }, 170);
+            return;
+          }
+          clearTimeout(trailing); trailing = null;
+          lastFull = performance.now();
+          drawHand();
+          noteDrawn();
+        });
       }
       var stage = el("#stage");
       var wasLeft = stage ? stage.scrollLeft : 0;
@@ -529,6 +558,7 @@
         paint();
       }
       function drop(e) {
+        clearTimeout(trailing); trailing = null;   // (let go: drawn whole below)
         chaseStop();
         guides = [];                     // the red lines go with the holding
         shapeCarried = false;

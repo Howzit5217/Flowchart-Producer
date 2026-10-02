@@ -58,7 +58,9 @@
     i_easel: 1300, i_trampoline: 1200, i_swing: 1100,
     i_firepit: 1100, i_lounger: 1300, i_gazebo: 1000, i_shed: 800, i_planter: 600, i_birdbath: 600,
     i_lamppost: 500, i_pathlight: 500, i_porchlight: 500, i_floodlight: 500, i_mailbox: 700, i_bikerack: 700,
-    i_workbench: 1300, i_shelving: 700, i_toolchest: 800, i_furnace: 600
+    i_workbench: 1300, i_shelving: 700, i_toolchest: 800, i_furnace: 600,
+    i_gondola: 900, i_checkout: 1200, i_cooler: 700, i_display: 800, i_register: 600, i_schooldesk: 1300,
+    i_outlet: 400, i_lightswitch: 300, i_breaker: 800, i_post: 300
   };
 
   // ---- doors: open, shut, locked -------------------------------------------
@@ -165,15 +167,53 @@
     return f && f.ceil > 0 ? f.ceil : CEIL_PLAIN;
   }
 
+  // (2026-10-01: "when you make multiple houses instead of being able to
+  // see them individually in 3d they are currently stacking on top of one
+  // another")  Floors stack with the floors of their own house only: those
+  // Start a house made together (`bldg`), those joined by stairs drawn
+  // between them, and a floor with neither going with the house whose
+  // ground floor is nearest.  Each house's ground floor stays where it is
+  // drawn; `up` is the floor over each in its own house.
   function floorsOf() {
     var list = hand.nodes.filter(function (n) { return n.kind === "i_floor"; });
     if (!list.length) { return []; }
     var left = list.slice().sort(function (p, q) { return p.x - q.x || p.y - q.y; });
-    var order = list.map(function (n) { return { n: n, key: levelKey(n, left.indexOf(n)) }; })
-      .sort(function (p, q) { return p.key - q.key || p.n.x - q.n.x; });
-    var ground = 0;
-    for (var g = 0; g < order.length; g++) { if (order[g].key >= 0) { ground = g; break; } }
-    var base = order[ground].n;
+    var all = list.map(function (n) { return { n: n, key: levelKey(n, left.indexOf(n)) }; });
+    var top = all.map(function (o, i) { return i; });
+    function root(i) { while (top[i] !== i) { i = top[i]; } return i; }
+    function join(i, j) { top[root(i)] = root(j); }
+    all.forEach(function (o, i) {
+      all.forEach(function (p, j) { if (j > i && o.n.bldg !== undefined && o.n.bldg === p.n.bldg) { join(i, j); } });
+    });
+    function holder(n) {
+      var best = -1;
+      all.forEach(function (o, i) { if (insideArea(o.n, n.x, n.y) && (best < 0 || o.n.w * o.n.h < all[best].n.w * all[best].n.h)) { best = i; } });
+      return best;
+    }
+    hand.links.forEach(function (l) {
+      var a = nodeById(l.from), b = nodeById(l.to);
+      if (!a || !b || !BETWEEN_FLOORS[a.kind] || !BETWEEN_FLOORS[b.kind]) { return; }
+      var fa = holder(a), fb = holder(b);
+      if (fa >= 0 && fb >= 0 && fa !== fb) { join(fa, fb); }
+    });
+    var houses = {};
+    all.forEach(function (o, i) { (houses[root(i)] = houses[root(i)] || []).push(o); });
+    var groups = Object.keys(houses).map(function (k) { return houses[k]; });
+    // a house without a ground floor (an Upstairs drawn on its own) goes
+    // with the nearest that has one -- one house, as it always was
+    // (a ground floor: called one, or the first of those called nothing)
+    var grounded = groups.filter(function (g) { return g.some(function (o) { return o.key >= 0 && o.key <= 5; }); });
+    if (!grounded.length) { groups = [all]; }
+    else {
+      groups.filter(function (g) { return grounded.indexOf(g) < 0; }).forEach(function (g) {
+        var best = null, far = Infinity;
+        grounded.forEach(function (h) {
+          h.forEach(function (o) { var d = Math.hypot(o.n.x - g[0].n.x, o.n.y - g[0].n.y); if (d < far) { far = d; best = h; } });
+        });
+        Array.prototype.push.apply(best, g);
+      });
+      groups = grounded;
+    }
     function tall(f) {                   // a storey: its highest ceiling, and the floor over it
       var most = ceilOf(f);
       hand.nodes.forEach(function (r) {
@@ -181,15 +221,31 @@
       });
       return (most + 0.3) * FLOOR_PX;
     }
-    var z = 0;
-    for (var i = ground; i < order.length; i++) { order[i].z = z; z += tall(order[i].n); }
-    z = 0;
-    for (var j = ground - 1; j >= 0; j--) { z -= tall(order[j].n); order[j].z = z; }
-    order.forEach(function (o, k) {
-      o.level = k - ground;
-      o.dx = base.x - o.n.x; o.dy = base.y - o.n.y;
+    var out = [];
+    groups.forEach(function (order, b) {
+      order.sort(function (p, q) { return p.key - q.key || p.n.x - q.n.x; });
+      var ground = 0;
+      for (var g = 0; g < order.length; g++) { if (order[g].key >= 0) { ground = g; break; } }
+      var base = order[ground].n;
+      var z = 0;
+      for (var i = ground; i < order.length; i++) { order[i].z = z; z += tall(order[i].n); }
+      z = 0;
+      for (var j = ground - 1; j >= 0; j--) { z -= tall(order[j].n); order[j].z = z; }
+      order.forEach(function (o, k) {
+        o.level = k - ground;
+        o.dx = base.x - o.n.x; o.dy = base.y - o.n.y;
+        o.bldg = b;
+        o.up = order[k + 1] || null;
+      });
+      out = out.concat(order);
     });
-    return order;
+    return out.sort(function (p, q) { return p.level - q.level || p.bldg - q.bldg; });
+  }
+  // The floor over another, in its own house (null at the top).
+  function floorOver(floors, f) {
+    if (!f) { return null; }
+    if (f.up !== undefined) { return f.up; }
+    return floors[floors.indexOf(f) + 1] || null;
   }
 
   function floorAt(floors, x, y) {
@@ -217,12 +273,15 @@
     }
     hand.links.forEach(function (l) {
       var a = nodeById(l.from), b = nodeById(l.to);
-      if (a && b && BETWEEN_FLOORS[a.kind] && BETWEEN_FLOORS[b.kind] && !used[a.id] && !used[b.id]) { add(a, b); }
+      // (a lift stops at every floor of a block, 39-types.js: one may be
+      // joined to the floor under it and to the one over it)
+      if (a && b && BETWEEN_FLOORS[a.kind] && BETWEEN_FLOORS[b.kind] &&
+          (!used[a.id] || a.kind === "i_elevator") && (!used[b.id] || b.kind === "i_elevator")) { add(a, b); }
     });
     if (floors.length > 1) {
       ways.forEach(function (a) {
         if (used[a.id]) { return; }
-        var fa = floorAt(floors, a.x, a.y), next = fa && floors[floors.indexOf(fa) + 1];
+        var fa = floorAt(floors, a.x, a.y), next = fa && floorOver(floors, fa);
         if (!next) { return; }
         var best = null, far = Infinity;
         ways.forEach(function (b) {
@@ -504,24 +563,31 @@
   }
 
   // The squares a piece stands on -- the stairs, to be stood on to go up.
-  function cellsUnder(plan, piece) {
-    var out = [];
-    for (var i = 0; i < plan.cells.length; i++) {
-      var p = cellMid(plan, i);
-      if (insideArea(piece, p[0], p[1], 2) && plan.cells[i] !== 1 && plan.cells[i] !== 2) { out.push(i); }
-    }
+  // The squares a piece could touch, grown by `grow`: the box round it,
+  // turned any way.  (Every square of the plan was looked at for every
+  // piece: two houses side by side, 300 pieces on 170,000 squares, took
+  // the house's suggestions three seconds -- 2026-10-01, "really laggy".)
+  function cellsNear(plan, piece, grow) {
+    var r = Math.hypot(piece.w || 0, piece.h || 0) / 2 + grow + WALK_CELL, out = [];
+    var c0 = Math.max(0, Math.floor((piece.x - r - plan.x0) / WALK_CELL)), c1 = Math.min(plan.cols - 1, Math.ceil((piece.x + r - plan.x0) / WALK_CELL));
+    var r0 = Math.max(0, Math.floor((piece.y - r - plan.y0) / WALK_CELL)), r1 = Math.min(plan.rows - 1, Math.ceil((piece.y + r - plan.y0) / WALK_CELL));
+    for (var row = r0; row <= r1; row++) { for (var col = c0; col <= c1; col++) { out.push(row * plan.cols + col); } }
     return out;
+  }
+  function cellsUnder(plan, piece) {
+    return cellsNear(plan, piece, 2).filter(function (i) {
+      var p = cellMid(plan, i);
+      return insideArea(piece, p[0], p[1], 2) && plan.cells[i] !== 1 && plan.cells[i] !== 2;
+    });
   }
 
   // The open squares beside a piece, where it is used from.
   function besideOf(plan, piece) {
-    var out = [];
-    for (var i = 0; i < plan.cells.length; i++) {
-      if (plan.cells[i] !== 0 && plan.cells[i] !== 3) { continue; }
+    return cellsNear(plan, piece, WALK_CELL * 1.6).filter(function (i) {
+      if (plan.cells[i] !== 0 && plan.cells[i] !== 3) { return false; }
       var p = cellMid(plan, i);
-      if (insideArea(piece, p[0], p[1], -WALK_CELL * 1.6) && !insideArea(piece, p[0], p[1], 0)) { out.push(i); }
-    }
-    return out;
+      return insideArea(piece, p[0], p[1], -WALK_CELL * 1.6) && !insideArea(piece, p[0], p[1], 0);
+    });
   }
 
   // ---- the walk -------------------------------------------------------------

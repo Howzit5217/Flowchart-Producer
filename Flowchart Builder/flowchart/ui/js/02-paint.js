@@ -250,13 +250,19 @@
   // flowchart is top to bottom, so where the stage is scrolled to says
   // near enough which of them is being looked at.  It settles nothing but
   // what gets its color first, so near enough is enough.
+  // (Where the stage is scrolled to is read before a drawing by hand is
+  // poured, while the page is laid out already, and kept a moment: read
+  // after, it made the browser lay out the whole new drawing to answer --
+  // the most of what dragging a piece round a big plan took, 2026-10-01.)
+  var eyeKept = null;
   function eyeAt(howMany) {
     var stage = el("#stage");
     if (paintingAll || !stage || howMany < 2) { return 0; }
-    var room = stage.scrollHeight - stage.clientHeight;
+    var fresh = eyeKept && performance.now() - eyeKept.at < 40;
+    var room = fresh ? eyeKept.room : stage.scrollHeight - stage.clientHeight, top = fresh ? eyeKept.top : stage.scrollTop;
     if (room <= 0) { return 0; }
     return Math.min(howMany - 1,
-                    Math.max(0, Math.floor(stage.scrollTop / room * (howMany - 1))));
+                    Math.max(0, Math.floor(top / room * (howMany - 1))));
   }
 
   // Who is in the chart, worked out once per drawing rather than once per

@@ -457,6 +457,7 @@
       "t M25 25 L25 8 M25 25 L39.7 16.5 M25 25 L39.7 33.5 M25 25 L25 42 M25 25 L10.3 33.5 M25 25 L10.3 16.5",
       "o " + C(25, 8, 3.4) + " " + C(39.7, 16.5, 3.4) + " " + C(39.7, 33.5, 3.4) + " " + C(25, 42, 3.4) + " " + C(10.3, 33.5, 3.4) + " " + C(10.3, 16.5, 3.4),
       "o " + C(25, 25, 5)]);
+    plan("i_vent", 24, 24, ["o " + R(0, 0, 24, 24, 1.5), "t M4 6 H20 M4 10 H20 M4 14 H20 M4 18 H20"]);   // an air vent in the ceiling (2026-10-01)
     plan("i_ceilingfan", 70, 70, ["t- " + C(35, 35, 34.5),
       "o M35 35 C31 22 32 8 35 3 C38 8 39 22 35 35 Z M35 35 C48 31 62 32 67 35 C62 38 48 39 35 35 Z " +
       "M35 35 C39 48 38 62 35 67 C32 62 31 48 35 35 Z M35 35 C22 39 8 38 3 35 C8 32 22 31 35 35 Z",
@@ -578,6 +579,36 @@
     plan("i_shelving", 100, 40, ["o " + R(0, 0, 100, 40, 0), "t M0 10 H100 M0 20 H100 M0 30 H100",
                                  "k " + R(0, 0, 4, 4, 0) + " " + R(96, 0, 4, 4, 0) + " " + R(0, 36, 4, 4, 0) + " " + R(96, 36, 4, 4, 0)]);
     plan("i_furnace", 60, 60, ["o " + R(0, 0, 60, 60, 1), "t " + R(6, 6, 48, 28, 1), "t M10 42 H50 M10 48 H50 M10 54 H50", "o " + C(30, 20, 6)]);
+    // a shop, an office, a school (2026-10-02: "design things in stores with
+    // shelves, aisles"): shelving for an aisle, both sides stocked; a
+    // checkout with its belt, its till and the cashier's stool; a cooler
+    // behind glass doors; a table of crates; a till for a counter; a pupil's
+    // desk and chair
+    plan("i_gondola", 120, 90, ["o " + R(0, 0, 120, 90, 1), "t M0 45 H120", "t M3 9 H117 M3 81 H117",
+                                "t " + R(6, 13, 12, 26, 0.5) + " " + R(22, 13, 16, 26, 0.5) + " " + R(42, 13, 10, 26, 0.5) + " " + R(56, 13, 18, 26, 0.5) +
+                                " " + R(78, 13, 14, 26, 0.5) + " " + R(96, 13, 18, 26, 0.5),
+                                "t " + R(6, 51, 16, 26, 0.5) + " " + R(26, 51, 12, 26, 0.5) + " " + R(42, 51, 18, 26, 0.5) + " " + R(64, 51, 12, 26, 0.5) +
+                                " " + R(80, 51, 16, 26, 0.5) + " " + R(100, 51, 14, 26, 0.5)]);
+    plan("i_checkout", 180, 80, ["o " + R(0, 0, 180, 50, 2), "t " + R(6, 8, 110, 34, 2),
+                                 "t M20 8 V42 M34 8 V42 M48 8 V42 M62 8 V42 M76 8 V42 M90 8 V42 M104 8 V42",
+                                 "o " + R(126, 6, 44, 38, 2), "t " + R(134, 12, 28, 14, 1), "o " + C(153, 66, 11)]);
+    plan("i_cooler", 120, 75, ["o " + R(0, 0, 120, 75, 2), "t M60 6 V75 M4 68 H116",
+                               "t M8 18 H54 M66 18 H112 M8 32 H54 M66 32 H112 M8 46 H54 M66 46 H112",
+                               "k " + R(52, 58, 3, 12, 1) + " " + R(65, 58, 3, 12, 1)]);
+    plan("i_display", 120, 80, ["o " + R(0, 0, 120, 80, 3),
+                                "t " + R(6, 6, 34, 31, 2) + " " + R(43, 6, 34, 31, 2) + " " + R(80, 6, 34, 31, 2) +
+                                " " + R(6, 43, 34, 31, 2) + " " + R(43, 43, 34, 31, 2) + " " + R(80, 43, 34, 31, 2),
+                                "t " + C(23, 21, 6) + " " + C(60, 21, 6) + " " + C(97, 21, 6) + " " + C(23, 58, 6) + " " + C(60, 58, 6) + " " + C(97, 58, 6)]);
+    plan("i_register", 40, 35, ["o " + R(0, 9, 40, 26, 3), "o " + R(8, 0, 24, 12, 2),
+                                "t M6 19 H34 M6 25 H34 M6 31 H34 M14 19 V34 M20 19 V34 M26 19 V34"]);
+    plan("i_schooldesk", 60, 75, ["o " + R(0, 0, 60, 40, 2), "t M6 7 H54", "o " + R(14, 47, 32, 22, 3), "o " + R(14, 67, 32, 8, 2)]);
+    // what a house is wired with, and holds it up (2026-10-02: "outlets ...
+    // light switches and circuit breakers in proper locations"; "real things
+    // that are needed to properly support the building")
+    plan("i_outlet", 16, 8, ["o " + R(2, 0, 12, 5, 0.6), "t M6 1.4 V3.6 M10 1.4 V3.6", "o " + C(8, 6.4, 1.6)]);
+    plan("i_lightswitch", 14, 8, ["o " + R(2, 0, 10, 4.5, 0.6), "t M7 4.5 L10.4 7.6", "k " + C(10.4, 7.6, 1.1)]);
+    plan("i_breaker", 44, 12, ["o " + R(0, 0, 44, 9, 0.8), "t M5 3 H39 M5 6 H39 M14 1.2 V7.8 M22 1.2 V7.8 M30 1.2 V7.8", "k " + R(36, 9, 6, 3, 0.6)]);
+    plan("i_post", 16, 16, ["k " + R(0, 0, 16, 16, 0.6)]);
     plan("i_toolchest", 60, 45, ["o " + R(0, 0, 60, 45, 2), "t M3 9 H57 M3 17 H57 M3 25 H57 M3 33 H57", "t2 M20 41 H40", "k " + C(54, 4.5, 1.6)]);
     // a house on its land: the lot it stands on, the way to it, round it
     area("i_lot", 750, 1000, function (w, h) {      // 15 m by 20 m, about 49 ft by 66 ft
@@ -879,7 +910,7 @@
                  "i_linencab"]],
     ["ic_decor", ["i_tablelamp", "i_desklamp", "i_vase", "i_candle", "i_books", "i_frame", "i_basket",
                   "i_monitor", "i_plant", "i_succulent", "i_herbs", "i_palm", "i_cactus", "i_flowers",
-                  "i_hanging", "i_pendant", "i_chandelier", "i_ceilingfan"]],
+                  "i_hanging", "i_pendant", "i_chandelier", "i_ceilingfan", "i_vent"]],
     ["ic_walls", ["i_picture", "i_mirror", "i_shelf", "i_walltv", "i_wallclock", "i_sconce", "i_cabinet",
                   "i_hooks", "i_radiator", "i_hood", "i_towelrail", "i_medicine", "i_cubeshelf",
                   "i_cornershelf", "i_shoerack", "i_coatrack", "i_whiteboard", "i_dartboard", "i_evcharger"]],
@@ -891,6 +922,11 @@
                     "i_birdbath", "i_lamppost", "i_pathlight", "i_porchlight", "i_floodlight", "i_mailbox", "i_bikerack"]],
     ["ic_fitness", ["i_treadmill", "i_exbike", "i_weightbench", "i_yogamat", "i_pooltable", "i_pingpong",
                     "i_dartboard", "i_easel", "i_trampoline", "i_swing"]],
+    ["ic_store", ["i_gondola", "i_checkout", "i_cooler", "i_display", "i_register", "i_counter", "i_shelving",
+                  "i_closetrod", "i_floormirror", "i_roundtable", "i_chair", "i_stool", "i_coffeemaker",
+                  "i_desk", "i_officechair", "i_filing", "i_printer", "i_whiteboard", "i_schooldesk", "i_plant"]],
+    ["ic_power", ["i_outlet", "i_lightswitch", "i_breaker", "i_post", "i_furnace", "i_ac", "i_vent", "i_heater",
+                  "i_radiator", "i_evcharger"]],
     ["ic_utility", ["i_workbench", "i_shelving", "i_toolchest", "i_furnace", "i_freezer", "i_evcharger",
                     "i_bikerack"]],
     ["ic_devices", ["i_computer", "i_laptop", "i_tablet", "i_phone", "i_server", "i_database",
