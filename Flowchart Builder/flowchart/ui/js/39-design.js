@@ -1515,8 +1515,92 @@
       } g.fillStyle = shade(-0.35); g.fillRect(0, y + 7, S, 1); }
     } else if (kind === "metal") {
       for (x = 4; x < S; x += 9) { line(x, 0, x, S, shade(0.25), 1.6); line(x + 1.5, 0, x + 1.5, S, shade(-0.2)); }
+    // (added 2026-10-01: "add more textures")
+    } else if (kind === "herringbone") {
+      // planks four to one, each row of the zigzag stepped one along, laid on the slant
+      g.save(); g.translate(S / 2, S / 2); g.rotate(Math.PI / 4);
+      for (var cy = -9; cy <= 9; cy++) { for (var cx = -9; cx <= 9; cx++) {
+        var d = (((cx - cy) % 8) + 8) % 8, ix = d < 4 ? cx - d : cx, iy = d < 4 ? cy : cy - (7 - d);
+        var hsh = (((ix * 73856093) ^ (iy * 19349663)) >>> 0) % 100 / 100;
+        g.fillStyle = shade((hsh - 0.5) * 0.24); g.fillRect(cx * 4, cy * 4, 4, 4);
+      } }
+      g.restore();
+    } else if (kind === "hextiles") {
+      g.fillStyle = shade(-0.28); g.fillRect(0, 0, S, S);
+      for (y = 0, r = 0; y < S + 9; y += 7.8, r++) { for (x = (r % 2) * 4.5; x < S + 9; x += 9) {
+        g.fillStyle = shade((rnd() - 0.5) * 0.08); g.beginPath();
+        for (i = 0; i < 6; i++) { var an = Math.PI / 6 + i * Math.PI / 3; g.lineTo(x + Math.cos(an) * 4.4, y + Math.sin(an) * 4.4); }
+        g.fill();
+      } }
+    } else if (kind === "checker") {
+      var lum = mLum(color), other = lum > 0.45 ? mShade(color, -0.82) : mShade(color, 0.85);
+      for (y = 0; y < S; y += 11) { for (x = 0; x < S; x += 11) { if (((x + y) / 11) % 2) { g.fillStyle = other; g.fillRect(x, y, 11, 11); } } }
+    } else if (kind === "terrazzo") {
+      speckle(120, 0.08);
+      for (i = 0; i < 70; i++) { g.fillStyle = "hsl(" + Math.round(rnd() * 360) + ",25%," + Math.round(40 + rnd() * 40) + "%)"; g.fillRect(rnd() * S, rnd() * S, 1.6 + rnd() * 1.6, 1.4 + rnd() * 1.4); }
+    } else if (kind === "cork") {
+      speckle(600, 0.4);
+      for (y = 0; y <= S; y += 22) { line(0, y, S, y, shade(-0.25)); line(y, 0, y, S, shade(-0.25)); }
+    } else if (kind === "plaster") {
+      for (i = 0; i < 14; i++) { g.fillStyle = shade((rnd() - 0.5) * 0.12); g.globalAlpha = 0.5; g.beginPath(); g.arc(rnd() * S, rnd() * S, 5 + rnd() * 9, 0, 7); g.fill(); }
+      g.globalAlpha = 1;
+    } else if (kind === "shiplap") {
+      for (y = 0; y < S; y += 7) { g.fillStyle = shade((rnd() - 0.5) * 0.06); g.fillRect(0, y, S, 7); line(0, y + 0.5, S, y + 0.5, shade(-0.35), 1.2); }
+    } else if (kind === "beadboard") {
+      for (x = 0; x < S; x += 3.5) { line(x, 0, x, S, shade(-0.18)); }
+    } else if (kind === "logs") {
+      for (y = 0; y < S; y += 11) {
+        var lg = g.createLinearGradient(0, y, 0, y + 11);
+        lg.addColorStop(0, shade(-0.4)); lg.addColorStop(0.5, shade(0.1)); lg.addColorStop(1, shade(-0.4));
+        g.fillStyle = lg; g.fillRect(0, y, S, 11);
+      }
+    } else if (kind === "cladding") {
+      for (y = 0, r = 0; y < S; y += 11, r++) { for (x = (r % 2) * 11; x < S + 22; x += 22) {
+        g.fillStyle = shade((rnd() - 0.5) * 0.08); g.fillRect(x - 22, y, 21.4, 10.4);
+      } }
+    } else if (kind === "corrugated") {
+      for (x = 0; x < S; x += 4) {
+        var cg = g.createLinearGradient(x, 0, x + 4, 0);
+        cg.addColorStop(0, shade(-0.22)); cg.addColorStop(0.5, shade(0.18)); cg.addColorStop(1, shade(-0.22));
+        g.fillStyle = cg; g.fillRect(x, 0, 4, S);
+      }
+    } else if (kind === "thatch") {
+      for (i = 0; i < 260; i++) { var tx = rnd() * S, ty = rnd() * S; line(tx, ty, tx + (rnd() - 0.5) * 2, ty + 5, shade((rnd() - 0.5) * 0.45)); }
+      for (y = 10; y < S; y += 12) { line(0, y, S, y, shade(-0.3), 1.4); }
+    } else if (kind === "green") {
+      speckle(500, 0.5);
+      for (i = 0; i < 18; i++) { g.fillStyle = "#e0c85a"; g.fillRect(rnd() * S, rnd() * S, 1.6, 1.6); }
+    } else if (kind === "solar") {
+      g.fillStyle = "#c8cdd2"; g.fillRect(0, 0, S, S);
+      for (y = 1, r = 0; y < S; y += 14, r++) { for (x = 1; x < S; x += 21) {
+        g.fillStyle = color; g.fillRect(x, y, 19.5, 12.5);
+        for (i = 1; i < 4; i++) { line(x + i * 19.5 / 4, y, x + i * 19.5 / 4, y + 12.5, shade(0.18), 0.6); }
+        line(x, y + 6.2, x + 19.5, y + 6.2, shade(0.18), 0.6);
+      } }
+    } else if (kind === "woodshakes") {
+      for (y = 0, r = 0; y < S; y += 9, r++) {
+        for (x = (r % 2) * -5; x < S; x += 5 + rnd() * 6) { g.fillStyle = shade((rnd() - 0.5) * 0.24); g.fillRect(x + 0.5, y, 5, 8); }
+        g.fillStyle = shade(-0.3); g.fillRect(0, y + 8, S, 1);
+      }
     }
     return (matPics[key] = c.toDataURL());
+  }
+  // How light a color is, 0 to 1 (the checker's other tile is the other way).
+  function mLum(color) {
+    var m = /^#?([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i.exec(String(color || ""));
+    return m ? (0.3 * parseInt(m[1], 16) + 0.59 * parseInt(m[2], 16) + 0.11 * parseInt(m[3], 16)) / 255 : 0.5;
+  }
+  // A material painted any color at all, as the picker moves: no Undo of
+  // its own each step (the swatch keeps one for the whole visit), saved
+  // once the picker is put away.
+  function matPaint(room, part, kind, color) {
+    var whole = part === "out" || part === "roof";
+    (whole ? hand.nodes.filter(function (r) { return r.kind === "i_room"; }) : [room]).forEach(function (r) {
+      var m = Object.assign({}, r.mat || {});
+      m[part] = kind; m[part + "C"] = color;
+      r.mat = m;
+    });
+    if (V3) { V3.dirty = true; }
   }
   function matName(part, kind) {
     var key = part === "roof" ? "mtr_" + kind : part === "out" && kind === "boards" ? "mt_batten" : "mt_" + kind;
@@ -1590,6 +1674,16 @@
         chip.onclick = function () { setMat(room, part, now.kind, col); redraw(); };
         tints.appendChild(chip);
       });
+      // and any color at all: the material painted that color (asked
+      // 2026-10-01: "be able to 'paint' said textures different colors")
+      var paint = swatch(now.color, now.color, function (v) { matPaint(room, part, now.kind, v); }, function () {
+        if (typeof handKeep === "function") { handKeep(); }
+        redraw();
+      });
+      paint.classList.add("dz-paint");
+      paint.title = TXT.mt_any;
+      paint.setAttribute("aria-label", matName(part, now.kind) + ": " + TXT.mt_any);
+      tints.appendChild(paint);
       row.appendChild(tints);
     }
     return row;
@@ -1648,6 +1742,16 @@
           };
           line.lastChild.appendChild(chip);
         });
+        // any color at all, from the picker (the swatch keeps the one Undo)
+        var paint = swatch(fin[r[0]] || r[2][0], r[2][0], function (v) {
+          n.fin = Object.assign({}, n.fin || {});
+          n.fin[r[0]] = v;
+          if (V3) { V3.dirty = true; }
+        }, function () { finChanged(); draw(); });
+        paint.classList.add("dz-paint");
+        paint.title = TXT.mt_any;
+        paint.setAttribute("aria-label", TXT[r[1]] + ": " + TXT.mt_any);
+        line.lastChild.appendChild(paint);
         sec.appendChild(line);
       });
     }
@@ -1686,6 +1790,11 @@
     sheet.addEventListener("wheel", function (ev) { ev.stopPropagation(); });
     sheet.addEventListener("keydown", function (ev) { if (ev.key !== "Escape") { ev.stopPropagation(); } });
     V3.box.appendChild(sheet);
+    // a change here shows in the room's own panel beside the view as well
+    function drawBoth() {
+      draw();
+      try { if (nodeById(picked) && nodeById(picked).kind === "i_room") { drawHandPanel(); } } catch (e) { /* the sheet is what matters */ }
+    }
     function draw() {
       var rooms = hand.nodes.filter(function (r) { return r.kind === "i_room"; });
       if (!rooms.length) { sheet.innerHTML = ""; sheet.textContent = TXT.mt_none; return; }
@@ -1696,8 +1805,8 @@
       head.className = "v3-mats-head";
       head.textContent = TXT.mt_house;
       sheet.appendChild(head);
-      sheet.appendChild(matRow(here, "out", draw, true));
-      sheet.appendChild(matRow(here, "roof", draw, true));
+      sheet.appendChild(matRow(here, "out", drawBoth, true));
+      sheet.appendChild(matRow(here, "roof", drawBoth, true));
       var which = document.createElement("div");
       which.className = "v3-mats-head";
       which.textContent = TXT.mt_room;
@@ -1713,8 +1822,8 @@
         pick.appendChild(b);
       });
       sheet.appendChild(pick);
-      sheet.appendChild(matRow(here, "floor", draw));
-      sheet.appendChild(matRow(here, "wall", draw));
+      sheet.appendChild(matRow(here, "floor", drawBoth));
+      sheet.appendChild(matRow(here, "wall", drawBoth));
     }
     btn.onclick = function (ev) {
       ev.stopPropagation();
@@ -1761,20 +1870,47 @@
   // its top and down its side, each with its length in the middle -- and a
   // length pressed is a box to type another in, there and then.
   var dimEditing = null;
+  // The piece the sizes were last put on: drawn again for the same one --
+  // carried, nudged, the paper drawn for any reason -- they stay as they
+  // were, rather than fading in again.  (Faded in each time, they flickered
+  // while a piece was carried: asked 2026-10-01, "whenever I move the shape
+  // and it has the sizes on there they flicker as I move it".)
+  var dimsFor = null;
   function dimsArt() {
     var g = chart && chart.querySelector("g.dz-dims-on");
     if (g) { g.remove(); }
-    if (!designMode() || !chart || many.length > 1) { return; }
-    var n = nodeById(picked);
-    if (!n || !ICONS[n.kind] || isFigure(n.kind) || quarter(n) === null) { return; }
+    var n = designMode() && chart && many.length <= 1 ? nodeById(picked) : null;
+    if (!n || !ICONS[n.kind] || isFigure(n.kind) || quarter(n) === null) { dimsFor = null; return; }
     var parts = sizesOf(n).filter(function (one) { return one.key === "w" || one.key === "h"; });
-    if (!parts.length) { return; }
+    if (!parts.length) { dimsFor = null; return; }
     var t = turned(n), ox = handOrigin.x, oy = handOrigin.y;
     var l = n.x - t.w / 2 + ox, r = n.x + t.w / 2 + ox, tp = n.y - t.h / 2 + oy, b = n.y + t.h / 2 + oy;
     var q = quarter(n), GAP = 16, TICK = 5;
     var NS = "http://www.w3.org/2000/svg";
     g = document.createElementNS(NS, "g");
-    g.setAttribute("class", "dz-dims-on");
+    g.setAttribute("class", "dz-dims-on" + (dimsFor === n.id ? " dz-steady" : ""));
+    dimsFor = n.id;
+    // Carried inside a room: how far it is from each of the room's walls,
+    // as it goes, so it can be put down just so far from one.
+    var carried = document.body.classList.contains("carrying-shape");
+    var room = carried && n.kind !== "i_room" && !isArea(n.kind) && typeof roomAround === "function" ? roomAround(n) : null;
+    if (room && quarter(room) !== null) {
+      // (a quarter in from the middle, clear of the pills on its top and side)
+      var f = innerOf(room), cy = tp + (b - tp) * 0.75, cx = l + (r - l) * 0.75;
+      [[f.l + ox, l, cy, true], [r, f.r + ox, cy, true], [f.t + oy, tp, cx, false], [b, f.b + oy, cx, false]].forEach(function (s) {
+        var from = s[0], to = s[1], at = s[2], flat = s[3];
+        if (to - from < 2) { return; }
+        var gap = document.createElementNS(NS, "g");
+        gap.setAttribute("class", "dz-gap");
+        var d = flat ? "M" + from + " " + at + "H" + to + "M" + from + " " + (at - 4) + "V" + (at + 4) + "M" + to + " " + (at - 4) + "V" + (at + 4)
+                     : "M" + at + " " + from + "V" + to + "M" + (at - 4) + " " + from + "H" + (at + 4) + "M" + (at - 4) + " " + to + "H" + (at + 4);
+        // (the one across, under its line: over it, a narrow one ran into the pill at the piece's side)
+        gap.innerHTML = '<path d="' + d + '"/><text x="' + (flat ? (from + to) / 2 : at + 5) + '" y="' +
+                        (flat ? at + 13 : (from + to) / 2 + 4) + '" text-anchor="' + (flat ? "middle" : "start") + '"></text>';
+        gap.querySelector("text").textContent = lenSay((to - from) / FLOOR_PX);
+        g.appendChild(gap);
+      });
+    }
     function line(x1, y1, x2, y2) {
       var p = document.createElementNS(NS, "path");
       p.setAttribute("d", "M" + x1 + " " + y1 + "L" + x2 + " " + y2);

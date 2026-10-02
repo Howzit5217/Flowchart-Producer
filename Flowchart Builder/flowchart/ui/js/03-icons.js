@@ -421,12 +421,13 @@
                        i_picture: "face", i_mirror: "face", i_shelf: "face", i_walltv: "face",
                        i_wallclock: "face", i_sconce: "face", i_cabinet: "face", i_hooks: "face",
                        i_radiator: "face", i_hood: "face", i_towelrail: "face", i_medicine: "face",
-                       i_proscreen: "face", i_ac: "face", i_whiteboard: "face", i_dartboard: "face", i_evcharger: "face" };
+                       i_proscreen: "face", i_ac: "face", i_whiteboard: "face", i_dartboard: "face", i_evcharger: "face",
+                       i_porchlight: "outface", i_floodlight: "outface" };
   // Hung on a wall, up out of the way: walked under, not round (38-walk.js).
   var ON_THE_WALL = { i_picture: true, i_mirror: true, i_shelf: true, i_walltv: true,
                       i_wallclock: true, i_sconce: true, i_cabinet: true, i_hooks: true,
                       i_hood: true, i_towelrail: true, i_medicine: true, i_proscreen: true, i_ac: true,
-                      i_whiteboard: true, i_dartboard: true, i_evcharger: true };
+                      i_whiteboard: true, i_dartboard: true, i_evcharger: true, i_porchlight: true, i_floodlight: true };
   // What stands on top of something else -- a lamp on a table, a kettle on
   // the counter -- and is raised to stand on it in 3D (38-view3d.js).
   var ON_TOP = { i_microwave: true, i_coffeemaker: true, i_toaster: true, i_kettle: true, i_fruitbowl: true,
@@ -488,6 +489,7 @@
       var n = nodeById(id);
       if (!n || !SNAP_IN_WALL[n.kind]) { return; }
       var swing = SNAP_IN_WALL[n.kind] === "swing", face = SNAP_IN_WALL[n.kind] === "face", best = null;
+      var outface = SNAP_IN_WALL[n.kind] === "outface";
       hand.nodes.forEach(function (room) {
         if (room.kind !== "i_room" || ((room.turn || 0) % 90)) { return; }
         var q = turned(room), T = roomWallOf(room);
@@ -505,6 +507,15 @@
             var fa = Math.max(wall[2] + T + half, Math.min(wall[3] - T - half, at));
             best = across ? { d: fd, x: fa, y: inner + into * n.h / 2, turn: into > 0 ? 0 : 180 }
                           : { d: fd, y: fa, x: inner + into * n.h / 2, turn: into > 0 ? 270 : 90 };
+            return;
+          }
+          if (outface) {
+            // a light out of doors: against the outside of the wall, facing out
+            var od = Math.abs(off - (line - into * n.h / 2));
+            if (od > n.h / 2 + 22 || (off - line) * into > 0 || (best && od >= best.d)) { return; }
+            var oa = Math.max(wall[2] + half, Math.min(wall[3] - half, at));
+            best = across ? { d: od, x: oa, y: line - into * n.h / 2, turn: into > 0 ? 180 : 0 }
+                          : { d: od, y: oa, x: line - into * n.h / 2, turn: into > 0 ? 90 : 270 };
             return;
           }
           var mid = swing ? line : line + into * T / 2;

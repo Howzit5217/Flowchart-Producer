@@ -156,6 +156,18 @@
     return J;
   }
 
+  // Where an arrow between two rooms says the one goes, put together with
+  // the other placed at `pb`: its `fit`, the middle of the room it goes to
+  // from the middle of the room it comes from (Start a house sets it, for a
+  // house laid out as it was meant).  Null where it says nothing.
+  function tieFit(e, r, pb) {
+    var fit = e.link && !e.door && e.link.fit;
+    if (!fit || fit.length !== 2) { return null; }
+    if (r === e.b) { return [pb.x + fit[0], pb.y + fit[1]]; }
+    if (r === e.a) { return [pb.x - fit[0], pb.y - fit[1]]; }
+    return null;
+  }
+
   function tieWork() {
     var J = { moves: {}, made: [], drop: [], delta: {}, boxes: {}, rooms: [], ways: [], any: false };
     var rooms = hand.nodes.filter(function (n) { return n.kind === "i_room" && tieSquare(n); });
@@ -288,6 +300,10 @@
       if (slanted.some(function (s) { return s.storey === g.storey && mine.some(function (b) { return tieOver(b, s.b, 1); }); })) { return true; }
       return all.some(function (o) {
         if (o === g || o.storey !== g.storey) { return false; }
+        // (not one still to come to this house, where it is drawn: it is
+        // going to be put somewhere else -- and it was in the way of where
+        // the rooms of a house spread out go)
+        if (!o.placed && o.set !== undefined && o.set === g.set) { return false; }
         var theirs = boxesOf(o, o.dx, o.dy);
         return mine.some(function (b) { return theirs.some(function (c) { return tieOver(b, c, 1); }); });
       });
@@ -331,6 +347,10 @@
             list.forEach(function (v) { tries.push({ dx: Math.max(lo2, Math.min(hi2, v)) - r.x, dy: y - r.y }); });
           }
         });
+        // where the arrow says the two go together, where it says (a house
+        // Start a house laid out: `fit`, the one's middle from the other's)
+        var fit = tieFit(e, r, pb);
+        if (fit) { tries.push({ dx: fit[0] - r.x, dy: fit[1] - r.y }); }
       });
       var best = null;
       tries.forEach(function (c) {
@@ -351,6 +371,10 @@
           // lying the way it lies from it on the paper
           var was = Math.atan2(r.y - p.y, r.x - p.x), now = Math.atan2(rb.y - pb.y, rb.x - pb.x);
           cost += Math.abs(Math.atan2(Math.sin(now - was), Math.cos(now - was))) * 60;
+          // just where the arrow says, where it says (less than a room
+          // dragged round to another side of it on the paper counts for)
+          var fit = tieFit(e, r, pb);
+          if (fit && Math.abs(rb.x - fit[0]) < 1 && Math.abs(rb.y - fit[1]) < 1) { cost -= 100; }
           // edges lined up look like a house
           if (Math.abs(rb.l - pb.l) < 0.5 || Math.abs(rb.r - pb.r) < 0.5 || Math.abs(rb.t - pb.t) < 0.5 || Math.abs(rb.b - pb.b) < 0.5) { cost -= 5; }
         });
@@ -393,6 +417,7 @@
     // rest come to it: begun from the biggest (a garage, as often as not),
     // the house folded round it and left rooms with no outside wall
     function degree(g) { return edges.filter(function (e) { return groupOf(e.a) === g || groupOf(e.b) === g; }).length; }
+    sets.forEach(function (set, k) { set.forEach(function (g) { g.set = k; }); });
     sets.forEach(function (set) {
       set.sort(function (p, q) { return degree(q) - degree(p) || q.area - p.area; });
       set[0].placed = true;
@@ -522,17 +547,23 @@
   // together): a copy, where only what moves is new -- the rest are the
   // drawing's own shapes -- with the doors made, and without the arrows
   // the joining has said all of.  Null where nothing moves.
-  var tieMade = { H: null, key: null, hand: null };
+  var tieMade = { H: null, key: null, hand: null, pairs: [] };
   function tieHand(t) {
     var J = tieLayout();
     if (!J.any || t <= 0.001) { return null; }
     var key = tieSeen.key + "|" + Math.round(t * 1000);
-    if (tieMade.H === hand && tieMade.key === key) { return tieMade.hand; }
-    var H = hand, k = Math.min(1, t);
+    if (tieMade.H === hand && tieMade.key === key) {
+      tieMade.pairs.forEach(tieFresh);
+      // and what is the drawing's as a whole (the house's settings, 39-house.js)
+      for (var top in hand) { if (top !== "nodes" && top !== "links") { tieMade.hand[top] = hand[top]; } }
+      return tieMade.hand;
+    }
+    var H = hand, k = Math.min(1, t), pairs = [];
     var nodes = H.nodes.map(function (n) {
       var m = J.moves[n.id];
       if (!m) { return n; }
       var c = Object.assign({}, n), a = n.turn || 0, b = m.turn || 0;
+      pairs.push([c, n]);
       c.x = n.x + (m.x - n.x) * k; c.y = n.y + (m.y - n.y) * k;
       var turn = a + ((((b - a) % 360) + 540) % 360 - 180) * k;
       turn = ((turn % 360) + 360) % 360;
@@ -547,8 +578,17 @@
       });
     }
     var made = Object.assign({}, H, { nodes: nodes, links: H.links.filter(function (l) { return J.drop.indexOf(l) < 0; }) });
-    tieMade = { H: H, key: key, hand: made };
+    tieMade = { H: H, key: key, hand: made, pairs: pairs };
     return made;
+  }
+  // A copy keeps up with whatever changes on its shape without moving it:
+  // a material, a finish, a color picked while looking at the house in 3D
+  // (the copy above is only made again when something moves).
+  var TIE_OWN = { x: 1, y: 1, turn: 1 };
+  function tieFresh(p) {
+    var c = p[0], n = p[1], k;
+    for (k in n) { if (!TIE_OWN[k] && c[k] !== n[k]) { c[k] = n[k]; } }
+    for (k in c) { if (!TIE_OWN[k] && !(k in n)) { delete c[k]; } }
   }
 
   // Whether a spot just outside a room's wall is inside another room once
@@ -638,6 +678,9 @@
     v3Words = tieWith(v3Words, 0);
     v3AdviceShow = tieWith(v3AdviceShow, 0);
   }
+  // A house on a lot is measured put together, as it will stand on it:
+  // rooms drawn apart on the paper are no wider a house for it.
+  if (typeof lotMeasure === "function") { lotMeasure = tieWith(lotMeasure, 1); }
 
   // ---- the arrows, kept in step with the plan ---------------------------------
   // A new room is joined to the room before it (the one in hand when it

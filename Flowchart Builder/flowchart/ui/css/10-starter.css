@@ -11,4 +11,83 @@
   .st-row + .st-row { border-top: 1px solid var(--line-soft); }
   .st-seg .seg-btn { min-width: 34px; }
   .st-go { display: flex; justify-content: flex-end; gap: 8px; margin-top: 18px; }
-  #hand-house[hidden] { display: none; }
+  #hand-house[hidden], #hand-floors[hidden] { display: none; }
+
+  /* ------------------------------ what Check says (12-check.js, 37-board.js) --
+     (2026-10-01: "format it in a better way because it looks really
+     unpolished")  A home's numbers as tiles, a number over what it counts;
+     all clear as a green badge with a tick; what was just done as a quiet
+     note under it. */
+  #report .scene-stats {
+    display: grid; grid-template-columns: minmax(0, .9fr) minmax(0, 1.15fr) minmax(0, 1.55fr); gap: 6px; margin: 2px 0 8px;
+  }
+  #report .scene-stat {
+    display: flex; flex-direction: column; gap: 2px; min-width: 0; padding: 8px 9px 7px;
+    border: 1px solid var(--line-soft); border-radius: 9px;
+    background: color-mix(in srgb, var(--accent-soft) 60%, var(--panel));
+  }
+  #report .scene-stat b {
+    font-size: 17px; font-weight: 650; line-height: 1.15; color: var(--ink); font-variant-numeric: tabular-nums;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  #report .scene-stat b small { font-size: 11px; font-weight: 600; color: var(--muted); }
+  #report .scene-stat span {
+    font-size: 11.5px; font-weight: 600; color: var(--muted);
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  #report .report-ok {
+    display: inline-flex; align-items: center; gap: 7px; margin: 2px 0 0; padding: 4px 11px 4px 5px;
+    border-radius: 999px; font-size: 12.5px; font-weight: 600;
+    color: var(--good); background: color-mix(in srgb, var(--good) 11%, var(--panel));
+  }
+  #report .report-ok svg {
+    width: 17px; height: 17px; padding: 2px; box-sizing: border-box; border-radius: 50%; flex: none;
+    background: var(--good); fill: none; stroke: var(--panel); stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round;
+  }
+  #report .report-note {
+    display: block; margin: 8px 0 0; padding: 6px 10px; font-size: 12.5px; color: var(--ink);
+    border-left: 3px solid var(--accent); border-radius: 4px 8px 8px 4px; background: var(--accent-soft);
+    animation: report-note-in .25s ease-out both;
+  }
+  @keyframes report-note-in { from { opacity: 0; transform: translateY(-3px); } }
+  @media (prefers-reduced-motion: reduce) { #report .report-note { animation: none; } }
+
+  /* --------------------------------------------- the 3D view's button (38-view3d.js) --
+     (asked: "make the 3d View button more apparent")  What a floor plan is
+     looked at in: an accent button taking most of its row, its cube turning
+     a little under the pointer; pressed (the view open), it goes back to
+     an outline. */
+  .board-row .field:has(+ #view3d-open) { flex: 1 1 0; min-width: 96px; }
+  .board-row #view3d-open {
+    flex: 1.25 1 0; justify-content: center; min-height: 34px; padding: 0 12px; gap: 7px;
+    font-weight: 650; color: #ffffff; border-color: transparent;
+    background: linear-gradient(180deg, color-mix(in srgb, var(--accent) 84%, #ffffff), var(--accent));
+    box-shadow: 0 1px 2px rgba(16, 24, 40, .12), 0 3px 10px color-mix(in srgb, var(--accent) 30%, transparent);
+    transition: filter var(--quick, .15s) ease, box-shadow var(--quick, .15s) ease;
+  }
+  .board-row #view3d-open:hover { filter: brightness(1.08); box-shadow: 0 1px 2px rgba(16, 24, 40, .12), 0 5px 14px color-mix(in srgb, var(--accent) 38%, transparent); }
+  .board-row #view3d-open svg { width: 17px; height: 17px; stroke-width: 1.6; transition: transform .3s ease; }
+  .board-row #view3d-open:hover svg { transform: rotate(-14deg) scale(1.08); }
+  .board-row #view3d-open[aria-pressed="true"] {
+    color: var(--accent); background: var(--panel); border-color: var(--accent); box-shadow: none; filter: none;
+  }
+  @media (prefers-reduced-motion: reduce) { .board-row #view3d-open, .board-row #view3d-open svg { transition: none; } }
+  .hs-floors { color: var(--muted); font-size: 12.5px; }
+
+  /* ---------------------------------------- the 3D view's Settings (39-house.js) --
+     On the right, where Materials keeps the left; the weather on segments;
+     what is falling over the picture; what the land comes to, in a corner. */
+  .v3-set { left: auto; right: 10px; }
+  .v3-set .switch.wide { padding: 7px 0; }
+  .v3-weather-seg { display: flex; flex-wrap: wrap; margin: 6px 0 4px; }
+  .v3-weather-seg .seg-btn { flex: 1 1 auto; }
+  .v3-set-says { margin: 8px 0 2px; font-size: 12px; line-height: 1.45; color: var(--muted); }
+  .view3d .v3-weather { position: absolute; left: 0; top: 0; width: 100%; height: 100%; pointer-events: none; }
+  .v3-land {
+    position: absolute; left: 10px; bottom: 10px; max-width: min(380px, calc(100% - 20px));
+    background: var(--panel); color: var(--ink); border: 1px solid var(--line); border-radius: 10px;
+    box-shadow: var(--shadow); padding: 8px 11px; font-size: 12px; line-height: 1.5; pointer-events: none;
+    animation: dz-pop .16s ease-out both;
+  }
+  .v3-land-head { font-size: 11px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; color: var(--muted); }
+  @media (prefers-reduced-motion: reduce) { .v3-land { animation: none; } }

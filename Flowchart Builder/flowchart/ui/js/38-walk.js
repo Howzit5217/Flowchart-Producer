@@ -57,7 +57,7 @@
     i_treadmill: 1500, i_exbike: 1400, i_weightbench: 1300, i_yogamat: 1300, i_pooltable: 1300, i_pingpong: 1300,
     i_easel: 1300, i_trampoline: 1200, i_swing: 1100,
     i_firepit: 1100, i_lounger: 1300, i_gazebo: 1000, i_shed: 800, i_planter: 600, i_birdbath: 600,
-    i_lamppost: 500, i_mailbox: 700, i_bikerack: 700,
+    i_lamppost: 500, i_pathlight: 500, i_porchlight: 500, i_floodlight: 500, i_mailbox: 700, i_bikerack: 700,
     i_workbench: 1300, i_shelving: 700, i_toolchest: 800, i_furnace: 600
   };
 
@@ -768,4 +768,15 @@
                           area: floorSays(walkFloor(plan), FLOOR_PX) });
   }
 
-  SCENES.home = { run: walkRun, check: walkCheck, sum: walkSum };
+  // The same, as tiles of a number and what it counts (37-board.js lays
+  // them out): the floor's area as its number, its unit under it.
+  function walkStats() {
+    var plan = walkPlan(), area = floorSays(walkFloor(plan), FLOOR_PX);
+    var unit = String(TXT.fp_area || "{n}").replace("{n}", "").trim();
+    var n = unit ? area.replace(unit, "").trim() : area;
+    return [{ n: String(plan.rooms.length), what: TXT.wk_st_rooms },
+            { n: String(plan.pieces.length), what: TXT.wk_st_pieces },
+            { n: n, unit: unit, what: TXT.wk_st_floor }];
+  }
+
+  SCENES.home = { run: walkRun, check: walkCheck, sum: walkSum, stats: walkStats };

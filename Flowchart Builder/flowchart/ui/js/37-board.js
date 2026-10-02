@@ -564,10 +564,35 @@
     showReportUnboarded.apply(this, arguments);
     var scene = byHand && boardNow(), box = el("#report");
     if (!scene || !box || !scene.is.sum) { return; }
-    var line = document.createElement("p");
-    line.className = "good scene-sum";
-    line.textContent = scene.is.sum();
-    box.insertBefore(line, box.firstChild);
+    // (2026-10-01: "format it in a better way because it looks really
+    // unpolished") A home's numbers as tiles, a number over what it
+    // counts; any other scene's summary in a card of its own.  The
+    // sentence stays for screen readers.
+    var stats = scene.is.stats ? scene.is.stats() : null, card;
+    if (stats && stats.length) {
+      card = document.createElement("div");
+      card.className = "scene-stats";
+      card.setAttribute("aria-label", scene.is.sum());
+      stats.forEach(function (s) {
+        var tile = document.createElement("div");
+        tile.className = "scene-stat";
+        tile.setAttribute("aria-hidden", "true");
+        tile.innerHTML = '<b></b><span></span>';
+        tile.firstChild.textContent = s.n;
+        if (s.unit) {
+          var u = document.createElement("small");
+          u.textContent = " " + s.unit;
+          tile.firstChild.appendChild(u);
+        }
+        tile.lastChild.textContent = s.what;
+        card.appendChild(tile);
+      });
+    } else {
+      card = document.createElement("p");
+      card.className = "good scene-sum";
+      card.textContent = scene.is.sum();
+    }
+    box.insertBefore(card, box.firstChild);
     // nothing found: the design's "no problems" under the summary says it
   };
 

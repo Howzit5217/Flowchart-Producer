@@ -182,7 +182,10 @@
     box.innerHTML = "";
     if (!hand.nodes.length) { return; }
     if (!found.length) {
-      box.innerHTML = '<p class="good">' + TXT.checked_good + "</p>";
+      // a tick in a green badge, not a line of green type
+      box.innerHTML = '<p class="good report-ok"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3.5 8.4 6.6 11.3 12.5 4.9"/></svg>' +
+                      "<span></span></p>";
+      box.querySelector(".report-ok span").textContent = TXT.checked_good;
       return;
     }
     // Red where the design does not work, amber where it only reads
@@ -1148,7 +1151,8 @@
     var box = el("#report");
     if (!box) { return; }
     var line = document.createElement("p");
-    line.className = bad ? "hint bad" : "good";
+    // what was just done, said quietly under the check: a note, not a result
+    line.className = bad ? "hint bad" : "good report-note";
     line.textContent = what;
     box.appendChild(line);
   }

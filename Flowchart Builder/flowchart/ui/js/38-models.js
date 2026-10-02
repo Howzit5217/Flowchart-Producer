@@ -332,12 +332,18 @@
   // { floor, floorC, wall, wallC, out, outC, roof, roofC }.
   var HOUSE_MATS = {
     floor: { boards: [2, "#b98d63"], parquet: [48, "#a77a50"], tiles: [7, "#dfe2e4"], marble: [49, "#ece9e4"],
-             slate: [50, "#8f9391"], carpet: [47, "#a9a39a"], concrete: [10, "#a8a8a4"] },
+             slate: [50, "#8f9391"], carpet: [47, "#a9a39a"], concrete: [10, "#a8a8a4"],
+             // (added 2026-10-01: "add more textures")
+             herringbone: [55, "#b48a5e"], hextiles: [56, "#e9e6df"], checker: [57, "#f2f0ea"],
+             terrazzo: [58, "#e7e2d8"], cork: [59, "#b98e5c"] },
     wall: { paint: [0, "#f2efe8"], wallpaper: [51, "#e6dccb"], panels: [52, "#b48a62"], tiles: [53, "#f4f4f1"],
-            brick: [40, "#a65a44"], stone: [41, "#b9b1a3"] },
+            brick: [40, "#a65a44"], stone: [41, "#b9b1a3"],
+            plaster: [60, "#e9e2d4"], shiplap: [61, "#f4f2ec"], beadboard: [62, "#eef0ea"], concrete: [63, "#b6b4ae"] },
     out: { siding: [13, "#ede8dc"], brick: [40, "#a65a44"], stone: [41, "#b9b1a3"], stucco: [42, "#efe7d6"],
-           boards: [43, "#8e6f52"], shakes: [54, "#9a7a5a"] },
-    roof: { shingles: [1, "#5d6166"], tiles: [44, "#b5603f"], metal: [45, "#4f5a63"], slate: [46, "#4a4f57"] }
+           boards: [43, "#8e6f52"], shakes: [54, "#9a7a5a"],
+           logs: [64, "#8a6340"], cladding: [65, "#c9cdd0"], corrugated: [66, "#9aa3a8"], concrete: [63, "#b6b4ae"] },
+    roof: { shingles: [1, "#5d6166"], tiles: [44, "#b5603f"], metal: [45, "#4f5a63"], slate: [46, "#4a4f57"],
+            thatch: [67, "#b59a62"], woodshakes: [54, "#8f6f4f"], green: [68, "#6f8f4a"], solar: [69, "#263850"] }
   };
   // The colors offered for each, the first its own.
   var HOUSE_TINTS = {
@@ -351,7 +357,16 @@
     siding: ["#ede8dc", "#c9d3d9", "#6f8592", "#e2d3b5", "#3f4a52", "#8c9c84"], stucco: ["#efe7d6", "#e6c9a8", "#d9d6cf", "#c7b49a"],
     shakes: ["#9a7a5a", "#7d6a5a", "#b9a68c"],
     roofshingles: ["#5d6166", "#3f4246", "#7a5f4c", "#5c6b5a"], rooftiles: ["#b5603f", "#8f4a34", "#c99a6b"],
-    roofmetal: ["#4f5a63", "#7a2e2a", "#2f4a3c", "#c9ced3"], roofslate: ["#4a4f57", "#3a3d42"]
+    roofmetal: ["#4f5a63", "#7a2e2a", "#2f4a3c", "#c9ced3"], roofslate: ["#4a4f57", "#3a3d42"],
+    herringbone: ["#b48a5e", "#d9b98f", "#7a5236", "#4f3524"], hextiles: ["#e9e6df", "#ffffff", "#9fb3a8", "#2f3437", "#d9c7b0"],
+    checker: ["#f2f0ea", "#1f2226", "#b5462f", "#2f5f8a"], terrazzo: ["#e7e2d8", "#d9d0c6", "#c7cfd2", "#e8d6cc"],
+    cork: ["#b98e5c", "#a37a4c", "#cfa673"],
+    plaster: ["#e9e2d4", "#f2ece2", "#d9cbb8", "#c9d1cf", "#e6d3cf"], shiplap: ["#f4f2ec", "#dfe6ea", "#e6e0d2", "#8d9ea6"],
+    beadboard: ["#eef0ea", "#dde6e0", "#e8e1d4", "#a9bcc4"],
+    logs: ["#8a6340", "#a5784c", "#6b4a2f", "#c19a6b"], cladding: ["#c9cdd0", "#3f464c", "#d8d2c4", "#8a948f"],
+    corrugated: ["#9aa3a8", "#7a2e2a", "#2f4a3c", "#c9ced3"],
+    roofthatch: ["#b59a62", "#9c8452", "#c9b07a"], roofwoodshakes: ["#8f6f4f", "#7a5f45", "#a8876a"],
+    roofgreen: ["#6f8f4a", "#5a7a3c", "#8a9c5a"], roofsolar: ["#263850", "#1d2a3a", "#2f3b44"]
   };
   function houseTints(part, kind) { return HOUSE_TINTS[(part === "roof" ? "roof" : "") + kind] || [HOUSE_MATS[part][kind][1]]; }
   // What a room's part is made of, picked -- or null, and it is made of
@@ -2499,6 +2514,36 @@
     M.lathe(0, 0, [[6 * cm, H - 40 * cm], [12 * cm, H - 34 * cm], [12 * cm, H - 12 * cm]], met, { seg: 4, from: 45, to: 405 });
     M.lathe(0, 0, [[11 * cm, H - 33 * cm], [11 * cm, H - 13 * cm]], M.mat("glow", C.frame), { seg: 4, from: 45, to: 405 });
     M.lathe(0, 0, [[15 * cm, H - 12 * cm], [2 * cm, H]], met, { seg: 4, from: 45, to: 405 });
+  });
+  // Lights out of doors (2026-10-01: "add lights to other outside of the
+  // house"): glass of the "glow" stuff, lit after dark, the light they give
+  // thrown round them by 39-house.js.  The two on a wall have their backs
+  // to it, as a sconce does.
+  mDef("i_pathlight", function (M, W, D, H, C) {
+    C = mPick(C, "#2a2d30", "#fff1d0");
+    var met = M.mat("metal", C.main), R = Math.min(W, D) / 2;
+    M.cyl(0, 0, 0, H * 0.7, R * 0.5, met, { seg: 10 });
+    M.cyl(0, 0, H * 0.7, H * 0.88, R * 0.6, M.mat("glow", C.frame), { seg: 10 });
+    M.lathe(0, 0, [[R, H * 0.88], [R * 0.95, H * 0.92], [R * 0.2, H]], met, { seg: 10 });
+  });
+  mDef("i_porchlight", function (M, W, D, H, C) {
+    C = mPick(C, "#26292c", "#fff1d0");
+    var met = M.mat("metal", C.main), y0 = -D / 2;
+    M.box(-W * 0.2, W * 0.2, y0, y0 + 1.2 * cm, H * 0.1, H * 0.7, met, 0.4 * cm);
+    M.box(-W * 0.3, W * 0.3, y0 + 1.2 * cm, D / 2, H * 0.12, H * 0.2, met);
+    M.box(-W * 0.26, W * 0.26, y0 + 2 * cm, D / 2 - 0.6 * cm, H * 0.2, H * 0.78, M.mat("glow", C.frame));
+    M.box(-W * 0.34, W * 0.34, y0 + 1.2 * cm, D / 2 + 0.6 * cm, H * 0.78, H * 0.86, met);
+    M.box(-W * 0.1, W * 0.1, y0 + D * 0.4, y0 + D * 0.6, H * 0.86, H, met);
+  });
+  mDef("i_floodlight", function (M, W, D, H, C) {
+    C = mPick(C, "#2b2e31", "#fffaf0");
+    var met = M.mat("metal", C.main), y0 = -D / 2;
+    M.box(-W * 0.16, W * 0.16, y0, y0 + 1 * cm, 0, H * 0.7, met, 0.3 * cm);
+    M.tube([0, y0 + 1 * cm, H * 0.4], [0, y0 + D * 0.45, H * 0.4], 1 * cm, met, 6);
+    M.push().move(0, y0 + D * 0.62, H * 0.45).tiltX(30);
+    M.box(-W / 2, W / 2, -D * 0.18, D * 0.16, -H * 0.4, H * 0.4, met, 0.5 * cm);
+    M.box(-W / 2 + 1 * cm, W / 2 - 1 * cm, D * 0.16, D * 0.19, -H * 0.33, H * 0.33, M.mat("glow", C.frame));
+    M.pop();
   });
   mDef("i_mailbox", function (M, W, D, H, C) {
     C = mPick(C, "#2f3236", "#c7372f");

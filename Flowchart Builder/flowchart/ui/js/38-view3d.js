@@ -35,7 +35,9 @@
   var EYE_TALL = 1.6;                    // where the eyes are, walking round
   var V3_FOV = 75 * Math.PI / 180;       // how wide it sees, walking round
   var V3_NEAR = 4;                       // nothing nearer the eye than this is drawn
-  var WALK_PACE = 80;                    // pixels a second (1.6 m/s); Shift doubles it
+  // pixels a second (2.7 m/s, a brisk walk -- 1.6 was found too slow,
+  // 2026-10-01: "when walking through the house you move faster"); Shift doubles it
+  var WALK_PACE = 135;
   var WALK_BODY = 9;                     // how wide round you are, for walls
   // How tall each piece is, in metres; and which are round.
   var V3_HIGH = { i_bed: 0.55, i_bed1: 0.55, i_crib: 0.9, i_nightstand: 0.55, i_wardrobe: 2.0,
@@ -61,13 +63,14 @@
                   i_oven: 2.1, i_winecooler: 0.85, i_freezer: 0.85, i_cornertub: 0.55, i_linencab: 1.8,
                   i_treadmill: 1.4, i_exbike: 1.2, i_weightbench: 0.45, i_yogamat: 0.01, i_pooltable: 0.8, i_pingpong: 0.76,
                   i_easel: 1.6, i_trampoline: 0.9, i_swing: 2.1, i_firepit: 0.4, i_lounger: 0.4, i_gazebo: 2.8, i_shed: 2.3,
-                  i_planter: 0.5, i_birdbath: 0.8, i_lamppost: 2.4, i_mailbox: 1.1, i_bikerack: 0.8,
+                  i_planter: 0.5, i_birdbath: 0.8, i_lamppost: 2.4, i_pathlight: 0.6, i_mailbox: 1.1, i_bikerack: 0.8,
                   i_workbench: 0.9, i_shelving: 1.8, i_toolchest: 1.0, i_furnace: 1.4 };
   var V3_ROUND = { i_plant: true, i_lamp: true, i_shrub: true, i_stool: true, i_trash: true, i_heater: true,
                    i_sidetable: true, i_beanbag: true, i_palm: true, i_cactus: true, i_flowers: true,
                    i_coatrack: true, i_fan: true, i_dogbed: true, i_tablelamp: true, i_vase: true,
                    i_candle: true, i_succulent: true, i_fruitbowl: true, i_hanging: true, i_pendant: true,
-                   i_chandelier: true, i_ceilingfan: true, i_firepit: true, i_trampoline: true, i_birdbath: true, i_lamppost: true };
+                   i_chandelier: true, i_ceilingfan: true, i_firepit: true, i_trampoline: true, i_birdbath: true, i_lamppost: true,
+                   i_pathlight: true };
   // How tall what stands on something else is (it stands on the tallest
   // thing under it, 03-icons.js ON_TOP); and how far below the ceiling
   // what hangs from it reaches.
@@ -83,7 +86,7 @@
                   i_cabinet: [1.45, 2.2], i_hooks: [1.6, 1.72], i_radiator: [0.12, 0.7],
                   i_hood: [1.55, 2.2], i_towelrail: [0.95, 1.05], i_medicine: [1.3, 1.9],
                   i_proscreen: [0.9, 2.2], i_ac: [2.0, 2.3], i_whiteboard: [0.9, 2.0], i_dartboard: [1.5, 1.95],
-                  i_evcharger: [0.9, 1.3] };
+                  i_evcharger: [0.9, 1.3], i_porchlight: [1.75, 2.15], i_floodlight: [2.45, 2.7] };
   var PERSON_TALL = 1.7;
 
   function v3Mix(a, b, k) {             // a color k of the way from a to b
@@ -215,7 +218,11 @@
       }
     }
     if (lo === Infinity) { return null; }
-    var pad = Math.max(n.w, n.h) * step / 2;
+    // a door's opening exactly as wide as the door, its frame (v3Door) round
+    // the leaf: cut a sixteenth wider each side, there was a gap down both
+    // sides of every door you could see the room beyond through (2026-10-01,
+    // "giant holes on the sides of them"); a window's glass fills its own
+    var pad = WALK_DOORS[n.kind] ? 0 : Math.max(n.w, n.h) * step / 2;
     return { a: lo - pad, b: hi + pad };
   }
 
@@ -233,6 +240,17 @@
       v3Prism(faces, base, 0, leaf, look);
     }
     var hw = n.w / 2, hh = n.h / 2;
+    // its frame: a jamb down each side of the opening and a head across the
+    // top, through the wall and a hair proud of it either side, the leaf
+    // shutting against it -- in line with the wall it stands in (a swinging
+    // door's threshold, the middle of anything else)
+    var line = SNAP_IN_WALL[n.kind] === "swing" ? hh : 0, J = 1.5, deep = 6.5;
+    var trim = { piece: true, color: "#f1eee8", edge: own.line };
+    var frameTop = leaf + (n.kind === "i_garagedoor" ? 0 : 0.03 * FLOOR_PX);
+    v3Box(faces, n, -hw, -hw + J, line - deep, line + deep, 0, frameTop, trim);
+    v3Box(faces, n, hw - J, hw, line - deep, line + deep, 0, frameTop, trim);
+    // (its underside a little under the wall's over the doorway, not level with it to flicker)
+    v3Box(faces, n, -hw, hw, line - deep, line + deep, leaf - 0.4, frameTop + 1.2, trim);
     if (n.kind === "i_door") { slab(-hw + 1.5, hh, Math.cos(a), -Math.sin(a), n.w - 3, 3); }
     else if (n.kind === "i_door2") {
       slab(-hw + 1.3, hh, Math.cos(a), -Math.sin(a), hw - 2, 2.6);
@@ -338,8 +356,10 @@
   // `lift` (on its way on or off).
   function roofFaces(faces, R, lift, how) {
     var W = R.x1 - R.x0, D = R.y1 - R.y0, along = W >= D, half = (along ? D : W) / 2;
-    var rise = Math.min(half * ROOF_PITCH, ROOF_RIDGE * FLOOR_PX), k = half > 0 ? rise / half : 0;
-    var z = R.z + lift, top = z + rise, xm = (R.x0 + R.x1) / 2, ym = (R.y0 + R.y1) / 2;
+    // (a roof in one piece, 39-house.js: every part of it as steep, `k`,
+    // and one a hair over another where the two are the same slope)
+    var rise = R.k ? half * R.k : Math.min(half * ROOF_PITCH, ROOF_RIDGE * FLOOR_PX), k = R.k || (half > 0 ? rise / half : 0);
+    var z = R.z + lift + (R.bias || 0), top = z + rise, xm = (R.x0 + R.x1) / 2, ym = (R.y0 + R.y1) / 2;
     var at = R.turn ? { x: R.at[0], y: R.at[1], turn: R.turn } : null;
     function P(x, y, h) {
       if (!at) { return [x, y, h]; }
@@ -539,10 +559,21 @@
       var look = simLook(n);
       return { wall: true, color: v3Mix(look.line, simSheet(), 0.8), edge: look.line };
     }
+    // Roofed, from above, what is inside is seen only through the glass:
+    // the rooms with a window are built inside -- floor, walls, ceiling and
+    // what is in them -- and the rest only from out of doors (2026-10-01:
+    // "make sure you can see in through the windows accurate to walls,
+    // ceilings, floors"; it was the grass under the house that showed)
+    var glazed = hush ? roomsAll.filter(function (r) {
+      return hand.nodes.some(function (w) { return (w.kind === "i_window" || w.kind === "i_slide") && insideArea(r, w.x, w.y, -14); });
+    }) : [];
+    function seenIn(r) { return glazed.indexOf(r) >= 0; }
     function putNode(n) {
       var look = simLook(n);
-      if (hush && n.kind !== "i_room" && !isArea(n.kind) &&
-          (WALK_DOORS[n.kind] ? roomsHolding(n, 12) >= 2 : roomsHolding(n, 0) >= 1)) { return; }
+      if (hush && n.kind !== "i_room" && !isArea(n.kind)) {
+        var holders = roomsAll.filter(function (r) { return r !== n && insideArea(r, n.x, n.y, WALK_DOORS[n.kind] ? -12 : 0); });
+        if ((WALK_DOORS[n.kind] ? holders.length >= 2 : holders.length >= 1) && !holders.some(seenIn)) { return; }
+      }
       if (n.kind === "i_lot") {                  // the ground the house stands on
         faces.push({ pts: [[-n.w / 2, -n.h / 2], [n.w / 2, -n.h / 2], [n.w / 2, n.h / 2], [-n.w / 2, n.h / 2]]
                        .map(function (p) { var q = v3Local(n, p[0], p[1]); return [q[0], q[1], -1]; }),
@@ -601,17 +632,24 @@
       if (n.kind === "i_room") {
         var T = Math.max(1, Math.min(6, Math.min(n.w, n.h) * 0.06)), walls = { how: wallsOf(n) };
         var corners = [[-n.w / 2, -n.h / 2], [n.w / 2, -n.h / 2], [n.w / 2, n.h / 2], [-n.w / 2, n.h / 2]];
-        if (!hush) {
+        if (!hush || seenIn(n)) {
           faces.push({ pts: corners.map(function (p) { var q = v3Local(n, p[0], p[1]); return [q[0], q[1], 0]; }),
                        n: [0, 0, 1], how: { floor: true, color: look.fill, edge: look.line, room: n }, floor: true });
         }
-        if (inside) {                    // overhead, seen from under it
+        if (inside || (hush && seenIn(n))) {   // overhead, seen from under it (or through a window)
           var up = ceilOf(n) * FLOOR_PX;
           faces.push({ pts: corners.slice().reverse().map(function (p) { var q = v3Local(n, p[0], p[1]); return [q[0], q[1], up]; }),
                        n: [0, 0, -1], how: { ceiling: true, color: v3Mix(simSheet(), look.line, 0.05), edge: look.line },
                        ceiling: true });
+          // and over it, unseen, what throws its shadow for it: the sun's
+          // view could not tell the top of a wall from the ceiling just over
+          // it, and let a line of sunlight in along every wall
+          if (inside) {
+            faces.push({ pts: corners.map(function (p) { var q = v3Local(n, p[0], p[1]); return [q[0], q[1], up + 0.3 * FLOOR_PX]; }),
+                         n: [0, 0, 1], how: { ghost: true, caster: true } });
+          }
         }
-        var wallsUp = wallTop(n), keepOut = hush ? outsideOnly(n) : null;
+        var wallsUp = wallTop(n), keepOut = hush && !seenIn(n) ? outsideOnly(n) : null;
         if (hush) { walls.how.noTop = true; }
         ["top", "foot", "left", "right"].forEach(function (edge) {
           var holes = [];
@@ -1408,16 +1446,24 @@
     var side = (k.d ? 1 : 0) - (k.a ? 1 : 0);
     var turn = (k.arrowright || k.padright ? 1 : 0) - (k.arrowleft || k.padleft ? 1 : 0);
     var look = (k.arrowup ? 1 : 0) - (k.arrowdown ? 1 : 0);
+    if (!ahead && !side) { me.go = 0; }
     if (!ahead && !side && !turn && !look) { return false; }
-    me.head += turn * 1.9 * dt;
-    if (look) { me.pitch = Math.max(-0.9, Math.min(0.9, me.pitch + look * 1.3 * dt)); }
+    me.head += turn * 2.3 * dt;
+    if (look) { me.pitch = Math.max(-0.9, Math.min(0.9, me.pitch + look * 1.5 * dt)); }
     if (!ahead && !side) { return true; }
-    var pace = WALK_PACE * (k.shift ? 2 : 1) * dt;
+    // up to speed in a quarter of a second, not all at once
+    me.go = Math.min(1, (me.go || 0) + dt * 4);
+    var pace = WALK_PACE * (k.shift ? 2 : 1) * (0.45 + 0.55 * me.go) * dt;
     var mx = (Math.cos(me.head) * ahead - Math.sin(me.head) * side) * pace;
     var my = (Math.sin(me.head) * ahead + Math.cos(me.head) * side) * pace;
-    // along each way on its own, so a wall met at a slant is slid along
-    if (mx && !v3Blocked(me.x + mx, me.y)) { me.x += mx; }
-    if (my && !v3Blocked(me.x, me.y + my)) { me.y += my; }
+    // in steps no longer than a wall is thick, so a slow frame cannot carry
+    // you through one; along each way on its own, so a wall met at a slant
+    // is slid along
+    var steps = Math.max(1, Math.ceil(Math.hypot(mx, my) / 4));
+    for (var i = 0; i < steps; i++) {
+      if (mx && !v3Blocked(me.x + mx / steps, me.y)) { me.x += mx / steps; }
+      if (my && !v3Blocked(me.x, me.y + my / steps)) { me.y += my / steps; }
+    }
     v3Stairs();
     return true;
   }
@@ -1950,10 +1996,12 @@
       ev.preventDefault();
       v3Hold();
       if (V3.mode === "walk") {
-        var step = -ev.deltaY * 0.15, me = V3.me;
-        var nx = me.x + Math.cos(me.head) * step, ny = me.y + Math.sin(me.head) * step;
-        if (!v3Blocked(nx, me.y)) { me.x = nx; }
-        if (!v3Blocked(me.x, ny)) { me.y = ny; }
+        var step = Math.max(-30, Math.min(30, -ev.deltaY * 0.25)), me = V3.me, bits = Math.ceil(Math.abs(step) / 4) || 1;
+        for (var b = 0; b < bits; b++) {         // a wall's thickness at a time, as walking
+          var nx = me.x + Math.cos(me.head) * step / bits, ny = me.y + Math.sin(me.head) * step / bits;
+          if (!v3Blocked(nx, me.y)) { me.x = nx; }
+          if (!v3Blocked(me.x, ny)) { me.y = ny; }
+        }
         v3Stairs();
         V3.dirty = true;
         return;

@@ -566,6 +566,11 @@
     plan("i_planter", 60, 25, ["o " + R(0, 0, 60, 25, 2), "o " + C(13, 12.5, 6.5) + " " + C(30, 12.5, 7.5) + " " + C(47, 12.5, 6.5)]);
     plan("i_birdbath", 30, 30, ["o " + C(15, 15, 14.5), "t " + C(15, 15, 10), "k " + C(15, 15, 2)]);
     plan("i_lamppost", 16, 16, ["o " + C(8, 8, 7.5), "k " + C(8, 8, 2.5), "t M8 0.5 V3 M8 13 V15.5 M0.5 8 H3 M13 8 H15.5"]);
+    // lights out of doors (2026-10-01): one along a path, a lantern by the
+    // door and a floodlight, the last two on the outside of a wall
+    plan("i_pathlight", 12, 12, ["o " + C(6, 6, 5.5), "k " + C(6, 6, 2), "t M6 0.5 V2 M6 10 V11.5 M0.5 6 H2 M10 6 H11.5"]);
+    plan("i_porchlight", 18, 10, ["o " + R(0, 0, 18, 3, 0.5), "o " + R(3.5, 3, 11, 7, 1.5), "k " + C(9, 6.5, 1.8)]);
+    plan("i_floodlight", 22, 12, ["o " + R(8, 0, 6, 3, 0.5), "o M3 4.5 H19 L22 12 H0 Z", "t M5 8 H17"]);
     plan("i_mailbox", 20, 14, ["o " + R(0, 0, 20, 14, 5), "t M6 7 H14", "k " + R(15, 1.5, 3, 5, 0.5)]);
     plan("i_bikerack", 80, 40, ["o " + R(6, 16, 68, 8, 2), "t2 M14 2 V38 M30 2 V38 M46 2 V38 M62 2 V38"]);
     // garage and utility
@@ -883,7 +888,7 @@
     ["ic_outdoor", ["i_lot", "i_driveway", "i_path", "i_deck", "i_fence", "i_hedge", "i_flowerbed",
                     "i_parked", "i_shrub", "i_grill", "i_pool", "i_patio", "i_gardenbench", "i_hottub",
                     "i_dogbed", "i_cattree", "i_firepit", "i_lounger", "i_gazebo", "i_shed", "i_planter",
-                    "i_birdbath", "i_lamppost", "i_mailbox", "i_bikerack"]],
+                    "i_birdbath", "i_lamppost", "i_pathlight", "i_porchlight", "i_floodlight", "i_mailbox", "i_bikerack"]],
     ["ic_fitness", ["i_treadmill", "i_exbike", "i_weightbench", "i_yogamat", "i_pooltable", "i_pingpong",
                     "i_dartboard", "i_easel", "i_trampoline", "i_swing"]],
     ["ic_utility", ["i_workbench", "i_shelving", "i_toolchest", "i_furnace", "i_freezer", "i_evcharger",
