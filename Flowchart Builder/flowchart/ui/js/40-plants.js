@@ -391,7 +391,8 @@
     }
     function free(x, y, r) { return !taken.some(function (t) { return Math.hypot(x - t[0], y - t[1]) < t[2] + r; }); }
     // shade trees: as many as the lot has room for, well off the house
-    var big = yard.big;
+    // (the lot's own trees pieces of it, to move about or take away: not drawn here, 40-edit3d.js)
+    var big = hand.house && hand.house.treesPlaced ? [] : yard.big;
     if (big.length) {
       var want = Math.max(1, Math.min(7, Math.round(lot.w * lot.h / (P * P) / 240))), made = 0;
       for (var tries = 0; tries < want * 60 && made < want; tries++) {

@@ -94,8 +94,10 @@
       }), how);
     });
   }
-  function tourBody(faces, x, y, z, head, phase, look, withHead) {
-    var P = FLOOR_PX, f = [Math.cos(head), Math.sin(head)], s = [-Math.sin(head), Math.cos(head)];
+  // (k: how big, a child smaller; others: somebody else -- the faces not
+  // marked as your own, so they can be taken hold of, 40-drag.js)
+  function tourBody(faces, x, y, z, head, phase, look, withHead, k, others) {
+    var P = FLOOR_PX * (k || 1), f = [Math.cos(head), Math.sin(head)], s = [-Math.sin(head), Math.cos(head)], f0 = faces.length;
     function at(fw, sd, up) { return [x + f[0] * fw * P + s[0] * sd * P, y + f[1] * fw * P + s[1] * sd * P, z + up * P]; }
     function how(c) { return { piece: true, color: c, edge: c, bare: true }; }
     var shirt = how(look.shirt), pants = how(look.pants), shoes = how(look.shoes), skin = how(look.skin), hair = how(look.hair);
@@ -135,7 +137,49 @@
       tourLump(faces, at(0.01, 0, 1.63), f, s, 0.1 * P, 0.085 * P, 0.115 * P, skin);
       tourLump(faces, at(-0.015, 0, 1.68), f, s, 0.1 * P, 0.09 * P, 0.085 * P, hair);
     }
+    if (others) { for (var i = f0; i < faces.length; i++) { delete faces[i].me; } }
   }
+
+  // ---- everybody else, in 3D too ------------------------------------------------------------
+  // (asked for, 2026-10-03: "update the people actors to be modeled properly
+  // now in 3d when walking around")  Those drawn on the plan, the one a run
+  // walks round, and the people out on the street were pictures turned to
+  // face the eye; now each is a body like your own -- arms, legs, a head --
+  // standing as they were put, or walking with their arms and legs swinging.
+  // Each their own: skin, hair and clothes picked by who they are (the
+  // clothes the colors they have on the plan, where they have some).
+  var PEOPLE_SKIN = ["#f3cfb3", "#e2b48f", "#c98f68", "#a26a46", "#7a4b30", "#5a3522"];
+  var PEOPLE_HAIR = ["#1f1a17", "#3a2a1f", "#5b3b24", "#8a6238", "#c49a62", "#2b2b2b"];
+  var PEOPLE_SHIRT = ["#7f8794", "#a65a44", "#4f7d5c", "#2f4a6a", "#c9a227", "#b03a48", "#e8e2d6", "#6a4c93", "#d9822b", "#f4f1ea",
+                      "#3f4a52", "#8fb3c9", "#c46a8a", "#5b6b3a"];
+  var PEOPLE_PANTS = ["#2e3846", "#3b3b3e", "#4d4033", "#25303d", "#5a5f66", "#6b5a45"];
+  function peopleSize(kind) { return kind === "i_child" ? 0.66 : kind === "i_elder" ? 0.95 : 1; }
+  function peopleLook(n, look, seed) {
+    var r = typeof gl3Rand === "function" ? gl3Rand((seed || 1) * 7919 + 13) : Math.random;
+    function pick(list) { return list[Math.floor(r() * list.length) % list.length]; }
+    var out = { skin: pick(PEOPLE_SKIN), hair: pick(PEOPLE_HAIR), shirt: pick(PEOPLE_SHIRT), pants: pick(PEOPLE_PANTS),
+                shoes: pick(["#2b2623", "#1d1d1f", "#5a4632", "#e9e6e0"]) };
+    if (n && n.kind === "i_elder") { out.hair = pick(["#b9b6b0", "#d8d5cf", "#8f8c86"]); }
+    // the clothes as colored for this one (not their kind's colors: every
+    // man in the house had the one shirt), or as handed in (out on the street)
+    var mine = n && n.id && style && style.nodes ? style.nodes["h" + n.id] : null;
+    var wear = look && look.own ? look : mine || null, paper = simSheet();
+    if (wear && wear.fill && wear.fill !== paper && wear.fill !== "#ffffff") { out.shirt = tourHex(wear.fill); }
+    if (wear && wear.line && wear.line !== simInk() && wear.line !== wear.fill) { out.pants = tourHex(v3Mix(wear.line, "#2e3846", 0.5)); }
+    return out;
+  }
+  // A person as a body: `n` the one drawn (its kind, its number, its
+  // colors), facing `head`, `phase` how far through a step (0 standing).
+  function peopleBody(faces, n, x, y, z, head, phase, look, fade) {
+    var f0 = faces.length, id = n && n.id ? n.id : 1;
+    tourBody(faces, x, y, z, head, phase, peopleLook(n, look, id), true, peopleSize(n && n.kind) * (0.97 + ((id * 37) % 7) / 100), true);
+    for (var i = f0; i < faces.length; i++) {
+      faces[i].person = true;
+      if (fade !== undefined && fade < 0.999) { faces[i].how = Object.assign({}, faces[i].how, { alpha: fade, late: true }); }
+    }
+  }
+  // which way one drawn on the plan faces: as a chair does, its front
+  function peopleFacing(n) { var t = (n.turn || 0) * Math.PI / 180; return Math.atan2(Math.cos(t), -Math.sin(t)); }
   // In the colors of the person you are, where you started as one drawn on the plan.
   function tourHex(c) {
     var m = /^rgb\((\d+),\s*(\d+),\s*(\d+)\)$/.exec(String(c || ""));

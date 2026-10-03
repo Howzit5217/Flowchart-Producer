@@ -98,6 +98,7 @@
     }
     if (kind === "screen" || kind === "fan" || kind === "water" || kind === "heat") {
       U.on[n.id] = !U.on[n.id];
+      if (kind === "water") { (U.since || (U.since = {}))[n.id] = performance.now(); }
       var key = { screen: "us_screen", fan: "us_fan", water: "us_water", heat: "us_heat" }[kind];
       v3Say(say(key + (U.on[n.id] ? "_on" : "_off"), { what: name }));
       if (kind === "screen" && U.on[n.id] && (n.kind === "i_register" || n.kind === "i_checkout")) { useTone([880, 1320], 0.18); }
@@ -125,6 +126,7 @@
       v3Say(say(U.on[n.id] ? "us_open" : "us_close", { what: name }));
       return;
     }
+    if (n.kind === "i_outlet" && typeof usePlug === "function") { usePlug(n); return; }
     if (kind === "say") {
       if (n.kind === "i_piano") { useTone([261.6, 329.6, 392.0, 523.3], 0.9); }
       if (n.kind === "i_toilet") { useTone([180, 120], 0.6, "noise"); }
@@ -210,6 +212,7 @@
       var f = floors.length ? floorAt(floors, n.x, n.y) : null, dx = f ? f.dx : 0, dy = f ? f.dy : 0, dz = f ? f.z : 0;
       var a = (n.turn || 0) * Math.PI / 180, bx = Math.sin(a), by = -Math.cos(a);       // toward its back (the wall)
       var high = (typeof pieceHigh === "function" ? pieceHigh(n) : 0.9) * px;
+      if (USE_WATER[n.kind] && typeof useWaterDraw === "function" && useWaterDraw(model, n, dx, dy, dz, t)) { turning = true; return; }
       if (USE_WATER[n.kind]) {
         // the stream from the tap at the back, down into the basin (from the head, in a shower)
         var back = n.h * (n.kind === "i_shower" ? 0.36 : 0.3), x = n.x + bx * back + dx, y = n.y + by * back + dy;
@@ -251,7 +254,7 @@
     v3Watch = function () {
       if (V3 && V3.useMoving && !(typeof STILL !== "undefined" && STILL)) {
         var now = performance.now();
-        if (now - (V3.useAt || 0) > 33) { V3.useAt = now; V3.dirty = true; }
+        if (now - (V3.useAt || 0) > Math.max(33, (V3.drawMs || 0) * 3)) { V3.useAt = now; V3.dirty = true; }
       }
       return v3WatchUse.apply(this, arguments);
     };
@@ -306,7 +309,17 @@
   function wallIsOpen(room, edge, other, facing) {
     return (room.open || []).indexOf(edge) >= 0 || (!!facing && (other.open || []).indexOf(facing) >= 0);
   }
-  function wallAnyOpen() { return hand.nodes.some(function (o) { return o.kind === "i_room" && o.open && o.open.length; }); }
+  // (asked once a picture while one is made -- every door of a big building
+  // asked it of every shape in the building)
+  var wallOpenKept = { at: null, any: false };
+  function wallAnyOpen() {
+    var at = typeof V3 !== "undefined" && V3 ? V3.picture || null : null;
+    if (!wallOpenKept) { wallOpenKept = { at: null, any: false }; }   // (asked before this part has run)
+    if (at && wallOpenKept.at === at) { return wallOpenKept.any; }
+    var any = hand.nodes.some(function (o) { return o.kind === "i_room" && o.open && o.open.length; });
+    if (at) { wallOpenKept.at = at; wallOpenKept.any = any; }
+    return any;
+  }
   // The stretches of a room's wall taken out, from the wall's start.
   function wallOpenRuns(room, edge, boxOf) {
     var runs = [];
@@ -341,9 +354,9 @@
     };
   }
   // A door left standing in a wall taken out: not put up.
-  function wallDoorGone(d) {
+  function wallDoorGone(d, near) {       // (near: the rooms by it, where they are known)
     if (!wallAnyOpen()) { return false; }
-    return hand.nodes.some(function (room) {
+    return (near || hand.nodes).some(function (room) {
       if (room.kind !== "i_room" || !insideArea(room, d.x, d.y, 14)) { return false; }
       var t = turned(room);
       return WALL_EDGES.some(function (edge) {

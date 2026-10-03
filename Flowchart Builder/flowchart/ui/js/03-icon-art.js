@@ -608,6 +608,12 @@
     plan("i_outlet", 16, 8, ["o " + R(2, 0, 12, 5, 0.6), "t M6 1.4 V3.6 M10 1.4 V3.6", "o " + C(8, 6.4, 1.6)]);
     plan("i_lightswitch", 14, 8, ["o " + R(2, 0, 10, 4.5, 0.6), "t M7 4.5 L10.4 7.6", "k " + C(10.4, 7.6, 1.1)]);
     plan("i_breaker", 44, 12, ["o " + R(0, 0, 44, 9, 0.8), "t M5 3 H39 M5 6 H39 M14 1.2 V7.8 M22 1.2 V7.8 M30 1.2 V7.8", "k " + R(36, 9, 6, 3, 0.6)]);
+    // (2026-10-03, 40-systems.js) what the wiring, the air and the water come to: a smoke alarm on
+    // the ceiling, a thermostat on the wall, the water heater, a bathroom's fan in its ceiling
+    plan("i_smoke", 14, 14, ["o " + C(7, 7, 6.5), "t " + C(7, 7, 3.2), "k " + C(7, 7, 1)]);
+    plan("i_thermostat", 12, 6, ["o " + R(0, 0, 12, 4, 1), "t " + C(6, 2, 1.2), "t M3 5.4 H9"]);
+    plan("i_waterheater", 30, 30, ["o " + C(15, 15, 14.5), "t " + C(15, 15, 9), "k " + R(13, 3, 4, 4, 0.6), "t M15 15 L20 11"]);
+    plan("i_exhaustfan", 14, 14, ["o " + R(0, 0, 14, 14, 1), "t M3 4 H11 M3 7 H11 M3 10 H11"]);
     plan("i_post", 16, 16, ["k " + R(0, 0, 16, 16, 0.6)]);
     plan("i_toolchest", 60, 45, ["o " + R(0, 0, 60, 45, 2), "t M3 9 H57 M3 17 H57 M3 25 H57 M3 33 H57", "t2 M20 41 H40", "k " + C(54, 4.5, 1.6)]);
     // a house on its land: the lot it stands on, the way to it, round it
@@ -926,7 +932,7 @@
                   "i_closetrod", "i_floormirror", "i_roundtable", "i_chair", "i_stool", "i_coffeemaker",
                   "i_desk", "i_officechair", "i_filing", "i_printer", "i_whiteboard", "i_schooldesk", "i_plant"]],
     ["ic_power", ["i_outlet", "i_lightswitch", "i_breaker", "i_post", "i_furnace", "i_ac", "i_vent", "i_heater",
-                  "i_radiator", "i_evcharger"]],
+                  "i_radiator", "i_evcharger", "i_smoke", "i_thermostat", "i_waterheater", "i_exhaustfan"]],
     ["ic_utility", ["i_workbench", "i_shelving", "i_toolchest", "i_furnace", "i_freezer", "i_evcharger",
                     "i_bikerack"]],
     ["ic_devices", ["i_computer", "i_laptop", "i_tablet", "i_phone", "i_server", "i_database",

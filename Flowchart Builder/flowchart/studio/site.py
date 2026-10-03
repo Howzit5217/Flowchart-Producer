@@ -71,6 +71,32 @@ def service_worker():
                         hashlib.sha1(body.encode("utf-8")).hexdigest()[:10])
 
 
+def _write_whole(name, body):
+    """Write a file so that nothing reading it ever finds it half done.
+
+    A page opened while index.html was being written out came only part of
+    the way: its script stopped short and the panel fell to pieces.  So the
+    new one is written beside it and put in its place in one step.  (On
+    Windows a file being read cannot be replaced for that moment: tried a
+    few times, then written over as before.)"""
+    import time
+    tmp = name + ".part"
+    with io.open(tmp, "w", encoding="utf-8", newline="\n") as f:
+        f.write(body)
+    for _ in range(20):
+        try:
+            os.replace(tmp, name)
+            return
+        except PermissionError:
+            time.sleep(0.05)
+    with io.open(name, "w", encoding="utf-8", newline="\n") as f:
+        f.write(body)
+    try:
+        os.remove(tmp)
+    except OSError:
+        pass
+
+
 def write_site(where):
     """Write the whole thing out as a website that needs no server at all.
 
@@ -109,8 +135,7 @@ def write_site(where):
                          json.dumps(MANIFEST, indent=2) + "\n"),
                         (os.path.join(where, "sw.js"), service_worker()),
                         (os.path.join(where, ".nojekyll"), "")]):
-        with io.open(name, "w", encoding="utf-8", newline="\n") as f:
-            f.write(body)
+        _write_whole(name, body)
         written.append(name)
         print(word("wrote", path=name))
 

@@ -411,7 +411,13 @@ var tests = function () {
     hand.nodes = []; hand.links = []; hand.next = 1;
     starterMake({ beds: 3, baths: 2, open: false, office: true, laundry: true, garage: true, closet: true, spread: spread });
     var rooms = hand.nodes.filter(function (n) { return n.kind === "i_room"; });
-    check(rooms.length === 13, "Start a house made " + rooms.length + " rooms, not 13");
+    // (every room asked for -- the halls and the rooms a squarer plan adds
+    // between them come and go with the layout, 2026-10-03)
+    var made = {};
+    starterLast.forEach(function (o) { made[o.kind] = (made[o.kind] || 0) + 1; });
+    var asked = (made.main || 0) + (made.bed || 0) === 3 && (made.ensuite || 0) + (made.bath || 0) === 2 &&
+                !!(made.office && made.laundry && made.garage && made.closet && made.kitchen && made.living && made.hall);
+    check(asked && rooms.length === starterLast.length, "Start a house made " + JSON.stringify(made) + ", " + rooms.length + " rooms");
     var tips = homeAdvice().map(function (t) { return t.text; });
     check(!tips.length, "Start a house left things to put right (" + (spread ? "spread" : "together") + "): " + tips.join(" / "));
     // and every piece it was to put in, in

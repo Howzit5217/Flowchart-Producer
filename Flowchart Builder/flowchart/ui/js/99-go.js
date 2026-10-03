@@ -62,4 +62,7 @@
     }
     else if (MODE === "web") { warmAside(); }    // warm it up while they type
   }
+  // (got this far: the page came whole -- the guard in studio.html's head)
+  window.FLOWCHART_UP = true;
+  try { sessionStorage.removeItem("flowchart-reread"); } catch (e) { /* fine */ }
 })();

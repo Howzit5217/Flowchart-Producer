@@ -55,7 +55,15 @@
   // way it is turned, and how high off the floor it starts.
   function modelMaker(x, y, turn, z0) {
     var a = (turn || 0) * Math.PI / 180, c = Math.cos(a), s = Math.sin(a);
-    var M = { cur: [c, -s, 0, s, c, 0, 0, 0, 1, x, y, z0], stack: [], parts: {}, order: [] };
+    var M = { cur: [c, -s, 0, s, c, 0, 0, 0, 1, x, y, z0], stack: [], parts: {}, order: [], waters: [] };
+    // where water comes out (a tap's spout, a shower's head) and how low it falls to,
+    // in the model's own numbers: running, it is drawn there (40-use3d.js)
+    M.water = function (wx, wy, wz, kind, low) {
+      var C = M.cur;
+      M.waters.push({ p: [C[0] * wx + C[1] * wy + C[2] * wz + C[9], C[3] * wx + C[4] * wy + C[5] * wz + C[10], C[6] * wx + C[7] * wy + C[8] * wz + C[11]],
+                      kind: kind || "tap", low: low === undefined ? C[11] : low });
+      return M;
+    };
     M.push = function () { M.stack.push(M.cur); return M; };
     M.pop = function () { M.cur = M.stack.pop(); return M; };
     M.move = function (dx, dy, dz) { M.cur = mMul(M.cur, [1, 0, 0, 0, 1, 0, 0, 0, 1, dx, dy, dz || 0]); return M; };
@@ -304,6 +312,7 @@
                    mesh: { p: new Float32Array(b.p), n: new Float32Array(b.n), uv: new Float32Array(b.uv),
                            a: b.a ? new Float32Array(b.a) : null, base: pts[0].slice() } });
       });
+      out.waters = M.waters;
       return out;
     };
     return M;
@@ -374,10 +383,22 @@
   function houseTints(part, kind) { return HOUSE_TINTS[(part === "roof" ? "roof" : "") + kind] || [HOUSE_MATS[part][kind][1]]; }
   // What a room's part is made of, picked -- or null, and it is made of
   // what it always was (boards, or tiles where there is water; siding).
+  // (the room the whole house takes its outside from, looked for once a
+  // picture, not once a wall: every wall of a big building asked every
+  // shape in it, each picture)
+  var houseMatFirst = { list: null, at: 0, part: {} };
+  function houseMatOther(part) {
+    var F = houseMatFirst, now = performance.now();
+    if (F.list !== hand.nodes || now - F.at > 60) { F.list = hand.nodes; F.at = now; F.part = {}; }
+    if (!(part in F.part)) {
+      F.part[part] = hand.nodes.filter(function (r) { return r.kind === "i_room" && r.mat && r.mat[part]; })[0] || null;
+    }
+    return F.part[part];
+  }
   function houseMat(room, part) {
     var mine = (room && room.mat) || {}, kind = mine[part], color = mine[part + "C"];
     if ((part === "out" || part === "roof") && !kind) {
-      var other = hand.nodes.filter(function (r) { return r.kind === "i_room" && r.mat && r.mat[part]; })[0];
+      var other = houseMatOther(part);
       if (other) { kind = other.mat[part]; color = color || other.mat[part + "C"]; }
     }
     var table = HOUSE_MATS[part];
@@ -404,7 +425,23 @@
   // Put up in place of 38-view3d.js's box: the model, and round it the box
   // a body bumps into (unseen).  False where there is no model, or models
   // are not being drawn, and the box goes up as it did.
-  function v3ModelPut(faces, n, under, ceilAt) {
+  // (2026-10-03) A model kept for every piece of its kind, size and colors
+  // -- not one for each piece: a building of eight thousand pieces made
+  // every one of them again each picture, the six hundred kept being
+  // thrown out.  Which of its piece's own fields a model reads is watched
+  // the first time it is made; one that reads anything else of it (a
+  // plant's leaves, scattered by its number) is still kept for that piece.
+  var MODEL_KEYED = { kind: true, w: true, h: true, fin: true };
+  var modelOwn = {};                     // kinds whose models read more of the piece than their key
+  var modelWaters = {};                  // id -> where its water comes out, as last put up (40-use3d.js)
+  function modelSpy(n, kind) {
+    if (typeof Proxy !== "function") { modelOwn[kind] = true; return n; }
+    return new Proxy(n, { get: function (t, k) {
+      if (typeof k === "string" && !MODEL_KEYED[k]) { modelOwn[kind] = true; }
+      return t[k];
+    } });
+  }
+  function v3ModelPut(faces, n, under, ceilAt, near) {
     var make = MODELS[n.kind];
     if (!make || !modelsOn()) { return false; }
     var z0, H, extra = {}, P = FLOOR_PX;
@@ -417,7 +454,7 @@
       z0 = bottom; H = Math.max(2, body - bottom); extra.cord = hi - body; extra.hung = true;
     } else if (V3_WALL[n.kind]) {
       var hang = wallHang(n), clear = 0;
-      hand.nodes.forEach(function (m) {
+      (near ? near(n) : hand.nodes).forEach(function (m) {
         if (m === n || V3_HIGH[m.kind] === undefined || LIES_FLAT[m.kind] || !boxesOverlap(m, n)) { return; }
         clear = Math.max(clear, pieceHigh(m) + 0.06);
       });
@@ -434,13 +471,15 @@
     // it stands: moved or turned, it is the same model, put somewhere else
     // as it is drawn (gl3Faces).
     var C = modelColors(n);
-    var key = [n.kind, n.id, Math.round(n.w * 10), Math.round(n.h * 10), Math.round(H * 10),
-               Math.round((extra.cord || 0) * 10), C.main || "", C.frame || "", n.fin ? JSON.stringify(n.fin) : ""].join("|");
+    // (the design it is made in, 40-designs.js, is its finish's: in the key with it)
+    var key = [n.kind, modelOwn[n.kind] ? n.id : "", Math.round(n.w * 10), Math.round(n.h * 10), Math.round(H * 10),
+               Math.round((extra.cord || 0) * 10), JSON.stringify(C), n.fin ? JSON.stringify(n.fin) : "",
+               extra.onTop ? 1 : 0, extra.hung ? 1 : 0, extra.onWall ? 1 : 0].join("|");
     var made = modelKept.get(key);
     if (!made) {
-      var M = modelMaker(0, 0, 0, 0);
+      var M = modelMaker(0, 0, 0, 0), wasOwn = !!modelOwn[n.kind];
       try {
-        make(M, Math.max(2, n.w), Math.max(2, n.h), Math.max(1, H), C, n, extra);
+        make(M, Math.max(2, n.w), Math.max(2, n.h), Math.max(1, H), C, wasOwn ? n : modelSpy(n, n.kind), extra);
         if (!extra.onTop && !extra.hung && !extra.onWall && !LIES_FLAT[n.kind] && n.kind !== "i_fence" && n.kind !== "i_pool") {
           M.under(n.w, n.h);
         }
@@ -449,10 +488,21 @@
         return false;
       }
       made = M.done();
-      if (modelKept.size > 600) { modelKept.clear(); }
+      // (it read the piece's own number, or more: kept for this piece alone)
+      if (!wasOwn && modelOwn[n.kind]) { key = key.replace(n.kind + "||", n.kind + "|" + n.id + "|"); }
+      // the oldest let go, past as many as a big building has
+      if (modelKept.size > 4000) {
+        var drop = 0;
+        modelKept.forEach(function (v, k) { if (drop++ < 400) { modelKept.delete(k); } });
+      }
       modelKept.set(key, made);
     }
     var t = (n.turn || 0) * Math.PI / 180, tc = Math.cos(t), ts = Math.sin(t);
+    if (made.waters && made.waters.length) {
+      modelWaters[n.id] = made.waters.map(function (w) {
+        return { p: [n.x + w.p[0] * tc - w.p[1] * ts, n.y + w.p[0] * ts + w.p[1] * tc, z0 + w.p[2]], kind: w.kind, low: z0 + w.low };
+      });
+    }
     made.forEach(function (f) {
       var pts = f.pts.map(function (p) { return [n.x + p[0] * tc - p[1] * ts, n.y + p[0] * ts + p[1] * tc, z0 + p[2]]; });
       faces.push({ pts: pts, n: f.n, how: f.how,
@@ -529,8 +579,9 @@
     }).join("");
   }
   // a gooseneck tap, rising at x, y and curving over toward +y
-  function mTap(M, x, y, z, reach, m) {
+  function mTap(M, x, y, z, reach, m, low) {
     var r = 1.1 * cm, up = reach * 1.1;
+    M.water(x, y + reach, z + up * 0.55 - 1.2 * cm, "tap", low === undefined ? z - 14 * cm : low);
     M.cyl(x, y, z, z + 3 * cm, 2.4 * cm, m, { seg: 12 });
     var last = [x, y, z + 2 * cm];
     for (var i = 1; i <= 7; i++) {
@@ -1164,7 +1215,7 @@
       M.quad(steel, [b[1], by[0], H - deep], [b[1], by[1], H - deep], [b[1], by[1], H], [b[1], by[0], H], [-1, 0, 0]);
       M.cyl((b[0] + b[1]) / 2, (by[0] + by[1]) / 2, H - deep + 0.6 * cm, H - deep + 0.8 * cm, 2 * cm, M.mat("chrome", "#9aa0a6"), { seg: 10 });
     });
-    mTap(M, 0, y0 + D * 0.1, H, D * 0.42, M.mat("chrome", "#dfe3e8"));
+    mTap(M, 0, y0 + D * 0.1, H, D * 0.42, M.mat("chrome", "#dfe3e8"), H - 17 * cm);
   });
   mDef("i_stove", function (M, W, D, H, C) {
     C = mPick(C, "#c9cdd1", "#1b1c1e");
@@ -1326,6 +1377,7 @@
     M.cyl(0, y0 + t / 2, H, H + 4 * cm, 1.8 * cm, tap, { seg: 10 });
     M.tube([0, y0 + t / 2, H + 3.5 * cm], [0, y0 + t + 9 * cm, H + 3.5 * cm], 1.2 * cm, tap, 8);
     [-7, 7].forEach(function (dx) { M.cyl(dx * cm, y0 + t / 2, H, H + 3 * cm, 2 * cm, tap, { seg: 10 }); });
+    M.water(0, y0 + t + 9 * cm, H + 2.4 * cm, "tub", 8 * cm);
   });
   mDef("i_shower", function (M, W, D, H, C) {
     C = mPick(C, "#f6f6f3", "#dfe3e8");
@@ -1342,6 +1394,7 @@
     M.cyl(0, -D / 2 + 3 * cm, 1.0 * FLOOR_PX, top - 6 * cm, 1 * cm, chrome, { seg: 8 });
     M.tube([0, -D / 2 + 3 * cm, top - 6 * cm], [0, -D / 2 + 18 * cm, top - 4 * cm], 1 * cm, chrome, 8);
     M.cyl(0, -D / 2 + 22 * cm, top - 6 * cm, top - 4.5 * cm, 9 * cm, chrome, { seg: 20 });
+    M.water(0, -D / 2 + 22 * cm, top - 6.2 * cm, "spray", tray);
     M.push().move(0, -D / 2 + 0.5 * cm, 1.05 * FLOOR_PX).tiltX(-90);
     M.cyl(0, 0, 0, 3 * cm, 4 * cm, chrome, { seg: 14 });
     M.pop();
@@ -1648,7 +1701,9 @@
     C = mPick(C, "#f4f2ec", "#2b2d31");
     var R = Math.min(W, H) / 2, y0 = -D / 2;
     M.push().move(0, y0, H / 2).tiltX(-90);
-    M.lathe(0, 0, [[R, 0], [R, 2.5 * cm], [R - 1 * cm, 3 * cm], [0, 3 * cm]], M.mat("metal", C.frame), { seg: 30 });
+    // (its rim only: closed across the front, it hid the face -- a black disc on the kitchen wall)
+    M.lathe(0, 0, [[R, 0], [R, 2.5 * cm], [R - 1 * cm, 3 * cm], [R - 1.4 * cm, 2.6 * cm]], M.mat("metal", C.frame), { seg: 30 });
+    M.cyl(0, 0, 0, 0.4 * cm, R - 0.5 * cm, M.mat("metal", C.frame), { seg: 30 });
     M.cyl(0, 0, 2.6 * cm, 2.7 * cm, R - 1.3 * cm, M.mat("ceramic", C.main), { seg: 30 });
     for (var h = 0; h < 12; h++) {
       var a = h / 12 * Math.PI * 2;
@@ -2297,6 +2352,7 @@
     var tap = M.mat("chrome", C.frame);
     M.cyl(-W / 2 + 10 * sx, -D / 2 + 10 * sy, H, H + 4 * cm, 1.8 * cm, tap, { seg: 10 });
     M.tube([-W / 2 + 10 * sx, -D / 2 + 10 * sy, H + 3.5 * cm], [-W / 2 + 18 * sx, -D / 2 + 18 * sy, H + 3.5 * cm], 1.2 * cm, tap, 8);
+    M.water(-W / 2 + 18 * sx, -D / 2 + 18 * sy, H + 2.4 * cm, "tub", H - 10 * cm);
   });
   mDef("i_linencab", function (M, W, D, H, C) {
     C = mPick(C, "#f2f0ea", "#c9ced3");
@@ -2776,6 +2832,60 @@
     M.box(-W / 2 - 1.5 * cm, W / 2 + 1.5 * cm, -D / 2 - 1.5 * cm, D / 2 + 1.5 * cm, 0, 10 * cm, M.mat("plastic", C.frame), 0.4 * cm);
     M.box(-W / 2, W / 2, -D / 2, D / 2, 10 * cm, H - 8 * cm, body, 0.5 * cm);
     M.box(-W / 2 - 1.5 * cm, W / 2 + 1.5 * cm, -D / 2 - 1.5 * cm, D / 2 + 1.5 * cm, H - 8 * cm, H, M.mat("plastic", C.frame), 0.4 * cm);
+  });
+  // (2026-10-03) what a house's wiring, air and water come to (40-systems.js): a smoke alarm,
+  // a thermostat, the water heater, a bathroom's fan
+  // a smoke alarm: a white disc on the ceiling, its vents round the edge, a red light
+  mDef("i_smoke", function (M, W, D, H, C) {
+    var cm = FLOOR_PX / 100, R = Math.min(W, D, 14 * cm) / 2;
+    C = mPick(C, "#f4f3ef", "#d8d6d0");
+    M.cyl(0, 0, 0, H * 0.75, R, M.mat("plastic", C.main), { seg: 24, r1: R * 0.92 });
+    M.cyl(0, 0, H * 0.75, H, R * 1.04, M.mat("plastic", C.frame), { seg: 24 });
+    for (var i = 0; i < 12; i++) {
+      var a = i / 12 * Math.PI * 2;
+      M.box(Math.cos(a) * R * 0.9 - 0.4 * cm, Math.cos(a) * R * 0.9 + 0.4 * cm, Math.sin(a) * R * 0.9 - 0.4 * cm, Math.sin(a) * R * 0.9 + 0.4 * cm,
+            H * 0.2, H * 0.6, M.mat("plastic", "#b9b7b1"));
+    }
+    M.cyl(R * 0.4, 0, -0.2 * cm, 0.1 * cm, 0.5 * cm, M.mat("glow", "#e0372c"), { seg: 8 });
+    M.cyl(0, 0, -0.15 * cm, 0.05 * cm, R * 0.28, M.mat("plastic", "#e7e5e0"), { seg: 16 });
+  });
+  // a thermostat: a slim box on the wall, its round dial or screen
+  mDef("i_thermostat", function (M, W, D, H, C) {
+    var cm = FLOOR_PX / 100, w = Math.min(W, 12 * cm) / 2, y1 = D / 2;
+    C = mPick(C, "#f2f1ec", "#2f3236");
+    M.box(-w, w, y1 - 2.4 * cm, y1, 0, H, M.mat("plastic", C.main), 0.6 * cm);
+    M.push().move(0, y1, H / 2).tiltX(-90);
+    M.cyl(0, 0, 0, 0.6 * cm, Math.min(w, H / 2) * 0.72, M.mat("screen", C.frame), { seg: 24 });
+    M.cyl(0, 0, 0.6 * cm, 0.7 * cm, Math.min(w, H / 2) * 0.4, M.mat("glow", "#7fd3a8"), { seg: 20 });
+    M.pop();
+  });
+  // a water heater: a white tank, its domed top, the flue up from it, cold
+  // in and hot out in copper, the relief valve's pipe down its side, its
+  // controls at the foot
+  mDef("i_waterheater", function (M, W, D, H, C) {
+    var cm = FLOOR_PX / 100, R = Math.min(W, D) / 2 * 0.92;
+    C = mPick(C, "#eceae4", "#8a8f95");
+    var tank = M.mat("ceramic", C.main), steel = M.mat("metal", C.frame), copper = M.mat("metal", "#c07a44");
+    M.cyl(0, 0, 0, 6 * cm, R * 0.95, steel, { seg: 22 });
+    M.cyl(0, 0, 6 * cm, H - R * 0.25, R, tank, { seg: 26 });
+    M.ball(0, 0, H - R * 0.25, R, R, R * 0.22, tank, { seg: 10, lat0: 0 });
+    M.cyl(0, 0, H - 4 * cm, H + 22 * cm, 5 * cm, steel, { seg: 12 });
+    [[-R * 0.45, "#3f86d9"], [R * 0.45, "#d9534f"]].forEach(function (p) {
+      M.cyl(p[0], -R * 0.2, H - 6 * cm, H + 18 * cm, 1.4 * cm, copper, { seg: 10 });
+      M.cyl(p[0], -R * 0.2, H + 2 * cm, H + 4 * cm, 2.2 * cm, M.mat("plastic", p[1]), { seg: 10 });
+    });
+    M.box(-6 * cm, 6 * cm, R - 2 * cm, R + 3 * cm, 22 * cm, 40 * cm, M.mat("plastic", "#2b2d31"), 0.8 * cm);
+    M.cyl(R * 0.7, R * 0.7, 10 * cm, H * 0.82, 1.2 * cm, copper, { seg: 8 });
+    M.box(-R * 0.5, R * 0.5, R - 0.5 * cm, R + 0.3 * cm, H * 0.55, H * 0.7, M.mat("plastic", "#f2c53d"), 0.2 * cm);
+  });
+  // a bathroom's fan: a white grille in the ceiling, its slats
+  mDef("i_exhaustfan", function (M, W, D, H, C) {
+    var cm = FLOOR_PX / 100, w = Math.min(W, 26 * cm) / 2, d = Math.min(D, 26 * cm) / 2;
+    C = mPick(C, "#f4f3ef", "#cfcdc6");
+    M.box(-w, w, -d, d, H * 0.6, H, M.mat("plastic", C.main), 0.4 * cm);
+    for (var s = -3; s <= 3; s++) {
+      M.box(-w * 0.82, w * 0.82, s * d * 0.24 - 0.5 * cm, s * d * 0.24 + 0.5 * cm, 0, H * 0.6, M.mat("plastic", C.frame));
+    }
   });
   mDef("i_toolchest", function (M, W, D, H, C) {
     C = mPick(C, "#c7372f", "#dfe3e8");

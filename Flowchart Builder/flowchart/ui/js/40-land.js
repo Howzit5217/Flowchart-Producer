@@ -567,7 +567,14 @@
     var fx = Math.max(0, Math.min(1, (q[0] - M.xs[i]) / (M.xs[i + 1] - M.xs[i])));
     var fy = Math.max(0, Math.min(1, (q[1] - M.ys[j]) / (M.ys[j + 1] - M.ys[j])));
     var a = M.H[j * nx + i], b = M.H[j * nx + i + 1], c = M.H[(j + 1) * nx + i], d = M.H[(j + 1) * nx + i + 1];
-    return a + (b - a) * fx + (c - a) * fy + (a - b - c + d) * fx * fy;
+    // (on the two flat triangles the ground is drawn as, cut along the
+    // shorter way across (terrMesh) -- not a smooth blend of the corners: out
+    // where the squares are tens of metres across, a tree on the blend stood
+    // metres off the ground drawn under it, 2026-10-03)
+    if (Math.abs(a - d) <= Math.abs(b - c)) {
+      return fx >= fy ? a + (b - a) * fx + (d - b) * fy : a + (d - c) * fx + (c - a) * fy;
+    }
+    return fx + fy <= 1 ? a + (b - a) * fx + (c - a) * fy : d + (c - d) * (1 - fx) + (b - d) * (1 - fy);
   }
   function terrNormalAt(T, x, y) {
     var e = 0.6 * T.P, gx = (terrMeshAt(T, x + e, y) - terrMeshAt(T, x - e, y)) / (2 * e), gy = (terrMeshAt(T, x, y + e) - terrMeshAt(T, x, y - e)) / (2 * e);

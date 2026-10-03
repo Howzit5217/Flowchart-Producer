@@ -17,12 +17,24 @@
   // (as Low walls, 38-view3d.js).  Kept in the browser, like the time of day.
   function flat3dPref() { try { return localStorage.getItem("flowchart-3d-flat3d") === "1"; } catch (e) { return false; } }
   function flat3dNow() { return !!(V3 && V3.flat && V3.flatDone && V3.scene !== "space" && V3.mode !== "walk" && flat3dPref()); }
+  // (2026-10-03: "update this so in the 2d mode it lets you look at it from a
+  // deeper angle rather than top down so you can see the 3d furniture in the
+  // layout but nothing else is textured except the furnature")  Looked at
+  // from part way up, not straight down; the plan plain as drawn, and the
+  // furniture alone in its own materials (38-view3d-gl.js).
+  var FLAT3D_PITCH = 0.98;
+  function flat3dTilt(on, ms) {
+    if (!V3) { return; }
+    v3Tween("pitch", on ? FLAT3D_PITCH : Math.PI / 2, ms);
+    if (typeof v3FitSoon === "function") { v3FitSoon(ms); }     // (fitted to where it is going: v3Goal)
+  }
   function flat3dSet(on) {
     try { localStorage.setItem("flowchart-3d-flat3d", on ? "1" : "0"); } catch (e) { /* this visit only */ }
     if (!V3) { return; }
     if (V3.flat && V3.flatDone) {
       v3Fade(250);
       v3Tween("rise", on ? 1 : 0, 450);
+      flat3dTilt(on, 450);
     }
     V3.dirty = true;
     v3Words();
@@ -51,6 +63,8 @@
     v3Flat = function (on) {
       var out = v3FlatPlain.apply(this, arguments);
       if (on && flat3dPref() && V3 && V3.tw && V3.tw.rise) { V3.tw.rise.to = 1; }
+      else if (on && flat3dPref() && V3 && V3.flatDone && V3.rise !== 1) { V3.rise = 1; V3.dirty = true; }   // (there at once: a big building)
+      if (on && flat3dPref() && V3) { flat3dTilt(true, 750); }
       return out;
     };
   }

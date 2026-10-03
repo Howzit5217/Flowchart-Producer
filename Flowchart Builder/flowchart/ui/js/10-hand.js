@@ -108,13 +108,29 @@
   var nodeSpot = { list: null, size: -1, at: {} };
   function nodeById(id) {
     var list = hand.nodes;
+    // (grown at the end -- a piece put in -- only the new ones added: a
+    // house furnished a piece at a time made it over for every piece)
+    if (nodeSpot.list === list && list.length > nodeSpot.size) {
+      for (var g = nodeSpot.size; g < list.length; g++) { if (nodeSpot.at[list[g].id] === undefined) { nodeSpot.at[list[g].id] = g; } }
+      nodeSpot.size = list.length;
+    }
     if (nodeSpot.list !== list || nodeSpot.size !== list.length) {
       var at = {};
       for (var k = list.length - 1; k >= 0; k--) { at[list[k].id] = k; }   // the first of any two
       nodeSpot = { list: list, size: list.length, at: at };
     }
     var i = nodeSpot.at[id], n = i === undefined ? null : list[i];
-    return n && n.id === id ? n : null;
+    if (n && n.id === id) { return n; }
+    // (moved along: something put in ahead of it -- a Floor put under what
+    // is on it -- and the rest found where they are now)
+    if (i !== undefined) {
+      var again = {};
+      for (var j = list.length - 1; j >= 0; j--) { again[list[j].id] = j; }
+      nodeSpot = { list: list, size: list.length, at: again };
+      i = again[id]; n = i === undefined ? null : list[i];
+      return n && n.id === id ? n : null;
+    }
+    return null;
   }
   function outOf(id) {
     return hand.links.filter(function (l) { return l.from === id; });
@@ -2091,7 +2107,11 @@
       // baseline below each line's middle by about a third of the type,
       // which is what puts the body of the letters on the middle line
       // instead of hanging them off it.
-      out.push.apply(out, wordsArt(n.kind, moved.x, moved.y, n.w, n.h, lines, type));
+      // (none for a piece of furniture with nothing written on it: an empty
+      // line of words each was a quarter of a big plan's drawing)
+      if (!ICONS[n.kind] || lines.some(function (l) { return l; })) {
+        out.push.apply(out, wordsArt(n.kind, moved.x, moved.y, n.w, n.h, lines, type));
+      }
       out.push("</g>");
       if (joining && picked && n.id !== picked && (typeof linksWanted !== "function" || linksWanted(n))) {
         // Somewhere to aim for.  Once a line is being drawn, every other

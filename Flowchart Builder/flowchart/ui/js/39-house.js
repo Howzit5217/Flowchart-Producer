@@ -248,8 +248,23 @@
   if (typeof roofPlan === "function") {
     var roofPlanPieces = roofPlan;
     roofPlan = function (floors, upTo, wallTop) {
-      var base = roofPlanPieces.apply(this, arguments);
       houseFloorsNow = floors || [];
+      // (the rooms, the floors where they stand and the roof asked for as
+      // before: the roof as before, without working the plain one out again
+      // -- each picture of a big building did, room against room)
+      var shape0 = typeof styleRoofShape === "function" ? styleRoofShape() : "hip";
+      var first = [houseOpt("roof"), !!houseOpt("gutters"), shape0, houseEave(), typeof stylePitch === "function" ? stylePitch() : "", upTo,
+                   (floors || []).map(function (f) { return [f.n.id, f.dx, f.dy, f.z, f.level].join(","); }).join(";"),
+                   hand.nodes.map(function (r) {
+                     return r.kind === "i_room" || r.kind === "i_floor" ? [r.id, r.x, r.y, r.w, r.h, r.turn || 0, r.ceil || 0, r.text || ""].join(",") : "";
+                   }).join(";")].join("|");
+      if (roofKept.first === first && roofKept.out) {
+        return roofKept.out.map(function (R) {
+          var room = nodeById(R.roomId);
+          return Object.assign({}, R, { room: room || R.room });
+        });
+      }
+      var base = roofPlanPieces.apply(this, arguments);
       try {
         // (a roof of a style's shape is one roof: 39-styles.js -- over rooms
         // laid side by side for the flat ones, whose slabs must not overlap)
@@ -264,8 +279,9 @@
           var rects = roofRooms(floors, upTo, wallTop, base);
           var made = whole ? roofWhole(rects, floors) : rects;
           made.forEach(function (R) { R.runs = gut ? roofRuns(R, floors) : null; R.roomId = R.room && R.room.id; });
-          roofKept = { key: key, out: made };
+          roofKept = { key: key, out: made, first: first };
         }
+        roofKept.first = first;
         return roofKept.out.map(function (R) {
           var room = nodeById(R.roomId);
           return Object.assign({}, R, { room: room || R.room });
@@ -798,6 +814,11 @@
     floor2: '<path d="M3 8.2 10 2.8l7 5.4M4.6 7v9.4h10.8V7M4.6 11.4h10.8M8.6 16.4v-3h2.8v3M7 9.2h1.6M11.4 9.2H13"/>',
     basement: '<path d="M2.6 7.4 10 2.6l7.4 4.8M4.6 6.2v5.6h10.8V6.2M2 11.8h16"/><path d="M5.6 13.6h8.8v3.8H5.6z" stroke-dasharray="1.6 1.4"/>',
     kitchen: '<path d="M3.4 8.6h13.2v1.8a5 5 0 0 1-5 5H8.4a5 5 0 0 1-5-5zM10 8.6V5.4M7 6.2l-.6-2M13 6.2l.6-2M2.4 8.6h1M16.6 8.6h1"/>',
+    // (the four layouts, Start building: rooms drawn as walls, open where they are gone)
+    lay_classic: '<rect x="2.6" y="3.4" width="14.8" height="13.2" rx="1"/><path d="M10 3.4v4.4M10 10.4v6.2M2.6 10h4.6M9.4 10h8"/>',
+    lay_semi: '<rect x="2.6" y="3.4" width="14.8" height="13.2" rx="1"/><path d="M10 3.4v4.4M10 10.4v6.2M2.6 10h4.6"/>',
+    lay_open: '<rect x="2.6" y="3.4" width="14.8" height="13.2" rx="1"/><path d="M10 13.2v3.4M7 10h.01M13 10h.01"/>',
+    lay_great: '<rect x="2.6" y="3.4" width="14.8" height="13.2" rx="1"/><path d="M5.6 12.6h4M12.4 7.4l2 2-2 2"/>',
     living: '<path d="M3.6 10V7.6a1.6 1.6 0 0 1 1.6-1.6h9.6a1.6 1.6 0 0 1 1.6 1.6V10"/><path d="M2.6 10.4a1.4 1.4 0 0 1 2.8 0v1.6h9.2v-1.6a1.4 1.4 0 0 1 2.8 0v4.2H2.6z"/><path d="M4.4 14.6v1.6M15.6 14.6v1.6"/>',
     office: '<path d="M2.6 9h14.8M4.4 9v7.4M15.6 9v7.4M6 9V3.6h8V9M8.6 12h2.8"/>',
     laundry: '<rect x="4" y="3" width="12" height="14" rx="1.6"/><circle cx="10" cy="11" r="3.4"/><path d="M6.4 5.6h1.4M10 5.6h3.6"/>',
@@ -921,7 +942,8 @@
         b.className = "hs-tab";
         b.setAttribute("role", "tab");
         b.setAttribute("aria-selected", t === tab ? "true" : "false");
-        b.textContent = TXT["hs_tab_" + t];
+        // (the house's, or -- built as something else -- the building's: 40-grounds.js)
+        b.textContent = t === "house" && typeof groundsNow === "function" && groundsNow() !== "home" ? TXT.gr_tab_building : TXT["hs_tab_" + t];
         b.onclick = function () {
           try { localStorage.setItem("flowchart-3d-settab", t); } catch (e) { /* this visit only */ }
           draw();
@@ -932,7 +954,7 @@
       sheet.appendChild(strip);
       if (tab === "house") {
         if (typeof styleSection === "function") { styleSection(sheet, head, draw); }
-        head(TXT.hs_house);
+        head(typeof groundsNow === "function" && groundsNow() !== "home" ? TXT.gr_building : TXT.hs_house);
         tiles([
           { icon: "roof", label: TXT.st_roof_one, on: houseOpt("roof") === "one", set: function (v) { houseSetOpt("roof", v ? "one" : ""); } },
           { icon: "gutter", label: TXT.hs_gutters, on: !!houseOpt("gutters"), set: function (v) { houseSetOpt("gutters", v); } },

@@ -63,6 +63,15 @@
     seg.removeAttribute("data-seg-off");
     seg.style.setProperty("--seg-i", at);
     segAt[segKey(seg)] = at;
+    // (buttons each their own width -- Move, Select, Drag view: the block as
+    // wide as the one lit, where it is, measured; it sat half under the next
+    // one.  Equal shares, as before, while the switch is not laid out.)
+    var lit = buttons[at], w = lit.offsetWidth;
+    if (w) {
+      seg.style.setProperty("--seg-w", w + "px");
+      seg.style.setProperty("--seg-x", (lit.offsetLeft - 2) + "px");
+      if (!seg.hasAttribute("data-seg-px")) { seg.setAttribute("data-seg-px", ""); }
+    } else if (seg.hasAttribute("data-seg-px")) { seg.removeAttribute("data-seg-px"); }
   }
 
   // ------------------------------------------ Move and Select, by hand --
@@ -135,6 +144,8 @@
     void seg.offsetWidth;                // standing where it starts from
     seg.setAttribute("data-seg-set", "");
     segSlide(seg);                       // and on from there to where it is
+    // measured again when it changes size: shown, or put in other words
+    if (window.ResizeObserver) { new ResizeObserver(function () { segSlide(seg); }).observe(seg); }
     if (!window.MutationObserver) { return; }
     new MutationObserver(function () { segSlide(seg); })
       .observe(seg, { subtree: true, attributes: true,

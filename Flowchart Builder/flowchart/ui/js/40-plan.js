@@ -44,26 +44,39 @@
       into.appendChild(p);
       return p;
     }
-    var heads = all("polygon.head", svg), any = false;
+    var heads = all("polygon.head", svg), any = false, byId = new Map();
+    hand.links.forEach(function (l) { byId.set(l.id, l); });
+    // (each head's tip read once, not once an arrow)
+    var tips = heads.map(function (h) {
+      var first = (h.getAttribute("points") || "").split(" ")[0].split(",");
+      return [h, +first[0], +first[1]];
+    });
+    // Every arrow measured first, then all drawn: a class put on between
+    // two measures had the browser work the whole paper out again for the
+    // next (a second and more on a building of five hundred rooms).
+    var todo = [];
     links.forEach(function (g) {
-      var id = +g.dataset.link, link = hand.links.filter(function (l) { return l.id === id; })[0];
+      var id = +g.dataset.link, link = byId.get(id);
       if (!link || !planTieable(nodeById(link.from)) || !planTieable(nodeById(link.to))) { return; }
       var flow = el(".flow", g);
       if (!flow || link.color) { return; }       // one colored by hand keeps its own color
       var len = 0;
       try { len = flow.getTotalLength(); } catch (e) { len = 0; }
       if (len < 4) { return; }
+      todo.push({ g: g, link: link, len: len, d: flow.getAttribute("d"), on: g.classList.contains("on"),
+                  end: flow.getPointAtLength(len), back: flow.getPointAtLength(Math.max(0, len - 8)),
+                  mid: len > 46 ? flow.getPointAtLength(len / 2) : null });
+    });
+    todo.forEach(function (t) {
+      var g = t.g, link = t.link, d = t.d, on = t.on, end = t.end, back = t.back;
       g.classList.add("tie");
       any = true;
-      var d = flow.getAttribute("d"), on = g.classList.contains("on");
       // (drawn in its own colors, not the page's: a picture saved of the paper keeps them)
       path(d, { stroke: "#ffffff", "stroke-width": "8", "stroke-linecap": "round", "stroke-linejoin": "round", opacity: "0.92" }, layers[0]);
       path(d, { stroke: PLAN_TIE, "stroke-width": on ? "4.4" : "3", "stroke-linecap": "round", "stroke-linejoin": "round" }, layers[1]);
-      var end = flow.getPointAtLength(len), back = flow.getPointAtLength(Math.max(0, len - 8));
       // the plain head under it, put away
-      heads.forEach(function (h) {
-        var first = (h.getAttribute("points") || "").split(" ")[0].split(",");
-        if (Math.abs(+first[0] - end.x) < 1.5 && Math.abs(+first[1] - end.y) < 1.5) { h.classList.add("tie-gone"); }
+      tips.forEach(function (h) {
+        if (Math.abs(h[1] - end.x) < 1.5 && Math.abs(h[2] - end.y) < 1.5) { h[0].classList.add("tie-gone"); }
       });
       var dx = end.x - back.x, dy = end.y - back.y, run = Math.hypot(dx, dy) || 1, ux = dx / run, uy = dy / run;
       var cx = end.x - ux * 14, cy = end.y - uy * 14;
@@ -75,8 +88,8 @@
         layers[2].appendChild(head);
       }
       // the door it will be, on its middle (where it is long enough to hold one)
-      if (len > 46) {
-        var mid = flow.getPointAtLength(len / 2), badge = document.createElementNS(NS, "g");
+      if (t.mid) {
+        var mid = t.mid, badge = document.createElementNS(NS, "g");
         badge.setAttribute("transform", "translate(" + mid.x.toFixed(1) + "," + mid.y.toFixed(1) + ")");
         badge.innerHTML = '<circle r="10" fill="#ffffff" stroke="' + PLAN_TIE + '" stroke-width="2"/>' +
                           '<path d="M-3.6 5.2V-5.2h7.2v10.4M-5.6 5.2h11.2" fill="none" stroke="' + PLAN_TIE + '" stroke-width="1.5" ' +

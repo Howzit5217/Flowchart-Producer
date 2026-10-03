@@ -290,19 +290,21 @@
   }
 
   // ---- after Start a house -----------------------------------------------------------------------------
-  if (typeof starterMake === "function") {
-    var starterMakeLoose = starterMake;
-    starterMake = function (want) {
-      var out = starterMakeLoose.apply(this, arguments);
+  if (typeof starterWrap === "function") {
+    starterWrap(function* (inner, want) {
+      var out = yield* inner(want);
       try {
         var J = typeof tieLayout === "function" ? tieLayout() : null, ways = arrangeDoorways(J), moved = 0;
         // where everything was, to put back what the grouping boxes in
         var was = new Map();
         hand.nodes.forEach(function (n) { if (n.kind !== "i_room") { was.set(n, [n.x, n.y, n.turn]); } });
-        (starterLast || []).forEach(function (one) {
+        var rooms = starterLast || [];
+        for (var ai = 0; ai < rooms.length; ai++) {
+          var one = rooms[ai];
           var mine = ways.filter(function (w) { return insideArea(one.room, w.x, w.y, -40); });
           moved += arrangeRoom(one.room, mine);
-        });
+          yield ["arrange", (ai + 1) / rooms.length];
+        }
         // (2026-10-02: a lamp put at a sofa's end, in a corner with no way to
         // it) anything now nobody can get to, back where Start a house put it
         if (moved && typeof boxedPieces === "function" && typeof walkPlan === "function") {
@@ -329,5 +331,5 @@
         }
       } catch (e) { if (window.console && console.warn) { console.warn("arranging the house:", e && e.message); } }
       return out;
-    };
+    });
   }

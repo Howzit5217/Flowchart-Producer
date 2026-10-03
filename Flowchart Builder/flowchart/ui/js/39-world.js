@@ -658,6 +658,14 @@
     if (V3.flat && V3.flatDone) { return false; }
     return !!(typeof houseStreetLot === "function" && houseStreetLot());
   }
+  // How high the land is at a spot, as it is drawn (40-land.js): what goes
+  // along the street stands on it, not at the height of the house's floor.
+  function worldGroundAt(x, y) {
+    try {
+      if (typeof TERR === "undefined" || !TERR || TERR.off || typeof TERR_ON === "undefined" || !TERR_ON) { return 0; }
+      return TERR.mesh && typeof terrMeshAt === "function" ? terrMeshAt(TERR, x, y) : terrAt(x, y);
+    } catch (e) { return 0; }
+  }
   function worldFolk(model) {
     var lot = houseStreetLot();
     if (!lot) { return; }
@@ -671,27 +679,46 @@
     var span = walk ? 70 * P : Math.max(14 * P, (V3.gl && V3.gl.scenery ? V3.gl.scenery.groundR : 60 * P) * 0.62);
     var hy = lot.h / 2, walkW = 1.6 * P, roadW = 7 * P, far = hood();
     function hood() { return !!houseOpt("hood"); }
-    var lanes = [hy + walkW * 0.35, hy + walkW * 0.7];
-    if (far) { lanes.push(hy + walkW + roadW + walkW * 0.35, hy + walkW + roadW + walkW * 0.7); }
+    // Each pavement two ways, one each side of it; each way one pace, and
+    // those going it spaced out along it.  (They went back and forth at
+    // their own paces, and walked through one another, 2026-10-03.)
+    var lanes = [{ y: hy + walkW * 0.3, dir: 1 }, { y: hy + walkW * 0.74, dir: -1 }];
+    if (far) { lanes.push({ y: hy + walkW + roadW + walkW * 0.26, dir: 1 }, { y: hy + walkW + roadW + walkW * 0.7, dir: -1 }); }
     var rnd = gl3Rand(Math.round(Math.abs(lot.x) + Math.abs(lot.y)) + 3), many = far ? 12 : 7;
+    lanes.forEach(function (ln) { ln.pace = (1.05 + rnd() * 0.3) * P; ln.from = rnd(); ln.n = 0; });
+    for (var q = 0; q < many; q++) { lanes[q % lanes.length].n++; }
+    var bodies = typeof peopleBody === "function";
     for (var i = 0; i < many; i++) {
-      var lane = lanes[i % lanes.length], pace = (1.0 + rnd() * 0.5) * P, start = rnd() * 4 * span;
-      // there and back: a triangle wave along the pavement
-      var go = (start + t * pace) % (4 * span), x = go < 2 * span ? go - span : 3 * span - go;
-      var kind = WORLD_FOLK[i % WORLD_FOLK.length], look = { fill: WORLD_CLOTHES[Math.floor(rnd() * WORLD_CLOTHES.length)], line: ink };
+      var lane = lanes[i % lanes.length], nth = Math.floor(i / lanes.length), apart = 2 * span / Math.max(1, lane.n);
+      var give = (rnd() - 0.5) * Math.max(0, apart - 2.4 * P) * 0.5;
+      var pos = ((lane.from * 2 * span + nth * apart + give + t * lane.pace) % (2 * span) + 2 * span) % (2 * span) - span, x = lane.dir * pos;
+      var fadeP = Math.max(0, Math.min(1, (span - Math.abs(x)) / (4 * P)));
+      if (fadeP <= 0.02) { continue; }
+      var kind = WORLD_FOLK[i % WORLD_FOLK.length], look = { fill: WORLD_CLOTHES[Math.floor(rnd() * WORLD_CLOTHES.length)], line: ink, own: true };
       var tall = (kind === "i_child" ? 1.15 : kind === "i_elder" ? 1.62 : 1.7 + rnd() * 0.12) * P;
-      var p = W(x, lane), bob = still ? 0 : Math.abs(Math.sin(t * 7.5 + i)) * 0.035 * P;
-      passing.stand.push({ x: p[0], y: p[1], z: bob, tall: tall, img: v3Figure(kind, look) });
+      var p = W(x, lane.y), ground = worldGroundAt(p[0], p[1]);
+      if (bodies) {
+        var headP = Math.atan2(sn * lane.dir, c * lane.dir), phaseP = still ? 0 : (t * lane.pace) / (0.36 * P) + i * 1.7;
+        peopleBody(passing.faces, { kind: kind, id: 101 + i }, p[0], p[1], ground, headP, phaseP, look, fadeP);
+      } else {
+        var bob = still ? 0 : Math.abs(Math.sin(t * 7.5 + i)) * 0.035 * P;
+        passing.stand.push({ x: p[0], y: p[1], z: ground + bob, tall: tall, img: v3Figure(kind, look) });
+      }
     }
     // the cars, each way, in their lanes
     var roadSpan = walk ? 160 * P : span, cars = walk ? 6 : 3;
     var e = [c, sn], d = [-sn, c];
+    // each way one pace, and the cars along it spaced out -- each its own
+    // pace, a faster one drove through the one ahead (2026-10-03); a little
+    // give in the spacing, never closer than a car and a half
+    var ways = [{ n: Math.ceil(cars / 2), pace: (8 + rnd() * 4) * P, from: rnd() }, { n: Math.floor(cars / 2), pace: (8 + rnd() * 4) * P, from: rnd() }];
     for (var k = 0; k < cars; k++) {
-      var dir = k % 2 ? -1 : 1, laneY = hy + walkW + roadW * (dir > 0 ? 0.72 : 0.28), speed = (8 + rnd() * 4) * P;
-      var pos = ((rnd() * 2 * roadSpan + t * speed) % (2 * roadSpan)) - roadSpan, cx = dir * pos;
+      var way = ways[k % 2], dir = k % 2 ? -1 : 1, laneY = hy + walkW + roadW * (dir > 0 ? 0.72 : 0.28), speed = way.pace;
+      var apart = 2 * roadSpan / Math.max(1, way.n), give = (rnd() - 0.5) * Math.max(0, apart - 9 * P) * 0.6;
+      var pos = ((way.from * 2 * roadSpan + Math.floor(k / 2) * apart + give + t * speed) % (2 * roadSpan) + 2 * roadSpan) % (2 * roadSpan) - roadSpan, cx = dir * pos;
       var fade = Math.max(0, Math.min(1, (roadSpan - Math.abs(cx)) / (12 * P)));
       if (fade <= 0.02) { continue; }
-      var col = WORLD_CAR_COLORS[Math.floor(rnd() * WORLD_CAR_COLORS.length)], at = W(cx, laneY);
+      var col = WORLD_CAR_COLORS[Math.floor(rnd() * WORLD_CAR_COLORS.length)], at = W(cx, laneY), carGround = worldGroundAt(at[0], at[1]);
       var f = [e[0] * dir, e[1] * dir];
       worldCarParts(at, f, d, gl3Rgb(col)).forEach(function (b) {
         var pts = [[-1, -1], [1, -1], [1, 1], [-1, 1]].map(function (q) {
@@ -702,7 +729,7 @@
         if (b.pat === 70) { how = { glass: true, edge: hex, car: true }; }
         else if (b.pat === 31) { how.pat = 31; }
         if (fade < 0.999) { how.alpha = fade; how.late = true; }
-        v3Prism(passing.faces, pts, b.z0, b.z1, how);
+        v3Prism(passing.faces, pts, b.z0 + carGround, b.z1 + carGround, how);
       });
     }
   }
@@ -753,7 +780,7 @@
     v3Watch = function () {
       if (V3 && !(typeof STILL !== "undefined" && STILL)) {
         var now = performance.now();
-        if (now - (V3.folkAt || 0) > 33 && worldLive()) { V3.folkAt = now; V3.dirty = true; }
+        if (now - (V3.folkAt || 0) > Math.max(33, (V3.drawMs || 0) * 3) && worldLive()) { V3.folkAt = now; V3.dirty = true; }
       }
       return v3WatchWorld.apply(this, arguments);
     };

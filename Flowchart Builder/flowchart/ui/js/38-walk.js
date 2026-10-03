@@ -58,7 +58,7 @@
     i_easel: 1300, i_trampoline: 1200, i_swing: 1100,
     i_firepit: 1100, i_lounger: 1300, i_gazebo: 1000, i_shed: 800, i_planter: 600, i_birdbath: 600,
     i_lamppost: 500, i_pathlight: 500, i_porchlight: 500, i_floodlight: 500, i_mailbox: 700, i_bikerack: 700,
-    i_workbench: 1300, i_shelving: 700, i_toolchest: 800, i_furnace: 600,
+    i_workbench: 1300, i_shelving: 700, i_toolchest: 800, i_furnace: 600, i_waterheater: 600,
     i_gondola: 900, i_checkout: 1200, i_cooler: 700, i_display: 800, i_register: 600, i_schooldesk: 1300,
     i_outlet: 400, i_lightswitch: 300, i_breaker: 800, i_post: 300
   };
@@ -159,10 +159,22 @@
 
   // How high a room's ceiling is, in metres: its own, else its floor's,
   // else the usual.
+  // (the floors picked out of the drawing once, not each time a ceiling is
+  // asked about: every room of a big building asked every shape in it,
+  // several times a picture -- 2026-10-03)
+  var floorsKept = { list: null, count: -1, first: null, last: null, at: 0, floors: [] };
+  function floorNodes() {
+    var K = floorsKept || (floorsKept = { list: null, count: -1, first: null, last: null, at: 0, floors: [] }), list = hand.nodes, now = performance.now();
+    if (K.list !== list || K.count !== list.length || K.first !== list[0] || K.last !== list[list.length - 1] || now - K.at > 250) {
+      K.list = list; K.count = list.length; K.first = list[0]; K.last = list[list.length - 1]; K.at = now;
+      K.floors = list.filter(function (m) { return m.kind === "i_floor"; });
+    }
+    return K.floors;
+  }
   function ceilOf(n) {
     if (n && n.ceil > 0) { return n.ceil; }
-    var f = n && n.kind !== "i_floor" && hand.nodes.filter(function (m) {
-      return m.kind === "i_floor" && insideArea(m, n.x, n.y);
+    var f = n && n.kind !== "i_floor" && floorNodes().filter(function (m) {
+      return insideArea(m, n.x, n.y);
     })[0];
     return f && f.ceil > 0 ? f.ceil : CEIL_PLAIN;
   }
@@ -214,10 +226,14 @@
       });
       groups = grounded;
     }
+    var rooms = hand.nodes.filter(function (r) { return r.kind === "i_room"; });
+    // (each Floor asked only of the rooms near it: forty floors asked all
+    // four hundred rooms each, many times a picture, 2026-10-03)
+    var roomsIdx = typeof listNear === "function" && rooms.length > 60 ? listNear(rooms) : null;
     function tall(f) {                   // a storey: its highest ceiling, and the floor over it
-      var most = ceilOf(f);
-      hand.nodes.forEach(function (r) {
-        if (r.kind === "i_room" && insideArea(f, r.x, r.y)) { most = Math.max(most, ceilOf(r)); }
+      var most = ceilOf(f), ft = turned(f);
+      (roomsIdx ? roomsIdx.around(f.x - ft.w / 2, f.y - ft.h / 2, f.x + ft.w / 2, f.y + ft.h / 2) : rooms).forEach(function (r) {
+        if (insideArea(f, r.x, r.y)) { most = Math.max(most, ceilOf(r)); }
       });
       return (most + 0.3) * FLOOR_PX;
     }
@@ -378,8 +394,9 @@
     });
     // Which rooms each door joins: those whose wall it stands in.  A door
     // in only one room's wall goes outside.
+    var roomsNear = plan._roomsNear = listNear(rooms);
     plan.joins = doors.map(function (d) {
-      var by = rooms.filter(function (room) { return doorIn(d, room); });
+      var by = roomsNear.near(d, 12).filter(function (room) { return doorIn(d, room); });
       return { door: d, rooms: by, locked: doorLocked(d) };
     });
     plan.floors = floorsOf();
@@ -412,20 +429,71 @@
     return false;
   }
 
+  // (2026-10-03: a building of five hundred rooms took minutes to check --
+  // which room each piece was in asked every room, what was in each room
+  // asked every piece)  A list filed by the squares of paper (four metres)
+  // its things stand over, made once and asked many times: what stands
+  // over any part of a box.
+  function listNear(list) {
+    var S = 200, cells = new Map(), wide = [], order = new Map();
+    list.forEach(function (n, at) {
+      order.set(n, at);
+      var t = turned(n), hw = Math.max(t.w, n.w || 0) / 2, hh = Math.max(t.h, n.h || 0) / 2;
+      var c0 = Math.floor((n.x - hw) / S), c1 = Math.floor((n.x + hw) / S), r0 = Math.floor((n.y - hh) / S), r1 = Math.floor((n.y + hh) / S);
+      if (!isFinite(c0 + c1 + r0 + r1) || (c1 - c0 + 1) * (r1 - r0 + 1) > 400) { wide.push(n); return; }
+      for (var cy = r0; cy <= r1; cy++) {
+        for (var cx = c0; cx <= c1; cx++) {
+          var key = cx + "," + cy, cell = cells.get(key);
+          if (!cell) { cell = []; cells.set(key, cell); }
+          cell.push(n);
+        }
+      }
+    });
+    return {
+      around: function (l, t, r, b) {
+        var out = new Set(wide);
+        for (var cy = Math.floor(t / S); cy <= Math.floor(b / S); cy++) {
+          for (var cx = Math.floor(l / S); cx <= Math.floor(r / S); cx++) {
+            var got = cells.get(cx + "," + cy);
+            if (got) { for (var i = 0; i < got.length; i++) { out.add(got[i]); } }
+          }
+        }
+        // (in the list's own order: the first found is the one it always was)
+        return Array.from(out).sort(function (a, b) { return order.get(a) - order.get(b); });
+      },
+      near: function (n, pad) {
+        var t = turned(n), hw = Math.max(t.w, n.w || 0) / 2 + (pad || 0), hh = Math.max(t.h, n.h || 0) / 2 + (pad || 0);
+        return this.around(n.x - hw, n.y - hh, n.x + hw, n.y + hh);
+      }
+    };
+  }
   function roomAt(plan, x, y) {
-    var best = null;
-    plan.rooms.forEach(function (room) {
+    var best = null, idx = plan._roomsNear || (plan._roomsNear = listNear(plan.rooms));
+    idx.around(x, y, x, y).forEach(function (room) {
       if (insideArea(room, x, y) && (!best || room.w * room.h < best.w * best.h)) { best = room; }
     });
     return best;
   }
+  // What stands in each room (the smallest room round it): worked out once a plan.
+  function piecesIn(plan, room) {
+    if (!plan._piecesIn) {
+      var m = new Map();
+      plan.pieces.forEach(function (p) {
+        var r = roomAt(plan, p.x, p.y);
+        if (r) { var got = m.get(r); if (!got) { got = []; m.set(r, got); } got.push(p); }
+      });
+      plan._piecesIn = m;
+    }
+    return plan._piecesIn.get(room) || [];
+  }
+  function piecesNear(plan) { return plan._piecesNear || (plan._piecesNear = listNear(plan.pieces)); }
 
   // What a room is called in what is said: its own name, if it was given
   // one, or what it is for, from what is in it -- or simply "the room".
   function roomName(plan, room) {
     var said = String(room.text || "").replace(/\s+/g, " ").trim();
     if (said && said !== kindName("i_room")) { return said; }
-    var kinds = plan.pieces.filter(function (p) { return insideArea(room, p.x, p.y); })
+    var kinds = piecesNear(plan).near(room, 0).filter(function (p) { return insideArea(room, p.x, p.y); })
                            .map(function (p) { return p.kind; });
     var both = roomBoth(roomUses(kinds));
     if (both && TXT["fr_" + both]) { return TXT["fr_" + both]; }
@@ -820,7 +888,7 @@
     });
     // furniture standing across a doorway
     plan.doors.forEach(function (d) {
-      var hit = plan.pieces.filter(function (p) {
+      var hit = piecesNear(plan).near(d, 2).filter(function (p) {
         return insideArea(d, p.x, p.y) || insideArea(p, d.x, d.y);
       })[0];
       if (hit) { found.push({ text: say("wk_blocked", { what: kindName(hit.kind) }), id: hit.id }); }

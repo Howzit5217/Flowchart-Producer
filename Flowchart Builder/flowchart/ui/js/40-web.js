@@ -35,7 +35,7 @@
       var bare = rest.replace(/^["'`](.*)["'`]$/, "$1");
       if (webLooksLikeUrl(bare)) { return { url: bare }; }
       // Open site_name: what the name holds -- but only a name, or a string
-      if (/^["'`]/.test(rest) || /^[A-Za-z_][\w.]*$/.test(rest)) { return { expr: rest }; }
+      if (/^["'\x60]/.test(rest) ||/^[A-Za-z_][\w.]*$/.test(rest)) { return { expr: rest }; }
       return null;
     }
     if ((m = WEB_CALL.exec(text))) {

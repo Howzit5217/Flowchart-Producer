@@ -26,7 +26,7 @@
     BUILDING_TYPES.condos = {
       icon: "flats", style: "contemporary", ceil: 2.8,
       plan: function (want) {
-        var S = Math.max(2, Math.min(6, want.storeys || 4)), K = Math.max(1, Math.min(2, want.condosSide || 1)), B = want.condoBeds === 1 ? 1 : 2;
+        var S = Math.max(2, Math.min(TYPE_MOST.storeys, want.storeys || 4)), K = Math.max(1, Math.min(TYPE_MOST.side, want.condosSide || 1)), B = want.condoBeds === 1 ? 1 : 2;
         var floors = [], W = 0;
         for (var k = 0; k < S; k++) {
           var ground = k === 0;
@@ -55,8 +55,8 @@
         return { floors: floors, W: W, two: S > 1, noGarage: true };
       },
       ask: function (ui) {
-        ui.stepper("storeys", TXT.ty_storeys, "flats", 2, 6);
-        ui.stepper("condosSide", TXT.ty_condos_side, "door", 1, 2);
+        ui.stepper("storeys", TXT.ty_storeys, "flats", 2, TYPE_MOST.storeys);
+        ui.stepper("condosSide", TXT.ty_condos_side, "door", 1, TYPE_MOST.side);
         ui.stepper("condoBeds", TXT.ty_flat_beds, "bed", 1, 2);
       }
     };

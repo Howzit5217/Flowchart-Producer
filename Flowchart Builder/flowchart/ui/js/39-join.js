@@ -432,13 +432,18 @@
       // where they were, not round the biggest; a house drawn mostly
       // together has the rest come to it.
       if (set[0].area < areaOf(set) / 2) {
-        var cx = 0, cy = 0, mx = 0, my = 0, A = areaOf(set);
+        var cx = 0, cy = 0, mx = 0, my = 0, A = 0;
         set.forEach(function (g) {
           g.rooms.forEach(function (r) {
+            // (a room put in over the garage, drawn wherever there was room for
+            // it, has no say in where the rest come together: 40-attic.js)
+            if (r.attic) { return; }
             cx += r.x * r.w * r.h; cy += r.y * r.w * r.h;
             mx += (r.x + g.dx) * r.w * r.h; my += (r.y + g.dy) * r.w * r.h;
+            A += r.w * r.h;
           });
         });
+        A = A || 1;
         var sx = Math.round((cx - mx) / A), sy = Math.round((cy - my) / A);
         set.forEach(function (g) { g.dx += sx; g.dy += sy; });
         if (set.some(function (g) { return clashes(g, g.dx, g.dy); })) {
@@ -852,8 +857,14 @@
   // the arrow, and in at the other (walkPlan, 38-walk.js).
   function walkTies(plan) {
     if (!hand.links.length || !plan.cells || !plan.rooms.length) { return; }
-    var routes = null;
-    try { routes = typeof routeAll === "function" ? routeAll() : null; } catch (e) { routes = null; }
+    // (the arrows' ways round the paper, only if a doorway 3D has not placed
+    // already needs them: routing every arrow of a big building, each time
+    // the plan was walked, was most of what making one took -- 2026-10-03)
+    var routes = null, routed = false;
+    function routesNow() {
+      if (!routed) { routed = true; try { routes = typeof routeAll === "function" ? routeAll() : null; } catch (e) { routes = null; } }
+      return routes;
+    }
     var isRoom = {}, J = null;
     try { J = tieHome() ? tieLayout() : null; } catch (e) { J = null; }
     plan.rooms.forEach(function (r) { if (tieSquare(r)) { isRoom[r.id] = r; } });
@@ -889,11 +900,7 @@
       var door = ra && rb ? null : ra ? b : a;
       if (door && doorLocked(door)) { return; }
       // the arrow's ends, and the sides of the rooms they meet
-      var pts = routes && routes[li], ends = [[b.x, b.y], [a.x, a.y]], sides = [null, null];
-      if (pts && pts.length > 1) {
-        ends = [pts[0], pts[pts.length - 1]];
-        if (pts.sides) { sides = [PORT_SIDES[pts.sides[0]] || null, PORT_SIDES[pts.sides[1]] || null]; }
-      }
+      var ends = [[b.x, b.y], [a.x, a.y]], sides = [null, null];
       // where 3D puts the door between them, in each room's own place on the
       // paper -- so the walk goes in where the furniture leaves the way clear
       function through(room, other) {
@@ -905,8 +912,16 @@
         var dl = J.delta[room.id] || [0, 0], x = w.x - dl[0], y = w.y - dl[1];
         return open(room, x, y, facing(room, x, y));
       }
-      var gapA = ra ? through(a, b) || open(a, ends[0][0], ends[0][1], sides[0] || facing(a, b.x, b.y)) : null;
-      var gapB = rb ? through(b, a) || open(b, ends[1][0], ends[1][1], sides[1] || facing(b, a.x, a.y)) : null;
+      var tA = ra ? through(a, b) : null, tB = rb ? through(b, a) : null;
+      if ((ra && !tA) || (rb && !tB)) {
+        var all = routesNow(), pts = all && all[li];
+        if (pts && pts.length > 1) {
+          ends = [pts[0], pts[pts.length - 1]];
+          if (pts.sides) { sides = [PORT_SIDES[pts.sides[0]] || null, PORT_SIDES[pts.sides[1]] || null]; }
+        }
+      }
+      var gapA = ra ? tA || open(a, ends[0][0], ends[0][1], sides[0] || facing(a, b.x, b.y)) : null;
+      var gapB = rb ? tB || open(b, ends[1][0], ends[1][1], sides[1] || facing(b, a.x, a.y)) : null;
       if (ra && rb) {
         plan.joins.push({ door: { id: null, kind: "i_door", text: "", x: gapA.x, y: gapA.y, w: 44, h: 10, turn: gapA.turn, tie: true },
                           rooms: [a, b], locked: false, tie: l });

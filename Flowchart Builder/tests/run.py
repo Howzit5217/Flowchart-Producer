@@ -1514,7 +1514,8 @@ def _():
     said = "%d KB against %d KB" % (len(lean) // 1024, len(full) // 1024)
     if whole:
         said += " -- poured whole: " + ", ".join(whole[:3])
-    script = lean[lean.index("<script>") + 8:lean.rindex("</script>")]
+    # (the last: a small one in the head reads a half-come page again)
+    script = lean[lean.rindex("<script>") + 8:lean.rindex("</script>")]
     if not node_there():
         return len(lean) < len(full) * 0.85 and not whole, \
             said + " (node is not installed -- not read)"

@@ -187,6 +187,8 @@
                 opacity var(--quick) var(--ease-soft);
   }
   .seg[data-seg-off]::before { opacity: 0; }
+  /* the lit button measured (segSlide): its own width, where it stands */
+  .seg[data-seg-px]::before { width: var(--seg-w); transform: translateX(var(--seg-x)); }
   /* Held still until the script has put it where it starts from -- see
      tendSeg -- or a switch built afresh slides in from the far left. */
   .seg:not([data-seg-set])::before { transition: none; }
@@ -212,6 +214,7 @@
   #tool-seg.opening::before, #tool-seg.folding::before {
     width: calc((var(--tools-w) - 6px) / 2);
   }
+  #tool-seg.opening[data-seg-px]::before, #tool-seg.folding[data-seg-px]::before { width: var(--seg-w); }
   @keyframes tools-open {
     from { width: 0; padding: 2px 0; margin-left: calc(-1 * var(--tools-gap)); opacity: 0; }
     to { width: var(--tools-w); }

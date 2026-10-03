@@ -197,11 +197,10 @@
       try { localStorage.setItem("flowchart-starter", JSON.stringify(keep)); } catch (e) { /* as it was */ }
     };
   }
-  if (typeof starterMake === "function") {
-    var starterMakeEdit = starterMake;
-    starterMake = function (want) {
+  if (typeof starterWrap === "function") {
+    starterWrap(function* (inner, want) {
       var house = editNow;
-      if (!house) { return starterMakeEdit.apply(this, arguments); }
+      if (!house) { return yield* inner(want); }
       editNow = null;
       keepUndo();
       // where it stood: its lot's left side and front, or its rooms' corner
@@ -213,7 +212,7 @@
       hand.links = hand.links.filter(function (l) { return !gone[l.from] && !gone[l.to]; });
       var before = hand.next, undoWas = keepUndo, out;
       keepUndo = function () { };
-      try { out = starterMakeEdit.call(this, Object.assign({}, want, { where: "add-quiet" })); } finally { keepUndo = undoWas; }
+      try { out = yield* inner(Object.assign({}, want, { where: "add-quiet" })); } finally { keepUndo = undoWas; }
       var made = hand.nodes.filter(function (n) { return n.id >= before; });
       var lot = made.filter(function (n) { return n.kind === "i_lot"; })[0];
       var floors = typeof floorsOf === "function" ? floorsOf() : [];
@@ -227,7 +226,7 @@
       if (typeof hoodRedraw === "function") { hoodRedraw(); } else { drawHand(); }
       if (typeof handSaysSoft === "function") { handSaysSoft(TXT.ed_rebuilt); }
       return out;
-    };
+    });
   }
   function editBox(list) {
     var b = { l: Infinity, r: -Infinity, t: Infinity, b: -Infinity };

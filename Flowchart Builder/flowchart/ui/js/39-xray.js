@@ -26,7 +26,9 @@
     if (r.use) { k = r.use === "stock" || r.use === "lift" ? r.use : k; }
     return k;
   }
-  function wireHouse(rooms) {
+  // (a room at a time, said as it goes: Start building runs it in slices, 40-work.js)
+  function wireHouse(rooms) { return typeof stepsDrive === "function" ? stepsDrive(wireSteps(rooms)) : 0; }
+  function* wireSteps(rooms) {
     if (typeof starterAlong !== "function") { return 0; }
     var plan = walkPlan(), P = FLOOR_PX, made = 0;
     rooms = rooms || hand.nodes.filter(function (n) { return n.kind === "i_room"; });
@@ -39,15 +41,22 @@
       doors.push(m ? Object.assign({}, d, m) : d);
     });
     if (J && J.made) { J.made.forEach(function (one) { if (one.node && WALK_DOORS[one.node.kind]) { doors.push(one.node); } }); }
+    // the doors as the house stands in 3D, in each room's own numbers on the paper
+    function doorsBy(r) {
+      var d0 = J && J.delta[r.id] ? J.delta[r.id] : [0, 0], rb = J && J.boxes[r.id] ? J.boxes[r.id] : tieBox(r);
+      return doors.filter(function (d) {
+        return d.x >= rb.l - 40 && d.x <= rb.r + 40 && d.y >= rb.t - 40 && d.y <= rb.b + 40;
+      }).map(function (d) { return Object.assign({}, d, { x: d.x - d0[0], y: d.y - d0[1] }); });
+    }
     function put(r, kind, near, lift) {
-      var go = starterAlong(r, kind, near);
+      var go = starterAlong(r, kind, near, doorsBy(r));
       if (!go) { return null; }
       go();
       var n = nodeById(picked);
       if (n && n.kind === kind) { n.wired = true; n.own = true; if (lift !== undefined) { n.lift = lift; } made++; }
       return n;
     }
-    rooms.forEach(function (r) {
+    var wireRoom = function (r) {
       var kind = wireKindOf(plan, r), b = tieBox(r);
       if (WIRE_SKIP[kind] || WIRE_SKIP[r.use] || Math.min(r.w, r.h) < 1.2 * P) { return; }
       // a switch inside each door into it -- the doors as the house stands
@@ -82,7 +91,8 @@
         else { x = b.l; y = b.b - (t - 2 * (b.r - b.l) - (b.b - b.t)); }
         put(r, "i_outlet", { x: x, y: y });
       }
-    });
+    };
+    for (var wi = 0; wi < rooms.length; wi++) { wireRoom(rooms[wi]); yield ["wire", (wi + 1) / rooms.length]; }
     // the panel, once a house
     if (!hand.nodes.some(function (n) { return n.kind === "i_breaker" && !n.wired; })) {
       var home = null;
@@ -108,22 +118,21 @@
   function handSaysQuiet(words) { if (V3 && typeof v3Say === "function") { v3Say(words); } else if (typeof handSays === "function") { handSays(words); } }
   // Start a house: wired, if asked
   if (starterWant.wire === undefined) { starterWant.wire = true; }
-  if (typeof starterMake === "function") {
-    var starterMakeWire = starterMake;
-    starterMake = function (want) {
+  if (typeof starterWrap === "function") {
+    starterWrap(function* (inner, want) {
       var count = hand.nodes.length;
-      var out = starterMakeWire.apply(this, arguments);
+      var out = yield* inner(want);
       try {
         if (want && want.wire) {
           var mine = hand.nodes.slice(count).filter(function (n) { return n.kind === "i_room"; });
           if (!mine.length) { mine = (typeof starterLast === "object" ? starterLast : []).map(function (o) { return o.room; }); }
-          wireHouse(mine);
+          yield* wireSteps(mine);
           picked = null;
           drawHand(); drawHandPanel(); showReport();
         }
       } catch (e) { /* unwired */ }
       return out;
-    };
+    });
   }
 
   // ---- seen through: inside the walls ------------------------------------------------------

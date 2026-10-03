@@ -187,10 +187,17 @@
     return out;
   }
   // The windows and doors on a wall: where nothing is to go in front of them.
+  var powerOpenKept = typeof WeakMap === "function" ? new WeakMap() : null;
   function powerClearAt(W, floors, at) {
     var P = FLOOR_PX, along = W.out[0] ? 1 : 0;
-    return !hand.nodes.some(function (n) {
-      if (n.kind !== "i_window" && !WALK_DOORS[n.kind]) { return false; }
+    // (the windows and doors picked out once for a list of floors, not once a wall)
+    var opens = floors && powerOpenKept ? powerOpenKept.get(floors) : null;
+    if (!opens || opens.nodes !== hand.nodes || opens.count !== hand.nodes.length) {
+      opens = hand.nodes.filter(function (n) { return n.kind === "i_window" || WALK_DOORS[n.kind]; });
+      opens.nodes = hand.nodes; opens.count = hand.nodes.length;
+      if (floors && powerOpenKept) { powerOpenKept.set(floors, opens); }
+    }
+    return !opens.some(function (n) {
       var f = floors.length ? floorAt(floors, n.x, n.y) : null, x = n.x + (f ? f.dx : 0), y = n.y + (f ? f.dy : 0), q = turned(n);
       var off = along ? Math.abs(x - W.a[0]) : Math.abs(y - W.a[1]);
       if (off > 0.35 * P) { return false; }
@@ -274,10 +281,10 @@
     if (!houseOpt("vents") || !V3 || V3.scene === "space") { return; }
     var P = FLOOR_PX, floors = typeof floorsOf === "function" ? floorsOf() : [];
     var white = { piece: true, color: "#eeece6", edge: "#a9a69e" }, dark = { piece: true, color: "#3a3b3c", edge: "#1e1f20" };
-    var done = [];
+    var done = [], dryers = hand.nodes.filter(function (n) { return n.kind === "i_dryer"; });
     hand.nodes.forEach(function (r) {
       if (r.kind !== "i_room" || (r.turn || 0) % 90) { return; }
-      var dryer = hand.nodes.filter(function (n) { return n.kind === "i_dryer" && insideArea(r, n.x, n.y); })[0];
+      var dryer = dryers.filter(function (n) { return insideArea(r, n.x, n.y); })[0];
       if (!dryer && r.starter !== "laundry") { return; }
       if (done.some(function (q) { return insideArea(q, r.x, r.y) || insideArea(r, q.x, q.y); })) { return; }
       var f = floors.length ? floorAt(floors, r.x, r.y) : null, dx = f ? f.dx : 0, dy = f ? f.dy : 0, level = f ? f.level : 0;

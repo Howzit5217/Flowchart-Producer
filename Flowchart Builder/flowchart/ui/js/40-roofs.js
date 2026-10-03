@@ -74,11 +74,22 @@
 
   // ---- the house under a roof ----------------------------------------------------------
   // Each room upright on `level` or over it, in the ground floor's numbers.
+  // (worked out once for each list of floors it is asked with: asked once
+  // a room, a big building's rooms each went through all of them --
+  // 2026-10-03)
+  var roofRectsKept = typeof WeakMap === "function" ? new WeakMap() : null;
   function roofRoomRects(floors, level) {
-    return hand.nodes.filter(function (n) { return n.kind === "i_room" && !((n.turn || 0) % 90); }).map(function (r) {
-      var f = floors && floors.length ? floorAt(floors, r.x, r.y) : null, q = turned(r), dx = f ? f.dx : 0, dy = f ? f.dy : 0;
-      return { level: f ? f.level : 0, x0: r.x + dx - q.w / 2, x1: r.x + dx + q.w / 2, y0: r.y + dy - q.h / 2, y1: r.y + dy + q.h / 2 };
-    }).filter(function (b) { return b.level >= level; });
+    var all = floors && roofRectsKept ? roofRectsKept.get(floors) : null;
+    if (!all || all.nodes !== hand.nodes || all.count !== hand.nodes.length) {
+      all = hand.nodes.filter(function (n) { return n.kind === "i_room" && !((n.turn || 0) % 90); }).map(function (r) {
+        var f = floors && floors.length ? floorAt(floors, r.x, r.y) : null, q = turned(r), dx = f ? f.dx : 0, dy = f ? f.dy : 0;
+        return { level: f ? f.level : 0, x0: r.x + dx - q.w / 2, x1: r.x + dx + q.w / 2, y0: r.y + dy - q.h / 2, y1: r.y + dy + q.h / 2 };
+      });
+      all.nodes = hand.nodes; all.count = hand.nodes.length; all.by = {};
+      if (floors && roofRectsKept) { roofRectsKept.set(floors, all); }
+    }
+    if (!all.by[level]) { all.by[level] = all.filter(function (b) { return b.level >= level; }); }
+    return all.by[level].slice();
   }
   function roofIn(list, x, y) {
     return list.some(function (b) { return x > b.x0 && x < b.x1 && y > b.y0 && y < b.y1; });

@@ -79,8 +79,7 @@
     if (room.use && ROOM_USE[room.use]) { return ROOM_USE[room.use]; }
     var said = String(room.text || "");
     for (var k = 0; k < ROOM_CALLED.length; k++) { if (ROOM_CALLED[k][1].test(said)) { return ROOM_CALLED[k][0]; } }
-    var kinds = plan.pieces.filter(function (p) { return roomAt(plan, p.x, p.y) === room; })
-                           .map(function (p) { return p.kind; });
+    var kinds = piecesIn(plan, room).map(function (p) { return p.kind; });
     if (roomBoth(roomUses(kinds))) { return "multi"; }     // a studio, a great room (38-walk.js)
     for (var i = 0; i < ROOM_FOR.length; i++) {
       if (ROOM_FOR[i][1].some(function (kind) { return kinds.indexOf(kind) >= 0; })) { return ROOM_KIND_OF[ROOM_FOR[i][0]]; }
@@ -91,8 +90,7 @@
   // Everything a room is for -- what is in it, and what it is called -- so
   // a studio is told what a kitchen and a bedroom are each told.
   function roomUsesIn(plan, room) {
-    var kinds = plan.pieces.filter(function (p) { return roomAt(plan, p.x, p.y) === room; })
-                           .map(function (p) { return p.kind; });
+    var kinds = piecesIn(plan, room).map(function (p) { return p.kind; });
     var uses = roomUses(kinds), kind = roomKind(plan, room);
     if (kind === "work" || kind === "hall") { return {}; }
     if (kind !== "multi" && kind !== "room") { uses[kind] = true; }
@@ -277,8 +275,8 @@
     plan.rooms.forEach(function (room) {
       kinds[room.id] = roomKind(plan, room); names[room.id] = roomName(plan, room); uses[room.id] = roomUsesIn(plan, room);
     });
-    function inRoom(room, list) { return plan.pieces.filter(function (p) { return roomAt(plan, p.x, p.y) === room && (!list || list.indexOf(p.kind) >= 0); }); }
-    var windows = hand.nodes.filter(function (n) { return n.kind === "i_window"; });
+    function inRoom(room, list) { return piecesIn(plan, room).filter(function (p) { return !list || list.indexOf(p.kind) >= 0; }); }
+    var windows = hand.nodes.filter(function (n) { return n.kind === "i_window"; }), windowsNear = listNear(windows), near = piecesNear(plan);
 
     // a way in from outside
     if (!plan.joins.some(function (j) { return j.rooms.length === 1; })) {
@@ -287,7 +285,7 @@
     }
     plan.rooms.forEach(function (room) {
       var kind = kinds[room.id], name = names[room.id];
-      var lit = windows.some(function (w) { return doorIn(w, room); });
+      var lit = windowsNear.near(room, 14).some(function (w) { return doorIn(w, room); });
       // daylight, where people live
       if (!lit && /^(bed|living|kitchen|office|dining|multi)$/.test(kind)) {
         tip(say(uses[room.id].bed ? "ad_window_bed" : "ad_window", { room: name }), room.id,
@@ -336,14 +334,14 @@
     // doors that swing into something
     plan.doors.forEach(function (d) {
       if (d.kind === "i_slide" || d.kind === "i_bifold" || doorLocked(d)) { return; }
-      var hit = plan.pieces.filter(function (p) {
+      var hit = near.near(d, 4).filter(function (p) {
         return !ON_THE_WALL[p.kind] && p.kind !== "i_rug" && boxesTouch(d, p, -3);
       })[0];
       if (!hit) { return; }
       // the other way: reflected across its threshold, turned round
       var t = (d.turn || 0) * Math.PI / 180, sx = Math.sin(t), sy = -Math.cos(t);   // the way it swings
       var flip = { kind: d.kind, x: d.x - sx * d.h, y: d.y - sy * d.h, w: d.w, h: d.h, turn: ((d.turn || 0) + 180) % 360 };
-      var clear = !plan.pieces.some(function (p) { return !ON_THE_WALL[p.kind] && p.kind !== "i_rug" && boxesTouch(flip, p, -3); });
+      var clear = !near.near(flip, 4).some(function (p) { return !ON_THE_WALL[p.kind] && p.kind !== "i_rug" && boxesTouch(flip, p, -3); });
       tip(say("ad_door_hits", { what: kindName(hit.kind) }), d.id,
           fixed(TXT.ad_fix_flip, clear ? function () {
             var n = nodeById(d.id);
@@ -356,7 +354,7 @@
     plan.pieces.forEach(function (p) {
       var zone = frontRoom(p);
       if (!zone) { return; }
-      var hit = plan.pieces.filter(function (o) { return o !== p && blocksFront(o) && boxesTouch(zone, o, -2); })[0];
+      var hit = near.near(zone, 4).filter(function (o) { return o !== p && blocksFront(o) && boxesTouch(zone, o, -2); })[0];
       if (hit) { tip(say("ad_front_blocked", { what: kindName(p.kind), by: kindName(hit.kind) }), p.id); }
     });
     // a bathroom opening straight into the kitchen
@@ -419,10 +417,13 @@
   }
   function apartAdvice(plan, tip) {
     var things = hand.nodes.filter(function (n) { return isSolid(n.kind) || (isFigure(n.kind) && isPerson(n)); });
-    var told = {};
+    var told = {}, idx = listNear(things), order = new Map();
+    things.forEach(function (n, k) { order.set(n, k); });
     for (var i = 0; i < things.length; i++) {
-      for (var j = i + 1; j < things.length; j++) {
-        var a = things[i], b = things[j];
+      // (only those standing near it: each pair once, the earlier first)
+      var close = idx.near(things[i], 4).filter(function (o) { return order.get(o) > i; });
+      for (var jj = 0; jj < close.length; jj++) {
+        var a = things[i], b = close[jj];
         if (!isSolid(a.kind) && !isSolid(b.kind)) { continue; }
         if (!boxesMeet(a, a.x, a.y, b, b.x, b.y, -3)) { continue; }
         // the one to move: a person before a thing, else the smaller

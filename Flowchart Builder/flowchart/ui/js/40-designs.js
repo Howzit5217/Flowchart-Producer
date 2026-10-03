@@ -71,7 +71,7 @@
    ["outdoor", "i_grill i_hottub i_deck i_fence i_pool i_patio i_gardenbench i_lounger i_gazebo i_shed i_firepit i_birdbath i_mailbox i_bikerack i_swing i_trampoline i_pathlight i_lamppost i_porchlight i_floodlight"],
    ["bath", "i_toilet i_sink i_bathtub i_shower i_cornertub i_towelrail i_kitchensink i_utilitysink"],
    ["soft", "i_sofa i_loveseat i_armchair i_recliner i_sectional i_ottoman i_beanbag i_chaise i_daybed i_bed i_bedking i_bed1 i_bunkbed i_crib i_dogbed i_rocker i_bench i_chair i_stool i_officechair i_highchair i_rug i_bathmat i_lamp i_arclamp i_tablelamp i_desklamp i_pendant i_chandelier i_sconce i_ceilingfan i_yogamat"],
-   ["none", "i_outlet i_lightswitch i_breaker i_post i_vent i_closetrod i_closetshelves i_reachin i_furnace i_driveway i_path i_parked i_evcharger i_shrub i_hedge i_flowerbed i_cattree i_fruitbowl i_books"]
+   ["none", "i_outlet i_lightswitch i_breaker i_post i_vent i_smoke i_thermostat i_waterheater i_exhaustfan i_closetrod i_closetshelves i_reachin i_furnace i_driveway i_path i_parked i_evcharger i_shrub i_hedge i_flowerbed i_cattree i_fruitbowl i_books"]
   ].forEach(function (g) { g[1].split(" ").forEach(function (k) { DESIGN_GROUP[k] = g[0]; }); });
   // Which styles a bath fitting comes in (a toilet is china whatever it is)
   var DESIGN_BATH = ["modern", "classic", "minimal", "glam", "farmhouse", "industrial", "japandi", "artdeco"];

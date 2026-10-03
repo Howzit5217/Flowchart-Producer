@@ -24,7 +24,14 @@
   .st-step > .v3-ico { width: 20px; height: 20px; color: var(--accent); }
   .st-step-name { flex: 1; font-size: 13px; font-weight: 600; }
   .st-step-ctl { display: inline-flex; align-items: center; gap: 4px; }
-  .st-step-ctl output { min-width: 26px; text-align: center; font-size: 15px; font-weight: 700; font-variant-numeric: tabular-nums; }
+  .st-step-ctl output, .st-step-num { min-width: 26px; text-align: center; font-size: 15px; font-weight: 700; font-variant-numeric: tabular-nums; }
+  /* (typed into as well as stepped: a box only when looked at) */
+  .st-step-num {
+    width: 3.2ch; max-width: 7ch; padding: 3px 2px; border: 1px solid transparent; border-radius: 7px;
+    background: transparent; color: var(--ink); font-family: inherit; outline: none;
+  }
+  .st-step-num:hover { border-color: var(--line); }
+  .st-step-num:focus { border-color: var(--accent); background: var(--panel); }
   .st-step-btn {
     width: 30px; height: 30px; display: grid; place-items: center; padding: 0; border-radius: 8px;
     border: 1px solid var(--line); background: var(--panel); color: var(--ink); cursor: pointer;
@@ -293,6 +300,10 @@
   .v3-xray-row .v3-ico { width: 16px; height: 16px; color: var(--muted); }
   .v3-xray-row em { font-style: normal; }
   .v3-xray-dot { width: 10px; height: 10px; border-radius: 50%; flex: none; box-shadow: 0 0 0 1px rgba(0, 0, 0, .25) inset; }
+  /* the cables' jacket colors, by amps (40-systems.js) */
+  .v3-xray-legend { display: flex; flex-wrap: wrap; gap: 4px 10px; padding: 0 0 6px 17px; font-size: 11px; color: var(--muted); }
+  .v3-xray-legend span { display: inline-flex; align-items: center; gap: 4px; }
+  .v3-xray-legend i { width: 14px; height: 6px; border-radius: 3px; box-shadow: 0 0 0 1px rgba(0, 0, 0, .3) inset; }
   .v3-xray-wire { width: 100%; margin-top: 8px; }
   .view3d .v3-bar [data-v3="xray"][aria-pressed="true"] { border-color: var(--accent); }
   @media (prefers-reduced-motion: reduce) { .v3-xray { animation: none; } }
@@ -361,3 +372,49 @@
   @media (max-width: 440px) { .hood-picks { grid-template-columns: 1fr; } }
   .hood-gap { margin-top: 6px; }
   @media (prefers-reduced-motion: reduce) { .hood-pick { transition: none; } }
+
+  /* ------------------------- long work, a slice at a time (40-work.js) --
+     The build bar's own look (05-chart.css), with a Stop on it: so a press
+     reaches the button, and a veil over the paper below, which nothing on
+     it can be done to meanwhile. */
+  #build-bar.work-bar { pointer-events: auto; }
+  .work-bar .bb-said { flex: 1 1 auto; }
+  .work-stop {
+    flex: none; align-self: center; padding: 1px 9px; border: 1px solid var(--line);
+    border-radius: 999px; background: transparent; color: var(--muted);
+    font: inherit; font-size: 11.5px; line-height: 18px; cursor: pointer;
+  }
+  .work-stop:hover, .work-stop:focus-visible { border-color: var(--bad); color: var(--bad); }
+  #build-bar.work-bar.full .work-stop { visibility: hidden; }
+  .work-veil { position: absolute; inset: 0; z-index: 12; cursor: progress; background: transparent; }
+
+  /* ---- a lift's buttons, standing in its car (40-climb.js) ---- */
+  .v3-lift {
+    position: absolute; right: 16px; top: 50%; transform: translateY(-50%); z-index: 6;
+    display: flex; flex-direction: column; align-items: stretch; gap: 8px; padding: 12px;
+    background: #2b2f34; border: 1px solid #50565d; border-radius: 12px; box-shadow: var(--shadow);
+    color: #e9edf2; min-width: 120px;
+  }
+  .v3-lift-at {
+    font: 600 15px/1.2 ui-monospace, "Cascadia Mono", Consolas, monospace; letter-spacing: .04em; text-align: center;
+    color: #ffb347; background: #14171a; border-radius: 6px; padding: 6px 8px;
+  }
+  .v3-lift-keys { display: flex; flex-direction: column; gap: 6px; max-height: 50vh; overflow-y: auto; }
+  .v3-lift-key {
+    font: inherit; font-size: 12.5px; color: #e9edf2; background: #3a4047; border: 1px solid #5c636b;
+    border-radius: 999px; padding: 6px 12px; cursor: pointer; text-align: center;
+  }
+  .v3-lift-key:hover:not(:disabled) { border-color: #9fd3ff; }
+  .v3-lift-key.lit { background: #1f3b52; border-color: #7fd0ff; color: #bfe6ff; box-shadow: 0 0 10px rgba(127, 208, 255, .45); }
+  .v3-lift-key.here { opacity: .55; }
+  .v3-lift-key:disabled { cursor: default; }
+
+  /* ---- a piece picked in 3D: its name, Turn, Delete (40-edit3d.js) ---- */
+  .v3-picked {
+    position: absolute; left: 50%; bottom: 64px; transform: translateX(-50%); z-index: 6;
+    display: flex; align-items: center; gap: 8px; padding: 6px 8px 6px 14px;
+    background: var(--panel); border: 1px solid var(--line); border-radius: 12px; box-shadow: var(--shadow);
+    animation: bar-drop var(--move) var(--ease) backwards;
+  }
+  .v3-picked-name { font-weight: 600; font-size: 13px; color: var(--ink); max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+

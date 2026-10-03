@@ -20,6 +20,20 @@
      and the icon an iPhone puts on its home screen.  Nothing anywhere
      else -- page.py writes it only for the website. -->
 __APPHEAD__
+<!-- A page read while it was being written out (the site made again, a
+     copy part way down the wire) stops part way through its script: the
+     panel came apart, its pieces side by side and cut off (2026-10-03).
+     Then it is read again -- once, not over and over. -->
+<script>
+window.addEventListener("load", function () {
+  if (window.FLOWCHART_UP) { return; }
+  try {
+    if (sessionStorage.getItem("flowchart-reread")) { return; }
+    sessionStorage.setItem("flowchart-reread", "1");
+  } catch (e) { return; }
+  setTimeout(function () { location.reload(); }, 300);
+});
+</script>
 <style>
 @@CSS@@</style>
 </head>

@@ -139,22 +139,24 @@
     document.body.appendChild(sheet);
     setTimeout(function () { add.focus({ preventScroll: true }); }, 30);
   }
-  if (typeof starterMake === "function") {
-    var starterMakeHood = starterMake;
-    starterMake = function (want) {
-      var self = this, args = arguments;
+  if (typeof starterWrap === "function") {
+    starterWrap(function* (inner, want) {
       var here = hand.nodes.some(function (n) { return n.kind === "i_room"; });
-      if (!here || (want && want.where === "add-quiet")) { return hoodBuild(want); }
-      if (want && want.where === "replace") { return hoodReplace(want); }
-      if (want && want.where === "add") { return hoodAdd(want); }
-      hoodAsk(function (how) { if (how === "replace") { hoodReplace(want); } else { hoodAdd(want); } });
+      if (!here || (want && want.where === "add-quiet")) { return yield* hoodBuild(inner, want); }
+      if (want && want.where === "replace") { return yield* hoodReplace(inner, want); }
+      if (want && want.where === "add") { return yield* hoodAdd(inner, want); }
+      // (asked: made once the answer comes, a slice at a time like the rest)
+      hoodAsk(function (how) {
+        var steps = how === "replace" ? hoodReplace(inner, want) : hoodAdd(inner, want);
+        (typeof starterLive === "function" ? starterLive : starterDrive)(steps);
+      });
       return undefined;
-    };
+    });
   }
   // Made, and marked with what it was made from -- on its lot, else its
   // ground floor, else its first room -- for Change this house… (40-edit.js).
-  function hoodBuild(want) {
-    var before = hand.next, out = starterMakeHood(want);
+  function* hoodBuild(inner, want) {
+    var before = hand.next, out = yield* inner(want);
     try {
       var made = hand.nodes.filter(function (n) { return n.id >= before; });
       var mark = made.filter(function (n) { return n.kind === "i_lot"; })[0] ||
@@ -167,25 +169,25 @@
         mark.madeWith = keep;
       }
       // and what was asked for in its yard (40-yard.js)
-      if (typeof yardMake === "function") { yardMake(want, made); }
+      if (typeof yardMake === "function") { yardMake(want, made); yield ["yard", 1]; }
     } catch (e) { /* made, not marked */ }
     return out;
   }
   // In its place: the drawing cleared and the new house made -- one step to Undo.
-  function hoodReplace(want) {
+  function* hoodReplace(inner, want) {
     keepUndo();
     var keepHouse = hand.house ? Object.assign({}, hand.house) : null;
     hand.nodes = []; hand.links = [];
     if (keepHouse) { hand.house = keepHouse; }
     var undoWas = keepUndo, out;
     keepUndo = function () { };
-    try { out = hoodBuild(want); } finally { keepUndo = undoWas; }
+    try { out = yield* hoodBuild(inner, want); } finally { keepUndo = undoWas; }
     return out;
   }
   // Next door: made (to the right of everything, as it always was), then
   // put along the street.
-  function hoodAdd(want) {
-    var out = hoodBuild(want);
+  function* hoodAdd(inner, want) {
+    var out = yield* hoodBuild(inner, want);
     try { hoodRespace(); hoodRedraw(); } catch (e) { /* where it was made */ }
     if (typeof handSaysSoft === "function") { handSaysSoft(say("hd_added", { n: hoodHouseCount() })); }
     return out;

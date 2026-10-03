@@ -89,6 +89,8 @@
     if (lift) { core.push(R("lift", 2.0)); }
     return core;
   }
+  // (2026-10-03) as many as anyone could want: typed in past the steps
+  var TYPE_MOST = { units: 40, storeys: 60, side: 20, school: 8, classrooms: 40 };
   var BUILDING_TYPES = {
     house: { icon: "floor1" },
     cabin: {
@@ -107,7 +109,7 @@
     townhouses: {
       icon: "row", style: "georgian", together: true,
       plan: function (want) {
-        var n = Math.max(2, Math.min(6, want.units || 3)), U = 5.4, G = { level: 0, back: [], front: [], H: 0, Db: 4.2, Df: 4.6 };
+        var n = Math.max(2, Math.min(TYPE_MOST.units, want.units || 3)), U = 5.4, G = { level: 0, back: [], front: [], H: 0, Db: 4.2, Df: 4.6 };
         var F1 = { level: 1, back: [], front: [], H: 0, Db: 4.2, Df: 4.6 };
         for (var i = 0; i < n; i++) {
           var l = "l" + i, s = "s" + i, b = "b" + i;
@@ -118,7 +120,7 @@
         }
         return { floors: [G, F1], W: n * U, two: true, noGarage: true };
       },
-      ask: function (ui) { ui.stepper("units", TXT.ty_units, "row", 2, 6); }
+      ask: function (ui) { ui.stepper("units", TXT.ty_units, "row", 2, TYPE_MOST.units); }
     },
     duplex: {
       icon: "duplex", style: "craftsman", together: true,
@@ -135,7 +137,7 @@
     apartments: {
       icon: "flats", style: "modern", ceil: 2.7,
       plan: function (want, rnd) {
-        var S = Math.max(2, Math.min(8, want.storeys || 4)), K = Math.max(1, Math.min(3, want.flatsSide || 2)), B = want.flatBeds > 1 ? 2 : 1;
+        var S = Math.max(2, Math.min(TYPE_MOST.storeys, want.storeys || 4)), K = Math.max(1, Math.min(TYPE_MOST.side, want.flatsSide || 2)), B = want.flatBeds > 1 ? 2 : 1;
         var floors = [], W = 0;
         for (var k = 0; k < S; k++) {
           var f = { level: k, back: typeCore(k, S - 1, true), front: [k ? R("landing", 4.8) : R("lobby", 4.8, { entry: true })], H: 1.6, Db: 4.6, Df: 4.6 };
@@ -164,8 +166,8 @@
         return { floors: floors, W: W, two: S > 1, noGarage: true };
       },
       ask: function (ui) {
-        ui.stepper("storeys", TXT.ty_storeys, "flats", 2, 8);
-        ui.stepper("flatsSide", TXT.ty_flats_side, "door", 1, 3);
+        ui.stepper("storeys", TXT.ty_storeys, "flats", 2, TYPE_MOST.storeys);
+        ui.stepper("flatsSide", TXT.ty_flats_side, "door", 1, TYPE_MOST.side);
         ui.stepper("flatBeds", TXT.ty_flat_beds, "bed", 1, 2);
       }
     },
@@ -208,7 +210,7 @@
     office: {
       icon: "office", style: "contemporary", ceil: 3.0,
       plan: function (want) {
-        var S = Math.max(1, Math.min(3, want.storeys || 1)), s = Math.max(1, Math.min(3, want.size || 2)), W = [16, 22, 30][s - 1];
+        var S = Math.max(1, Math.min(TYPE_MOST.storeys, want.storeys || 1)), s = Math.max(1, Math.min(3, want.size || 2)), W = [16, 22, 30][s - 1];
         var floors = [];
         for (var k = 0; k < S; k++) {
           var back = S > 1 ? typeCore(k, S - 1, true) : [];
@@ -223,12 +225,12 @@
         floors.forEach(function (f) { typeFill(f.back, Wd, ["meeting"]); typeFill(f.front, Wd, ["openoffice"]); });
         return { floors: floors, W: Wd, two: S > 1, noGarage: true };
       },
-      ask: function (ui) { ui.stepper("storeys", TXT.ty_storeys, "flats", 1, 3); typeSizes(ui); }
+      ask: function (ui) { ui.stepper("storeys", TXT.ty_storeys, "flats", 1, TYPE_MOST.storeys); typeSizes(ui); }
     },
     school: {
       icon: "school", style: "georgian", ceil: 3.0,
       plan: function (want) {
-        var S = Math.max(1, Math.min(2, want.storeys || 1)), n = Math.max(2, Math.min(6, want.rooms || 4));
+        var S = Math.max(1, Math.min(TYPE_MOST.school, want.storeys || 1)), n = Math.max(2, Math.min(TYPE_MOST.classrooms, want.rooms || 4));
         var floors = [];
         for (var k = 0; k < S; k++) {
           var back = (S > 1 ? typeCore(k, S - 1, false) : []).concat([R("restroom", 2.6), R("restroom", 2.6)]);
@@ -241,7 +243,7 @@
         floors.forEach(function (f) { typeFill(f.back, W, ["classroom"]); typeFill(f.front, W, ["classroom"]); });
         return { floors: floors, W: W, two: S > 1, noGarage: true };
       },
-      ask: function (ui) { ui.stepper("storeys", TXT.ty_storeys, "flats", 1, 2); ui.stepper("rooms", TXT.ty_classrooms, "school", 2, 6); }
+      ask: function (ui) { ui.stepper("storeys", TXT.ty_storeys, "flats", 1, TYPE_MOST.school); ui.stepper("rooms", TXT.ty_classrooms, "school", 2, TYPE_MOST.classrooms); }
     }
   };
   var TYPE_WANT = { type: "house", units: 3, storeys: 4, flatsSide: 2, flatBeds: 1, size: 2, rooms: 4 };
@@ -281,7 +283,10 @@
   // Spots in a grid over a room, each taken where it is clear of what is
   // there (and of the doors' swings, stood in for while a house is made).
   function typeClear(spot, gap) {
-    var others = hand.nodes.filter(function (o) {
+    // (only what stands near: anything that can touch the spot, or the
+    // room in front of either, is within a metre and the gap of it)
+    var near = typeof starterNear === "function" ? starterNear(spot, Math.max(8, gap || 0) + FLOOR_PX + 8) : hand.nodes;
+    var others = near.filter(function (o) {
       return o !== spot && !isArea(o.kind) && !ON_THE_WALL[o.kind] && !FROM_CEILING[o.kind] && o.kind !== "i_window" && !LIES_FLAT[o.kind];
     });
     if (others.some(function (o) { return boxesTouch(spot, o, WALK_DOORS[o.kind] ? 8 : gap); })) { return false; }
@@ -526,17 +531,16 @@
                    classroom: 1, lobby: 1, landing: 1, lift: 1, stock: 1, fitting: 1, kitchenette: 1, flatbath: 1, flatbed: 1, flatbed2: 1, flat: 1 };
   // Made: its style put on (the type's own unless another was picked),
   // and the house's settings a shop or a block of flats wants.
-  if (typeof starterMake === "function") {
-    var starterMakeHouse = starterMake;
-    starterMake = function (want) {
+  if (typeof starterWrap === "function") {
+    starterWrap(function* (inner, want) {
       if (typeOf(want).together && want.spread) { want = Object.assign({}, want, { spread: false }); }
-      var out = starterMakeHouse.call(this, want);
+      var out = yield* inner(want);
       try {
         var T = typeOf(want), key = want.style !== undefined ? want.style : (T.style || "");
         if (key && typeof HOUSE_STYLES === "object" && HOUSE_STYLES[key]) { styleApplyQuiet(key); }
       } catch (e) { /* as made */ }
       return out;
-    };
+    });
   }
   function styleApplyQuiet(key) {
     var keep = keepUndo;
