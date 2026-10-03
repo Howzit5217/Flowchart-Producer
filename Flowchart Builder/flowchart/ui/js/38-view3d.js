@@ -39,6 +39,7 @@
   // 2026-10-01: "when walking through the house you move faster"); Shift doubles it
   var WALK_PACE = 135;
   var WALK_BODY = 9;                     // how wide round you are, for walls
+  var V3_LOOK_DOWN = 1.35;               // how far down you can look walking: at your own feet (40-tour.js)
   // How tall each piece is, in metres; and which are round.
   var V3_HIGH = { i_bed: 0.55, i_bed1: 0.55, i_crib: 0.9, i_nightstand: 0.55, i_wardrobe: 2.0,
                   i_dresser: 0.9, i_sofa: 0.8, i_armchair: 0.8, i_coffee: 0.42, i_tv: 1.1,
@@ -1145,9 +1146,11 @@
         climb = V3.climb.by * (1 - k * k * (3 - 2 * k));
         if (k >= 1) { V3.climb = null; }
       }
-      // (sitting down, 39-inside.js: lower)
+      // (sitting down, 39-inside.js: lower; out of doors, on the land as it
+      // rises and falls, 40-land.js)
       V3.eye = { x: V3.me.x + (here ? here.dx : 0), y: V3.me.y + (here ? here.dy : 0),
-                 z: (V3.sitting ? 1.12 : EYE_TALL) * FLOOR_PX + (here ? here.z : 0) + climb };
+                 z: (V3.sitting ? 1.12 : EYE_TALL) * FLOOR_PX + (here ? here.z : 0) + climb +
+                    (typeof terrEye === "function" ? terrEye(here) : 0) };
       eye = [V3.eye.x, V3.eye.y, V3.eye.z];
       V3.inRoom = roomAt(plan, V3.me.x, V3.me.y) || null;   // under a ceiling, or out under the sky
     }
@@ -1484,7 +1487,7 @@
     if (!ahead && !side) { me.go = 0; }
     if (!ahead && !side && !turn && !look) { return false; }
     me.head += turn * 2.3 * dt;
-    if (look) { me.pitch = Math.max(-0.9, Math.min(0.9, me.pitch + look * 1.5 * dt)); }
+    if (look) { me.pitch = Math.max(-V3_LOOK_DOWN, Math.min(0.9, me.pitch + look * 1.5 * dt)); }
     if (!ahead && !side) { return true; }
     // up to speed in a quarter of a second, not all at once
     me.go = Math.min(1, (me.go || 0) + dt * 4);
@@ -2005,7 +2008,7 @@
       var ids = Object.keys(downs);
       if (ids.length === 2) {
         var a = downs[ids[0]], b = downs[ids[1]];
-        pinch = { d: Math.hypot(a.x - b.x, a.y - b.y) || 1, scale: V3.scale };
+        pinch = { d: Math.hypot(a.x - b.x, a.y - b.y) || 1, scale: V3.scale, mid: [(a.x + b.x) / 2, (a.y + b.y) / 2], ang: Math.atan2(b.y - a.y, b.x - a.x) };
       }
       V3.box.focus({ preventScroll: true });
       ev.preventDefault();
@@ -2023,7 +2026,7 @@
       if (V3.mode === "walk") {
         if (document.pointerLockElement === canvas) { return; }
         V3.me.head -= dx * 0.005;
-        V3.me.pitch = Math.max(-0.9, Math.min(0.9, V3.me.pitch + dy * 0.004));
+        V3.me.pitch = Math.max(-V3_LOOK_DOWN, Math.min(0.9, V3.me.pitch + dy * 0.004));
         V3.dirty = true;
         return;
       }
@@ -2031,6 +2034,12 @@
       if (ids.length === 2 && pinch) {
         var a = downs[ids[0]], b = downs[ids[1]];
         V3.scale = Math.max(0.05, Math.min(8, pinch.scale * (Math.hypot(a.x - b.x, a.y - b.y) || 1) / pinch.d));
+        // (2026-10-02: "make it so the 3d mode works on mobile for dragging
+        // around")  Two fingers move it as they go, and turn it as they turn.
+        var mid = [(a.x + b.x) / 2, (a.y + b.y) / 2], ang = Math.atan2(b.y - a.y, b.x - a.x);
+        V3.panX += mid[0] - pinch.mid[0]; V3.panY += mid[1] - pinch.mid[1];
+        if (!V3.flat) { V3.yaw += Math.atan2(Math.sin(ang - pinch.ang), Math.cos(ang - pinch.ang)); }
+        pinch.mid = mid; pinch.ang = ang;
       } else if (was.pan || V3.flat) {
         V3.panX += dx; V3.panY += dy;
       } else {
@@ -2045,7 +2054,7 @@
     canvas.addEventListener("mousemove", function (ev) {
       if (!V3 || V3.mode !== "walk" || document.pointerLockElement !== canvas) { return; }
       V3.me.head += (ev.movementX || 0) * 0.0025;
-      V3.me.pitch = Math.max(-0.9, Math.min(0.9, V3.me.pitch - (ev.movementY || 0) * 0.0022));
+      V3.me.pitch = Math.max(-V3_LOOK_DOWN, Math.min(0.9, V3.me.pitch - (ev.movementY || 0) * 0.0022));
       V3.dirty = true;
     });
     function up(ev) {
@@ -2095,7 +2104,10 @@
       if (ev.target && ev.target.closest && ev.target.closest("button, input")) { return; }
       var key = keyOf(ev);
       if (key === "escape") {
-        if (V3.mode === "walk") { v3Mode("orbit"); } else { v3Leave(); }
+        // (2026-10-02: "more straight forward and easy to go back") back to
+        // the plan, walking or not -- a locked mouse is let go by the browser
+        // itself, before this hears of it
+        v3Leave();
         ev.stopPropagation(); return;
       }
       // what is pressed here is the view's: Delete, say, is not for the

@@ -2757,6 +2757,8 @@
     M.box(-3.6 * cm, 3.6 * cm, y0, y0 + 0.7 * cm, 0, 11.6 * cm, M.mat("plastic", C.main), 0.3 * cm);
     M.push().move(0, y0 + 0.7 * cm, 5.8 * cm).tiltX(-6);
     M.box(-1.6 * cm, 1.6 * cm, 0, 0.9 * cm, -3.2 * cm, 3.2 * cm, M.mat("plastic", C.frame), 0.4 * cm);
+    // (a little light in the rocker, lit while the room's light is on -- dark when it is off, 39-inside.js)
+    M.box(-0.35 * cm, 0.35 * cm, 0.9 * cm, 1.05 * cm, 1.9 * cm, 2.6 * cm, M.mat("glow", "#ffc46b"));
     M.pop();
   });
   mDef("i_breaker", function (M, W, D, H, C) {

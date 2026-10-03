@@ -1,0 +1,44 @@
+{
+  "name": "flowchart-builder",
+  "productName": "Flowchart Builder",
+  "version": "1.0.0",
+  "description": "Flowchart Builder as a desktop program for Windows and macOS",
+  "main": "main.js",
+  "private": true,
+  "scripts": {
+    "site": "node copy-site.js",
+    "start": "node copy-site.js && electron .",
+    "dist:win": "node copy-site.js && electron-builder --win --publish never",
+    "dist:mac": "node copy-site.js && electron-builder --mac --publish never"
+  },
+  "devDependencies": {
+    "electron": "44.5.1",
+    "electron-builder": "26.15.3"
+  },
+  "build": {
+    "appId": "io.github.flowchartbuilder.desktop",
+    "productName": "Flowchart Builder",
+    "directories": { "output": "dist", "buildResources": "build" },
+    "files": ["main.js", "preload.js", "site/**/*", "build/icon.png"],
+    "win": {
+      "target": [{ "target": "nsis", "arch": ["x64"] }],
+      "icon": "build/icon.png"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Flowchart Builder",
+      "artifactName": "Flowchart-Builder-Setup-${version}.${ext}"
+    },
+    "mac": {
+      "target": [{ "target": "dmg", "arch": ["x64", "arm64"] }],
+      "category": "public.app-category.productivity",
+      "icon": "build/icon.png",
+      "identity": null,
+      "artifactName": "Flowchart-Builder-${version}-${arch}.${ext}"
+    }
+  }
+}

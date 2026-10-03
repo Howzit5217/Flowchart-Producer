@@ -374,6 +374,18 @@
         "9131"
       ],
       "port": 9131
+    },
+    {
+      "name": "wish-site",
+      "runtimeExecutable": "python",
+      "runtimeArgs": [
+        "-m",
+        "http.server",
+        "9163",
+        "--directory",
+        "C:/Users/origa/Downloads/GitHub/Flowchart-Producer/Flowchart Builder"
+      ],
+      "port": 9163
     }
   ]
 }

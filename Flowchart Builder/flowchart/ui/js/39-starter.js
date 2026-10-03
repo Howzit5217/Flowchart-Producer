@@ -28,27 +28,30 @@
     // metres across and deep, and what goes in: against a wall, or in the
     // middle; `bw` the width it has in a band of the house and `max` the
     // most it grows to, filling a band out
-    living: { w: 5.2, h: 4.2, bw: 5.8, max: 8.2, wall: ["i_sofa", "i_tv", "i_armchair", "i_lamp", "i_plant"], mid: ["i_rug", "i_coffee"] },
-    kitchen: { w: 3.8, h: 3.4, bw: 4.2, max: 5.6, wall: ["i_counter", "i_kitchensink", "i_stove", "i_fridge", "i_dishwasher"], mid: [] },
-    great: { w: 6.4, h: 4.0, bw: 7.0, max: 9.2, wall: ["i_counter", "i_kitchensink", "i_stove", "i_fridge", "i_dishwasher"], mid: ["i_dining"] },
-    dining: { w: 4.0, h: 3.6, bw: 4.4, max: 5.6, wall: ["i_sideboard|i_hutch|i_consoletable", "i_plant"], mid: ["i_dining|i_roundtable"] },
-    main: { w: 4.4, h: 4.2, bw: 5.2, max: 6.2, wall: ["i_bedking", "i_nightstand", "i_nightstand", "i_wardrobe", "i_dresser"], mid: [] },
-    bed: { w: 3.4, h: 3.4, bw: 3.8, max: 4.8, wall: ["i_bed", "i_nightstand", "i_wardrobe", "i_desk"], mid: [] },
-    bath: { w: 3.0, h: 2.4, bw: 2.8, max: 3.4, wall: ["i_bathtub", "i_toilet", "i_vanity|i_sink", "i_sconce"], mid: [] },
-    ensuite: { w: 2.4, h: 2.2, wall: ["i_shower", "i_toilet", "i_sink", "i_sconce"], mid: [] },
-    office: { w: 3.0, h: 3.0, bw: 3.4, max: 4.2, wall: ["i_desk", "i_bookcase", "i_filing"], mid: ["i_officechair"] },
-    laundry: { w: 3.0, h: 2.6, bw: 2.6, max: 3.4, wall: ["i_washer", "i_dryer", "i_utilitysink|i_hamper"], mid: [] },
+    living: { w: 5.8, h: 4.6, bw: 6.4, max: 9.0, wall: ["i_sofa", "i_tv", "i_armchair", "i_lamp", "i_plant"], mid: ["i_rug", "i_coffee"] },
+    kitchen: { w: 4.2, h: 3.8, bw: 4.6, max: 6.0, wall: ["i_counter", "i_kitchensink", "i_stove", "i_fridge", "i_dishwasher"], mid: [] },
+    great: { w: 7.0, h: 4.4, bw: 7.6, max: 10, wall: ["i_counter", "i_kitchensink", "i_stove", "i_fridge", "i_dishwasher"], mid: ["i_dining"] },
+    dining: { w: 4.4, h: 3.9, bw: 4.8, max: 6.0, wall: ["i_sideboard|i_hutch|i_consoletable", "i_plant"], mid: ["i_dining|i_roundtable"] },
+    main: { w: 4.8, h: 4.6, bw: 5.6, max: 6.6, wall: ["i_bedking", "i_nightstand", "i_nightstand", "i_wardrobe", "i_dresser"], mid: [] },
+    bed: { w: 3.8, h: 3.7, bw: 4.1, max: 5.0, wall: ["i_bed", "i_nightstand", "i_wardrobe", "i_desk"], mid: [] },
+    bath: { w: 3.2, h: 2.6, bw: 3.0, max: 3.6, wall: ["i_bathtub", "i_toilet", "i_vanity|i_sink", "i_sconce"], mid: [] },
+    ensuite: { w: 2.6, h: 2.4, wall: ["i_shower", "i_toilet", "i_sink", "i_sconce"], mid: [] },
+    office: { w: 3.3, h: 3.2, bw: 3.6, max: 4.4, wall: ["i_desk", "i_bookcase", "i_filing"], mid: ["i_officechair"] },
+    laundry: { w: 3.2, h: 2.8, bw: 2.8, max: 3.6, wall: ["i_washer", "i_dryer", "i_utilitysink|i_hamper"], mid: [] },
     garage: { w: 6.0, h: 6.2, wall: ["i_workbench", "i_shelving"], mid: ["i_parked"] },
-    closet: { w: 2.6, h: 2.0, wall: ["i_closetrod|i_closetshelves"], mid: [] },
+    closet: { w: 2.8, h: 2.2, wall: ["i_closetrod|i_closetshelves"], mid: [] },
     hall: { w: 6.0, h: 1.4, wall: ["i_sconce", "i_sconce"], mid: [] },
     stairs: { w: 1.4, h: 4.2, bw: 1.4, max: 1.4, wall: ["i_sconce"], mid: [] },
-    family: { w: 5.0, h: 4.2, bw: 5.4, max: 14, wall: ["i_sectional|i_sofa", "i_tv", "i_lamp"], mid: ["i_rug", "i_coffee"] },
+    family: { w: 5.4, h: 4.6, bw: 5.8, max: 14, wall: ["i_sectional|i_sofa", "i_tv", "i_lamp"], mid: ["i_rug", "i_coffee"] },
     storage: { w: 3.0, h: 4.2, bw: 3.0, max: 9, wall: ["i_shelving", "i_shelving", "i_sconce"], mid: [] },
     utility: { w: 3.0, h: 4.2, bw: 3.0, max: 3.4, wall: ["i_furnace", "i_shelving", "i_sconce"], mid: [] }
   };
   var STARTER_GAP = 100;                 // px between rooms spread out: room for the arrows
-  var STARTER_HALL = 1.5;                // metres, the hall across
-  var STARTER_BAND = 4.4;                // metres, a band of rooms deep
+  // (2026-10-02: "when you go to explore houses they are bigger than what
+  // you are expecting so it is easier to walk around") every room a size
+  // roomier, the hall wider, the bands deeper
+  var STARTER_HALL = 1.7;                // metres, the hall across
+  var STARTER_BAND = 4.8;                // metres, a band of rooms deep
   var starterLast = [];                  // the rooms last made, and what each was to be
   var starterWant = { beds: 3, baths: 2, open: true, office: false, laundry: true, garage: true, closet: true, spread: true,
                       floors: 1, basement: false, roofOne: true, lot: true };
@@ -110,6 +113,17 @@
                        i_hutch: 1, i_consoletable: 1, i_bookcase: 1, i_coffee: 1, i_chest: 1, i_bench: 1, i_sidetable: 1 };
   var STARTER_WOODS = ["#c29a6b", "#8a6240", "#4b3627", "#efede8", "#2a2a2a", "#a98563", "#d8c3a0"];
 
+  // (2026-10-02: "Homes ... of different sizes") a house small, as it was,
+  // or large: its rooms that much wider, its bands a little deeper
+  var STARTER_SIZES = { 1: [0.86, 1], 2: [1, 1], 3: [1.18, 1.1] };
+  var STARTER_ROOMY = { living: 1, great: 1, family: 1, main: 1, bed: 1 };
+  function starterScale(want) { var t = want && (!want.type || want.type === "house") ? STARTER_SIZES[want.homeSize] : null; return t ? t[0] : 1; }
+  function starterDeep(want) { var t = want && (!want.type || want.type === "house") ? STARTER_SIZES[want.homeSize] : null; return t ? t[1] : 1; }
+  // How many of a room are wanted: the count, or the old yes or no.
+  function starterCount(want, many, one, most) {
+    var n = want[many] !== undefined ? +want[many] : one ? (want[one] ? 1 : 0) : 1;
+    return Math.max(0, Math.min(most, Math.round(n) || 0));
+  }
   // ---- the house, laid out -----------------------------------------------------------
   // Each floor: { level, back: [...], front: [...] }, each room in a band
   // { kind, label, w } in metres, the main bedroom's own rooms a column
@@ -118,8 +132,12 @@
     rnd = rnd || starterRand(1);
     // a little bigger or smaller, each house its own
     function it(kind, label) {
-      var s = STARTER_ROOMS[kind], w = s.bw || s.w;
-      if (s.max && s.max > w && kind !== "stairs") { w = Math.min(s.max, w * (1 + rnd() * 0.1)); }
+      var s = STARTER_ROOMS[kind], w = s.bw || s.w, k = kind === "stairs" ? 1 : starterScale(want);
+      // (small, the rooms people sit and sleep in as they are: smaller, their
+      // furniture no longer goes together)
+      if (k < 1 && STARTER_ROOMY[kind]) { k = 1; }
+      w *= k;
+      if (s.max && s.max * k > w && kind !== "stairs") { w = Math.min(s.max * k, w * (1 + rnd() * 0.1)); }
       return { kind: kind, label: label || "", w: w };
     }
     function width(band) { return band.reduce(function (s, r) { return s + r.w; }, 0); }
@@ -134,8 +152,19 @@
     var col = suite.length ? { kind: "suite", parts: suite, w: suite.length > 1 || suite[0].kind === "ensuite" ? 2.6 : 2.0 } : null;
     var baths = [];
     for (var t = 0; t < want.baths - (want.baths > 1 ? 1 : 0); t++) { baths.push(it("bath")); }
-    var office = want.office ? it("office") : null, living = it("living"), kitchen = it(want.open ? "great" : "kitchen");
-    var dining = want.open ? null : it("dining"), laundry = want.laundry ? it("laundry") : null;
+    // (2026-10-02: "set how many of each room you want in a house instead of
+    // just one") how many offices, kitchens, living rooms, laundry rooms --
+    // each past the first named with its number (asked on steppers, below)
+    var nOffice = starterCount(want, "offices", "office", 3), nKitchen = Math.max(1, starterCount(want, "kitchens", null, 2));
+    var nLiving = Math.max(1, starterCount(want, "livings", null, 2)), nLaundry = starterCount(want, "laundries", "laundry", 2);
+    function nth(kind, word, k, n) { return n > 1 && k ? say("st_room_n", { room: TXT[word] || "", n: k + 1 }) : ""; }
+    var offices = [], laundries = [], more = [];
+    for (var o = 0; o < nOffice; o++) { offices.push(it("office", nth("office", "rl_office", o, nOffice))); }
+    for (var q = 0; q < nLaundry; q++) { laundries.push(it("laundry", nth("laundry", "rl_laundry", q, nLaundry))); }
+    var office = offices.shift() || null, living = it("living"), kitchen = it(want.open ? "great" : "kitchen");
+    var dining = want.open ? null : it("dining"), laundry = laundries.shift() || null;
+    for (var c = 1; c < nKitchen; c++) { more.push(it("kitchen", say("st_room_n", { room: TXT.rl_kitchen || "", n: c + 1 }))); }
+    for (var v = 1; v < nLiving; v++) { more.push(it("family", TXT.st_family)); }
     var G = { level: 0, back: [], front: [] }, floors = [G];
     if (!two) {
       // one floor: the bedrooms along the back, the rest along the front --
@@ -145,8 +174,9 @@
       var suiteBlock = col ? (rnd() < 0.5 ? [main, col] : [col, main]) : [main];
       var rest = starterShuffle(rnd, beds.concat(baths));
       G.back = rnd() < 0.5 ? suiteBlock.concat(rest) : rest.concat(suiteBlock);
-      var chain = [living, kitchen, dining].filter(Boolean);
-      G.front = (office && rnd() < 0.5 ? [office].concat(chain) : chain.concat(office ? [office] : [])).concat(laundry ? [laundry] : []);
+      var chain = [living].concat(more.filter(function (r) { return r.kind === "family"; }), [kitchen],
+                                  more.filter(function (r) { return r.kind === "kitchen"; }), [dining]).filter(Boolean);
+      G.front = (office && rnd() < 0.5 ? [office].concat(chain) : chain.concat(office ? [office] : [])).concat(offices, laundries, laundry ? [laundry] : []);
       // the two about as long as each other: a bedroom brought round to
       // the front, or the office and the laundry room to the back
       while (width(G.back) - width(G.front) > 3 && G.back.some(function (r) { return r.kind === "bed"; })) {
@@ -154,7 +184,7 @@
         G.back.splice(G.back.indexOf(last), 1);
         G.front.unshift(last);
       }
-      [office, laundry].forEach(function (r) {
+      [office].concat(offices, laundries, [laundry]).forEach(function (r) {
         if (r && width(G.front) - width(G.back) > 3) { G.front.splice(G.front.indexOf(r), 1); G.back.push(r); }
       });
     } else {
@@ -162,11 +192,12 @@
       // front; the bedrooms upstairs, the stairs at the end of the hall
       var U = { level: 1, back: [it("stairs", TXT.st_stairs)].concat(col && rnd() < 0.5 ? [col, main] : [main].concat(col ? [col] : [])), front: [] };
       beds = starterShuffle(rnd, beds);
-      G.back = [it("stairs", TXT.st_stairs), kitchen].concat(dining ? [dining] : []);
-      G.front = [living].concat(office ? [office] : []);
+      G.back = [it("stairs", TXT.st_stairs), kitchen].concat(more.filter(function (r) { return r.kind === "kitchen"; }), dining ? [dining] : []);
+      G.front = [living].concat(more.filter(function (r) { return r.kind === "family"; }), office ? [office] : []);
       if (baths.length > 1) { (width(G.back) <= width(G.front) ? G.back : G.front).push(baths.shift()); }
       if (laundry) { G.front.push(laundry); }
-      beds.concat(baths).forEach(function (r) { (width(U.back) <= width(U.front) ? U.back : U.front).push(r); });
+      // a second laundry room, and the offices past the first, upstairs by the bedrooms
+      beds.concat(baths, offices, laundries).forEach(function (r) { (width(U.back) <= width(U.front) ? U.back : U.front).push(r); });
       floors.push(U);
     }
     if (want.basement) {
@@ -214,7 +245,7 @@
     var seed = want.seed !== undefined ? want.seed >>> 0 : Math.floor(Math.random() * 4294967295);
     var rnd = starterRand(seed);
     var plan = starterPlan(want, rnd), W = plan.W, H = STARTER_HALL;
-    var D = starterPick(rnd, [STARTER_BAND, STARTER_BAND + 0.2, STARTER_BAND + 0.4]);   // its rooms this deep
+    var D = starterPick(rnd, [STARTER_BAND, STARTER_BAND + 0.2, STARTER_BAND + 0.4]) * starterDeep(want);   // its rooms this deep
     var flip = rnd() < 0.5;                                         // mirrored: the garage on the other side
     function X(m) { return Math.round(m * P); }
     var floors = [];
@@ -463,8 +494,9 @@
       cursor += b.r - b.l + 240;
     });
     tieSeen = { H: null, key: null, J: null };
-    if (want.roofOne) { hand.house = Object.assign({}, hand.house || {}, { roof: "one" }); }
-    else if (hand.house && hand.house.roof) { hand.house = Object.assign({}, hand.house); delete hand.house.roof; }
+    // (a roof over each room asked for in so many words: one piece is the plain way, 40-roofs.js)
+    if (want.roofOne) { hand.house = Object.assign({}, hand.house || {}); delete hand.house.roof; }
+    else { hand.house = Object.assign({}, hand.house || {}, { roof: "" }); }
 
     // put together on the paper too, where that was asked for: the front
     // door (and anything else) where 3D puts it, and drawn (tieTidy) each
@@ -868,7 +900,7 @@
   // the same order: the plan, the depth of a band, whether it is mirrored).
   function starterSketch(want) {
     var rnd = starterRand(want.seed >>> 0), plan = starterPlan(want, rnd), W = plan.W, H = STARTER_HALL;
-    var D = starterPick(rnd, [STARTER_BAND, STARTER_BAND + 0.2, STARTER_BAND + 0.4]), flip = rnd() < 0.5;
+    var D = starterPick(rnd, [STARTER_BAND, STARTER_BAND + 0.2, STARTER_BAND + 0.4]) * starterDeep(want), flip = rnd() < 0.5;
     var out = [];
     plan.floors.forEach(function (fp) {
       var rooms = [], Db = fp.Db || D, Df = fp.Df || D, Hh = fp.H === undefined ? H : fp.H;
@@ -983,8 +1015,9 @@
         out.textContent = String(want[key]);
         less.disabled = want[key] <= from; more.disabled = want[key] >= to;
       }
-      less.onclick = function () { if (want[key] > from) { want[key]--; show(); redraw(); } };
-      more.onclick = function () { if (want[key] < to) { want[key]++; show(); redraw(); } };
+      function counted() { if (key === "offices") { want.office = want.offices > 0; } if (key === "laundries") { want.laundry = want.laundries > 0; } }
+      less.onclick = function () { if (want[key] > from) { want[key]--; counted(); show(); redraw(); } };
+      more.onclick = function () { if (want[key] < to) { want[key]++; counted(); show(); redraw(); } };
       show();
       pick.appendChild(row);
     }
@@ -1024,8 +1057,22 @@
         T.ask({ head: head, stepper: stepper, tiles: tiles, tile: tile, want: want });
       } else if (!T || !T.plan) {
         head(TXT.st_rooms_head);
-        stepper("beds", TXT.st_beds, "bed", 1, 5);
-        stepper("baths", TXT.st_baths, "bath", 1, 3);
+        // (how many of each, within what houses have: 2026-10-02)
+        if (want.kitchens === undefined) { want.kitchens = 1; }
+        if (want.livings === undefined) { want.livings = 1; }
+        if (want.offices === undefined) { want.offices = want.office ? 1 : 0; }
+        if (want.laundries === undefined) { want.laundries = want.laundry ? 1 : 0; }
+        stepper("beds", TXT.st_beds, "bed", 1, 6);
+        stepper("baths", TXT.st_baths, "bath", 1, 4);
+        stepper("kitchens", TXT.st_kitchens, "kitchen", 1, 2);
+        stepper("livings", TXT.st_livings, "living", 1, 2);
+        stepper("offices", TXT.st_offices, "office", 0, 3);
+        stepper("laundries", TXT.st_laundries, "laundry", 0, 2);
+        head(TXT.ty_size);
+        tiles();
+        [[1, TXT.ty_small, "size1"], [2, TXT.ty_medium, "size2"], [3, TXT.ty_large, "size3"]].forEach(function (t) {
+          tile(t[1], t[2], function () { return (want.homeSize || 2) === t[0]; }, function () { want.homeSize = t[0]; }, true);
+        });
         head(TXT.st_floors);
         tiles();
         tile(TXT.st_one_floor, "floor1", function () { return want.floors === 1; }, function () { want.floors = 1; }, true);
@@ -1033,10 +1080,21 @@
         tile(TXT.st_basement, "basement", function () { return !!want.basement; }, function () { want.basement = !want.basement; });
         head(TXT.st_extras_head);
         tiles();
-        [["open", TXT.st_open_plan, "kitchen"], ["office", TXT.st_office, "office"], ["laundry", TXT.st_laundry, "laundry"],
+        // (Open plan: the living rooms one space, their walls taken out -- 40-arrange.js)
+        // (an office and a laundry room are counted above now)
+        [["open", TXT.st_open_plan, "kitchen"], ["openPlan", TXT.st_open_living, "openplan"],
          ["garage", TXT.st_garage, "car"], ["closet", TXT.st_closet, "closet"]].forEach(function (t) {
           tile(t[1], t[2], function () { return !!want[t[0]]; }, function () { want[t[0]] = !want[t[0]]; });
         });
+        // (2026-10-02) the yard: what goes behind it, and a porch on the front (40-yard.js)
+        if (typeof YARD_KINDS !== "undefined") {
+          head(TXT.yd_head);
+          tiles();
+          want.yard = Object.assign({}, want.yard && typeof want.yard === "object" ? want.yard : {});
+          YARD_KINDS.forEach(function (Y) {
+            tile(TXT["yd_" + Y[0]], "yd_" + Y[0], function () { return !!want.yard[Y[0]]; }, function () { want.yard[Y[0]] = !want.yard[Y[0]]; });
+          });
+        }
       }
       head(TXT.st_house_head);
       tiles();

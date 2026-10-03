@@ -283,6 +283,22 @@
   // coming and going with it.
   var GUTTER = "#dedbd4", FASCIA = "#f3f1ec";
   var houseSpouts = [];                  // the downpipes drawn so far, this picture
+  // The windows and doors in a wall along `line` (a y for a wall across,
+  // an x for one up and down), on floors under `top`: where no downpipe
+  // may come down in front of them.
+  function gutterHoles(line, across, top) {
+    var P = FLOOR_PX, floors = houseFloorsNow || [], out = [];
+    hand.nodes.forEach(function (n) {
+      if (n.kind !== "i_window" && !WALK_DOORS[n.kind]) { return; }
+      var f = floors.length ? floorAt(floors, n.x, n.y) : null;
+      if (f && f.z > top) { return; }
+      var x = n.x + (f ? f.dx : 0), y = n.y + (f ? f.dy : 0), q = turned(n);
+      if (Math.abs((across ? y : x) - line) > 0.35 * P) { return; }
+      var half = (across ? q.w : q.h) / 2, mid = across ? x : y;
+      out.push({ lo: mid - half, hi: mid + half });
+    });
+    return out;
+  }
   function gutterFaces(faces, R, lift, how) {
     if (!R.runs || !R.runs.length) { return; }
     var W = R.x1 - R.x0, D = R.y1 - R.y0, half = Math.min(W, D) / 2;
@@ -296,7 +312,10 @@
       var line = r.side === "n" ? R.y0 : r.side === "s" ? R.y1 : r.side === "w" ? R.x0 : R.x1;
       // carried round the corner where the eave on the next side is open too
       var lo = r.a, hi = r.b, lo0 = across ? R.x0 : R.y0, hi0 = across ? R.x1 : R.y1;
-      var before = across ? R.eave.w : R.eave.n, after = across ? R.eave.e : R.eave.s;
+      // (only as far as the roof hangs out there: a gable's rake, R.rake, less than an eave)
+      var sb4 = across ? "w" : "n", saft = across ? "e" : "s";
+      var before = R.rake && R.rake[sb4] !== undefined ? R.rake[sb4] : R.eave[sb4];
+      var after = R.rake && R.rake[saft] !== undefined ? R.rake[saft] : R.eave[saft];
       var atLo = Math.abs(lo - lo0) < 1, atHi = Math.abs(hi - hi0) < 1;
       if (atLo) { lo -= before; }
       if (atHi) { hi += after; }
@@ -309,15 +328,27 @@
       box(lo, hi, fb[0], fb[1], zE - fh, zE + 0.02 * P, board);
       var gb = span(line + out * e, line + out * (e + gw));                   // the gutter on it
       box(lo, hi, gb[0], gb[1], zE - gh - 0.02 * P, zE - 0.02 * P);
-      // downpipes: at the corners of the front and the back, and along a long wall
+      // downpipes: at the house's corners, and along a long wall -- moved
+      // along it off any window or door they would come down in front of
+      // (2026-10-02: "the downspouts to be on the corner edges of the houses
+      // too and not blocking windows")
       var ends = [];
-      if (across) {
-        if (atLo) { ends.push(lo0 + 0.25 * P); }
-        if (atHi) { ends.push(hi0 - 0.25 * P); }
-      }
+      if (atLo) { ends.push({ at: lo0 + 0.25 * P, way: 1 }); }
+      if (atHi) { ends.push({ at: hi0 - 0.25 * P, way: -1 }); }
       var many = Math.floor((r.b - r.a) / (11 * P));
-      for (var m = 1; m <= many; m++) { ends.push(r.a + (r.b - r.a) * m / (many + 1)); }
-      ends.forEach(function (at) {
+      for (var m = 1; m <= many; m++) { ends.push({ at: r.a + (r.b - r.a) * m / (many + 1), way: 0 }); }
+      var holes = gutterHoles(line, across, zE);
+      function clear(at) {
+        return at > r.a + 0.12 * P && at < r.b - 0.12 * P &&
+               !holes.some(function (h) { return at > h.lo - 0.15 * P && at < h.hi + 0.15 * P; });
+      }
+      ends.forEach(function (want) {
+        var at = null;
+        for (var k = 0; k <= 30 && at === null; k++) {
+          var tries = want.way ? [want.at + want.way * k * 0.1 * P] : [want.at + k * 0.1 * P, want.at - k * 0.1 * P];
+          for (var q = 0; q < tries.length; q++) { if (clear(tries[q])) { at = tries[q]; break; } }
+        }
+        if (at === null) { return; }
         var wallOut = line + out * 0.06 * P;
         var gx = across ? at : wallOut, gy = across ? wallOut : at;
         if (houseSpouts.some(function (s) { return Math.hypot(s[0] - gx, s[1] - gy) < 1.2 * P; })) { return; }
@@ -325,14 +356,18 @@
         var fx = across ? at : line + out * 0.3 * P, fy = across ? line + out * 0.3 * P : at;
         if (houseBuilt(houseFloorsNow, fx, fy, 0)) { return; }
         houseSpouts.push([gx, gy]);
-        var foot = 0.1 * P, p = span(wallOut - pipe, wallOut + pipe);
+        // (where the land falls away from the house, 40-land.js, down to it)
+        var ground = typeof terrGround === "function" ? terrGround(gx, gy) : 0;
+        var sbx = across ? at : wallOut + out * 0.5 * P, sby = across ? wallOut + out * 0.5 * P : at;
+        var under = typeof terrGround === "function" ? terrGround(sbx, sby) : 0;
+        var foot = ground + 0.1 * P, p = span(wallOut - pipe, wallOut + pipe);
         box(at - pipe, at + pipe, p[0], p[1], foot + pipe * 2, zE - gh - pipe * 2);                         // down the wall
         var g = span(wallOut, line + out * (e + gw / 2));
         box(at - pipe * 0.9, at + pipe * 0.9, g[0], g[1], zE - gh - pipe * 2, zE - gh);                     // up into the gutter
         var t = span(wallOut, wallOut + out * 0.3 * P);
         box(at - pipe, at + pipe, t[0], t[1], foot, foot + pipe * 2);                                       // the turn out at the foot
         var sb = span(wallOut + out * 0.22 * P, wallOut + out * 0.8 * P);
-        box(at - 0.14 * P, at + 0.14 * P, sb[0], sb[1], 0, 0.03 * P, board);                               // the splash block
+        box(at - 0.14 * P, at + 0.14 * P, sb[0], sb[1], under - 0.02 * P, under + 0.03 * P, board);         // the splash block
       });
     });
   }
@@ -763,6 +798,7 @@
     floor2: '<path d="M3 8.2 10 2.8l7 5.4M4.6 7v9.4h10.8V7M4.6 11.4h10.8M8.6 16.4v-3h2.8v3M7 9.2h1.6M11.4 9.2H13"/>',
     basement: '<path d="M2.6 7.4 10 2.6l7.4 4.8M4.6 6.2v5.6h10.8V6.2M2 11.8h16"/><path d="M5.6 13.6h8.8v3.8H5.6z" stroke-dasharray="1.6 1.4"/>',
     kitchen: '<path d="M3.4 8.6h13.2v1.8a5 5 0 0 1-5 5H8.4a5 5 0 0 1-5-5zM10 8.6V5.4M7 6.2l-.6-2M13 6.2l.6-2M2.4 8.6h1M16.6 8.6h1"/>',
+    living: '<path d="M3.6 10V7.6a1.6 1.6 0 0 1 1.6-1.6h9.6a1.6 1.6 0 0 1 1.6 1.6V10"/><path d="M2.6 10.4a1.4 1.4 0 0 1 2.8 0v1.6h9.2v-1.6a1.4 1.4 0 0 1 2.8 0v4.2H2.6z"/><path d="M4.4 14.6v1.6M15.6 14.6v1.6"/>',
     office: '<path d="M2.6 9h14.8M4.4 9v7.4M15.6 9v7.4M6 9V3.6h8V9M8.6 12h2.8"/>',
     laundry: '<rect x="4" y="3" width="12" height="14" rx="1.6"/><circle cx="10" cy="11" r="3.4"/><path d="M6.4 5.6h1.4M10 5.6h3.6"/>',
     car: '<path d="M3.4 12.4 5 7.6a1.8 1.8 0 0 1 1.7-1.2h6.6a1.8 1.8 0 0 1 1.7 1.2l1.6 4.8v3.4H3.4zM3.4 12.4h13.2"/><circle cx="6.4" cy="15.2" r="1.2"/><circle cx="13.6" cy="15.2" r="1.2"/>',
@@ -909,10 +945,15 @@
       if (tab === "land") {
         head(TXT.ws_head);
         worldPicker(sheet, WORLD_SCAPES, worldScape(), "ws_", function (k) { houseSetOpt("scape", k); draw(); });
+        // how the ground rises and falls, and what the house stands on (40-land.js)
+        if (typeof terrSection === "function") { terrSection(sheet, head, tiles, draw); }
         head(TXT.hs_outside);
         tiles([
           { icon: "land", label: TXT.hs_land, on: !!houseOpt("land"), set: function (v) { houseSetOpt("land", v); } },
           { icon: "tree", label: TXT.hs_trees, on: !!houseOpt("trees"), set: function (v) { houseSetOpt("trees", v); } },
+          // (the yard's own: shade trees, shrubs by the house, flowers -- 40-plants.js)
+          { icon: "tree", label: TXT.hs_lot_trees, on: !!houseOpt("lotTrees"), off: houseOpt("trees") ? "" : TXT.hs_needs_trees,
+            set: function (v) { houseSetOpt("lotTrees", v); } },
           { icon: "bound", label: TXT.hs_bound, on: !!houseOpt("bound"), set: function (v) { houseSetOpt("bound", v); } }
         ]);
         sheet.scrollTop = keepScroll;

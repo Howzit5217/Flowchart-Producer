@@ -1,0 +1,45 @@
+# The desktop program (Flowchart Builder/native), built for Windows and for
+# the Mac -- the Mac's on a Mac, which only GitHub's runners have here.
+# Run it by hand from the Actions tab (Run workflow), or by pushing a tag
+# such as v1.0.0; the installers are left with the run, under Artifacts.
+# Neither is signed: Windows warns before the first run (More info, Run
+# anyway), and on a Mac the first time it is opened with right-click, Open.
+name: Desktop app
+
+on:
+  workflow_dispatch:
+  push:
+    tags: ["v*"]
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            target: win
+          - os: macos-latest
+            target: mac
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        working-directory: "Flowchart Builder/native"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install
+        run: npm install
+      - name: Build
+        run: npm run dist:${{ matrix.target }}
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: "false"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: flowchart-builder-${{ matrix.target }}
+          path: |
+            Flowchart Builder/native/dist/*.exe
+            Flowchart Builder/native/dist/*.dmg
+          if-no-files-found: error

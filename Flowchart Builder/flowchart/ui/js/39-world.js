@@ -507,12 +507,13 @@
     gl3Poly(v, [L.lotWorld(-reach, far0, -1.5), L.lotWorld(reach, far0, -1.5), L.lotWorld(reach, far0 + L.walkW, -1.5), L.lotWorld(-reach, far0 + L.walkW, -1.5)],
             [0, 0, 1], pave, 1, [[-reach / P, 0], [reach / P, 0], [reach / P, 1.6], [-reach / P, 1.6]], PAT.walk);
     var many = L.walk ? 4 : 2, near = L.walk ? Infinity : L.groundR * 0.78;
-    var spots = [];
+    var spots = [], gapPx = (typeof hoodGap === "function" ? hoodGap() : 0) * P;
     for (var i = 0; i < many; i++) {
-      var off = lot.w / 2 + W / 2 + i * W;
+      // (as far apart as asked: 40-hood.js)
+      var off = lot.w / 2 + gapPx + W / 2 + i * (W + gapPx);
       spots.push({ x: off, front: hy, back: false }, { x: -off, front: hy, back: false });
     }
-    for (var j = -many; j <= many; j++) { spots.push({ x: j * W + (rnd() - 0.5) * 2 * P, front: far0 + L.walkW, back: true }); }
+    for (var j = -many; j <= many; j++) { spots.push({ x: j * (W + gapPx) + (rnd() - 0.5) * 2 * P, front: far0 + L.walkW, back: true }); }
     spots.forEach(function (s, k) {
       var mid = L.lotWorld(s.x, s.back ? s.front + D / 2 : s.front - D / 2, 0);
       if (Math.hypot(mid[0] - L.mid[0], mid[1] - L.mid[1]) > near) { return; }

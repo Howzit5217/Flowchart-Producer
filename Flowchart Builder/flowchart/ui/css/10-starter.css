@@ -39,6 +39,9 @@
     border: 1px solid var(--line); border-radius: 12px; background: color-mix(in srgb, var(--accent-soft) 35%, var(--panel));
   }
   .st-look-pic { aspect-ratio: 4 / 3; display: grid; place-items: center; }
+  /* (one column, on a phone: the plan's picture first, and scrolled away with
+     the rest -- pinned, it covered the choices under it, 2026-10-02) */
+  @media (max-width: 780px) { .st-look { position: static; } .st-look-pic { aspect-ratio: 16 / 10; } }
   .st-sketch { width: 100%; height: 100%; }
   .st-sketch .sk-room { stroke: var(--ink); stroke-width: .07; stroke-opacity: .65; }
   .st-sketch .sk-day { fill: color-mix(in srgb, #e9b872 42%, var(--panel)); }
@@ -120,6 +123,8 @@
      On the right, where Materials keeps the left; the weather on segments;
      what is falling over the picture; what the land comes to, in a corner. */
   .v3-set { left: auto; right: 10px; }
+  /* under the bar, however many rows it wraps to (40-touch.js sets --v3-top) */
+  .v3-mats { top: var(--v3-top, 52px); max-height: calc(100% - var(--v3-top, 52px) - 68px); }
   .v3-set { width: min(340px, calc(100% - 20px)); }
   /* each setting a tile: its picture and its name, lit and ticked while on */
   .hs-tiles, .hs-weather { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; margin: 6px 0 4px; }
@@ -204,6 +209,13 @@
   @container (max-width: 560px) {
     .v3-bar .v3-group .btn[data-v3="run"] .v3-lbl { display: none; }
   }
+  /* Back to the plan (40-tour.js): its name kept while there is room for it */
+  @container (max-width: 1180px) {
+    .v3-bar .v3-group .btn.v3-back .v3-lbl { display: inline; }
+  }
+  @container (max-width: 720px) {
+    .v3-bar .v3-group .btn.v3-back .v3-lbl { display: none; }
+  }
   .view3d .v3-hint.v3-hint-foot {
     position: absolute; left: 50%; bottom: 12px; transform: translateX(-50%); max-width: calc(100% - 40px);
     pointer-events: none; opacity: .88; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
@@ -284,3 +296,68 @@
   .v3-xray-wire { width: 100%; margin-top: 8px; }
   .view3d .v3-bar [data-v3="xray"][aria-pressed="true"] { border-color: var(--accent); }
   @media (prefers-reduced-motion: reduce) { .v3-xray { animation: none; } }
+
+  /* ---- Drag view (40-drag.js): every drag the view's, on the paper and in 3D */
+  body.by-hand.drag-view #chart, body.by-hand.drag-view #chart .node { cursor: grab; }
+  body.by-hand.drag-view #stage.grabbing #chart, body.by-hand.drag-view #stage.grabbing #chart .node { cursor: grabbing; }
+  .view3d canvas.v3-carrying { cursor: grabbing; }
+  #tool-seg #tool-view svg { fill: none; }
+
+  /* ---- a piece's design (40-designs.js): a tile a style, its colorways under it */
+  .dz-design .dz-fin-head { display: flex; align-items: baseline; gap: 8px; }
+  .dz-design-n { font-size: 11px; color: var(--muted); }
+  .dz-design .dz-link { margin-left: auto; }
+  .dz-design-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(76px, 1fr)); gap: 6px; margin: 6px 0 8px; }
+  .dz-dtile {
+    display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 7px 4px 6px; min-width: 0;
+    border: 1px solid var(--line); border-radius: 10px; background: var(--panel); color: var(--muted);
+    font: inherit; font-size: 11px; font-weight: 600; line-height: 1.2; text-align: center; cursor: pointer;
+    transition: border-color var(--quick, .15s) ease, background-color var(--quick, .15s) ease, color var(--quick, .15s) ease;
+  }
+  .dz-dtile svg { width: 40px; height: 28px; flex: none; }
+  .dz-dtile span { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .dz-dtile:hover { border-color: color-mix(in srgb, var(--accent) 45%, var(--line)); color: var(--ink); }
+  .dz-dtile.on { border-color: var(--accent); background: var(--accent-soft); color: var(--accent); }
+  .dz-chip.dz-way { width: 26px; height: 26px; }
+
+  /* ---- the arrows joining rooms, on a design's paper (40-plan.js) */
+  body.designing #chart .link.tie .flow { opacity: 0; }
+  body.designing #chart polygon.head.tie-gone { opacity: 0; }
+  body.designing #chart .plan-ties { pointer-events: none; }
+
+  /* ---- a website a program opens, in the run's tape (40-web.js) */
+  .web-card { padding: 0 !important; margin: 6px 0; border: 1px solid var(--line); border-radius: 10px; overflow: hidden; background: var(--panel); }
+  .web-bar { display: flex; align-items: center; gap: 6px; padding: 4px 5px 4px 9px; border-bottom: 1px solid var(--line); background: var(--line-soft); font-size: 12px; }
+  .web-ico { display: inline-flex; color: var(--accent); }
+  .web-ico svg, .web-btn svg { width: 15px; height: 15px; fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
+  .web-url { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--ink); font-weight: 560; }
+  .web-btn { display: inline-flex; align-items: center; justify-content: center; width: 26px; height: 24px; border-radius: 7px; border: 0; background: none; color: var(--muted); cursor: pointer; }
+  .web-btn:hover { background: var(--panel); color: var(--ink); }
+  .web-view { position: relative; aspect-ratio: 16 / 11; background: #ffffff; }
+  .web-frame { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; background: #ffffff; }
+  .web-wait { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; padding: 12px; text-align: center;
+              color: #6b7280; font-size: 12px; pointer-events: none; transition: opacity .2s ease; }
+  .web-card.loaded .web-wait { opacity: 0; }
+  .web-note { padding: 5px 9px 7px; font-size: 11px; color: var(--muted); line-height: 1.35; }
+  .web-note:empty { display: none; }
+  .web-card.big { position: fixed; z-index: 60; left: 50%; top: 50%; width: min(1100px, 92vw); height: min(760px, 86vh); margin: 0;
+                  transform: translate(-50%, -50%); box-shadow: 0 20px 60px rgba(0, 0, 0, .35); display: flex; flex-direction: column; }
+  .web-card.big .web-view { flex: 1; aspect-ratio: auto; }
+  @media (prefers-reduced-motion: reduce) { .web-wait { transition: none; } }
+
+  /* ------------------ a house there already (40-hood.js): in its place, or next door -- */
+  .hood-card { width: min(480px, 100%); }
+  .hood-picks { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 16px; }
+  .hood-pick {
+    display: flex; flex-direction: column; align-items: flex-start; gap: 6px; padding: 14px; text-align: left;
+    border: 1px solid var(--line); border-radius: 12px; background: var(--panel); color: var(--ink); font: inherit; cursor: pointer;
+    transition: border-color var(--quick, .15s) ease, background-color var(--quick, .15s) ease;
+  }
+  .hood-pick:hover, .hood-pick:focus-visible { border-color: var(--accent); background: color-mix(in srgb, var(--accent-soft) 40%, var(--panel)); }
+  .hood-pick b { font-size: 14px; }
+  .hood-pick > span:last-child { font-size: 12.5px; color: var(--muted); line-height: 1.35; }
+  .hood-ico .v3-ico { width: 26px; height: 26px; color: var(--accent); }
+  .hood-replace .hood-ico .v3-ico { color: var(--muted); }
+  @media (max-width: 440px) { .hood-picks { grid-template-columns: 1fr; } }
+  .hood-gap { margin-top: 6px; }
+  @media (prefers-reduced-motion: reduce) { .hood-pick { transition: none; } }

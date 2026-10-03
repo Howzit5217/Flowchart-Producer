@@ -809,7 +809,8 @@ class Teller(object):
         t = re.sub(r"\bthen\b", "", text, flags=re.I)
         t = re.sub(r"\s+", " ", t.replace('"', "'")).strip(" ,.;:")
         t = re.sub(r"\s+(?:and|or)$", "", t, flags=re.I)
-        t = t.replace("#", "number ").replace("//", "/")
+        # (a web address keeps its two slashes: https://...)
+        t = re.sub(r"(?<![A-Za-z]:)//", "/", t.replace("#", "number "))
         return t[:1].upper() + t[1:] if t else "?"
 
     def decision(self, text, line, out, word="if"):
@@ -1223,7 +1224,8 @@ class Teller(object):
         t = re.sub(r"\s+", " ", text).strip(" ,;:.")
         if t.count('"') % 2:
             t = t.replace('"', "")
-        t = t.replace("#", "number ").replace("//", "/")
+        # (a web address keeps its two slashes: https://...)
+        t = re.sub(r"(?<![A-Za-z]:)//", "/", t.replace("#", "number "))
         t = re.sub(r"(?:\s*[-+*/=&(,]|\s+(?:and|or))+$", "", t, flags=re.I).strip()
         t = t[:1].upper() + t[1:]
         first = t.split(None, 1)[0].lower() if t else ""

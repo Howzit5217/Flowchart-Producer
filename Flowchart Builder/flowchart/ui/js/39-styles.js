@@ -146,6 +146,8 @@
         faces.push({ pts: pts, n: n, how: h || how, roof: true });
       },
       under: function (pts) {               // seen from under the eaves
+        // (a hair under the roof, not in its plane: the two flickered, 2026-10-02)
+        pts = pts.map(function (p) { return [p[0], p[1], p[2] - 2.5]; });
         var n = styleNormal(pts);
         if (n[2] > 0) { n = [-n[0], -n[1], -n[2]]; }
         // painted as the trim is, a little of the roof's color in it
@@ -191,7 +193,7 @@
       [F.u0, F.u1].forEach(function (u) {
         M.wall([P(u, F.v0, z), P(u, F.v0 + run, zb), P(u, vm, top), P(u, F.v1 - run, zb), P(u, F.v1, z)]);
       });
-      return { top: top, eaveK: k1 };
+      return { top: top, eaveK: k1, ev: [ev0, ev1], rake: [r0, r1] };
     }
     var topZ = z + half * k;
     M.roof([P(a, F.v0 - ev0, z - ev0 * k), P(b, F.v0 - ev0, z - ev0 * k), P(b, vm, topZ), P(a, vm, topZ)]);
@@ -222,7 +224,7 @@
         }
       });
     }
-    return { top: topZ, eaveK: k };
+    return { top: topZ, eaveK: k, ev: [ev0, ev1], rake: [r0, r1] };
   }
   // Hipped, all four sides sloping -- the house's own (roofFaces), or its
   // curved kind: in Japan, China, Korea, Thailand the eaves sweep out
@@ -302,6 +304,8 @@
       [-1, 1].forEach(function (side) {
         var cx = along ? R.x0 + W * t : (side < 0 ? R.x0 : R.x1) - side * run * 0.5;
         var cy = along ? (side < 0 ? R.y0 : R.y1) - side * run * 0.5 : R.y0 + D * t;
+        // only out over the garden, not where more of the roof runs on (40-roofs.js)
+        if (typeof roofSideOpen === "function" && !roofSideOpen(R, along ? (side < 0 ? "n" : "s") : (side < 0 ? "w" : "e"), along ? cx : cy)) { return; }
         var hw = 0.5 * px, hd = run * 0.75;
         var base = along ? [[cx - hw, cy - hd], [cx + hw, cy - hd], [cx + hw, cy + hd], [cx - hw, cy + hd]]
                          : [[cx - hd, cy - hw], [cx + hd, cy - hw], [cx + hd, cy + hw], [cx - hd, cy + hw]];
@@ -439,8 +443,18 @@
         var F = styleFrame(R), keep = shape === "gable" || shape === "stepped" || shape === "gambrel" || shape === "aframe"
           ? (F.along ? { n: 1, s: 1 } : { w: 1, e: 1 }) : shape === "shed" ? (F.along ? { s: 1 } : { e: 1 }) : { n: 1, s: 1, w: 1, e: 1 };
         var runs = R.runs.filter(function (r) { return keep[r.side]; });
-        if (runs.length && shape !== "mansard") {
-          try { gutterFaces(faces, Object.assign({}, R, { runs: runs, k: got.eaveK, bias: R.bias }), lift, how); } catch (e2) { /* without */ }
+        // (none round a pagoda's eaves, turning up at their corners: a
+        // gutter straight along them would hang off it)
+        if (runs.length && shape !== "mansard" && shape !== "pagoda") {
+          var over = { runs: runs, k: got.eaveK, bias: R.bias };
+          if (got.ev) {
+            // a gable's own eaves (an A-frame's down near the ground), and its rakes
+            var eave = Object.assign({}, R.eave);
+            eave[F.along ? "n" : "w"] = got.ev[0]; eave[F.along ? "s" : "e"] = got.ev[1];
+            over.eave = eave;
+            over.rake = F.along ? { w: got.rake[0], e: got.rake[1] } : { n: got.rake[0], s: got.rake[1] };
+          }
+          try { gutterFaces(faces, Object.assign({}, R, over), lift, how); } catch (e2) { /* without */ }
         }
       }
       return undefined;
