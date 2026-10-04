@@ -1939,8 +1939,14 @@
       return out;
     };
   }
-  function lwCurbBays(v, lot, lotWorld, lotLocal, hy, walkW, sheetC) {
-    var P = FLOOR_PX, y0 = hy + walkW, wide = 2.3 * P, bay = 6.1 * P, reach = 75 * P, white = gl3Mix([0.94, 0.94, 0.92], sheetC, 0.05);
+  // The bays along the kerb in front, and the car parked in each that has one -- in the lot's own
+  // numbers (x along the street, y out from the lot's front), the same every time for the same lot.
+  // (asked for, 2026-10-04, by the building-site work: its trucks stop clear of the parked cars)
+  // [{ x0, x1, y0, y1, car: null | { x, y, col, back } }]; none unless cars park on the street.
+  function lwCurbList(lot, lotLocal) {
+    if (!lot || !lwStreetParked()) { return []; }
+    var P = FLOOR_PX, hy = lot.h / 2, walkW = typeof streetWalkPx === "function" ? streetWalkPx() : 1.6 * P;
+    var y0 = hy + walkW, wide = 2.3 * P, bay = 6.1 * P, reach = 75 * P, out = [];
     var cuts = [], corner = typeof adrCorner === "function" ? adrCorner() : "none";
     hand.nodes.forEach(function (n) {
       if (n.kind !== "i_driveway") { return; }
@@ -1949,18 +1955,31 @@
     });
     if (corner === "left") { cuts.push([-Infinity, -lot.w / 2 - 1.0 * P]); }
     if (corner === "right") { cuts.push([lot.w / 2 + 1.0 * P, Infinity]); }
-    var rnd = gl3Rand(Math.round(Math.abs(lot.x) + Math.abs(lot.y) * 3) + 61), e = lotWorld(1, 0, 0), o = lotWorld(0, 0, 0), dd = lotWorld(0, 1, 0);
-    var ex = [e[0] - o[0], e[1] - o[1]], dy = [dd[0] - o[0], dd[1] - o[1]];
+    var rnd = gl3Rand(Math.round(Math.abs(lot.x) + Math.abs(lot.y) * 3) + 61);
     for (var x = -reach; x + bay <= reach; x += bay) {
       if (cuts.some(function (c) { return x + bay > c[0] && x < c[1]; })) { continue; }
+      var B = { x0: x, x1: x + bay, y0: y0, y1: y0 + wide, car: null };
+      out.push(B);
+      if (rnd() > 0.62) { continue; }
+      var col = WORLD_CAR_COLORS[Math.floor(rnd() * WORLD_CAR_COLORS.length)];
+      B.car = { x: x + bay / 2 + (rnd() - 0.5) * 0.4 * P, y: y0 + wide / 2 + 0.05 * P, col: col, back: rnd() >= 0.85 };
+    }
+    return out;
+  }
+  function lwCurbBays(v, lot, lotWorld, lotLocal, hy, walkW, sheetC) {
+    var P = FLOOR_PX, white = gl3Mix([0.94, 0.94, 0.92], sheetC, 0.05);
+    var e = lotWorld(1, 0, 0), o = lotWorld(0, 0, 0), dd = lotWorld(0, 1, 0);
+    var ex = [e[0] - o[0], e[1] - o[1]], dy = [dd[0] - o[0], dd[1] - o[1]];
+    lwCurbList(lot, lotLocal).forEach(function (B) {
+      var x = B.x0, y0 = B.y0, wide = B.y1 - B.y0;
       // the bay's line at its start, and the short tick along the kerb's edge of the lane
       gl3Poly(v, [lotWorld(x - 0.05 * P, y0, 0.5), lotWorld(x + 0.05 * P, y0, 0.5), lotWorld(x + 0.05 * P, y0 + wide, 0.5), lotWorld(x - 0.05 * P, y0 + wide, 0.5)], [0, 0, 1], white, 1, null, PAT.plain);
       gl3Poly(v, [lotWorld(x - 0.4 * P, y0 + wide - 0.05 * P, 0.5), lotWorld(x + 0.4 * P, y0 + wide - 0.05 * P, 0.5), lotWorld(x + 0.4 * P, y0 + wide + 0.05 * P, 0.5), lotWorld(x - 0.4 * P, y0 + wide + 0.05 * P, 0.5)], [0, 0, 1], white, 1, null, PAT.plain);
-      if (rnd() > 0.62) { continue; }
-      var col = WORLD_CAR_COLORS[Math.floor(rnd() * WORLD_CAR_COLORS.length)], at = lotWorld(x + bay / 2 + (rnd() - 0.5) * 0.4 * P, y0 + wide / 2 + 0.05 * P, 0);
-      var fwd = rnd() < 0.85 ? [-ex[0], -ex[1]] : ex;      // (on the near side, facing the way the near lane runs)
-      worldCarParts(at, fwd, dy, gl3Rgb(col)).forEach(function (b) { worldBox(v, b.c, b.e, b.d, b.hx, b.hy, b.z0, b.z1, b.col, b.pat); });
-    }
+      if (!B.car) { return; }
+      var at = lotWorld(B.car.x, B.car.y, 0);
+      var fwd = B.car.back ? ex : [-ex[0], -ex[1]];      // (on the near side, facing the way the near lane runs)
+      worldCarParts(at, fwd, dy, gl3Rgb(B.car.col)).forEach(function (b) { worldBox(v, b.c, b.e, b.d, b.hx, b.hy, b.z0, b.z1, b.col, b.pat); });
+    });
   }
   if (typeof worldNearLane === "function") {
     var worldNearLaneSite = worldNearLane;

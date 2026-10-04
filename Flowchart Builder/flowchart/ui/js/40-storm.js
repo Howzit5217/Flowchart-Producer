@@ -27,7 +27,9 @@
   // sheathing and anchors are rated.
   var SM_STORMS = [
     ["gale", 25, "wind"], ["severe", 36, "wind"], ["cat1", 42, "hurricane"], ["cat3", 58, "hurricane"], ["cat5", 78, "hurricane"],
-    ["ef1", 47, "tornado"], ["ef3", 70, "tornado"], ["ef5", 92, "tornado"],
+    // (each tornado near the top of its rating's range, 2026-10-04 -- every rating now:
+    // EF0 65-85 mph, EF1 86-110, EF2 111-135, EF3 136-165, EF4 166-200, EF5 over 200)
+    ["ef0", 38, "tornado"], ["ef1", 47, "tornado"], ["ef2", 58, "tornado"], ["ef3", 70, "tornado"], ["ef4", 84, "tornado"], ["ef5", 92, "tornado"],
     // (2026-10-03, the other things a building is tried by: an earthquake by
     // how hard the ground shakes (g), a flood by how deep the water stands
     // (m), snow by its weight on the ground (kPa), hail by its stones (cm))
@@ -72,43 +74,123 @@
   }
 
   // ---- tried --------------------------------------------------------------------------------
-  // Each check: what the storm does, what holds, and whether it holds.
+  // (2026-10-04, asked: "80mph winds are destroying houses when in reality
+  // it needs to be a lot stronger than that" -- "do your research on
+  // tornados, their wind speeds and the damage caused by them ... for these
+  // houses and other buildings and how they were built")  The checks below
+  // used to set the wind as the codes take it for design (six tenths of it)
+  // against what each part is rated for -- a margin of two or three over
+  // what breaks it -- and the storm let loose broke each part there: a long
+  // ranch's walls at 80 mph.  Now each is what the wind really does against
+  // what really breaks it, and then kept within what the damage surveys
+  // find for that kind of building: the Enhanced Fujita scale's degrees of
+  // damage (Texas Tech for the National Weather Service, 2006, as the Storm
+  // Prediction Center gives them), the 3-second gust at 10 m in mph, from
+  // the least it was seen at to the most.
+  //   A house of wood (FR12): windows broken 79-114 (expected 96); the roof's
+  //   deck lifted 81-116 (97) to large parts of the roof gone 104-142 (122);
+  //   shifted off its foundation 103-141 (121); its outside walls down
+  //   113-153 (132); most walls 127-178 (152); all 142-198 (170); the slab
+  //   swept clean 165-220 (200).  Apartments, condos (ACT): the roof's deck
+  //   107-146, its structure 120-158, the top storey's walls 138-184, the
+  //   top two storeys 155-205.  A small shop or cafe (SRB): glass 72-103,
+  //   the roof's deck 81-119 to the whole roof 101-140, its outside walls
+  //   120-159, all of it 143-193.  A strip mall (SM): glass 72-105, deck
+  //   84-122, roof 103-143, walls 117-165, all 147-198.  A school (ES):
+  //   windows 71-106, deck 82-121, roof 108-148, walls 117-180, all 152-203.
+  //   An office, up to four storeys (LRB): glass 83-122, deck 83-120, roof
+  //   114-157, walls 122-167, all 161-221.  Five storeys and up (MROB,
+  //   HROB): glass low down 83-120, the curtain wall's anchors 110-157.
+  // What each is built with puts it in that range: a house's roof held by
+  // toenails, by hurricane clips or by straps (Reed et al. 1997: toenails
+  // give at about 1.9 kN each; clips, straps about 5.5 and 9), its walls
+  // braced by sheathing or not, its sill bolted down or anchored -- the way
+  // Prevatt's surveys of Tuscaloosa and Joplin found houses come apart.
+  var SM_DOD = {
+    wood: { windows: [79, 114], roof: [81, 142], walls: [113, 153], shear: [113, 178], shift: [103, 141], held: [141, 220] },
+    act: { windows: [79, 114], roof: [107, 158], walls: [138, 184], held: [155, 205] },
+    srb: { windows: [72, 103], roof: [81, 140], walls: [120, 159], held: [143, 193] },
+    sm: { windows: [72, 105], roof: [84, 143], walls: [117, 165], held: [147, 198] },
+    es: { windows: [71, 106], roof: [82, 148], walls: [117, 180], held: [152, 203] },
+    lrb: { windows: [83, 122], roof: [83, 157], walls: [122, 167], held: [161, 221] },
+    // (and, as they are not torn apart here, the roof's structure lifted and
+    // the curtain walls and the walls inside broken through)
+    mrob: { windows: [83, 120], skin: [110, 150], roof: [118, 158], walls: [120, 167] },
+    hrob: { windows: [83, 120], skin: [110, 157], roof: [123, 183], walls: [123, 172] }
+  };
+  var SM_MPH = 0.44704;
+  function smClass(B) {
+    if (B.frame === "wood") { return "wood"; }
+    if (B.frame === "tall") { return B.storeys > 20 ? "hrob" : "mrob"; }
+    var t = B.type;
+    return t === "apartments" || t === "condos" ? "act" : t === "school" ? "es" : t === "mall" ? "sm"
+         : t === "shop" || t === "boutique" || t === "cafe" ? "srb" : "lrb";
+  }
+  // a part's range, m/s; and a speed kept within it
+  function smBand(B, part) { var r = SM_DOD[smClass(B)][part]; return r ? [r[0] * SM_MPH, r[1] * SM_MPH] : null; }
+  function smWithin(v, band) { return band ? Math.max(band[0], Math.min(band[1], v)) : v; }
+  // Each check: what the storm does, what holds, and whether it holds --
+  // and `at`, the gust (m/s) it gives way at, which the storm let loose
+  // (40-stormfx.js) breaks it at too.
   function smTry(key) {
     var St = smStormOf(key), B = smBuilding();
     if (!St || !B) { return null; }
     if (!SM_WINDY[St[2]]) { return smTryHazard(St, B); }
-    var V = St[1], q10 = 0.28 * V * V, qh = q10 * Math.pow(Math.max(B.H, 8) / 8, 0.2);   // Pa, at its roof
-    var out = [], tornado = St[2] === "tornado", debris = (St[2] === "hurricane" && V >= 50) || (tornado && V >= 55);
-    var windowsOk = smHold("impact") || B.frame === "tall";
-    // the windows: flying debris breaks them, and the wind gets in under the roof
-    if (debris) { out.push({ k: "windows", ok: windowsOk, said: windowsOk ? TXT.sm_win_ok : TXT.sm_win_bad, fix: "impact" }); }
-    var inside = debris && !windowsOk ? 0.55 : 0.18;
-    // the roof, pulled up
-    var Ar = B.W * B.D * 1.1, up = qh * (0.9 + inside) * Ar / 1000;          // kN
-    if (B.frame === "wood") {
-      var conns = Math.round(2 * B.W / 0.61) + 2, each = smHold("straps") ? 4.5 : smHold("ties") ? 2.4 : 0.45;
-      var hold = 0.6 * 0.6 * Ar + conns * each;
-      out.push({ k: "roof", ok: hold >= up, need: up, have: hold, fix: smHold("ties") ? "straps" : "ties" });
-    } else {
-      var holdR = 0.6 * (B.frame === "tall" ? 4.0 : 2.4) * Ar + (B.frame === "tall" ? 3.0 : 1.2) * Ar;
-      out.push({ k: "roof", ok: holdR >= up, need: up, have: holdR, fix: null });
+    var V = St[1], hf = Math.pow(Math.max(B.H, 8) / 8, 0.2), qh = 0.47 * V * V * hf;      // Pa, at its roof, as the wind is
+    var out = [], tornado = St[2] === "tornado", wood = B.frame === "wood";
+    // (what is flying: a tornado's from EF0 up, a hurricane's from category 1)
+    var debris = (St[2] === "hurricane" && V >= 42) || (tornado && V >= 38);
+    // a speed as a row: what it needs and has at this storm's speed, both going as the speed squared
+    function row(k, at, need, more) {
+      var r = Object.assign({ k: k, ok: V < at, at: at }, more || {});
+      if (need !== undefined) { r.need = need; r.have = need * (at / V) * (at / V); }
+      return r;
     }
-    // the walls, pushed over sideways (racking)
-    var push = qh * 1.3 * B.W * B.wall / 1000;                                 // kN on the long side
-    var perM = B.frame === "wood" ? (smHold("shear") ? 5.1 : 1.6) : B.frame === "steel" ? 22 : 90;
-    var holdW = perM * 2 * B.D * (B.frame === "wood" ? 1 : Math.max(1, B.storeys * 0.6));
-    out.push({ k: "walls", ok: holdW >= push, need: push, have: holdW, fix: B.frame === "wood" && !smHold("shear") ? "shear" : null });
-    // the house to its foundation: slid or tipped -- or lifted off it, the
-    // roof's pull up taken by the whole house, against its weight and what
-    // ties it down (2026-10-03, the storm let loose: a house not anchored
-    // is carried away whole)
+    // where a building that is not wood stands in its range: about where the surveys expect it
+    function mid(part, k) { var b = smBand(B, part); return b ? b[0] + (b[1] - b[0]) * k : null; }
+    // the windows: flying debris breaks them, and the wind gets in under the roof
+    var winBand = smBand(B, "windows"), atWin = smHold("impact") ? smBand(B, wood ? "walls" : "windows")[1] : winBand[0] + (winBand[1] - winBand[0]) * 0.45;
+    var broken = debris && V >= atWin;
+    if (debris) { out.push(row("windows", atWin, undefined, { said: smHold("impact") ? TXT.sm_win_ok : TXT.sm_win_bad, fix: smHold("impact") ? null : "impact" })); }
+    // the roof, pulled up -- shut, and with the wind in through a broken window
+    var Ar = B.W * B.D * 1.1, upPer = function (inside) { return qh * (0.9 + inside) * Ar / 1000; };   // kN
+    if (wood) {
+      var conns = Math.round(2 * B.W / 0.61) + 2, each = smHold("straps") ? 9 : smHold("ties") ? 5.5 : 1.9;
+      var hold = 0.9 * 0.6 * Ar + conns * each, band = smBand(B, "roof");
+      var atShut = smWithin(V * Math.sqrt(hold / upPer(0.18)), band), atOpen = smWithin(V * Math.sqrt(hold / upPer(0.55)), band);
+      out.push(row("roof", broken ? atOpen : atShut, upPer(broken ? 0.55 : 0.18), { shut: atShut, open: atOpen, fix: smHold("straps") ? null : smHold("ties") ? "straps" : "ties" }));
+    } else {
+      out.push(row("roof", mid("roof", 0.3), upPer(broken ? 0.55 : 0.18), { fix: null }));
+    }
+    // the walls, pushed over sideways (racking): a wood house braced by its
+    // walls along the wind and the rooms' walls inside -- plaster and siding
+    // (about 3.3 kN a metre where they break), or sheathing nailed to hold (11)
+    var push = qh * 1.3 * B.W * B.wall / 1000;                                   // kN on the long side
+    if (wood) {
+      var holdW = (smHold("shear") ? 11 : 3.3) * 3 * B.D;
+      out.push(row("walls", smWithin(V * Math.sqrt(holdW / push), smBand(B, smHold("shear") ? "shear" : "walls")), push,
+                   { fix: smHold("shear") ? null : "shear" }));
+    } else {
+      out.push(row("walls", mid("walls", 0.4), push, { fix: null }));
+    }
+    // the house to its foundation: slid, or lifted off it by its roof -- its
+    // weight and the bolts in its sill (pulled through it at about 3 kN
+    // each, sheared at 8) against it; anchored, plate washers and straps
+    // to the studs (15) -- and a building of steel or concrete built into
+    // its foundation, gone with it only when all of it goes
     if (B.frame !== "tall") {
-      var weight = (B.frame === "wood" ? 1.6 : 6.5) * B.W * B.D * B.storeys;  // kN
-      var anchors = smHold("anchors") || B.frame !== "wood" ? Math.round(2 * (B.W + B.D) / 1.2) * 9 + 4 * 25 : 0;
-      var holdA = 0.6 * weight * (anchors ? 0.45 : 0.25) + anchors;     // (a sill only nailed down slides sooner)
-      var holdUp = 0.6 * weight + anchors * 1.5, lifted = up / holdUp > push / holdA;
-      out.push({ k: "anchors", ok: holdA >= push && holdUp >= up, need: lifted ? up : push, have: lifted ? holdUp : holdA, lift: lifted,
-                 fix: B.frame === "wood" && !smHold("anchors") ? "anchors" : null });
+      var weight = (wood ? 1.6 : 6.5) * B.W * B.D * B.storeys, bolts = Math.round(2 * (B.W + B.D) / 1.8);   // kN
+      if (wood) {
+        var anch = smHold("anchors"), up = upPer(broken ? 0.55 : 0.18);
+        var holdUp = 0.9 * weight + bolts * (anch ? 15 : 3), holdA = 0.9 * weight * 0.5 + bolts * (anch ? 15 : 8);
+        var atUp = V * Math.sqrt(holdUp / up), atSlide = V * Math.sqrt(holdA / push), lifted = atUp < atSlide;
+        // (and each on its own for the storm let loose: lifted by its roof only while the roof is on it)
+        var atAnch = smWithin(Math.min(atUp, atSlide), smBand(B, anch ? "held" : "shift"));
+        out.push(row("anchors", atAnch, lifted ? up : push,
+                     { lift: lifted, up: Math.max(atAnch, Math.min(atUp, atAnch * 1.5)), slide: Math.max(atAnch, atSlide), fix: anch ? null : "anchors" }));
+      } else {
+        out.push(row("anchors", mid("held", 0.4), push, { lift: false, fix: null }));
+      }
     }
     // a tall building: how far its top moves, and whether that is felt --
     // built to sway no more than its height over 400 in a strong wind of
@@ -193,7 +275,8 @@
   }
   // whether the house has a brick or stone chimney (40-outside.js, the style's own)
   function smChimneys() {
-    if (hand.nodes.some(function (n) { return n.kind === "i_fireplace"; })) { return true; }
+    // (a chimney only over a fireplace, 40-outside.js: brick or stone in a style that has one, steel flues otherwise)
+    if (!hand.nodes.some(function (n) { return n.kind === "i_fireplace"; })) { return false; }
     var S = typeof styleNow === "function" ? styleNow() : null;
     return !!(S && S.chimney && S.chimney !== "none");
   }
@@ -255,6 +338,8 @@
         var row = document.createElement("div");
         row.className = "sm-row " + (c.ok ? "sm-ok" : "sm-bad");
         var said = c.said || say(c.ok ? "sm_holds" : "sm_gives", { need: smForce(c.need), have: smForce(c.have) });
+        // (and the gust it gives way at, by the damage surveys: the storm let loose breaks it there)
+        if (c.at && SM_WINDY[T.storm[2]] && TXT.sm_at_ok) { said += " · " + say(c.ok ? "sm_at_ok" : "sm_at_bad", { speed: smSpeed(c.at) }); }
         row.innerHTML = '<b class="sm-mark" aria-hidden="true">' + (c.ok ? "✓" : "✕") + '</b><span><em></em> <span class="sm-said"></span></span>';
         row.querySelector("em").textContent = TXT["sm_k_" + c.k];
         row.querySelector(".sm-said").textContent = said;

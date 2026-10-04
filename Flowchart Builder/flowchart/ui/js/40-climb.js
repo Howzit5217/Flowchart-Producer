@@ -498,7 +498,15 @@
     var R = V3.ride, plan = v3Ground(), me = V3.me;
     if (R.state === "shutting") {
       var shut = liftDoors(plan, R.car).every(function (d) { return (V3.doorAt[d.id] || 0) < 1; });
-      if (shut && now - R.t0 > 650) { R.state = "riding"; R.t0 = now; R.ms = 1200 + 900 * R.floors; }
+      // (as long as a real lift takes, 2026-10-04: "all things are of
+      // accurate time") -- starting, slowing and levelling off, two and a
+      // half seconds, and the height between at a lift's speed: a metre a
+      // second in a house or a low block, faster the taller the building
+      if (shut && now - R.t0 > 650) {
+        var climbM = Math.abs(R.to.f.z - R.from.f.z) / FLOOR_PX, many = R.stops.length;
+        var mps = many <= 5 ? 1.0 : many <= 20 ? 1.75 : many <= 40 ? 3.5 : 6.0;
+        R.state = "riding"; R.t0 = now; R.ms = 2500 + 1000 * (climbM || 3 * R.floors) / mps;
+      }
     } else if (R.state === "riding") {
       var k = Math.min(1, (now - R.t0) / R.ms), e = k * k * (3 - 2 * k);
       // the floors passed, on its panel; a little sway as it starts and stops

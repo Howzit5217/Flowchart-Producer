@@ -27,7 +27,7 @@
   var MO_MOVER = { own: true, fill: "#2f5d8a", line: "#3b4350", outfit: "polo" };
   var MO_HOLDING = { own: true, fill: "#2f5d8a", line: "#3b4350", outfit: "polo", arms: "carry" };     // (hands out in front: 40-bodies.js)
   var MO_RESIDENT_AT = [0.935, 0.99];    // when those who live there walk in
-  var MO_FIXTURE = { i_outlet: 1, i_lightswitch: 1, i_breaker: 1, i_thermostat: 1, i_sconce: 1, i_smoke: 1, i_vent: 1, i_exhaustfan: 1,
+  var MO_FIXTURE = { i_outlet: 1, i_lightswitch: 1, i_garagebtn: 1, i_breaker: 1, i_thermostat: 1, i_sconce: 1, i_smoke: 1, i_vent: 1, i_exhaustfan: 1,
                      i_wifi: 1, i_camera: 1, i_porchlight: 1, i_floodlight: 1, i_hood: 1, i_ac: 1, i_radiator: 1, i_towelrail: 1, i_hooks: 1,
                      i_evcharger: 1, i_waterheater: 1, i_furnace: 1 };
   var MO_DRIVEN = { i_parked: 1, i_car: 1, i_taxi: 1, i_truck: 1, i_bus: 1, i_bike: 1, i_scooter: 1, i_tree: 1 };
@@ -504,6 +504,11 @@
     return d;
   }
   function moWay(plan, from, wanted, through) {
+    // (one place to get to: looked for toward it, not everywhere round -- 40-works.js)
+    if (wanted.length === 1 && typeof wkPlanWay === "function") {
+      var got = wkPlanWay(plan, from, wanted[0], through);
+      if (got) { return got; }
+    }
     var cols = plan.cols, rows = plan.rows, cells = plan.cells, n = cols * rows, D = moClear(plan);
     var cost = new Float64Array(n).fill(Infinity), back = new Int32Array(n).fill(-1), goal = {}, any = false;
     wanted.forEach(function (i) { if (i >= 0 && i < n) { goal[i] = true; any = true; } });

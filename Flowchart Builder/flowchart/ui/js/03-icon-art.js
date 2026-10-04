@@ -675,6 +675,8 @@
     // that are needed to properly support the building")
     plan("i_outlet", 16, 8, ["o " + R(2, 0, 12, 5, 0.6), "t M6 1.4 V3.6 M10 1.4 V3.6", "o " + C(8, 6.4, 1.6)]);
     plan("i_lightswitch", 14, 8, ["o " + R(2, 0, 10, 4.5, 0.6), "t M7 4.5 L10.4 7.6", "k " + C(10.4, 7.6, 1.1)]);
+    // a garage door's button: its plate on the wall, the big round button on it (40-garage.js)
+    plan("i_garagebtn", 14, 8, ["o " + R(3, 0, 8, 5, 0.8), "k " + C(7, 2.6, 1.7), "t M5 6.6 H9"]);
     plan("i_breaker", 44, 12, ["o " + R(0, 0, 44, 9, 0.8), "t M5 3 H39 M5 6 H39 M14 1.2 V7.8 M22 1.2 V7.8 M30 1.2 V7.8", "k " + R(36, 9, 6, 3, 0.6)]);
     // (2026-10-03, 40-systems.js) what the wiring, the air and the water come to: a smoke alarm on
     // the ceiling, a thermostat on the wall, the water heater, a bathroom's fan in its ceiling
@@ -1006,7 +1008,7 @@
     ["ic_power", ["i_outlet", "i_lightswitch", "i_breaker", "i_post", "i_furnace", "i_ac", "i_vent", "i_heater",
                   "i_radiator", "i_evcharger", "i_smoke", "i_thermostat", "i_waterheater", "i_exhaustfan"]],
     ["ic_utility", ["i_workbench", "i_shelving", "i_toolchest", "i_furnace", "i_freezer", "i_evcharger",
-                    "i_bikerack"]],
+                    "i_bikerack", "i_garagebtn"]],
     ["ic_devices", ["i_computer", "i_laptop", "i_tablet", "i_phone", "i_server", "i_database",
                     "i_router", "i_switch", "i_firewall", "i_wifi", "i_internet", "i_tower",
                     "i_printer", "i_camera"]],

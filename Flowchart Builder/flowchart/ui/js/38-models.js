@@ -2787,7 +2787,12 @@
       M.box(t[0] * W - 1.5 * cm, t[0] * W + 1.5 * cm, y0 + 2 * cm, y0 + 4 * cm, H + 40 * cm, H + 40 * cm + t[1] * cm, M.mat("plastic", t[2]), 0.5 * cm);
     });
     M.box(-W / 2 + 6 / 120 * W, -W / 2 + 30 / 120 * W, D / 2 - 6 * cm, D / 2 + 2 * cm, H, H + 9 * cm, met, 1 * cm);   // the vise
-    mFronts(M, W / 2 - 34 / 120 * W, W / 2 - 4 * cm, D / 2, 20 * cm, H - 6 * cm, 3, 1, met, M.mat("chrome", "#dfe3e8"));
+    // (2026-10-04: "the drawers not having backs to them") the drawers' own
+    // cabinet, from the shelf up under the top -- sides, back and bottom --
+    // the fronts shut against it; it was three fronts hung in the air
+    var dx0 = W / 2 - 34 / 120 * W, yf = D / 2 - 0.6 * cm;
+    M.box(dx0 - 1 * cm, W / 2 - 3 * cm, y0 + 10 / 60 * D, yf, 17 * cm, H - 5 * cm, met, 0.3 * cm);
+    mFronts(M, dx0, W / 2 - 4 * cm, yf, 20 * cm, H - 6 * cm, 3, 1, met, M.mat("chrome", "#dfe3e8"));
   });
   mDef("i_shelving", function (M, W, D, H, C, n) {
     C = mPick(C, "#3a3d40", "#c9ad7f");
@@ -2953,6 +2958,16 @@
     // (a little light in the rocker, lit while the room's light is on -- dark when it is off, 39-inside.js)
     M.box(-0.35 * cm, 0.35 * cm, 0.9 * cm, 1.05 * cm, 1.9 * cm, 2.6 * cm, M.mat("glow", "#ffc46b"));
     M.pop();
+  });
+  // a garage door's button (40-garage.js): its plate on the wall, a big
+  // square push button on it lit from behind, and a small one for the light
+  mDef("i_garagebtn", function (M, W, D, H, C) {
+    C = mPick(C, "#f1efe9", "#dedbd3");
+    var y0 = -D / 2;
+    M.box(-3.6 * cm, 3.6 * cm, y0, y0 + 1.6 * cm, 0, 11.4 * cm, M.mat("plastic", C.main), 0.6 * cm);
+    M.box(-2.5 * cm, 2.5 * cm, y0 + 1.6 * cm, y0 + 2.6 * cm, 4.2 * cm, 9.6 * cm, M.mat("plastic", C.frame), 0.5 * cm);
+    M.box(-1.4 * cm, 1.4 * cm, y0 + 2.6 * cm, y0 + 2.75 * cm, 6.2 * cm, 7.6 * cm, M.mat("glow", "#ffd27a"));
+    M.box(-1.6 * cm, 1.6 * cm, y0 + 1.6 * cm, y0 + 2.2 * cm, 1.2 * cm, 2.8 * cm, M.mat("plastic", C.frame), 0.3 * cm);
   });
   mDef("i_breaker", function (M, W, D, H, C) {
     C = mPick(C, "#c9ced3", "#5d6166");

@@ -206,7 +206,7 @@
   var NO_LABEL = { i_door: true, i_door2: true, i_slide: true, i_bifold: true, i_window: true, i_wall: true, i_garagedoor: true,
                    // (what only finishes a room is not named over it: it crowded the names that matter)
                    i_vent: true, i_picture: true, i_sconce: true, i_mirror: true, i_wallclock: true, i_pendant: true,
-                   i_outlet: true, i_lightswitch: true, i_post: true, i_smoke: true, i_thermostat: true, i_exhaustfan: true,
+                   i_outlet: true, i_lightswitch: true, i_post: true, i_smoke: true, i_thermostat: true, i_exhaustfan: true, i_garagebtn: true,
                    // (a store's shelving and coolers come by the dozen: named once would be enough, so not at all)
                    i_gondola: true, i_cooler: true, i_schooldesk: true,
                    // nor the chairs round a table, the screen on a desk, a rail of clothes: in a cafe or an office there are dozens
@@ -441,13 +441,13 @@
                        i_wallclock: "face", i_sconce: "face", i_cabinet: "face", i_hooks: "face",
                        i_radiator: "face", i_hood: "face", i_towelrail: "face", i_medicine: "face",
                        i_proscreen: "face", i_ac: "face", i_whiteboard: "face", i_dartboard: "face", i_evcharger: "face", i_thermostat: "face",
-                       i_porchlight: "outface", i_floodlight: "outface" };
+                       i_porchlight: "outface", i_floodlight: "outface", i_garagebtn: "face" };
   // Hung on a wall, up out of the way: walked under, not round (38-walk.js).
   var ON_THE_WALL = { i_picture: true, i_mirror: true, i_shelf: true, i_walltv: true,
                       i_wallclock: true, i_sconce: true, i_cabinet: true, i_hooks: true,
                       i_hood: true, i_towelrail: true, i_medicine: true, i_proscreen: true, i_ac: true,
                       i_whiteboard: true, i_dartboard: true, i_evcharger: true, i_porchlight: true, i_floodlight: true,
-                      i_outlet: true, i_lightswitch: true, i_breaker: true, i_thermostat: true };
+                      i_outlet: true, i_lightswitch: true, i_breaker: true, i_thermostat: true, i_garagebtn: true };
   // What stands on top of something else -- a lamp on a table, a kettle on
   // the counter -- and is raised to stand on it in 3D (38-view3d.js).
   var ON_TOP = { i_microwave: true, i_coffeemaker: true, i_toaster: true, i_kettle: true, i_fruitbowl: true,

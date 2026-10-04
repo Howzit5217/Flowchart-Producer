@@ -54,6 +54,19 @@
     if (t >= 1 || (typeof STILL !== "undefined" && STILL)) { delete A[i]; return want; }
     return a.from + (want - a.from) * o3Ease(t);
   }
+  // (2026-10-04: "all things are of accurate time") How long a part takes to
+  // open all the way, as long as the real one does by hand: a drawer pulled
+  // out, a cupboard's door swung, a lid lifted, a flap let down -- and an
+  // appliance's heavier door slower (each was 0.42 s, O3_MS).
+  var O3_TIMES = { drawer: 650, door: 800, lid: 900, flap: 1150, slide: 900 };
+  var O3_HEAVY = { i_fridge: 1100, i_freezer: 1000, i_reachin: 1100, i_cooler: 1100, i_winecooler: 900, i_oven: 1200,
+                   i_dishwasher: 1200, i_washer: 900, i_dryer: 900, i_microwave: 650 };
+  function o3Ms(id, i) {
+    var f = typeof modelFronts === "object" && modelFronts[id] ? modelFronts[id][i] : null, n = /^[0-9]+$/.test(String(id)) ? nodeById(+id) : null;
+    var ms = f ? (O3_TIMES[f.kind] || O3_TIMES[f.part] || O3_MS) : O3_MS;
+    if (n && O3_HEAVY[n.kind] && !(f && f.kind === "drawer")) { ms = O3_HEAVY[n.kind]; }
+    return ms;
+  }
   function o3IsOpen(id, i) {
     var U = typeof V3 !== "undefined" && V3 ? V3.use : null;
     return !!(U && U.fr && U.fr[id] && U.fr[id][i]);
@@ -66,7 +79,7 @@
       if (!Object.keys(U.fr[id]).length) { delete U.fr[id]; }
     }
     if (Math.abs(to - was) > 0.001) {
-      (U.anim[id] || (U.anim[id] = {}))[i] = { from: was, t0: performance.now(), ms: O3_MS * Math.max(0.4, Math.abs(to - was)) };
+      (U.anim[id] || (U.anim[id] = {}))[i] = { from: was, t0: performance.now(), ms: o3Ms(id, i) * Math.max(0.4, Math.abs(to - was)) };
     }
     V3.o3Moving = true;
     V3.o3Pose = null;

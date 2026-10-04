@@ -26,8 +26,14 @@
     structMemo = { pic: pic, kind: kind };
     return kind;
   }
-  function structShown() { return houseOpt("beams") === "shown"; }
-  function structSeen() { return structShown() || (typeof xrayOn === "function" && xrayOn()); }
+  // (2026-10-04) "open": an open plan's, Start building -- on show over its
+  // living space, where its walls came out, and nowhere else (a room asked
+  // about: whether it is part of that space; asked of the house: "shown" only)
+  function structShown(room) {
+    var b = houseOpt("beams");
+    return b === "shown" || (b === "open" && !!room && !!((room.open && room.open.length) || (room.openTo && room.openTo.length)));
+  }
+  function structSeen(room) { return structShown(room) || (typeof xrayOn === "function" && xrayOn()); }
 
   // ---- a beam ---------------------------------------------------------------------------
   // In a shape's own numbers, along x (or y) from a0 to a1, its middle at
@@ -68,10 +74,12 @@
   // seen through the walls -- as what it is, not boxed in)
   if (typeof wallBeams === "function") {
     wallBeams = function (faces, room, edge) {
-      var px = FLOOR_PX, ceil = ceilOf(room) * px, steel = structKind() === "steel", shown = structShown(), seen = structSeen();
-      if (edge === "top" && shown) { structCeiling(faces, room, steel, ceil); }
+      var px = FLOOR_PX, ceil = ceilOf(room) * px, steel = structKind() === "steel";
+      if (edge === "top" && structShown(room)) { structCeiling(faces, room, steel, ceil); }
       wallOpenRuns(room, edge).forEach(function (r) {
         if (r.other.id < room.id) { return; }
+        // (on show where either room is: an open plan's, over its living space)
+        var shown = structShown(room) || structShown(r.other), seen = shown || structSeen();
         var s = wallStructure(room, r);
         // (a wall that carried nothing: a beam where it was only to be seen)
         if (!s.bearing && !shown) { return; }
@@ -96,14 +104,35 @@
     var alongX = room.w <= room.h, span = (alongX ? room.w : room.h) / P, long = alongX ? room.h : room.w;
     var every = (steel ? 2.4 : 1.2) * P, count = Math.max(1, Math.round(long / every));
     var deep = (steel ? (span > 6 ? 0.3 : 0.2) : (span > 5 ? 0.3 : 0.22)) * P, wide = (steel ? (span > 6 ? 0.17 : 0.13) : 0.14) * P;
-    var look = structLook(steel ? "steel" : "timber"), reach = (alongX ? hw : hh) - T;
-    for (var k = 0; k < count; k++) {
-      var at = -long / 2 + (k + 0.5) * long / count;
+    var look = structLook(steel ? "steel" : "timber"), reach = (alongX ? hw : hh) - T, gap = long / count;
+    // (clear of what hangs from the ceiling -- a fan, a light over the table:
+    // the beams put half a space along where one would be in the way, 2026-10-04)
+    var shift = 0;
+    if (!(room.turn || 0) && typeof FROM_CEILING === "object") {
+      var hung = hand.nodes.filter(function (n) { return FROM_CEILING[n.kind] && insideArea(room, n.x, n.y); })
+        .map(function (n) { return alongX ? n.y - room.y : n.x - room.x; });
+      var clash = function (o) {
+        var c = 0;
+        for (var j = 0; j <= count; j++) {
+          var a = -long / 2 + (j + 0.5) * gap + o;
+          if (a > -long / 2 + 0.2 * gap && a < long / 2 - 0.2 * gap) { hung.forEach(function (h) { if (Math.abs(h - a) < 0.3 * P) { c++; } }); }
+        }
+        return c;
+      };
+      if (hung.length && clash(gap / 2) < clash(0)) { shift = gap / 2; }
+    }
+    for (var k = 0; k <= count; k++) {
+      var at = -long / 2 + (k + 0.5) * gap + shift;
+      if (at <= -long / 2 + 0.2 * gap || at >= long / 2 - 0.2 * gap) { continue; }
       structBeam(faces, room, alongX, -reach, reach, at, ceil - deep, ceil - 0.4, wide, steel, look);
     }
     if (span > 6.5) {
       var gd = deep * 1.4, gw = wide * 1.3, ends = (alongX ? hh : hw) - T;
-      structBeam(faces, room, !alongX, -ends, ends, 0, ceil - gd, ceil - 0.3, gw, steel, look);
+      // (to one side of a fan in the middle, not through it)
+      var across = (room.turn || 0) || typeof FROM_CEILING !== "object" ? [] : hand.nodes.filter(function (n) { return FROM_CEILING[n.kind] && insideArea(room, n.x, n.y); })
+        .map(function (n) { return alongX ? n.x - room.x : n.y - room.y; });
+      var gm = [0, 0.7 * P, -0.7 * P].filter(function (o) { return !across.some(function (h) { return Math.abs(h - o) < 0.35 * P; }); })[0] || 0;
+      structBeam(faces, room, !alongX, -ends, ends, gm, ceil - gd, ceil - 0.3, gw, steel, look);
     }
   }
 
@@ -217,6 +246,6 @@
       if (typeof worldPicker === "function") {
         worldPicker(sheet, STRUCT_KINDS, structKind(), "sx_", function (k) { houseSetOpt("frame", k); if (draw) { draw(); } });
       }
-      tiles([{ icon: "sx_shown", label: TXT.sx_shown, on: structShown(), set: function (v) { houseSetOpt("beams", v ? "shown" : ""); } }]);
+      tiles([{ icon: "sx_shown", label: TXT.sx_shown, on: houseOpt("beams") === "shown" || houseOpt("beams") === "open", set: function (v) { houseSetOpt("beams", v ? "shown" : ""); } }]);
     });
   }

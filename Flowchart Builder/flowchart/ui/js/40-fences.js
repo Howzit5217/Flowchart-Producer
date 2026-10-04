@@ -126,25 +126,33 @@
   }
   // The gate in 3D: two posts, and the leaf between, framed, braced, its pickets and its latch.
   if (typeof mDef === "function") {
-    mDef("i_gate", function (M, W, D, H, C) {
+    mDef("i_gate", function (M, W, D, H, C, n) {
       C = mPick(C, "#f2f0ea");
       var paint = M.mat("plastic", C.main), metal = M.mat("metal", "#3b3f44"), post = 9 * cm, x0 = -W / 2 + post, x1 = W / 2 - post;
       [-W / 2, W / 2 - post].forEach(function (x) {
         M.box(x, x + post, -post / 2, post / 2, 0, H + 12 * cm, paint);
         M.box(x - 1 * cm, x + post + 1 * cm, -post / 2 - 1 * cm, post / 2 + 1 * cm, H + 12 * cm, H + 16 * cm, paint, 1 * cm);
       });
-      // the leaf: a frame a little off the ground, a brace corner to corner
+      // the leaf: a frame a little off the ground, a brace corner to corner --
+      // opened walking round (E, 40-open3d.js), swung on its hinges at the
+      // first post, and walked through (40-gatespool.js) (2026-10-04: "fences
+      // can have gates and you can open them")
       var g = 1.5 * cm, lo = 8 * cm, hi = H - 2 * cm;
-      M.box(x0 + g, x1 - g, -2 * cm, 2 * cm, lo, lo + 8 * cm, paint);
-      M.box(x0 + g, x1 - g, -2 * cm, 2 * cm, hi - 8 * cm, hi, paint);
-      M.box(x0 + g, x0 + g + 8 * cm, -2 * cm, 2 * cm, lo, hi, paint);
-      M.box(x1 - g - 8 * cm, x1 - g, -2 * cm, 2 * cm, lo, hi, paint);
-      var bx = (x1 - x0) / 2, by = (hi - lo) / 2;
-      M.tube([x0 + g + 8 * cm, 0, lo + 8 * cm], [x1 - g - 8 * cm, 0, hi - 8 * cm], 2.5 * cm, paint, 6);
-      for (var x = x0 + 18 * cm; x < x1 - 14 * cm; x += 12 * cm) { M.box(x - 4 * cm, x + 4 * cm, 2 * cm, 4 * cm, lo + 4 * cm, hi - 4 * cm, paint); }
-      // its latch, on the far side from its hinges
-      M.box(x1 - g - 14 * cm, x1 - g - 4 * cm, 4 * cm, 7 * cm, H * 0.62, H * 0.62 + 4 * cm, metal);
-      void bx; void by;
+      var k = typeof M.front === "function" ? M.front("door", x0 + g, x1 - g, -2 * cm, 7 * cm, lo, hi, { part: "gate" }) : 0;
+      var leaf = function () {
+        M.box(x0 + g, x1 - g, -2 * cm, 2 * cm, lo, lo + 8 * cm, paint);
+        M.box(x0 + g, x1 - g, -2 * cm, 2 * cm, hi - 8 * cm, hi, paint);
+        M.box(x0 + g, x0 + g + 8 * cm, -2 * cm, 2 * cm, lo, hi, paint);
+        M.box(x1 - g - 8 * cm, x1 - g, -2 * cm, 2 * cm, lo, hi, paint);
+        M.tube([x0 + g + 8 * cm, 0, lo + 8 * cm], [x1 - g - 8 * cm, 0, hi - 8 * cm], 2.5 * cm, paint, 6);
+        for (var x = x0 + 18 * cm; x < x1 - 14 * cm; x += 12 * cm) { M.box(x - 4 * cm, x + 4 * cm, 2 * cm, 4 * cm, lo + 4 * cm, hi - 4 * cm, paint); }
+        // its latch, on the far side from its hinges; the hinges on the post
+        M.box(x1 - g - 14 * cm, x1 - g - 4 * cm, 4 * cm, 7 * cm, H * 0.62, H * 0.62 + 4 * cm, metal);
+        [lo + 14 * cm, hi - 14 * cm].forEach(function (z) { M.box(x0 + g - 1 * cm, x0 + g + 12 * cm, 2 * cm, 3 * cm, z, z + 3 * cm, metal); });
+      };
+      // (a pool's gate opens out, away from the water, as the codes ask: 40-gatespool.js)
+      var way = typeof gpGateSign === "function" && n ? gpGateSign(n) : 1;
+      if (k > 0.001 && typeof o3Swing === "function") { o3Swing(M, x0 + g, 0, k * 100 * way, leaf); } else { leaf(); }
     });
   }
   if (typeof HOUSE_ICONS === "object") {

@@ -557,6 +557,9 @@
       [say("land_house", { ground: areaSays(m.house), all: areaSays(all) })],
       [say("lot_yard", { area: areaSays(m.yard) }) + " · " + say("land_cover", { n: Math.round(100 * m.house / Math.max(1, lot.w * lot.h)) })]
     ];
+    // (the grass strip in front of it out to the curb, the house's own to keep, 40-verge.js)
+    var strip = typeof streetVergePx === "function" && houseOpt("street") && !lot.guessed ? streetVergePx() - 0.15 * FLOOR_PX : 0;
+    if (strip > 0 && TXT.vg_land) { lines.push([say("vg_land", { area: areaSays(lot.w * strip) })]); }
     var html = lines.map(function (l) { return "<div" + (l[1] ? ' class="v3-land-head"' : "") + ">" + escaped(l[0]) + "</div>"; }).join("");
     if (card.innerHTML !== html) { card.innerHTML = html; }
   }

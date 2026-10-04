@@ -48,6 +48,12 @@
     storage: { w: 3.0, h: 4.2, bw: 3.0, max: 9, wall: ["i_shelving", "i_shelving", "i_sconce"], mid: [] },
     utility: { w: 3.0, h: 4.2, bw: 3.0, max: 3.4, wall: ["i_furnace", "i_shelving", "i_sconce"], mid: [] }
   };
+  // (2026-10-04: "a setting so you can do 1, 2 etc. car garage") a garage as
+  // wide as its cars need (`want.cars`, two if not said): one 3.7 m, two 6 m
+  // as it always was, three 9.1 m, four 12.2 m -- the widths garages are built
+  // to; its doors, cars and buttons, 40-garage.js
+  var STARTER_GARAGE_W = [6.0, 3.7, 6.0, 9.1, 12.2];
+  function starterGarageW(want) { return STARTER_GARAGE_W[Math.max(1, Math.min(4, Math.round(+(want && want.cars) || 2) || 2))]; }
   var STARTER_GAP = 100;                 // px between rooms spread out: room for the arrows
   // (2026-10-02: "when you go to explore houses they are bigger than what
   // you are expecting so it is easier to walk around") every room a size
@@ -143,6 +149,76 @@
     if (asked && asked !== "any") { return list.indexOf(asked) >= 0 ? asked : "together"; }
     return pick;
   }
+  // An open floor's front row ends at the garage: in from it through a
+  // mudroom or the laundry room, not a bedroom -- a mudroom put there where
+  // the house has neither (40-rooms.js).
+  function starterOpenGarage(band, want, it) {
+    if (!want.garage || !band.length) { return; }
+    var mud = band.filter(function (r) { return r.kind === "mudroom"; })[0] || band.filter(function (r) { return r.kind === "laundry"; }).pop();
+    if (mud) { band.splice(band.indexOf(mud), 1); band.push(mud); return; }
+    if (STARTER_ROOMS.mudroom) { band.push(it("mudroom", TXT[STARTER_LABEL.mudroom] || "")); }
+  }
+  // Which opens into which on an open floor (no hall): the living space's
+  // rooms, from the living room out, each joined to one it meets; every
+  // other room into the part of the living space it meets most of -- or,
+  // meeting none, the room beside it it meets most of -- the main
+  // bedroom's own rooms off it, a nook off its room.
+  var STARTER_LIVED = { living: 1, great: 1, kitchen: 1, family: 1, dining: 1, sunroom: 1 };
+  var STARTER_BY_KITCHEN = { laundry: 1, pantry: 1, mudroom: 1 };
+  function starterOpenJoins(f, main, byId, join, X) {
+    var every = f.back.concat([].concat.apply([], f.mids || []), f.front);
+    // the wall two rooms share, along (0 where they do not meet)
+    function shared(p, q) {
+      var a = p.local, b = q.local, ox = Math.min(a[2], b[2]) - Math.max(a[0], b[0]), oy = Math.min(a[3], b[3]) - Math.max(a[1], b[1]);
+      if ((Math.abs(a[3] - b[1]) < 3 || Math.abs(a[1] - b[3]) < 3) && ox > 0) { return ox; }
+      if ((Math.abs(a[2] - b[0]) < 3 || Math.abs(a[0] - b[2]) < 3) && oy > 0) { return oy; }
+      return 0;
+    }
+    var lived = every.filter(function (r) { return STARTER_LIVED[r.starter] && !r.starterVia; }), seen = new Set();
+    var root = lived.filter(function (r) { return r.starter === "living"; })[0] || lived[0], queue = root ? [root] : [];
+    if (root) { seen.add(root); }
+    while (queue.length) {
+      var q = queue.shift();
+      lived.forEach(function (r) {
+        if (seen.has(r) || shared(q, r) < X(1.0)) { return; }
+        seen.add(r); queue.push(r); join(q, r);
+      });
+    }
+    // (a nook is part of the room it opens off, no wall between: of the living space, if that is)
+    every.forEach(function (r) {
+      if (!r.starterVia || !byId[r.starterVia]) { return; }
+      join(byId[r.starterVia], r);
+      if (r.starterNook && seen.has(byId[r.starterVia])) { seen.add(r); }
+    });
+    // the rest, each into what it meets that is joined already -- the living
+    // space first -- a round at a time, out from it (and, at the last, into
+    // whatever it meets: every room of the house joined to the rest)
+    var reached = new Set(seen);
+    every.forEach(function (r) { if (r.starterVia && byId[r.starterVia] && reached.has(byId[r.starterVia])) { reached.add(r); } });
+    var left = every.filter(function (r) { return !reached.has(r) && !(r.starterVia && byId[r.starterVia]); });
+    for (var round = 0; round < 8 && left.length; round++) {
+      var last = round === 7;
+      left = left.filter(function (r) {
+        if ((r.starter === "ensuite" || r.starter === "closet") && main && main !== r && shared(main, r) > 0 && (reached.has(main) || last)) {
+          join(main, r); reached.add(r); return false;
+        }
+        var best = null, most = -Infinity;
+        every.forEach(function (o) {
+          var s = o === r ? 0 : shared(o, r);
+          if (s < X(0.9) || o.starter === "ensuite" || o.starter === "closet" || (!reached.has(o) && !last)) { return; }
+          // (a bathroom not straight into the kitchen; the laundry, the
+          // pantry and the mudroom into it, where they can)
+          var cook = o.starter === "kitchen" || o.starter === "great";
+          var score = s + (seen.has(o) ? X(1000) : 0) + (cook ? (r.starter === "bath" ? -X(600) : STARTER_BY_KITCHEN[r.starter] ? X(300) : 0) : 0);
+          if (score > most) { most = score; best = o; }
+        });
+        if (!best) { return true; }
+        join(best, r); reached.add(r);
+        every.forEach(function (n) { if (n.starterVia && byId[n.starterVia] === r) { reached.add(n); } });
+        return false;
+      });
+    }
+  }
   // ---- the house, laid out -----------------------------------------------------------
   // Each floor: { level, back: [...], front: [...] }, each room in a band
   // { kind, label, w } in metres, the main bedroom's own rooms a column
@@ -161,6 +237,15 @@
     }
     function width(band) { return band.reduce(function (s, r) { return s + r.w; }, 0); }
     var two = want.floors > 1;
+    // (2026-10-04: "an open concept house should not really have hallways
+    // and all things should be connected as one ... no walls there ... either
+    // poles in the house or metal beams in the ceiling holding things up")
+    // Open concept, and a great room: no hall on the ground floor -- the
+    // kitchen, the dining and the family rooms one space along the back, the
+    // living room open to it at the front, and the rest opening straight
+    // into it (the walls between taken out, and what holds the house up then
+    // put in, as asked: arrangeOpen, 40-arrange.js)
+    var open = !!want.openPlan && (!want.type || want.type === "house");
     // (2026-10-03: "creative layouts ... Shuffle must change a lot") which
     // way round it is: as asked, or the seed's own (starterZones)
     var zones = starterZones(want, rnd, two);
@@ -194,6 +279,7 @@
       return false;
     }
     var G = { level: 0, back: [], front: [] }, floors = [G];
+    if (open) { G.H = 0; G.open = true; }
     if (!two) {
       // one floor: the bedrooms along the back, the rest along the front --
       // the main bedroom (its own rooms either side of it) at one end or
@@ -208,7 +294,54 @@
       var cooking = [kitchen].concat(more.filter(function (r) { return r.kind === "kitchen"; }), dining ? [dining] : []);
       var sitting = [living].concat(more.filter(function (r) { return r.kind === "family"; }), office ? [office] : [], offices);
       var utility = laundries.concat(laundry ? [laundry] : []);
-      if (zones === "split") {
+      if (open) {
+        // no hall: the kitchen, the dining room and the family rooms along the
+        // back, one space out to the yard, the main bedroom at its far end
+        // (its own rooms past it); along the front, a room under the main
+        // bedroom, the living room (the way in, open to the space behind)
+        // and the rest, each under the living space and opening straight
+        // into it -- the laundry, the pantry and the mudroom by the garage.
+        // Split, the other bedrooms over at the garage's side of the house.
+        var byGarage = utility.concat(extra.day.concat(extra.up).filter(function (r) { return r.kind === "pantry" || r.kind === "mudroom"; }));
+        var others = extra.day.concat(extra.up).filter(function (r) { return r.kind !== "pantry" && r.kind !== "mudroom" && r.kind !== "sunroom"; });
+        var desks = (office ? [office] : []).concat(offices);
+        var suiteOut = col ? [col, main] : [main];                    // (the bedroom itself by the living space)
+        // (as wide as they are made: grown, they would push the living room
+        // along from under the living space it opens into)
+        suiteOut.forEach(function (r) { r.fixed = true; });
+        var order = zones === "split" ? desks.concat(others, rest) : rest.concat(desks, others);
+        var sun = extra.day.concat(extra.up).filter(function (r) { return r.kind === "sunroom"; });
+        var fams = more.filter(function (r) { return r.kind === "family"; });
+        if (width(suiteOut) + width(order) + width(byGarage) <= 16) {
+          // under the main bedroom, as much of it as there are rooms to go
+          // there -- the living room then all under the living space, open to it
+          // (with a basement, its stairs there instead, beside the living room: one over the other)
+          var under = [];
+          while (!want.basement && order.length && width(under) < width(suiteOut) - 1.0) { under.push(order.shift()); }
+          under.forEach(function (r) { r.fixed = true; });
+          // (a sunroom out to the yard as well, at the far end of the space)
+          G.back = suiteOut.concat(sun, fams, cooking.slice().reverse());
+          G.dayAt = suiteOut.length;
+          G.front = under.concat([living], order, byGarage);
+        } else {
+          // more rooms than one row along it has room for (a house of them
+          // in a line half a street long): three rows -- the living space
+          // through the middle of the house, the bedrooms and the rest along
+          // the back and the front either side of it, each opening straight
+          // into it; the kitchen out at the back, the living room at the
+          // front, the way in; each row about as long as the other
+          var cooks = cooking.filter(function (r) { return r !== dining; }), backs = [], fronts = [];
+          order.forEach(function (r) {
+            (width(suiteOut) + width(backs) + width(cooks) <= width(fronts) + living.w + width(byGarage) ? backs : fronts).push(r);
+          });
+          G.back = suiteOut.concat(backs, cooks);
+          G.dayAt = suiteOut.length + backs.length;
+          G.mid = [sun.concat(fams, dining ? [dining] : [])];
+          var half = Math.ceil(fronts.length / 2);
+          G.front = fronts.slice(0, half).concat([living], fronts.slice(half), byGarage);
+        }
+        starterOpenGarage(G.front, want, it);
+      } else if (zones === "split") {
         // the main bedroom at one end, the other bedrooms at the other, the
         // kitchen between them -- across the hall from the living room
         G.back = suiteBlock.concat(cooking, rest);
@@ -220,24 +353,28 @@
         G.back = suiteBlock.concat(rest.slice(0, half), cooking);
         G.front = rest.slice(half).concat(sitting, utility);
       }
-      // the pantry after the kitchen, the mudroom at the end by the garage, the rest where the bands are shortest
-      extra.day.concat(extra.up).forEach(function (r) {
-        if (extraPut(G.front, r)) { return; }
-        if (r.kind === "mudroom") { G.front.push(r); return; }
-        (width(G.back) <= width(G.front) ? G.back : G.front).push(r);
-      });
-      // the two about as long as each other: a bedroom brought round to
-      // the front, or the office and the laundry room to the back
-      while (width(G.back) - width(G.front) > 3 && G.back.some(function (r) { return r.kind === "bed"; })) {
-        var last = G.back.filter(function (r) { return r.kind === "bed"; }).pop();
-        G.back.splice(G.back.indexOf(last), 1);
-        // (in a bedroom wing, round to the wing's own end of the front)
-        if (zones === "wing") { G.front.splice(G.front.filter(function (r) { return r.kind === "bed" || r.kind === "bath"; }).length, 0, last); }
-        else { G.front.unshift(last); }
+      // (open: the rest in the back already, and the two bands made as long
+      // as each other after, by `fill` -- not a bedroom brought round to the front)
+      if (!open) {
+        // the pantry after the kitchen, the mudroom at the end by the garage, the rest where the bands are shortest
+        extra.day.concat(extra.up).forEach(function (r) {
+          if (extraPut(G.front, r)) { return; }
+          if (r.kind === "mudroom") { G.front.push(r); return; }
+          (width(G.back) <= width(G.front) ? G.back : G.front).push(r);
+        });
+        // the two about as long as each other: a bedroom brought round to
+        // the front, or the office and the laundry room to the back
+        while (width(G.back) - width(G.front) > 3 && G.back.some(function (r) { return r.kind === "bed"; })) {
+          var last = G.back.filter(function (r) { return r.kind === "bed"; }).pop();
+          G.back.splice(G.back.indexOf(last), 1);
+          // (in a bedroom wing, round to the wing's own end of the front)
+          if (zones === "wing") { G.front.splice(G.front.filter(function (r) { return r.kind === "bed" || r.kind === "bath"; }).length, 0, last); }
+          else { G.front.unshift(last); }
+        }
+        [office].concat(offices, laundries, [laundry]).forEach(function (r) {
+          if (r && width(G.front) - width(G.back) > 3) { G.front.splice(G.front.indexOf(r), 1); G.back.push(r); }
+        });
       }
-      [office].concat(offices, laundries, [laundry]).forEach(function (r) {
-        if (r && width(G.front) - width(G.back) > 3) { G.front.splice(G.front.indexOf(r), 1); G.back.push(r); }
-      });
     } else {
       // two: the kitchen at the back downstairs, the living room at the
       // front; the bedrooms upstairs, the stairs at the end of the hall
@@ -248,29 +385,60 @@
       // (a main bedroom downstairs, at the far end of the back from the stairs: the rest up)
       if (zones === "downstairs") { G.back = G.back.concat(mainBlock.slice().reverse()); }
       G.front = [living].concat(more.filter(function (r) { return r.kind === "family"; }), office ? [office] : []);
-      if (baths.length > 1) { (width(G.back) <= width(G.front) ? G.back : G.front).push(baths.shift()); }
-      if (laundry) { G.front.push(laundry); }
-      extra.day.forEach(function (r) {
-        if (extraPut(G.back, r)) { return; }
-        if (r.kind === "mudroom") { G.front.push(r); return; }
-        (width(G.back) <= width(G.front) ? G.back : G.front).push(r);
-      });
+      if (open) {
+        // no hall downstairs: the stairs up, the family rooms, the dining
+        // room and the kitchen along the back, one space; the living room
+        // along the front, the stairs' foot in it, and beside it the office,
+        // a bathroom, the rest and the laundry by the garage, each opening
+        // into the space behind (the main bedroom downstairs among them)
+        G.back = [G.back[0]].concat(extra.day.filter(function (r) { return r.kind === "sunroom"; }), more.filter(function (r) { return r.kind === "family"; }),
+                                    dining ? [dining] : [], more.filter(function (r) { return r.kind === "kitchen"; }), [kitchen]);
+        G.dayAt = 1;
+        // (the bathroom next to the living room, its door into it -- not into the kitchen)
+        G.front = [living].concat(baths.length > 1 ? [baths.shift()] : [], office ? [office] : [],
+                                  zones === "downstairs" ? mainBlock.slice().reverse() : [],
+                                  extra.day.filter(function (r) { return r.kind !== "pantry" && r.kind !== "mudroom" && r.kind !== "sunroom"; }),
+                                  laundry ? [laundry] : [], extra.day.filter(function (r) { return r.kind === "pantry" || r.kind === "mudroom"; }));
+        starterOpenGarage(G.front, want, it);
+      } else {
+        if (baths.length > 1) { (width(G.back) <= width(G.front) ? G.back : G.front).push(baths.shift()); }
+        if (laundry) { G.front.push(laundry); }
+        extra.day.forEach(function (r) {
+          if (extraPut(G.back, r)) { return; }
+          if (r.kind === "mudroom") { G.front.push(r); return; }
+          (width(G.back) <= width(G.front) ? G.back : G.front).push(r);
+        });
+      }
       // a second laundry room, and the offices past the first, upstairs by the bedrooms (and a playroom, a library, a gym)
       beds.concat(baths, offices, laundries, extra.up).forEach(function (r) { (width(U.back) <= width(U.front) ? U.back : U.front).push(r); });
       floors.push(U);
     }
     // (2026-10-03) a finished attic: a flight up to it from the top floor, by
     // the stairs up to that one (the attic put over it after, 40-attic.js)
-    if (want.attic === "room") { (two ? U : G).back.splice(two ? 1 : 0, 0, it("stairs", TXT.st_stairs)); }
+    // (an open floor's in the front row, its foot in the living space behind it)
+    if (want.attic === "room" && !two && open) { G.front.splice(G.front.indexOf(living) + 1, 0, it("stairs", TXT.st_stairs)); }
+    else if (want.attic === "room") { (two ? U : G).back.splice(two ? 1 : 0, 0, it("stairs", TXT.st_stairs)); }
     if (want.basement) {
       // down from the front band, its foot in the hall; a family room,
-      // a utility room and storage below
-      G.front.unshift(it("stairs", TXT.st_stairs));
-      floors.push({ level: -1, back: [it("family", TXT.st_family)],
-                    front: [it("stairs", TXT.st_stairs)].concat(starterShuffle(rnd, [it("utility", TXT.st_utility), it("storage", TXT.st_storage)])) });
+      // a utility room and storage below (an open floor's beside the living
+      // room, open to it -- and the flight below it one under the other)
+      var downAt = open && !two ? G.front.indexOf(living) : 0, lead = width(G.front.slice(0, Math.max(0, downAt)));
+      G.front.splice(Math.max(0, downAt), 0, it("stairs", TXT.st_stairs));
+      var below = { level: -1, back: [it("family", TXT.st_family)],
+                    front: [it("stairs", TXT.st_stairs)].concat(starterShuffle(rnd, [it("utility", TXT.st_utility), it("storage", TXT.st_storage)])) };
+      if (lead > 0.5) { var pad = it("storage", TXT.st_storage); pad.w = lead; pad.fixed = true; below.front.unshift(pad); }
+      floors.push(below);
     }
-    // (2026-10-03) a nook beside a room now and then, part of it (40-oddrooms.js)
-    if (typeof oddNooks === "function") { oddNooks(floors, want, rnd, it); }
+    // (an open floor's living room broad enough to meet the living space
+    // behind it, past what is beside it along the back, by a good stretch)
+    if (open && !G.mid) {
+      var aBack = width(G.back.slice(0, G.dayAt || 0)), bFront = width(G.front.slice(0, Math.max(0, G.front.indexOf(living))));
+      living.w = Math.max(living.w, aBack - bFront + 2.6);
+    }
+    // (2026-10-03) a nook beside a room now and then, part of it (40-oddrooms.js) --
+    // not on an open floor: a nook along a row there stood between rooms and
+    // the living space they open into (2026-10-04)
+    if (typeof oddNooks === "function") { oddNooks(floors.filter(function (f) { return !f.open; }), want, rnd, it); }
     // (2026-10-03) a long house folded into more rows (starterFold)
     starterFold(floors, want, rnd, it, width, two);
     // as wide as the widest band; each band grown out to that, the floor
@@ -280,12 +448,20 @@
       W = Math.max(W, width(f.back), width(f.front));
       (f.mid || []).forEach(function (row) { W = Math.max(W, width(row)); });
     });
-    function fill(band, must, filler, to) {
+    function fill(band, must, filler, to, keepEnd, first) {
       var Wb = to === undefined ? W : to;
+      // (keepEnd: the room at the garage's end stays at the end, and its size;
+      // first: where a room more goes in, if not at the end -- an open
+      // floor's at the far end of its living space)
+      var end = keepEnd && band.length > 1 && (band[band.length - 1].kind === "mudroom" || band[band.length - 1].kind === "laundry") ? band.pop() : null;
+      if (end) { Wb -= end.w; }
+      try { fillTo(band, must, filler, Wb, first); } finally { if (end) { band.push(end); } }
+    }
+    function fillTo(band, must, filler, Wb, first) {
       for (var pass = 0; pass < 4; pass++) {
         var short = Wb - width(band);
         if (short < 0.01) { break; }
-        var grow = band.filter(function (r) { return r.kind !== "suite" && (STARTER_ROOMS[r.kind].max || r.w) - r.w > 0.01; });
+        var grow = band.filter(function (r) { return r.kind !== "suite" && !r.fixed && (STARTER_ROOMS[r.kind].max || r.w) - r.w > 0.01; });
         var room = grow.reduce(function (s, r) { return s + STARTER_ROOMS[r.kind].max - r.w; }, 0);
         if (!room) { break; }
         grow.forEach(function (r) { r.w += (STARTER_ROOMS[r.kind].max - r.w) * Math.min(1, short / room); });
@@ -295,7 +471,9 @@
       if (left >= 2.6) {
         // (in a row between two halls, with no outside wall but at its ends, a store room)
         var fam = filler === "storage" ? it("storage", TXT.st_storage) : it("family", TXT.st_family);
-        fam.w = left; band.push(fam); return;
+        fam.w = left;
+        if (first >= 0) { band.splice(first, 0, fam); } else { band.push(fam); }
+        return;
       }
       var wide = band.filter(function (r) { return r.kind !== "suite" && r.kind !== "stairs" && !r.cross; }).pop() || band[band.length - 1];
       wide.w += left;
@@ -304,22 +482,30 @@
     // than the ground floor left parts of it sticking out, roofed apart,
     // and a notch in the middle of the house -- 2026-10-01)
     floors.forEach(function (f) {
-      var whole = (two || !!(f.mid && f.mid.length)) && f.level >= 0;
-      fill(f.back, whole);
+      // (an open floor's back the whole length too: every room on it opens into the front)
+      var whole = (two || f.open || !!(f.mid && f.mid.length)) && f.level >= 0;
+      fill(f.back, whole, undefined, undefined, false, f.open ? f.dayAt || 0 : -1);
       // (a row between two halls is filled out to their length: a gap there was a hole in the house)
       (f.mid || []).forEach(function (row) {
+        // (an open floor's: the living space, out to both ends of the house,
+        // a family room more at its far end where it is short)
+        if (f.open) { fill(row, true, undefined, undefined, false, row[0] && row[0].kind === "sunroom" ? 1 : 0); return; }   // (a sunroom kept at the end: its outside walls)
         // its far end in the house's outside wall: what was at the end stays at the end
         var end = row.length > 1 && STARTER_DAY[row[row.length - 1].kind] ? row.pop() : null;
         fill(row, true, "storage", end ? W - end.w : W);
         if (end) { row.push(end); }
       });
-      fill(f.front, whole || (f.level === 0 && want.garage));
+      fill(f.front, whole || (f.level === 0 && want.garage), undefined, undefined, !!f.open && want.garage);
     });
     // (a deeper front band, the living rooms broad, or a deeper back, the
     // bedrooms -- the same on every floor, each over the other)
     var skew = starterPick(rnd, [0, 0.4, 0.8, -0.4, 0.6]);
-    floors.forEach(function (f) { f.dF = skew; f.dB = skew < 0 ? -skew : -skew / 2; });
-    return { floors: floors, W: W, two: two, zones: zones };
+    // (an open floor's front the deeper by the hall it has not got: the
+    // living space broad, and the floor as deep as those over and under it)
+    floors.forEach(function (f) { f.dF = skew + (f.open && !f.mid ? STARTER_HALL : 0); f.dB = skew < 0 ? -skew : -skew / 2; });
+    // (an open floor's middle row's family rooms: STARTER_CALM)
+    floors.forEach(function (f) { if (f.open) { (f.mid || []).forEach(function (row) { row.forEach(function (r) { if (r.kind === "family") { r.calm = true; } }); }); } });
+    return { floors: floors, W: W, two: two, zones: zones, open: open };
   }
 
   // ---- a long house folded into more rows -----------------------------------------------------
@@ -339,9 +525,10 @@
   var STARTER_DAY = { main: 1, bed: 1, living: 1, great: 1, kitchen: 1, family: 1, office: 1, dining: 1 };
   var STARTER_FRONT = { living: 1, great: 1, kitchen: 1, family: 1, dining: 1 };
   function starterFold(floors, want, rnd, it, width, two) {
-    var D = STARTER_BAND * starterDeep(want) + 0.2, H = STARTER_HALL, garageW = want.garage ? 6.0 : 0;
+    var D = STARTER_BAND * starterDeep(want) + 0.2, H = STARTER_HALL, garageW = want.garage ? starterGarageW(want) : 0;
     var G = floors.filter(function (f) { return f.level === 0; })[0], U = floors.filter(function (f) { return f.level === 1; })[0];
-    if (!G) { return; }
+    // (an open floor is not folded: rows between halls are what it has none of)
+    if (!G || G.open) { return; }
     function size(f) { return width(f.back) + width(f.front); }
     // upstairs far the longer: bedrooms (and a bathroom for them) brought down
     if (two && U) {
@@ -494,7 +681,7 @@
       // (other buildings, 39-types.js: a room may open off another of its
       // own home's rather than the hall, be a way in from the street, or be
       // a stairwell's bay -- a flight up or down in it, or none)
-      if (spec) { n.starterId = spec.id; n.starterVia = spec.via; n.starterEntry = spec.entry; n.starterGo = spec.go; n.starterBay = spec.bay; n.starterNook = spec.nook; }
+      if (spec) { n.starterId = spec.id; n.starterVia = spec.via; n.starterEntry = spec.entry; n.starterGo = spec.go; n.starterBay = spec.bay; n.starterNook = spec.nook; n.starterCalm = spec.calm; }
       n.home = [(x0 + x1) / 2, (y0 + y1) / 2];           // where it is put together
       n.x = n.home[0] + sx; n.y = n.home[1] + sy;        // and where on the paper
       made.push(n);
@@ -506,18 +693,32 @@
     }
     // a flight of stairs in the bay at the end of the hall, its foot by the
     // hall -- a door's swing back from it
-    function flight(f, bay, foot) {
+    function flight(f, bay, foot, side) {
       var s = { id: hand.next++, kind: "i_stairs", text: "", x: 0, y: 0, w: 140, h: 46 };
       measure(s);
       s.w = 50; s.h = 150;
-      s.x = Math.round(bay.x - bay.w / 2 + X(0.16) + s.w / 2);       // against one side, the way past it on the other
+      // against one side, the way past it on the other (side > 0: its right)
+      s.x = side > 0 ? Math.round(bay.x + bay.w / 2 - X(0.16) - s.w / 2) : Math.round(bay.x - bay.w / 2 + X(0.16) + s.w / 2);
       s.y = Math.round(foot > 0 ? bay.y + bay.h / 2 - X(1.05) - s.h / 2 : bay.y - bay.h / 2 + X(1.05) + s.h / 2);
       if (foot < 0) { s.turn = 180; }
       f.nodes.push(s);
       return s;
     }
+    // (on an open floor, a flight against the side away from the living
+    // space beside its bay, the way up past it on that side -- and the
+    // flights over and under it the same way round: one over the other)
+    var sideAt = {};
+    function stairSide(f, r) {
+      var key = Math.round(r.local[0]) + ":" + Math.round(r.local[2]);
+      if (f.open) {
+        var band = f.back.indexOf(r) >= 0 ? f.back : f.front, i = band.indexOf(r);
+        var by = [band[i + 1], band[i - 1]].filter(function (o) { return o && STARTER_LIVED[o.starter]; })[0];
+        if (by) { sideAt[key] = by.x < r.x ? 1 : -1; }
+      }
+      return sideAt[key] || -1;
+    }
     plan.floors.forEach(function (fp) {
-      var f = { level: fp.level, nodes: [], back: [], front: [], hall: null, ups: [] };
+      var f = { level: fp.level, nodes: [], back: [], front: [], hall: null, ups: [], open: !!fp.open };
       floors.push(f);
       var across = Math.max(fp.back.length, fp.front.length);
       // (each band as deep as the floor has it -- a shop's floor deeper
@@ -525,7 +726,7 @@
       // rooms open off each other, 39-types.js)
       var Db = fp.Db || D + (fp.dB || 0), Df = fp.Df || D + (fp.dF || 0), Hh = fp.H === undefined ? H : fp.H;
       // (a folded house, starterFold: rows between halls, each as deep as the rest)
-      var mids = Hh > 0 ? fp.mid || [] : [], Dm = fp.Dm || D, Ys = Db + Hh + mids.length * (Dm + Hh);
+      var mids = Hh > 0 || fp.open ? fp.mid || [] : [], Dm = fp.Dm || D, Ys = Db + Hh + mids.length * (Dm + Hh);
       f.depth = Ys + Df;
       f.mids = [];
       f.halls = [];
@@ -559,7 +760,7 @@
           at += r.w;
         });
         f.mids.push(band);
-        f.halls.push(room(f, "hall", TXT.st_hall, 0, X(y0 + Dm), X(wide), X(y0 + Dm + Hh), (across - 1) * G / 2, G * (2 * j + 2)));
+        if (Hh > 0) { f.halls.push(room(f, "hall", TXT.st_hall, 0, X(y0 + Dm), X(wide), X(y0 + Dm + Hh), (across - 1) * G / 2, G * (2 * j + 2))); }
       });
       at = 0;
       fp.front.forEach(function (r, i) {
@@ -575,16 +776,16 @@
         f.front.push(room(f, r.kind, r.label, X(at), X(Ys), X(at + r.w), X(Ys + Df), i * G, G * (2 * mids.length + 1), r));
         at += r.w;
       });
-      if (fp.level === 0 && want.garage && !plan.noGarage && f.hall) {
+      if (fp.level === 0 && want.garage && !plan.noGarage && (f.hall || f.open)) {
         // beside the last hall, and the front row's end
         var gy = Ys - Hh;
-        f.garage = room(f, "garage", "", X(W), X(gy), X(W) + X(6.0), X(gy) + X(6.2), fp.front.length * G, G * (2 * mids.length + 1));
+        f.garage = room(f, "garage", "", X(W), X(gy), X(W) + X(starterGarageW(want)), X(gy) + X(6.2), fp.front.length * G, G * (2 * mids.length + 1));
       }
       // the stairs in their bays: up from the back, down from the front --
       // or, in a stairwell, a flight up or down as its bay says, or none
       f.back.concat(f.front, [].concat.apply([], f.mids)).forEach(function (r) {
         if (r.starter === "stairs" && r.starterGo !== "none") {
-          f.ups.push({ s: flight(f, r, f.back.indexOf(r) >= 0 ? 1 : -1), back: f.back.indexOf(r) >= 0, go: r.starterGo, bay: r.starterBay });
+          f.ups.push({ s: flight(f, r, f.back.indexOf(r) >= 0 ? 1 : -1, stairSide(f, r)), back: f.back.indexOf(r) >= 0, go: r.starterGo, bay: r.starterBay });
         }
       });
     });
@@ -596,7 +797,10 @@
       var main = every.filter(function (m) { return m.starter === "main"; })[0], byId = {};
       every.forEach(function (r) { if (r.starterId) { byId[r.starterId] = r; } });
       var halls = f.halls && f.halls.length ? f.halls : [f.hall];
-      [f.back].concat(f.mids || [], [f.front]).forEach(function (band, bi, bands) {
+      // (an open floor has no hall: its own way, starterOpenJoins)
+      var joined = f.open && !f.hall ? [] : [f.back].concat(f.mids || [], [f.front]);
+      if (f.open && !f.hall) { starterOpenJoins(f, main, byId, join, X); }
+      joined.forEach(function (band, bi, bands) {
         // (the back row off the first hall, each row inside off the hall over
         // it, the front off the last)
         var hall = bi === 0 ? halls[0] : bi === bands.length - 1 ? halls[halls.length - 1] : halls[bi - 1];
@@ -623,7 +827,8 @@
         var end = f.front[f.front.length - 1];
         // (the laundry room only where its end is the garage's wall)
         var meets = end && Math.abs(end.local[2] - X(W)) < 2;
-        join(end && end.starter === "laundry" && meets ? end : halls[halls.length - 1], f.garage);
+        // (an open floor, no hall: in through the room at the front row's end, starterOpenGarage)
+        join(end && end.starter === "laundry" && meets ? end : halls[halls.length - 1] || end, f.garage);
       }
     });
     yield ["plan", 0.4];
@@ -736,7 +941,7 @@
         var cy = hy - (a.local[1] + a.local[3]) / 2 + X(deepest) / 2;
         var b = boxOf(f.nodes);
         // round the rooms both as drawn and as put together (the garage too)
-        var half = Math.max(cx - b.l, b.r - cx, X(W) / 2 + (f.garage ? X(6.0) : 0)) + rim;
+        var half = Math.max(cx - b.l, b.r - cx, X(W) / 2 + (f.garage ? f.garage.w : 0)) + rim;
         var tall = Math.max(cy - b.t, b.b - cy, X(deepest) / 2 + (f.garage ? X(1.0) : 0)) + rim;
         f.box.x = Math.round(cx); f.box.y = Math.round(cy);
         f.box.w = Math.round(2 * half); f.box.h = Math.round(2 * tall);
@@ -799,6 +1004,10 @@
     // (a roof over each room asked for in so many words: one piece is the plain way, 40-roofs.js)
     if (want.roofOne) { hand.house = Object.assign({}, hand.house || {}); delete hand.house.roof; }
     else { hand.house = Object.assign({}, hand.house || {}, { roof: "" }); }
+    // (what an open plan before this one was held up by, not this one's: 40-arrange.js)
+    if (!plan.open && hand.house.openSet) {
+      ["support", "beams", "frame", "openSet"].forEach(function (k) { delete hand.house[k]; });
+    }
 
     // put together on the paper too, where that was asked for: the front
     // door (and anything else) where 3D puts it, and drawn (tieTidy) each
@@ -822,9 +1031,18 @@
     if (typeof tieLayout === "function") { tieHeld = tieLayout(); }
     // (let go when done, or stopped: the finally at the foot of this)
     try {
+    // an open floor: the walls between its living rooms out now, before
+    // anything is put against them, and what holds the house up put in
+    // where they were -- the furniture then kept clear of it (40-arrange.js)
+    if (plan.open && typeof arrangeOpen === "function") {
+      arrangeOpen(made.map(function (r) { return { room: r, kind: r.starter }; }), tieHeld, want);
+    }
     if (want.spread && typeof tieLayout === "function") {
       var L = tieLayout(), doors = [];
-      L.made.forEach(function (one) { doors.push(one.node); });
+      // (not a door in a wall that came out: there is none -- an open plan's
+      // way from one part of it to the next is the whole of the opening)
+      var doorGone = typeof wallDoorGone === "function" && typeof tieWith === "function" ? tieWith(function (d) { return wallDoorGone(d); }, 1) : null;
+      L.made.forEach(function (one) { if (!(plan.open && doorGone && doorGone(one.node))) { doors.push(one.node); } });
       Object.keys(L.moves).forEach(function (id) {
         var n = nodeById(+id);
         if (n && WALK_DOORS[n.kind]) { doors.push(Object.assign({}, n, L.moves[id])); }
@@ -859,9 +1077,15 @@
     var typePlan = plan;
     var plan = walkPlan();
     var furnish = function (r) {
-      var spec = STARTER_ROOMS[r.starter];
-      spec.mid.forEach(function (one) { starterShuffle(rnd, one.split("|")).some(function (kind) { return !!starterMid(r, kind); }); });
+      var spec = r.starterCalm ? STARTER_CALM : STARTER_ROOMS[r.starter];
+      // (an open plan's kitchen: its counters first, an island out from them, then the table)
+      var island = !!typePlan.open && (r.starter === "kitchen" || r.starter === "great");
+      var mids = function () { spec.mid.forEach(function (one) { starterShuffle(rnd, one.split("|")).some(function (kind) { return !!starterMid(r, kind); }); }); };
+      // (an open plan's living room and family room: the television and the sofa facing it first)
+      var lounge = !!typePlan.open && !r.starterCalm && (r.starter === "living" || r.starter === "family") && starterLounge(r);
+      if (!island) { mids(); }
       spec.wall.forEach(function (one) {
+        if (lounge && /i_sofa|i_sectional|i_tv/.test(one)) { return; }
         // the first of "this|or that" there is room for, the two in either order
         starterShuffle(rnd, one.split("|")).some(function (kind) {
           // nightstands by the bed; the television across the room from the
@@ -881,6 +1105,7 @@
           return !!put;
         });
       });
+      if (island) { starterIsland(r); mids(); }
     };
     for (var mi = 0; mi < made.length; mi++) { furnish(made[mi]); yield ["furnish", (mi + 1) / made.length]; }
     // and now and then a little more: a bookcase, a plant, a chest at the
@@ -997,7 +1222,7 @@
     starterLast = made.map(function (r) { return { room: r, kind: r.starter }; });
     made.forEach(function (r) {
       delete r.starter; delete r.home; delete r.local;
-      delete r.starterId; delete r.starterVia; delete r.starterEntry; delete r.starterGo; delete r.starterBay; delete r.starterNook;
+      delete r.starterId; delete r.starterVia; delete r.starterEntry; delete r.starterGo; delete r.starterBay; delete r.starterNook; delete r.starterCalm;
     });
     picked = null; chosen = null; many = [];
     starterShown(say("st_made", { rooms: made.length }));
@@ -1127,6 +1352,14 @@
         return at + w / 2 > mid + sm.a - 3 && at - w / 2 < mid + sm.b + 3;
       });
     }
+    // (2026-10-04) where a wall was taken out (39-inside.js): nothing against
+    // it, nothing hung on it -- it is not there; an open plan's sofa backed
+    // onto a wall that then came out, and stood in the middle of the room
+    var gone = starterGone(r);
+    function overGone(e, at) {
+      var runs = gone[e.name], along = at - e.from;
+      return !!runs && runs.some(function (g) { return along + w / 2 > g.a - 2 && along - w / 2 < g.b + 2; });
+    }
     function overOpening(e, at) {
       return openings.some(function (o) {
         if (Math.abs((e.across ? o.y : o.x) - e.line) > T + 30) { return false; }     // not in this wall
@@ -1144,7 +1377,7 @@
         var off = e.line + e.into * (T + h / 2 + 1);
         var spot = { kind: kind, x: e.across ? at : off, y: e.across ? off : at, w: w, h: h, turn: e.turn,
                      put: long ? (e.turn + 90) % 360 : e.turn };
-        if (!overOpening(e, at) && !overSeam(e, at) && !(fit && fit.ok && !fit.ok(spot)) && !others.some(function (o) { return boxesTouch(spot, o, 3); }) &&
+        if (!overOpening(e, at) && !overSeam(e, at) && !overGone(e, at) && !(fit && fit.ok && !fit.ok(spot)) && !others.some(function (o) { return boxesTouch(spot, o, 3); }) &&
             !starterFrontClash({ kind: kind, x: spot.x, y: spot.y, w: fit ? fit.w : ICONS[kind].box[0], h: fit ? fit.h : ICONS[kind].box[1], turn: spot.put }, others)) { spots.push(spot); }
       }
     });
@@ -1156,6 +1389,132 @@
       var node = adviceAdd(kind, Math.round(s0.x), Math.round(s0.y), s0.put);
       if (fit) { node.w = fit.w; node.h = fit.h; node.own = true; }
     };
+  }
+
+  // (2026-10-04) An open plan's kitchen: an island out from its counters,
+  // the long way along them, with a metre and more of floor all round it to
+  // cook and to pass; stools along its side away from them.
+  var STARTER_COOK = { i_counter: 1, i_kitchensink: 1, i_stove: 1, i_dishwasher: 1, i_fridge: 1 };
+  function starterIsland(r) {
+    var P = FLOOR_PX, b = tieBox(r), T = roomWallOf(r), aisle = 1.05 * P;
+    if (!ICONS.i_island || Math.min(r.w, r.h) < 4.2 * P) { return null; }
+    var near = starterNear(r, 0), cook = near.filter(function (n) { return STARTER_COOK[n.kind] && insideArea(r, n.x, n.y); });
+    if (!cook.length) { return null; }
+    var cx = 0, cy = 0;
+    cook.forEach(function (n) { cx += n.x / cook.length; cy += n.y / cook.length; });
+    // along the wall the counters are mostly on
+    var byWall = cook.filter(function (n) { return Math.min(n.y - b.t, b.b - n.y) < Math.min(n.x - b.l, b.r - n.x); }).length;
+    var turn = byWall * 2 >= cook.length ? 0 : 90, iw = Math.min(2.4 * P, (turn ? r.h : r.w) - 2 * aisle - 2 * T), ih = 1.0 * P;
+    if (iw < 1.6 * P) { return null; }
+    var others = near.filter(function (o) {
+      return o !== r && !isArea(o.kind) && !ON_THE_WALL[o.kind] && !FROM_CEILING[o.kind] && o.kind !== "i_window" && o.kind !== "i_rug" && o.kind !== "i_vent";
+    });
+    var best = null;
+    for (var x = b.l; x <= b.r; x += 0.1 * P) {
+      for (var y = b.t; y <= b.b; y += 0.1 * P) {
+        var spot = { kind: "i_island", x: Math.round(x), y: Math.round(y), w: iw, h: ih, turn: turn }, q = turned(spot);
+        if (x - q.w / 2 < b.l + T + 0.4 * P || x + q.w / 2 > b.r - T - 0.4 * P || y - q.h / 2 < b.t + T + 0.4 * P || y + q.h / 2 > b.b - T - 0.4 * P) { continue; }
+        if (others.some(function (o) { return boxesTouch(spot, o, WALK_DOORS[o.kind] ? 0.6 * P : aisle); })) { continue; }
+        var far = Math.hypot(x - cx, y - cy);
+        if (!best || far < best.far) { best = { x: spot.x, y: spot.y, far: far }; }
+      }
+    }
+    if (!best) { return null; }
+    var isle = adviceAdd("i_island", best.x, best.y, turn);
+    isle.w = Math.round(iw); isle.h = Math.round(ih); isle.own = true;
+    // the stools: on the side away from the counters, one to every 60 cm
+    var side = turn ? (best.x < cx ? -1 : 1) : (best.y < cy ? -1 : 1), count = Math.max(1, Math.floor(iw / (0.6 * P)));
+    for (var k = 0; k < count; k++) {
+      var off = (k - (count - 1) / 2) * 0.6 * P, out = side * (ih / 2 + 0.3 * P);
+      var sx = turn ? best.x + out : best.x + off, sy = turn ? best.y + off : best.y + out;
+      var stool = { kind: "i_stool", x: Math.round(sx), y: Math.round(sy), w: ICONS.i_stool ? ICONS.i_stool.box[0] : 20, h: ICONS.i_stool ? ICONS.i_stool.box[1] : 20 };
+      if (!ICONS.i_stool || !insideArea(r, sx, sy, 8) || others.some(function (o) { return boxesTouch(stool, o, 2); })) { continue; }
+      // (facing the island: a turn of nought faces down the page)
+      adviceAdd("i_stool", stool.x, stool.y, turn ? (side > 0 ? 90 : 270) : (side > 0 ? 180 : 0));
+    }
+    return isle;
+  }
+
+  // A room's walls taken out (39-inside.js), side by side: the stretches of
+  // each from its start, in the house as it will stand.
+  function starterGone(r) {
+    var gone = {};
+    if (typeof wallOpenRuns === "function" && typeof wallAnyOpen === "function" && wallAnyOpen() && !((r.turn || 0) % 90)) {
+      var Jo = tieHeld || (typeof tieLayout === "function" ? tieLayout() : null);
+      var boxOpen = function (n) { return (Jo && Jo.boxes && Jo.boxes[n.id]) || tieBox(n); };
+      ["top", "foot", "left", "right"].forEach(function (name) { gone[name] = wallOpenRuns(r, name, boxOpen); });
+    }
+    return gone;
+  }
+  // (2026-10-04) An open plan's living room or family room: the television
+  // against a wall still standing -- across from the side most open, where
+  // it can -- and the sofa out in the room facing it, its back to the
+  // living space beyond (backed onto a wall that came out, it faced away
+  // from the television, across the room).  True if both went in.
+  var STARTER_FACE = { top: 180, foot: 0, left: 90, right: 270 };
+  // (the family room through the middle of an open house of three rows, a
+  // door off it on either side: chairs to sit and read in, a bookcase -- the
+  // television and the sofa in the living room off it)
+  var STARTER_CALM = { wall: ["i_bookcase", "i_armchair", "i_armchair", "i_lamp", "i_plant"], mid: ["i_rug", "i_coffee"] };   // (a seat's turn to face a wall: nought faces down the page)
+  function starterLounge(r) {
+    var gone = starterGone(r), b = tieBox(r), P = FLOOR_PX, most = null, mostLen = 0;
+    var len = { top: b.r - b.l, foot: b.r - b.l, left: b.b - b.t, right: b.b - b.t };
+    ["top", "foot", "left", "right"].forEach(function (e) {
+      var o = (gone[e] || []).reduce(function (s, g) { return s + g.b - g.a; }, 0);
+      if (o > mostLen) { mostLen = o; most = e; }
+    });
+    if (!most || !ICONS.i_tv) { return false; }
+    // (the wall across first; then the other walls standing, the most of each first)
+    var standing = function (e) { return len[e] - (gone[e] || []).reduce(function (s, g) { return s + g.b - g.a; }, 0); };
+    var first = { top: "foot", foot: "top", left: "right", right: "left" }[most];
+    var walls = [first].concat(["top", "foot", "left", "right"].filter(function (e) { return e !== most && e !== first; })
+      .sort(function (p, q) { return standing(q) - standing(p); })).filter(function (e) { return standing(e) >= 2.0 * P; });
+    return walls.some(function (wall) { return starterLoungeOn(r, wall, b, P); });
+  }
+  function starterLoungeOn(r, wall, b, P) {
+    var mid = { top: { x: r.x, y: b.t }, foot: { x: r.x, y: b.b }, left: { x: b.l, y: r.y }, right: { x: b.r, y: r.y } }[wall];
+    var was = hand.nodes.length, put = starterAlong(r, "i_tv", mid);
+    if (!put) { return false; }
+    put();
+    var tv = hand.nodes.length > was ? hand.nodes[hand.nodes.length - 1] : null;
+    if (!tv || tv.kind !== "i_tv") { return false; }
+    // its wall, as it went in: the nearest of the four
+    var off = { top: Math.abs(tv.y - b.t), foot: Math.abs(b.b - tv.y), left: Math.abs(tv.x - b.l), right: Math.abs(b.r - tv.x) };
+    wall = Object.keys(off).sort(function (p, q) { return off[p] - off[q]; })[0];
+    // (the sofa the room suits -- or, where that will not go, the next down)
+    var fits = [], ask = r.starter === "family" ? "i_sectional" : "i_sofa";
+    for (var guard = 0; ask && guard < 3; guard++) {
+      var f1 = typeof furnFit === "function" ? furnFit(r, ask, false) : null;
+      fits.push(f1 && f1.kind ? f1 : { kind: String(ask).split("@")[0], w: 0, h: 0 });
+      ask = f1 && f1.less;
+    }
+    var turn = STARTER_FACE[wall], T = roomWallOf(r);
+    var others = starterNear(r, 130).filter(function (o) {
+      return o !== r && !isArea(o.kind) && !ON_THE_WALL[o.kind] && !FROM_CEILING[o.kind] && o.kind !== "i_window" && o.kind !== "i_rug";
+    });
+    var across = wall === "top" || wall === "foot", into = wall === "top" || wall === "left" ? 1 : -1, line = { top: b.t, foot: b.b, left: b.l, right: b.r }[wall];
+    var room = (across ? b.b - b.t : b.r - b.l) - 2 * T;
+    for (var fi = 0; fi < fits.length; fi++) {
+    var fit = fits[fi], kind = ICONS[fit.kind] ? fit.kind : "i_sofa", w = fit.w || ICONS[kind].box[0], h = fit.h || ICONS[kind].box[1];
+    for (var d = 3.2; d >= 1.6; d -= 0.15) {
+      var depth = h / 2 + d * P;
+      if (depth + h / 2 + 0.5 * P > room) { continue; }                   // (and a way behind it)
+      // (across from the television, or a little to one side of it)
+      for (var k = 0; k < 7; k++) {
+        var slide = (k % 2 ? 1 : -1) * Math.ceil(k / 2) * 0.3 * P;
+        var at = line + into * (T + depth), x = across ? tv.x + slide : at, y = across ? at : tv.y + slide;
+        var spot = { kind: kind, x: Math.round(x), y: Math.round(y), w: w, h: h, turn: turn }, q = turned(spot);
+        if (!insideArea(r, spot.x - q.w / 2, spot.y - q.h / 2, T + 2) || !insideArea(r, spot.x + q.w / 2, spot.y + q.h / 2, T + 2)) { continue; }
+        if (others.some(function (o) { return o !== tv && boxesTouch(spot, o, 3); })) { continue; }
+        var sofa = adviceAdd(kind, spot.x, spot.y, turn);
+        if (fit.w) { sofa.w = w; sofa.h = h; sofa.own = true; }
+        return true;
+      }
+    }
+    }
+    // (no room for it so: the television out again, and the room furnished as any other)
+    hand.nodes = hand.nodes.filter(function (n) { return n !== tv; });
+    return false;
   }
 
   // ---- what is near a room, quickly -------------------------------------------------------------
@@ -1272,7 +1631,15 @@
       // (a small room of another building -- a restroom, a stockroom -- a light all the same, 39-types.js)
       if (hang && ICONS[hang] && Math.min(r.w, r.h) >= ((r.use || kind === "laundry" || kind === "utility" || kind === "pantry" || kind === "mudroom" || (typeof ODD_SMALL === "object" && ODD_SMALL[kind])) && hang === "i_pendant" ? 1.4 : 2.6) * P) {
         var over = (hang === "i_chandelier" && inRoom("i_dining|i_roundtable")) || null;
-        adviceAdd(hang, Math.round(over ? over.x : r.x), Math.round(over ? over.y : r.y));
+        if (!(hang === "i_pendant" && inRoom("i_island"))) { adviceAdd(hang, Math.round(over ? over.x : r.x), Math.round(over ? over.y : r.y)); }
+      }
+      // (an island: two lights hung over it, along it -- 2026-10-04)
+      var isle = inRoom("i_island");
+      if (isle && ICONS.i_pendant) {
+        var tI = turned(isle), lengthwise = tI.w >= tI.h;
+        [-0.25, 0.25].forEach(function (k) {
+          adviceAdd("i_pendant", Math.round(isle.x + (lengthwise ? tI.w * k : 0)), Math.round(isle.y + (lengthwise ? 0 : tI.h * k)));
+        });
       }
       // an air vent near a corner, away from the light
       if (STARTER_VENTED[kind] && ICONS.i_vent && Math.min(r.w, r.h) >= 1.4 * P) {
@@ -1369,14 +1736,14 @@
         at += r.w;
       });
       var wide = Math.max(fp.back.reduce(function (s, r) { return s + r.w; }, 0), fp.front.reduce(function (s, r) { return s + r.w; }, 0));
-      var mids = Hh > 0 ? fp.mid || [] : [], Dm = fp.Dm || D, Ys = Db + Hh + mids.length * (Dm + Hh);
+      var mids = Hh > 0 || fp.open ? fp.mid || [] : [], Dm = fp.Dm || D, Ys = Db + Hh + mids.length * (Dm + Hh);
       mids.forEach(function (row) { wide = Math.max(wide, row.reduce(function (s, r) { return s + r.w; }, 0)); });
       if (Hh > 0) { put("hall", TXT.st_hall, 0, Db, wide, Db + Hh); }
       mids.forEach(function (row, j) {
         var y0 = Db + Hh + j * (Dm + Hh);
         at = 0;
         row.forEach(function (r) { put(r.kind, r.cross ? "" : r.label, at, y0, at + r.w, y0 + Dm); at += r.w; });
-        put("hall", "", 0, y0 + Dm, wide, y0 + Dm + Hh);
+        if (Hh > 0) { put("hall", "", 0, y0 + Dm, wide, y0 + Dm + Hh); }
       });
       at = 0;
       fp.front.forEach(function (r) {
@@ -1386,7 +1753,7 @@
         } else { put(r.kind, r.label, at, Ys, at + r.w, Ys + Df); }
         at += r.w;
       });
-      if (fp.level === 0 && want.garage && !plan.noGarage && Hh > 0) { put("garage", "", W, Ys - Hh, W + 6.0, Ys - Hh + 6.2); }
+      if (fp.level === 0 && want.garage && !plan.noGarage && (Hh > 0 || fp.open)) { put("garage", "", W, Ys - Hh, W + starterGarageW(want), Ys - Hh + 6.2); }
       out.push({ level: fp.level, rooms: rooms });
     });
     out.sort(function (a, b) { return a.level - b.level; });
@@ -1574,6 +1941,18 @@
         [["classic", false, false], ["semi", true, false], ["open", false, true], ["great", true, true]].forEach(function (m) {
           tile(TXT["lay_" + m[0]], "lay_" + m[0], function () { return !!want.open === m[1] && !!want.openPlan === m[2]; },
                function () { want.open = m[1]; want.openPlan = m[2]; }, true);
+        });
+        // (2026-10-04) an open plan's: what holds the house up where its
+        // walls came out -- steel beams in the ceiling, or posts (40-arrange.js)
+        head(TXT.sup_head);
+        var supHead = pick.lastChild;
+        tiles();
+        var supGrid = grid;
+        [["beams", TXT.sup_beams], ["posts", TXT.sup_posts]].forEach(function (s) {
+          tile(s[1], "sup_" + s[0], function () { return (want.support || "beams") === s[0]; }, function () { want.support = s[0]; }, true);
+          var b = grid.lastChild, was = b.refresh;
+          b.refresh = function () { was(); supHead.style.display = supGrid.style.display = want.openPlan ? "" : "none"; };
+          b.refresh();
         });
         // (2026-10-03) which way round: the bedrooms together, split, in a
         // wing -- or the main bedroom downstairs in a house of two floors;

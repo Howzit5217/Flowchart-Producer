@@ -97,7 +97,7 @@
     var parts = [typeof worldScapes === "function" ? worldScapes().join("+") : worldScape(), terrRelief(), terrFoundPick(), houseOpt("landSeed"), houseOpt("street") ? 1 : 0, houseOpt("hood") ? 1 : 0];
     var any = false;
     hand.nodes.forEach(function (n) {
-      if (n.kind !== "i_room" && n.kind !== "i_floor" && n.kind !== "i_lot" && !WALK_DOORS[n.kind]) { return; }
+      if (n.kind !== "i_room" && n.kind !== "i_floor" && n.kind !== "i_lot" && n.kind !== "i_pool" && !WALK_DOORS[n.kind]) { return; }
       if (n.kind === "i_room") { any = true; }
       parts.push(n.kind.slice(2, 5) + n.id + ":" + Math.round(n.x) + "," + Math.round(n.y) + "," + Math.round(n.w) + "," +
                  Math.round(n.h) + "," + (n.turn || 0) + "," + (n.ceil || 0));
@@ -203,6 +203,19 @@
       var c = o.sill - Math.max(0, Math.hypot(x - o.x, y - o.y) - o.r) * o.k;
       if (c > g) { g = c; }
     }
+    // (2026-10-04) a pool dug in: the ground level with its coping round it,
+    // easing back to the land's own a couple of metres off (40-gatespool.js)
+    if (T.pools) {
+      for (var pi = 0; pi < T.pools.length; pi++) {
+        var pl = T.pools[pi], px = x - pl.x, py = y - pl.y;
+        var ox = Math.abs(px * pl.c + py * pl.s) - pl.hw, oy = Math.abs(-px * pl.s + py * pl.c) - pl.hh;
+        var off = Math.hypot(Math.max(ox, 0), Math.max(oy, 0));
+        if (off < 3 * T.P) {
+          var w = off <= 0.8 * T.P ? 1 : 1 - (off - 0.8 * T.P) / (2.2 * T.P);
+          g += (pl.z - g) * w * w * (3 - 2 * w);
+        }
+      }
+    }
     return g;
   }
   // The ground's height for the other parts (0 where the land is level).
@@ -221,7 +234,7 @@
     var P = FLOOR_PX, scape = typeof worldScapes === "function" ? worldScapes().join("+") : worldScape(), S = terrShapeNow(), k = TERR_K[terrRelief()];
     if (k === undefined) { k = 1; }
     var floors = typeof floorsOf === "function" ? floorsOf() : [];
-    var T = { key: key, P: P, floors: floors, rects: [], under: [], doors: [], pads: [], made: null, lifts: new Map() };
+    var T = { key: key, P: P, floors: floors, rects: [], under: [], doors: [], pads: [], made: null, lifts: new Map(), scape: scape };
     hand.nodes.forEach(function (r) {
       if (r.kind !== "i_room") { return; }
       var f = floors.length ? floorAt(floors, r.x, r.y) : null, lv = f ? f.level : 0;
@@ -324,6 +337,17 @@
       });
       p.lo = Math.min(lo - 0.1 * P, p.top - 0.05 * P);
     });
+    // a pool dug into the lot: where it stands, at the height of the ground there
+    var pools = [];
+    hand.nodes.forEach(function (n) {
+      if (n.kind !== "i_pool" || n.w < 1.2 * P || n.h < 1.2 * P) { return; }
+      var f = floors.length ? floorAt(floors, n.x, n.y) : null;
+      if (f && f.level !== 0) { return; }
+      var R = terrRect(n, f);
+      R.z = terrAt(R.x, R.y);
+      pools.push(R);
+    });
+    T.pools = pools;
     return T;
   }
 
@@ -343,6 +367,11 @@
     var P = T.P, faces = [], posts = T.found === "posts";
     var conc = { piece: true, color: "#aba79e", edge: "#8a877f", pat: 63, bare: true };
     var wood = { piece: true, color: "#6e604f", edge: "#4c4238", pat: 21, bare: true };
+    // (2026-10-04: "no weird holes in the foundation") between the posts, a
+    // lattice skirt down to the ground -- the crawl space closed in, not the
+    // house up in the air with the garden through under it; by the sea left
+    // open, as a house on stilts is built for the water to run under
+    var skirt = posts && !/beach/.test(T.scape || "") ? { piece: true, color: "#8a7660", edge: "#5f4f3e", pat: 82, bare: true } : null;
     var deck = posts ? { piece: true, color: "#8d7256", edge: "#5f4c39", pat: 2 }
                      : { piece: true, color: "#bdb9b0", edge: "#8d8a83", pat: 10 };
     function quad(a, b, ta, tb, la, lb, n, how) {
@@ -383,6 +412,9 @@
             var A = pts[j], B = pts[j + 1];
             if (posts) {
               quad(A.p, B.p, A.top, B.top, A.top - 0.3 * P, B.top - 0.3 * P, nn, wood);
+              if (skirt && (A.g < A.top - 0.32 * P || B.g < B.top - 0.32 * P)) {
+                quad(A.p, B.p, A.top - 0.3 * P, B.top - 0.3 * P, Math.min(A.top - 0.3 * P, A.g - 0.1 * P), Math.min(B.top - 0.3 * P, B.g - 0.1 * P), nn, skirt);
+              }
             } else {
               var ba = Math.min(A.top, A.g - 0.12 * P), bb = Math.min(B.top, B.g - 0.12 * P);
               if (ba < A.top - 0.5 || bb < B.top - 0.5) { quad(A.p, B.p, A.top, B.top, ba, bb, nn, conc); }
@@ -637,6 +669,13 @@
       var q = terrLocal(T, Rc.x, Rc.y), w = Math.abs(cr) > 0.5 ? Rc.hw : Rc.hh, h = Math.abs(cr) > 0.5 ? Rc.hh : Rc.hw;
       keysX.push(q[0] - w, q[0] + w); keysY.push(q[1] - h, q[1] + h);
     });
+    // (and each pool's sides, square to the lot: the ground over it cut out along them, 40-gatespool.js)
+    (T.pools || []).forEach(function (Pl) {
+      var cr = Pl.c * T.ca + Pl.s * T.sa, sr = Pl.s * T.ca - Pl.c * T.sa;
+      if (Math.abs(cr) < 0.999 && Math.abs(sr) < 0.999) { return; }
+      var q = terrLocal(T, Pl.x, Pl.y), w = Math.abs(cr) > 0.5 ? Pl.hw : Pl.hh, h = Math.abs(cr) > 0.5 ? Pl.hh : Pl.hw;
+      keysX.push(q[0] - w, q[0] + w); keysY.push(q[1] - h, q[1] + h);
+    });
     var fx0 = Math.max(m[0] - R, -F.w / 2 - 30 * P), fx1 = Math.min(m[0] + R, F.w / 2 + 30 * P);
     var fy0 = Math.max(m[1] - R, -F.h / 2 - (W ? W.shore + W.surf + 12 * P : 30 * P)), fy1 = Math.min(m[1] + R, (St ? St.far : F.h / 2) + 25 * P);
     var xs = terrLines(m[0] - R, m[0] + R, Math.min(fx0, fx1), Math.max(fx0, fx1), step, keysX);
@@ -679,6 +718,11 @@
         var w4 = corners.map(function (k) { return terrWorld(T, xs[k[0]], ys[k[1]]); });
         if (w4.every(function (p) { return Math.hypot(p[0] - L.mid[0], p[1] - L.mid[1]) > R; })) { continue; }
         if (T.under.length && w4.every(function (p, k) { return dug(xs[corners[k][0]], ys[corners[k][1]]); })) { continue; }
+        // (over a pool: its water and its basin are there instead)
+        if (T.pools && T.pools.length) {
+          var mw = terrWorld(T, cx, cy);
+          if (T.pools.some(function (Pl) { return terrIn(Pl, mw[0], mw[1], -0.5); })) { continue; }
+        }
         // what this bit of ground is
         var col = land, pat = landPat, uv = null;
         if (St && cy > St.hy && cy < St.far) {

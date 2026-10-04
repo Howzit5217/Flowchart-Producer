@@ -412,6 +412,18 @@
       "port": 9253
     },
     {
+      "name": "storm-site",
+      "runtimeExecutable": "python",
+      "runtimeArgs": [
+        "-m",
+        "http.server",
+        "9287",
+        "--directory",
+        "C:/Users/origa/Downloads/GitHub/Flowchart-Producer/Flowchart Builder"
+      ],
+      "port": 9287
+    },
+    {
       "name": "open3d-site",
       "runtimeExecutable": "python",
       "runtimeArgs": [

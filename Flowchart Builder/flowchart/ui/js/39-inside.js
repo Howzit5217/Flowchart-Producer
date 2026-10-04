@@ -346,8 +346,24 @@
     });
     return out;
   }
+  // (2026-10-04) or only the stretch it shares with one room (`room.openTo`,
+  // that room's id): an open plan's living room half beside the kitchen and
+  // half beside a bedroom, the one taken out and the other left standing
   function wallIsOpen(room, edge, other, facing) {
-    return (room.open || []).indexOf(edge) >= 0 || (!!facing && (other.open || []).indexOf(facing) >= 0);
+    return (room.open || []).indexOf(edge) >= 0 || (!!facing && (other.open || []).indexOf(facing) >= 0) ||
+           (room.openTo || []).indexOf(other.id) >= 0 || (other.openTo || []).indexOf(room.id) >= 0;
+  }
+  function wallSomeOpen(o) { return o.kind === "i_room" && ((o.open && o.open.length) || (o.openTo && o.openTo.length)); }
+  // The rooms a room is open to, by any stretch of its walls taken out (in the house as it stands).
+  function wallOpenTo(room) {
+    if (!wallSomeOpen(room) && !hand.nodes.some(function (o) { return (o.openTo || []).indexOf(room.id) >= 0 || (o.open && o.open.length); })) { return []; }
+    var W = wallJoined(), out = [];
+    WALL_EDGES.forEach(function (edge) {
+      wallAcross(room, edge, W.box).forEach(function (it) {
+        if (wallIsOpen(room, edge, it.room, it.facing) && out.indexOf(it.room) < 0) { out.push(it.room); }
+      });
+    });
+    return out;
   }
   // (asked once a picture while one is made -- every door of a big building
   // asked it of every shape in the building)
@@ -356,7 +372,7 @@
     var at = typeof V3 !== "undefined" && V3 ? V3.picture || null : null;
     if (!wallOpenKept) { wallOpenKept = { at: null, any: false }; }   // (asked before this part has run)
     if (at && wallOpenKept.at === at) { return wallOpenKept.any; }
-    var any = hand.nodes.some(function (o) { return o.kind === "i_room" && o.open && o.open.length; });
+    var any = hand.nodes.some(wallSomeOpen);
     if (at) { wallOpenKept.at = at; wallOpenKept.any = any; }
     return any;
   }
@@ -396,13 +412,17 @@
   // A door left standing in a wall taken out: not put up.
   function wallDoorGone(d, near) {       // (near: the rooms by it, where they are known)
     if (!wallAnyOpen()) { return false; }
+    // (a door's box is mostly the floor it swings over, to one side of its
+    // wall: its middle half a door off the wall line -- 2026-10-04, two doors
+    // stood in an open plan's opening, their wall gone round them)
+    var reach = Math.max(14, Math.min(d.w || 0, d.h || 0) / 2 + 8);
     return (near || hand.nodes).some(function (room) {
-      if (room.kind !== "i_room" || !insideArea(room, d.x, d.y, 14)) { return false; }
+      if (room.kind !== "i_room" || !insideArea(room, d.x, d.y, -reach)) { return false; }
       var t = turned(room);
       return WALL_EDGES.some(function (edge) {
         var out = wallOut(room, edge), half = Math.abs(out[1]) > 0.5 ? t.h / 2 : t.w / 2;
         var off = (d.x - room.x) * out[0] + (d.y - room.y) * out[1];
-        if (Math.abs(off - half) > 14) { return false; }
+        if (Math.abs(off - half) > reach) { return false; }
         var at = wallAlong(room, edge, d.x, d.y);
         return wallOpenRuns(room, edge).some(function (r) { return at > r.a - 4 && at < r.b + 4; });
       });
@@ -437,13 +457,114 @@
              plies: span > 4.5 ? 3 : 2, middle: span > 6.0 };
   }
   // Where its posts stand: at the ends of the stretch, and in the middle of
-  // a long one -- in the house as it stands.
+  // a long one -- in the house as it stands.  None where it carried nothing.
+  //
+  // (2026-10-04: "an open concept house ... either poles in the house or
+  // metal beams in the ceiling holding things up")  A house that says how
+  // it is held up (`hand.house.support`, Start building's open plans):
+  // "beams" -- steel over each line where walls came out, as long as the
+  // line runs, wall to wall, a post only where its end has nothing under it
+  // or past 9 m; "posts" -- a post every 3 m along each line, beams over
+  // them.  The stretches along one line are one beam; a beam ending on
+  // another, or on a wall, is held there.
   function wallPostSpots(room, run, boxOf) {
     var it = run.it, px = FLOOR_PX, s = wallStructure(room, run, boxOf), inset = 0.12 * px, out = [];
-    var ends = [it.lo + inset, it.hi - inset];
-    if (s.middle) { ends.push((it.lo + it.hi) / 2); }
-    ends.forEach(function (v) { out.push(it.horiz ? [v, it.line] : [it.line, v]); });
+    var how = typeof houseOpt === "function" ? houseOpt("support") : "";
+    if (how !== "beams" && how !== "posts") {
+      if (!s.bearing) { return out; }
+      var ends = [it.lo + inset, it.hi - inset];
+      if (s.middle) { ends.push((it.lo + it.hi) / 2); }
+      ends.forEach(function (v) { out.push(it.horiz ? [v, it.line] : [it.line, v]); });
+      return out;
+    }
+    boxOf = boxOf || function (n) { return tieBox(n); };
+    var floors = typeof floorsOf === "function" ? floorsOf() : [], f0 = floors.length ? floorAt(floors, room.x, room.y) : null;
+    var lines = wallOpenLines(boxOf, floors, f0);
+    // this stretch's whole line: the open stretches along it, end to end
+    var line = wallLineOf(lines, it.horiz, it.line, it.lo, it.hi);
+    var bearing = s.bearing || line.runs.some(function (l) { return l.bearing; });
+    if (how === "beams" && !bearing && !wallBeamsShown()) { return out; }
+    function at(v) { return it.horiz ? [v, it.line] : [it.line, v]; }
+    // its ends: a post where nothing holds it
+    if (Math.abs(line.lo - it.lo) < 2 && !wallHeld(lines, it.horiz, it.line, line.lo, -1, boxOf, floors, f0)) { out.push(at(it.lo + inset)); }
+    if (Math.abs(line.hi - it.hi) < 2 && !wallHeld(lines, it.horiz, it.line, line.hi, 1, boxOf, floors, f0)) { out.push(at(it.hi - inset)); }
+    // along it: no further apart than a beam that size spans
+    var steel = s.steel || (typeof structKind === "function" && structKind() === "steel");
+    var each = how === "posts" ? 3.0 : bearing ? (steel ? 9.0 : 6.0) : 0;
+    if (each) {
+      var len = line.hi - line.lo, n = Math.ceil(len / (each * px) - 1e-6);
+      for (var k = 1; k < n; k++) {
+        var v = line.lo + len * k / n;
+        if (v > it.lo - 1 && v <= it.hi + 1) { out.push(at(v)); }
+      }
+    }
     return out;
+  }
+  function wallBeamsShown() { var b = typeof houseOpt === "function" ? houseOpt("beams") : ""; return b === "shown" || b === "open"; }
+  // Every stretch taken out on a floor, in the house's numbers: which way it
+  // runs, its line, from and to, and whether it carried anything.
+  function wallOpenLines(boxOf, floors, f0) {
+    var out = [];
+    hand.nodes.forEach(function (o) {
+      if (o.kind !== "i_room" || ((o.turn || 0) % 90) || !wallSomeOpen(o)) { return; }
+      if (floors.length && floorAt(floors, o.x, o.y) !== f0) { return; }
+      var B = boxOf(o);
+      WALL_EDGES.forEach(function (edge) {
+        var horiz = edge === "top" || edge === "foot";
+        wallOpenRuns(o, edge, boxOf).forEach(function (r) {
+          var base = horiz ? B.l : B.t;
+          out.push({ horiz: horiz, line: edge === "top" ? B.t : edge === "foot" ? B.b : edge === "left" ? B.l : B.r,
+                     lo: base + r.a, hi: base + r.b, bearing: wallStructure(o, r, boxOf).bearing });
+        });
+      });
+    });
+    return out;
+  }
+  // The stretches along one line, touching end to end, as one.
+  function wallLineOf(lines, horiz, at, lo, hi) {
+    var mine = lines.filter(function (l) { return l.horiz === horiz && Math.abs(l.line - at) < 4; }), got = { lo: lo, hi: hi, runs: [] }, grew = true;
+    while (grew) {
+      grew = false;
+      mine.forEach(function (l) {
+        if (got.runs.indexOf(l) >= 0 || l.hi < got.lo - 6 || l.lo > got.hi + 6) { return; }
+        got.runs.push(l);
+        if (l.lo < got.lo) { got.lo = l.lo; grew = true; }
+        if (l.hi > got.hi) { got.hi = l.hi; grew = true; }
+      });
+    }
+    return got;
+  }
+  // Whether a beam's end at `v` along its line is held: the wall it was
+  // part of goes on past it, a wall stands across it there, or another
+  // beam runs across it there (and on past it both ways).
+  function wallHeld(lines, horiz, line, v, dir, boxOf, floors, f0) {
+    var step = 0.25 * FLOOR_PX, p = horiz ? [v, line] : [line, v];
+    var past = horiz ? [v + dir * step, line] : [line, v + dir * step];
+    if (wallStandsAt(past[0], past[1], horiz, boxOf, floors, f0)) { return true; }
+    var n = horiz ? [0, 1] : [1, 0];
+    if (wallStandsAt(p[0] + n[0] * step, p[1] + n[1] * step, !horiz, boxOf, floors, f0) ||
+        wallStandsAt(p[0] - n[0] * step, p[1] - n[1] * step, !horiz, boxOf, floors, f0)) { return true; }
+    // (the beam across: along the other way, through this end, and on past it both ways)
+    var across = wallLineOf(lines, !horiz, v, line, line);
+    return across.runs.length > 0 && across.lo < line - step && across.hi > line + step;
+  }
+  // Whether a wall stands through a point, running across (`horiz`) or down:
+  // a room's side there -- an outside wall too -- not taken out at that spot.
+  function wallStandsAt(x, y, horiz, boxOf, floors, f0) {
+    return hand.nodes.some(function (o) {
+      if (o.kind !== "i_room" || ((o.turn || 0) % 90)) { return false; }
+      if (floors.length && floorAt(floors, o.x, o.y) !== f0) { return false; }
+      var B = boxOf(o);
+      return WALL_EDGES.some(function (edge) {
+        if ((edge === "top" || edge === "foot") !== horiz) { return false; }
+        var lineAt = edge === "top" ? B.t : edge === "foot" ? B.b : edge === "left" ? B.l : B.r;
+        if (Math.abs((horiz ? y : x) - lineAt) > 3) { return false; }
+        var v = horiz ? x : y, lo = horiz ? B.l : B.t, hi = horiz ? B.r : B.b;
+        if (v < lo + 1 || v > hi - 1) { return false; }
+        var along = v - lo;
+        return !wallOpenRuns(o, edge, boxOf).some(function (r) { return along > r.a - 1 && along < r.b + 1; });
+      });
+    });
   }
   // The beams, drawn by one of the two rooms (the one first in the drawing).
   function wallBeams(faces, room, edge) {
@@ -580,7 +701,8 @@
     var W = wallJoined();
     return WALL_EDGES.map(function (edge) {
       var across = wallAcross(room, edge, W.box);
-      return { edge: edge, across: across, open: (room.open || []).indexOf(edge) >= 0 };
+      return { edge: edge, across: across, open: (room.open || []).indexOf(edge) >= 0 ||
+               across.some(function (it) { return wallIsOpen(room, edge, it.room, it.facing); }) };
     });
   }
   function wallSet(room, edge, open) {
@@ -593,14 +715,23 @@
     }
     // (this room's side only: the room across may have walls to others along it, still standing)
     mark(room, edge, open);
-    if (!open) { across.forEach(function (it) { if (it.facing) { mark(it.room, it.facing, false); } }); }
+    if (!open) {
+      across.forEach(function (it) {
+        if (it.facing) { mark(it.room, it.facing, false); }
+        // (and a stretch taken out to that room alone, put back)
+        [[room, it.room], [it.room, room]].forEach(function (pair) {
+          var to = (pair[0].openTo || []).filter(function (id) { return id !== pair[1].id; });
+          if (to.length) { pair[0].openTo = to; } else { delete pair[0].openTo; }
+        });
+      });
+    }
     // its posts: put up with the opening where the wall carried something, taken down with it
     var tag = room.id + ":" + edge;
     hand.nodes = hand.nodes.filter(function (n) { return !(n.kind === "i_post" && n.postFor === tag); });
     if (open) {
       var d = W.delta(room);
       wallInfo(room.id, edge).forEach(function (info) {
-        if (!info.s.bearing) { return; }
+        if (!info.spots.length) { return; }        // (it carried nothing, and needs nothing under it)
         info.spots.forEach(function (p) {
           if (wallPostNear(W, p, 0.35 * FLOOR_PX)) { return; }      // one there already: where two openings meet
           var post = adviceAdd("i_post", Math.round(p[0] - d[0]), Math.round(p[1] - d[1]));
@@ -680,11 +811,11 @@
         if (!wallAnyOpen()) { return tips; }
         var W = wallJoined(), done = {}, px = FLOOR_PX;
         hand.nodes.forEach(function (room) {
-          if (room.kind !== "i_room" || !room.open) { return; }
-          room.open.forEach(function (edge) {
+          if (!wallSomeOpen(room)) { return; }
+          WALL_EDGES.forEach(function (edge) {
             wallInfo(room.id, edge).forEach(function (info) {
               var key = [Math.min(room.id, info.other), Math.max(room.id, info.other)].join("|");
-              if (done[key] || !info.s.bearing) { return; }
+              if (done[key] || !info.spots.length) { return; }
               done[key] = true;
               var d = W.delta(room);
               // a post there: any post, in the house as it stands, within half a metre

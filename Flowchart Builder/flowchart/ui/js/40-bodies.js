@@ -25,6 +25,7 @@
   // (40-crew.js draws its hammer from the right hand and its hard hat round
   // the head), only the body round them is new.
   var BD_STEPS = 24;                     // poses to a stride
+  var BD_ARMS = { carry: 1, hammer: 1, shoulder: 1, up: 1, climb: 1 };    // what the hands can be doing
   var BD_ARMQ = 32;                      // heights of a hammer's swing
   var BD_KEPT = new Map(), BD_KEPT_MAX = 1500;
   var BD_ZERO = new Float32Array(2 * 24000);
@@ -254,7 +255,7 @@
   // The joints as 40-tour.js had them: hips at 0.93, the step swinging the
   // legs; shoulders at 1.42, the arms swinging the other way -- or out in
   // front carrying, or one raised with a hammer (40-crew.js's own numbers).
-  function bdJoints(sp, phase, arms, armK) {
+  function bdJoints(sp, phase, arms, armK, legs) {
     var T = BD_TORSO[sp.sex], swing = Math.sin(phase) * 0.42, lift = Math.max(0, Math.cos(phase)) * 0.06, J = { legs: [], arms: [] };
     [-1, 1].forEach(function (side) {
       var sw = swing * side, hy = side * T.hip, bend = sw > 0 ? sw * 0.6 : 0;
@@ -269,6 +270,16 @@
         elbow = [0.17, side * 0.25, 1.19]; wrist = [0.43, side * 0.21, 1.13];
       } else if (arms === "hammer") {
         elbow = [0.2, side * 0.27, 1.22 + armK * 0.26]; wrist = [0.42 - armK * 0.14, side * 0.23, 1.16 + armK * 0.48];
+      } else if (arms === "shoulder" && side > 0) {
+        // (40-works.js: timber on the right shoulder, steadied by that hand)
+        elbow = [0.12, side * 0.3, 1.3]; wrist = [0.06, side * 0.24, 1.56];
+      } else if (arms === "up") {
+        // both up over the head: a sheet held to the ceiling, a truss guided in
+        elbow = [0.1, side * 0.25, 1.68]; wrist = [0.2, side * 0.2, 1.96];
+      } else if (arms === "climb") {
+        // hand over hand up a ladder
+        var u = Math.sin(phase + (side > 0 ? 0 : Math.PI)) * 0.14;
+        elbow = [0.2, side * 0.23, 1.5 + u * 0.5]; wrist = [0.3, side * 0.19, 1.74 + u];
       }
       J.arms.push({ side: side, sh: sh, elbow: elbow, wrist: wrist });
     });
@@ -276,10 +287,20 @@
     // stride both feet were in the air; it dips as the legs part, rises as they pass)
     // (never with a hammer: 40-crew.js draws it from the hand where it was asked to be)
     J.drop = phase && arms !== "hammer" ? Math.max(0, Math.min(J.legs[0].ankle[2], J.legs[1].ankle[2]) - 0.08) : 0;
+    if (legs === "kneel") {
+      // down on one knee (laying a floor, a form board): the left knee on the
+      // ground, the right foot flat, the body that much lower
+      J.legs.forEach(function (L) {
+        var hy = L.hip[1];
+        if (L.side > 0) { L.knee = [0.42, hy, 0.93]; L.ankle = [0.42, hy, 0.5]; }
+        else { L.knee = [0.04, hy, 0.51]; L.ankle = [-0.38, hy, 0.5]; }
+      });
+      J.drop = 0.43;
+    }
     return J;
   }
-  function bdMake(sp, phase, arms, armK, withHead, scale) {
-    var G = bdMaker(), O = sp.O, T = BD_TORSO[sp.sex], J = bdJoints(sp, phase, arms, armK);
+  function bdMake(sp, phase, arms, armK, withHead, scale, legs) {
+    var G = bdMaker(), O = sp.O, T = BD_TORSO[sp.sex], J = bdJoints(sp, phase, arms, armK, legs);
     G.dz = -J.drop;
     var bare = O.legs === "skirt" || O.legs === "dress";
     var topSlot = O.vest ? "top2" : "top", legSlot = bare ? "skin" : "bottom";
@@ -379,7 +400,10 @@
       });
       bdBall(G, "hair", [H[0] + 0.092, 0, H[2] - 0.035], 0.012, 0.03, 0.008, 2, 6);                     // the moustache
     }
-    if (O.hat === "cap") {
+    if (O.hat === "hard") {
+      bdBall(G, "hat", [H[0] - 0.002, 0, H[2] + 0.028], 0.116, 0.104, 0.1, 4, 14, null, 0, 90);
+      bdBall(G, "hat", [H[0] + 0.012, 0, H[2] + 0.03], 0.152, 0.136, 0.011, 2, 14);
+    } else if (O.hat === "cap") {
       bdBall(G, "hat", [H[0] - 0.004, 0, H[2] + 0.03], 0.11, 0.095, 0.092, 4, 14, null, 0, 90);
       bdBall(G, "hat", [H[0] + 0.106, 0, H[2] + 0.034], 0.066, 0.08, 0.01, 3, 10);
     } else if (O.hat === "toque") {
@@ -416,8 +440,10 @@
   function bdSpec(L) {
     var sex = L && L.sex === "f" ? "f" : "m", outfit = L && BD_OUTFITS[L.outfit] ? L.outfit : "tee";
     var hair = L && L.hairStyle ? L.hairStyle : sex === "f" ? "long" : "short";
-    return { sex: sex, outfit: outfit, O: BD_OUTFITS[outfit], hair: hair, beard: !!(L && L.beard), child: !!(L && L.child),
-             key: [sex, outfit, hair, L && L.beard ? 1 : 0, L && L.child ? 1 : 0].join(",") };
+    var O = BD_OUTFITS[outfit];
+    if (L && L.hardhat) { O = Object.assign({}, O, { hat: "hard" }); }        // (on a building site, 40-works.js)
+    return { sex: sex, outfit: outfit, O: O, hair: hair, beard: !!(L && L.beard), child: !!(L && L.child),
+             key: [sex, outfit, hair, L && L.beard ? 1 : 0, L && L.child ? 1 : 0, L && L.hardhat ? "hh" : ""].join(",") };
   }
   function bdColor(L, slot) {
     switch (slot) {
@@ -432,7 +458,7 @@
       case "shoes": return L.shoes || "#2b2623";
       case "belt": return "#2b2623";
       case "tie": return L.tie || "#8c2f3a";
-      case "hat": return L.hat || L.pants || "#2e3846";
+      case "hat": return L.hardhat ? L.hardhatColor || "#f2c230" : L.hat || L.pants || "#2e3846";
       default: return "#f2f0ea";
     }
   }
@@ -445,10 +471,11 @@
   function bdDraw(faces, x, y, z, head, phase, look, withHead, k, others, fade) {
     var L = look || {}, sp = bdSpec(L), P = FLOOR_PX * (k || 1);
     var b = phase ? (((Math.round(phase / (Math.PI * 2) * BD_STEPS)) % BD_STEPS) + BD_STEPS) % BD_STEPS : 0;
-    var arms = withHead && (L.arms === "carry" || L.arms === "hammer") ? L.arms : "";
+    var arms = withHead && BD_ARMS[L.arms] ? L.arms : "", legs = L.legs === "kneel" ? "kneel" : "";
     var aq = arms === "hammer" ? Math.round(Math.max(0, Math.min(1, L.armK || 0)) * BD_ARMQ) : 0, kq = Math.round(P * 10) / 10;
-    var key = [sp.key, withHead ? 1 : 0, b, arms, aq, kq].join("|");
-    var made = bdKept(key, function () { return bdMake(sp, b / BD_STEPS * Math.PI * 2, arms, aq / BD_ARMQ, withHead, kq); });
+    if (legs) { b = 0; }
+    var key = [sp.key, withHead ? 1 : 0, b, arms, aq, kq, legs].join("|");
+    var made = bdKept(key, function () { return bdMake(sp, b / BD_STEPS * Math.PI * 2, arms, aq / BD_ARMQ, withHead, kq, legs); });
     var moving = !!phase || arms === "hammer", c = Math.cos(head), s = Math.sin(head), fa = fade !== undefined && fade < 0.999 ? Math.max(0, fade) : -1;
     made.order.forEach(function (slot) {
       var g = made.slots[slot], color = bdColor(L, slot);
@@ -521,6 +548,8 @@
         if (W && W.same && !(look && look.own)) { out.pants = out.shirt; }
       }
       if (look && look.arms) { out.arms = look.arms; out.armK = look.armK || 0; }
+      if (look && look.legs) { out.legs = look.legs; }
+      if (look && look.hardhat) { out.hardhat = true; out.hardhatColor = look.hardhatColor; }
       return out;
     };
   }

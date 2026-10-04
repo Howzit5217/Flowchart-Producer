@@ -923,7 +923,8 @@
     if (typeof tieLayout !== "function") { return; }
     var J = tieLayout(), floors = typeof floorsOf === "function" ? floorsOf() : [], rooms = hand.nodes.filter(function (r) { return r.kind === "i_room"; });
     function fOf(n) { return floors.length ? floorAt(floors, n.x, n.y) : null; }
-    var RB = rooms.map(function (r) {
+    // (a school's courtyard is out of doors: a window onto it stays, 40-campus.js)
+    var RB = rooms.filter(function (r) { return !r.court; }).map(function (r) {
       var B = (J && J.boxes && J.boxes[r.id]) || tieBox(r), f = fOf(r), dx = f ? f.dx || 0 : 0, dy = f ? f.dy || 0 : 0;
       return { l: B.l + dx, r: B.r + dx, t: B.t + dy, b: B.b + dy, level: f ? f.level : 0, bldg: f ? f.bldg : 0 };
     });
@@ -982,7 +983,7 @@
       var before = hand.next, out = yield* inner(want);
       if (out !== undefined || hand.nodes.some(function (n) { return n.kind === "i_room"; })) {
         // (only what this made: another house's, as it is)
-        try { ybHearths(before); } catch (e) { /* as made */ }
+        try { ybHearths(before, want); } catch (e) { /* as made */ }
         try { ybWindowsOut(before); } catch (e) { /* as made */ }
         try { ybUnbox(before); } catch (e) { /* as made */ }
       }
@@ -1012,16 +1013,64 @@
   // for every flue.  Fireplaces in a style without a chimney go up a
   // steel flue each.  The style's lone chimney only where there is no
   // fireplace.
+  //
+  // (2026-10-04: "it really should just be 1 chimney unless you are
+  // designing an apartment with fireplaces which should be optional settings
+  // too and it running in front of windows too and there just not being a
+  // fireplace where it is running")  How many fireplaces is a setting
+  // (hearths): none; one -- a house's, in its living room downstairs, what a
+  // house in a style with a chimney has unless asked otherwise; or one in
+  // every home of a duplex, a row, a block -- asked for, never there unasked.
+  // A chimney only ever over a fireplace (the style's lone chimney is gone),
+  // up an outside wall only where no window or door is in its way on any
+  // floor, else up inside the walls and out through the roof.
   var YB_HEARTH = { living: 1, great: 1, family: 1, flat: 1 };
-  function ybHearths(from) {
-    var S = typeof styleNow === "function" ? styleNow() : null;
-    if (!S || !S.chimney || typeof starterAlong !== "function") { return; }
-    var plan = walkPlan(), homes = [];
+  var YB_FIRES = ["none", "one", "each"];
+  var YB_MANY = { duplex: 1, townhouses: 1, apartments: 1, condos: 1, tower: 1 };
+  if (typeof HOUSE_PLAIN === "object") { HOUSE_PLAIN.hearths = "auto"; }
+  // What is asked (`asked`: none, one, each, or auto) comes to for a building of `type` in style S.
+  function ybFireMode(asked, type, S) {
+    var homes = type === "house" || type === "cabin" || !type ? 1 : YB_MANY[type] ? 2 : 0;
+    if (!homes) { return "none"; }
+    if (YB_FIRES.indexOf(asked) >= 0) { return homes === 1 && asked === "each" ? "one" : asked; }
+    return homes === 1 && S && S.chimney ? "one" : "none";
+  }
+  function ybFireNow(want) {
+    var type = want && want.type ? want.type : (typeof lwTypeNow === "function" ? lwTypeNow() : "house");
+    var asked = want && want.site && want.site.hearths !== undefined ? want.site.hearths : houseOpt("hearths");
+    var key = want && want.style !== undefined ? want.style : null;
+    var S = key && typeof HOUSE_STYLES === "object" ? HOUSE_STYLES[key] : (typeof styleNow === "function" ? styleNow() : null);
+    return ybFireMode(asked, type, S);
+  }
+  // The room that has the one fireplace: the biggest living room on the lowest floor.
+  function ybFireRoom(rooms, plan, floors) {
+    function lv(r) { var f = floors.length ? floorAt(floors, r.x, r.y) : null; return f ? f.level : 0; }
+    function rank(r) { var k = typeof wireKindOf === "function" ? wireKindOf(plan, r) : ""; return k === "living" || k === "great" ? 0 : 1; }
+    return rooms.slice().sort(function (a, b) { return lv(a) - lv(b) || rank(a) - rank(b) || b.w * b.h - a.w * a.h; })[0] || null;
+  }
+  function ybHearths(from, want) {
+    var mode = ybFireNow(want);
+    if (typeof starterAlong !== "function") { return; }
+    var plan = walkPlan(), homes = [], floors0 = typeof floorsOf === "function" ? floorsOf() : [];
     hand.nodes.forEach(function (r) {
       if (r.kind !== "i_room" || r.id < (from || 0)) { return; }
       var k = typeof wireKindOf === "function" ? wireKindOf(plan, r) : "";
       if (YB_HEARTH[k] || YB_HEARTH[r.use]) { homes.push(r); }
     });
+    // (what was put in with the rooms' furniture, kept to what is asked: none, or the one)
+    // (from the view's settings, from 0: only those put in for the house -- one put down by hand stays)
+    var made = hand.nodes.filter(function (n) { return n.kind === "i_fireplace" && n.id >= (from || 0) && (from > 0 || n.hearth); });
+    if (mode !== "each") {
+      var keep = null;
+      if (mode === "one") {
+        var main = ybFireRoom(homes, plan, floors0);
+        keep = main ? made.filter(function (n) { return insideArea(main, n.x, n.y); })[0] || null : made[0] || null;
+        homes = main ? [main] : [];
+      } else { homes = []; }
+      var gone = made.filter(function (n) { return n !== keep; });
+      if (gone.length) { hand.nodes = hand.nodes.filter(function (n) { return gone.indexOf(n) < 0; }); }
+      if (keep) { keep.hearth = true; homes = []; }
+    }
     // (floor by floor up: over a fireplace on the floor under, the same
     // spot where it fits -- one stack, not one a floor)
     var floors = typeof floorsOf === "function" ? floorsOf() : [];
@@ -1056,6 +1105,8 @@
       var put = starterAlong(r, "i_fireplace", near);
       if (put) { put(); }
     });
+    // (each one put in for the house marked so: the setting takes them out again, 3D Settings)
+    hand.nodes.forEach(function (n) { if (n.kind === "i_fireplace" && n.id >= (from || 0)) { n.hearth = true; } });
     picked = null; chosen = null; many = [];
   }
   // (put in first, with the rest of the room's furniture, where the style
@@ -1070,10 +1121,11 @@
   if (typeof STARTER_WRAPS === "object") {
     STARTER_WRAPS.unshift(function* (inner, want) {
       ybHearthUndo();
-      var key = want && want.style !== undefined ? want.style : (want && typeof typeOf === "function" ? typeOf(want).style || "" : "");
-      var S = key && typeof HOUSE_STYLES === "object" ? HOUSE_STYLES[key] : null;
-      if (S && S.chimney && typeof STARTER_ROOMS === "object") {
+      // (as many as asked: none; the one, in a living room; one in every home)
+      var mode = ybFireNow(want);
+      if (mode !== "none" && typeof STARTER_ROOMS === "object") {
         Object.keys(YB_HEARTH).forEach(function (k) {
+          if (mode === "one" && k !== "living" && k !== "great") { return; }
           var R = STARTER_ROOMS[k];
           if (R && R.wall && R.wall.indexOf("i_fireplace") < 0) { R.wall = ["i_fireplace"].concat(R.wall); ybHearthSpecs.push(R); }
         });
@@ -1105,6 +1157,20 @@
       s.x = s.all.reduce(function (m, q) { return m + q.x; }, 0) / s.all.length;
       s.y = s.all.reduce(function (m, q) { return m + q.y; }, 0) / s.all.length;
       s.outside = s.outside && e.outside;
+    });
+    // (up an outside wall only where nothing is in its way, floor over floor --
+    // a window, a door -- else up inside the walls and out through the roof)
+    var openings = hand.nodes.filter(function (w) { return w.kind === "i_window" || WALK_DOORS[w.kind]; }).map(function (w) {
+      var f = floorOf(w.x, w.y), t = turned(w);
+      return { x: w.x + (f ? f.dx : 0), y: w.y + (f ? f.dy : 0), half: Math.max(t.w, t.h) / 2 };
+    });
+    stacks.forEach(function (s) {
+      if (!s.outside) { return; }
+      var ax = -s.by, ay = s.bx, wide = (0.55 * P + 0.2 * P * Math.min(6, s.all.length - 1)) / 2;
+      if (openings.some(function (o) {
+        var dx = o.x - s.x, dy = o.y - s.y;
+        return Math.abs(dx * s.bx + dy * s.by) < 0.45 * P && Math.abs(dx * ax + dy * ay) < wide + o.half + 0.3 * P;
+      })) { s.outside = false; }
     });
     stacks.forEach(function (s) {
       // (as many flues as fireplaces; two on one floor, back to back: the stack deeper)
@@ -1188,13 +1254,11 @@
     });
     return true;
   }
-  // the style's own lone chimney: only where no fireplace has one
+  // the style's own lone chimney: never -- a chimney with no fireplace under
+  // it had no purpose (2026-10-04); a house in a style with one has its
+  // fireplace and the chimney over it, unless none is asked for
   if (typeof styleChimney === "function") {
-    var styleChimneyLone = styleChimney;
-    styleChimney = function (model, S) {
-      if (hand.nodes.some(function (n) { return n.kind === "i_fireplace"; })) { return; }
-      return styleChimneyLone.apply(this, arguments);
-    };
+    styleChimney = function () { return; };
   }
   if (typeof styleExtras === "function") {
     var styleExtrasFlues = styleExtras;

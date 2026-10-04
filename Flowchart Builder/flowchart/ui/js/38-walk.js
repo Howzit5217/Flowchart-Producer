@@ -60,7 +60,7 @@
     i_lamppost: 500, i_pathlight: 500, i_porchlight: 500, i_floodlight: 500, i_mailbox: 700, i_bikerack: 700,
     i_workbench: 1300, i_shelving: 700, i_toolchest: 800, i_furnace: 600, i_waterheater: 600,
     i_gondola: 900, i_checkout: 1200, i_cooler: 700, i_display: 800, i_register: 600, i_schooldesk: 1300,
-    i_outlet: 400, i_lightswitch: 300, i_breaker: 800, i_post: 300
+    i_outlet: 400, i_lightswitch: 300, i_breaker: 800, i_post: 300, i_garagebtn: 300
   };
 
   // ---- doors: open, shut, locked -------------------------------------------

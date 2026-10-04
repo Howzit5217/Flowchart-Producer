@@ -95,9 +95,21 @@
     }
     if (streetVerge() === "trees") { vgTrees(v, lot, lotWorld, hy + side + V / 2, sheetC); }
   }
-  // Trees along the strip, one every nine metres -- none where a drive or a
+  // Trees along the strip, one every seven metres -- none where a drive or a
   // path crosses it, and clear of the lamps and the poles.
   function vgTrees(v, lot, lotWorld, y, sheetC) {
+    var rnd = gl3Rand(Math.round(Math.abs(lot.x) * 7 + Math.abs(lot.y) * 3) + 41);
+    var keep = typeof terrLift !== "undefined" ? terrLift : null;
+    vgTreeSpots(lot).forEach(function (x) {
+      var at = lotWorld(x, y, 0);
+      try {
+        if (typeof terrLift !== "undefined") { terrLift = typeof powerGround === "function" ? powerGround(at[0], at[1]) : null; }
+        gl3Tree(v, [at[0], at[1]], rnd, sheetC, false);
+      } finally { if (typeof terrLift !== "undefined") { terrLift = keep; } }
+    });
+  }
+  // Where along the strip each of its trees stands, in the lot's own numbers (x along the street).
+  function vgTreeSpots(lot) {
     var P = FLOOR_PX, a = -(lot.turn || 0) * Math.PI / 180, c = Math.cos(a), s = Math.sin(a), busy = [];
     function local(n) { var dx = n.x - lot.x, dy = n.y - lot.y; return dx * c - dy * s; }
     // (a door out to the front -- a room behind it, nothing between it and the street -- has its path
@@ -114,8 +126,7 @@
     var every = 18 * P, shift = typeof worldLampShift === "function" ? worldLampShift() : every / 2;
     var lamps = typeof worldLampKind !== "function" || worldLampKind() !== "none";
     var poles = typeof powerPoles === "function" && typeof powerKind === "function" && powerKind() === "front" ? powerPoles(powerFrame(lot), false).map(function (p) { return p.lx; }) : [];
-    var rnd = gl3Rand(Math.round(Math.abs(lot.x) * 7 + Math.abs(lot.y) * 3) + 41), reach = 70 * P, step = VG_TREES * P;
-    var keep = typeof terrLift !== "undefined" ? terrLift : null;
+    var reach = 70 * P, step = VG_TREES * P, out = [];
     function clear(x) {
       if (busy.some(function (b) { return x > b[0] && x < b[1]; })) { return false; }
       if (lamps && Math.abs(((x - shift) % every + every * 1.5) % every - every / 2) < 2.2 * P) { return false; }
@@ -128,12 +139,32 @@
       [0, 1.5, -1.5, 3, -3].some(function (o) { var t = x0 + o * P; if (clear(t) && t - last >= 4.5 * P) { x = t; return true; } return false; });
       if (x === null) { continue; }
       last = x;
-      var at = lotWorld(x, y, 0);
-      try {
-        if (typeof terrLift !== "undefined") { terrLift = typeof powerGround === "function" ? powerGround(at[0], at[1]) : null; }
-        gl3Tree(v, [at[0], at[1]], rnd, sheetC, false);
-      } finally { if (typeof terrLift !== "undefined") { terrLift = keep; } }
+      out.push(x);
     }
+    return out;
+  }
+  // (asked for, 2026-10-04, by the building-site work -- its trucks back over
+  // the sidewalk, its crane's legs spread onto it -- to keep off them)
+  // What stands along the front of a lot by the street: its lamps, its power
+  // poles, the trees in the strip -- where they are drawn, in the lot's own
+  // numbers (x along the street, y out from the lot's front), r how far round
+  // each to keep clear.  The near side only; `reach` how far along each way.
+  function streetKerbThings(lot, reach) {
+    lot = lot || (typeof houseStreetLot === "function" ? houseStreetLot() : null);
+    if (!lot) { return []; }
+    var P = FLOOR_PX, hy = lot.h / 2, walkW = streetWalkPx(), R = reach || 80 * P, every = 18 * P, out = [];
+    if (typeof worldLampKind !== "function" || worldLampKind() !== "none") {
+      var shift = typeof worldLampShift === "function" ? worldLampShift() : every / 2;
+      for (var lx = -Math.floor(R / every) * every + shift; lx < R; lx += every) { out.push({ x: lx, y: hy + walkW - 0.35 * P, r: 0.45 * P, kind: "lamp" }); }
+    }
+    if (typeof powerPoles === "function" && typeof powerKind === "function" && powerKind() === "front") {
+      powerPoles(powerFrame(lot), false).forEach(function (p) { if (Math.abs(p.lx) < R) { out.push({ x: p.lx, y: p.ly, r: 0.5 * P, kind: "pole" }); } });
+    }
+    if (streetVerge() === "trees") {
+      var V = streetVergePx(), y = hy + walkW - V / 2;
+      vgTreeSpots(lot).forEach(function (x) { if (Math.abs(x) < R) { out.push({ x: x, y: y, r: 1.0 * P, kind: "tree" }); } });
+    }
+    return out;
   }
 
   // ---- what the land and the scenery are made for ---------------------------------------------

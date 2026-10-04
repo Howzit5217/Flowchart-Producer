@@ -44,20 +44,30 @@
       try { return gl3SceneryFoliage.apply(this, arguments); } finally { foliageNear = null; }
     };
   }
+  // (on land that rises and falls, 40-land.js: lifted as what it grows on is --
+  // a trunk and its boughs each corner on the land under it.  Left where it
+  // was made, a crown floated over its trunk where the land fell away, the
+  // boughs bare under it, and sank into it where it rose -- 2026-10-04.)
+  function foliageLift(at) {
+    if (typeof terrScene === "undefined" || !terrScene || typeof TERR !== "object" || !TERR || !TERR.mesh) { return 0; }
+    return terrLift !== null && terrLift !== undefined ? terrLift : terrMeshAt(TERR, at[0], at[1]);
+  }
   function foliageClump(v, at, R, sq, c, pat, inner) {
-    var s = foliageSeed(at), sqz = Math.max(0.3, sq);
+    var s = foliageSeed(at), sqz = Math.max(0.3, sq), lz = foliageLift(at);
     (foliageClose(at) && R > FLOOR_PX * 0.5 ? foliageFine() : GL3_BLOB).forEach(function (t) {
       for (var i = 0; i < 3; i++) {
         var p = t[i], b = foliageBend(p, s);
         var n = [p[0], p[1], p[2] / sqz], l = Math.hypot(n[0], n[1], n[2]);
         n = [n[0] / l, n[1] / l, n[2] / l];
-        gl3Vert(v, [at[0] + p[0] * R * b, at[1] + p[1] * R * b, at[2] + p[2] * R * b * sq], n, foliageTint(c, n, inner), 1, [0, 0], pat);
+        gl3Vert(v, [at[0] + p[0] * R * b, at[1] + p[1] * R * b, at[2] + p[2] * R * b * sq + lz], n, foliageTint(c, n, inner), 1, [0, 0], pat);
       }
     });
   }
   // A tier of a fir: ragged at its edge -- long sprays and short ones by
   // turns -- drooping at their ends, and its underside in shadow.
   function foliageTier(v, at, r, z0, z1, sides, c, pat, turn) {
+    var lz = foliageLift(at);
+    z0 += lz; z1 += lz;
     var n2 = Math.max(10, sides * 2), droop = (z1 - z0) * 0.14, ring = [], slope = r / Math.max(1, z1 - z0);
     for (var i = 0; i < n2; i++) {
       var a = i / n2 * Math.PI * 2 + (turn || 0), long = i % 2 === 0, rr = long ? r : r * 0.68;

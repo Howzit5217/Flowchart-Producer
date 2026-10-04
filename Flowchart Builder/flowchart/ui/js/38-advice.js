@@ -286,6 +286,12 @@
     plan.rooms.forEach(function (room) {
       var kind = kinds[room.id], name = names[room.id];
       var lit = windowsNear.near(room, 14).some(function (w) { return doorIn(w, room); });
+      // (a room of an open plan with no outside wall of its own -- the middle
+      // of the living space: its daylight through the rooms it is open to.
+      // Not a bedroom's: that needs its own window, a way out in a fire.)
+      if (!lit && !uses[room.id].bed && typeof wallOpenTo === "function" && typeof wallAnyOpen === "function" && wallAnyOpen()) {
+        lit = wallOpenTo(room).some(function (o) { return windowsNear.near(o, 14).some(function (w) { return doorIn(w, o); }); });
+      }
       // daylight, where people live
       if (!lit && /^(bed|living|kitchen|office|dining|multi)$/.test(kind)) {
         tip(say(uses[room.id].bed ? "ad_window_bed" : "ad_window", { room: name }), room.id,

@@ -40,7 +40,8 @@
     return [v[0] / l, v[1] / l, v[2] / l];
   })();
   var GL3_SHADOW = 2048;                 // the shadow map's size, in texels a side
-  var GL3_LAMP = 1024;                   // the ceiling light's, indoors
+  var GL3_LAMP = 1024;                   // the ceiling light's, indoors (each of four, in one map twice as wide)
+  var GL3_ROOMS = 32;                    // rooms near you whose light each point is lit by (gl3MainProgram: what fits)
   var GL3_STRIDE = 13;                   // floats a vertex: pos 3, normal 3, color 4, uv 2, pattern 1
 
   // What a face is covered in, worked out in the shader from where it is.
@@ -88,17 +89,17 @@
   // ---- the programs ------------------------------------------------------------
   var GL3_VS = [
     "attribute vec3 aPos; attribute vec3 aNorm; attribute vec4 aColor; attribute vec2 aUv; attribute float aPat;",
-    "uniform mat4 uMvp; uniform mat4 uSunMvp; uniform float uNudge; uniform mat4 uLampMvp;",
+    "uniform mat4 uMvp; uniform mat4 uSunMvp; uniform float uNudge;",
     "uniform vec4 uDepthK; uniform vec3 uEyeV; uniform vec3 uTowardV; uniform float uOrthoV;",
-    "varying vec3 vPos; varying vec3 vNorm; varying vec4 vColor; varying vec2 vUv; varying float vPat; varying vec4 vSun; varying vec4 vLampS;",
+    "varying vec3 vPos; varying vec3 vNorm; varying vec4 vColor; varying vec2 vUv; varying float vPat; varying vec4 vSun;",
     "void main() {",
     "  vPos = aPos; vNorm = aNorm; vColor = aColor; vUv = aUv; vPat = aPat;",
     // looked up in the sun's view a shadow-map texel or so out from the
     // surface, along its way out: no speckles of its own shadow on it, and
     // no gap where a wall meets the shadow it throws
     "  vSun = uSunMvp * vec4(aPos + aNorm * uNudge, 1.0);",
-    // and in the ceiling light's, indoors (2026-10-02: "accurate shadows and depth inside")
-    "  vLampS = uLampMvp * vec4(aPos + aNorm * 1.2, 1.0);",
+    // (and in the ceiling light's of the room it is in: worked out for each
+    // point, in the fragment program -- which room is not known here)
     "  gl_Position = uMvp * vec4(aPos, 1.0);",
     // (2026-10-04) Two faces in one plane -- back to back, a ceiling and the
     // top of a lamp's canopy against it, the floor above and the ceiling
@@ -134,14 +135,27 @@
     "uniform vec3 uFogCol; uniform float uFogNear; uniform float uFogFar;",
     "uniform sampler2D uTex; uniform float uUseTex; uniform float uDecal; uniform float uRound; uniform float uBill;",
     "uniform sampler2D uShadow; uniform float uShadowOn; uniform float uAlpha; uniform float uPx; uniform float uTime;",
-    "uniform vec2 uFade; uniform vec2 uMid; uniform float uIndoor; uniform float uDress; uniform vec3 uLamp;",
+    "uniform vec2 uFade; uniform vec2 uMid; uniform float uDress;",
     "uniform float uNight; uniform float uGlow;",       // how dark it is out (38-view3d-more.js); a window lit from in
     "uniform vec4 uRooms[24]; uniform float uRoomN;",   // after dark, each room's ceiling light: where, and how far it reaches (and the lights out of doors)
-    // indoors: the room's ceiling light's own shadows, and the room's box (its
-    // floor and ceiling heights) for the darker corners and edges a room has
-    "uniform sampler2D uLampShadow; uniform float uLampOn; uniform vec4 uRoomBox; uniform vec2 uRoomZ;",
+    // (2026-10-04: "update the shadows and lighting so they are constant no
+    // matter what room you are in")  Walking round, the rooms nearest you
+    // (uRmN of them): each one's box, A its middle and half its size across
+    // and along, B its floor, its ceiling, its light's height (far under
+    // the ground, switched off) and its turn, C which of its sides have no
+    // wall (40-arrange.js: -x, +x, -y, +y).  The first uLampN have their
+    // light's own shadows, each a quarter of uLampShadow, looked at from
+    // uLampMs, as strong as uLampK.  uSunIn: the sun through the windows.
+    "uniform float uWalkIn; uniform float uRmN; uniform vec4 uRmA[__NR__]; uniform vec4 uRmB[__NR__]; uniform vec4 uRmC[__NR__];",
+    "uniform sampler2D uLampShadow; uniform mat4 uLampMs[4]; uniform float uLampN; uniform vec4 uLampK; uniform float uSunIn;",
     "uniform float uTexOn;",                          // textures on (40-texture.js): patterns, their ridges, metal's shine
-    "varying vec3 vPos; varying vec3 vNorm; varying vec4 vColor; varying vec2 vUv; varying float vPat; varying vec4 vSun; varying vec4 vLampS;",
+    "varying vec3 vPos; varying vec3 vNorm; varying vec4 vColor; varying vec2 vUv; varying float vPat; varying vec4 vSun;",
+    // Indoors or not, and the light and the box of the room a point is in:
+    // worked out for each point (roomOf, under), where they were the room
+    // you stood in, for all of the picture.  (Still named as they were, so
+    // what reads them reads them as before.)
+    "float uIndoor = 0.0, uLampOn = 0.0, gLampK = 0.0; vec3 uLamp = vec3(0.0); vec4 uRoomBox = vec4(0.0);",
+    "vec2 uRoomZ = vec2(0.0); vec4 uRoomOpen = vec4(0.0); vec4 vLampS = vec4(0.0); vec2 gTileAt = vec2(0.0);",
     "float hash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }",
     "float noise(vec2 p) {",
     "  vec2 i = floor(p), f = fract(p); vec2 u = f * f * (3.0 - 2.0 * f);",
@@ -180,18 +194,48 @@
     "  return d * sum / 9.0;",
     "}",
     // how much of the ceiling light reaches here, past what stands under it
+    // (its room's quarter of the shadows, not reading over into the next)
     "float lampLit() {",
     "  if (uLampOn < 0.5 || vLampS.w <= 0.0) { return 1.0; }",
     "  vec3 s = vLampS.xyz / vLampS.w * 0.5 + 0.5;",
     "  if (s.x <= 0.0 || s.x >= 1.0 || s.y <= 0.0 || s.y >= 1.0 || s.z >= 1.0 || s.z <= 0.0) { return 1.0; }",
     "  float sum = 0.0, N = " + GL3_LAMP + ".0;",
-    "  vec2 t = s.xy * N - 0.5, f = fract(t), c0 = floor(t) - 1.0;",
+    "  vec2 t = s.xy * N - 0.5, f = fract(t), c0 = floor(t) - 1.0, at = gTileAt * N;",
     "  for (int i = 0; i < 4; i++) { for (int j = 0; j < 4; j++) {",
     "    float wx = i == 0 ? 1.0 - f.x : (i == 3 ? f.x : 1.0), wy = j == 0 ? 1.0 - f.y : (j == 3 ? f.y : 1.0);",
-    "    float near = unpack(texture2D(uLampShadow, (c0 + vec2(float(i), float(j)) + 0.5) / N));",
+    "    vec2 c = clamp(c0 + vec2(float(i), float(j)), 0.0, N - 1.0);",
+    "    float near = unpack(texture2D(uLampShadow, (at + c + 0.5) / (2.0 * N)));",
     "    sum += (s.z - 0.0006 > near ? 0.0 : 1.0) * wx * wy;",
     "  } }",
     "  return sum / 9.0;",
+    "}",
+    // The room a point is lit from: the smallest of those near you whose box
+    // holds it -- looked for a few centimetres off its face, on the side of
+    // it that is seen (the side of a wall, a floor, a ceiling you see is the
+    // room it shows to) -- and that room's light, its shadows and its box.
+    // Out of doors, or in no room near enough to be known: none.
+    "void roomOf(vec3 p, vec3 nn) {",
+    "  vec3 q = p + nn * (0.04 * uPx);",
+    "  float best = 1.0e20, pad = 0.01 * uPx; int at = -1;",
+    "  for (int i = 0; i < __NR__; i++) {",
+    "    if (float(i) >= uRmN) { break; }",
+    "    vec4 A = uRmA[i], B = uRmB[i];",
+    "    if (q.z < B.x - 0.03 * uPx || q.z > B.y + 0.03 * uPx || A.z * A.w >= best) { continue; }",
+    "    vec2 d = q.xy - A.xy;",
+    "    if (B.w != 0.0) { float c = cos(B.w), s = sin(B.w); d = vec2(c * d.x + s * d.y, c * d.y - s * d.x); }",
+    "    if (abs(d.x) > A.z + pad || abs(d.y) > A.w + pad) { continue; }",
+    "    best = A.z * A.w; at = i;",
+    "    uLamp = vec3(A.xy, B.z); uRoomZ = B.xy; uRoomOpen = uRmC[i];",
+    "    uRoomBox = B.w == 0.0 ? vec4(A.xy - A.zw, A.xy + A.zw) : vec4(0.0);",
+    "  }",
+    "  if (at < 0) { return; }",
+    "  uIndoor = 1.0;",
+    "  if (float(at) >= uLampN || uLamp.z < -1.0e5) { return; }",
+    "  mat4 L = uLampMs[0]; gLampK = uLampK.x; gTileAt = vec2(0.0, 0.0);",
+    "  if (at == 1) { L = uLampMs[1]; gLampK = uLampK.y; gTileAt = vec2(1.0, 0.0); }",
+    "  else if (at == 2) { L = uLampMs[2]; gLampK = uLampK.z; gTileAt = vec2(0.0, 1.0); }",
+    "  else if (at == 3) { L = uLampMs[3]; gLampK = uLampK.w; gTileAt = vec2(1.0, 1.0); }",
+    "  vLampS = L * vec4(p + nn * 1.2, 1.0); uLampOn = 1.0;",
     "}",
     "void main() {",
     "  float k = vPat, dr = uDress;",
@@ -211,13 +255,16 @@
     "  vec3 n = normalize(vNorm);",
     "  vec3 toEye = uOrtho > 0.5 ? uToward : normalize(uEye - vPos);",
     "  if (uBill < 0.5 && dot(n, toEye) < 0.0) { n = -n; }",
+    // lit as the room it is in, wherever you stand (what stands up as a
+    // picture: as where its feet are)
+    "  if (uWalkIn > 0.5) { roomOf(vPos, uBill > 0.5 ? vec3(0.0, 0.0, 1.0) : n); }",
     "  vec3 base = vColor.rgb; float a = vColor.a; vec3 emit = vec3(0.0);",
     // how raised the pattern is here (0 to 1, or none), how deep its grooves
     // in metres, and how far it repeats: for its ridges (RELIEF, below)
     "  float bump = -1.0, deep = 0.0, per = 1.0;",
     // textures off: plain colors -- but the road's line, water, solar
     // panels, towers' windows and far hills and mountains stay what they are
-    "  bool tx = uTexOn > 0.5 || (k > 3.5 && k < 4.5) || (k > 8.5 && k < 9.5) || (k > 11.5 && k < 12.5) || (k > 68.5 && k < 69.5) || (k > 73.5 && k < 79.5);",
+    "  bool tx = uTexOn > 0.5 || (k > 3.5 && k < 4.5) || (k > 8.5 && k < 9.5) || (k > 11.5 && k < 12.5) || (k > 68.5 && k < 69.5) || (k > 73.5 && k < 82.5);",
     "  vec2 m = vPos.xy / uPx; float h = vPos.z / uPx;",
     "  float along = dot(m, normalize(vec2(-n.y, n.x) + vec2(0.0001, 0.0)));",
     // how far up the face, in metres: up a wall, its height; up a roof, along
@@ -426,11 +473,10 @@
     "    float j = fract(along / 0.055);",
     "    base *= 0.88 + 0.12 * fa(smoothstep(0.0, 0.14, j) * smoothstep(1.0, 0.8, j), 0.83, 53.0);",
     "    bump = smoothstep(0.0, 0.14, j) * smoothstep(1.0, 0.8, j); deep = 0.003; per = 0.055;",
-    "  } else if (k > 62.5 && k < 63.5) {",            // concrete cast in forms, the tie holes in rows
+    "  } else if (k > 62.5 && k < 63.5) {",            // concrete cast in forms, its joints faint -- smooth, no tie holes (a foundation full of them looked full of holes, 2026-10-04)
     "    vec2 cw = vec2(along, h), tg = fract(cw / vec2(1.2, 0.6));",
-    "    base *= (0.93 + 0.08 * noise(cw * 5.0)) * (0.92 + 0.08 * fa(smoothstep(0.0, 0.01, min(tg.x, tg.y)), 0.99, 166.0));",
-    "    base *= 0.85 + 0.15 * fa(smoothstep(0.02, 0.035, length(fract(cw / 0.6) - 0.5)), 0.99, 25.0);",
-    "    bump = smoothstep(0.02, 0.035, length(fract(cw / 0.6) - 0.5)) * smoothstep(0.0, 0.01, min(tg.x, tg.y)); deep = 0.008; per = 0.6;",
+    "    base *= (0.94 + 0.07 * noise(cw * 5.0) + 0.03 * noise(cw * 23.0)) * (0.96 + 0.04 * fa(smoothstep(0.0, 0.01, min(tg.x, tg.y)), 0.99, 166.0));",
+    "    bump = smoothstep(0.0, 0.01, min(tg.x, tg.y)); deep = 0.002; per = 0.6;",
     // outside walls
     "  } else if (k > 63.5 && k < 64.5) {",            // logs, round, one on another
     "    float lr = fract(h / 0.24);",
@@ -513,6 +559,34 @@
     "    float lamp = step(0.4, hash(floor(vPos.xy / 37.0) + floor(h)));",
     "    base = mix(base, vec3(0.62, 0.72, 0.82), pow(1.0 - abs(dot(n, toEye)), 2.0) * 0.6);",
     "    emit += vec3(1.0, 0.8, 0.5) * lamp * uNight * 0.85;",
+    // (2026-10-04: "pools that have proper like water rather than just a
+    // blank texture")  A pool's water: small waves moving over it, tipping
+    // the light -- the sky and the sun in it below (after the light), and
+    // through it, the pool
+    "  } else if (k > 79.5 && k < 80.5) {",
+    "    vec2 wq = m * 2.4, wt = vec2(uTime * 0.33, uTime * 0.21), wu = vec2(uTime * 0.26, -uTime * 0.3);",
+    "    float w0 = noise(wq + wt) + 0.5 * noise(wq * 2.3 - wu);",
+    "    float wx = noise(wq + vec2(0.12, 0.0) + wt) + 0.5 * noise((wq + vec2(0.12, 0.0)) * 2.3 - wu);",
+    "    float wy = noise(wq + vec2(0.0, 0.12) + wt) + 0.5 * noise((wq + vec2(0.0, 0.12)) * 2.3 - wu);",
+    "    n = normalize(n + vec3(w0 - wx, w0 - wy, 0.0) * 1.1 * aa(2.4));",
+    // a pool's tiles: small and square, its grout; under the water the light
+    // through the waves in a moving net of bright threads (caustics)
+    // lattice: thin slats crossing on the diagonal, the shade of the crawl space behind them
+    "  } else if (k > 81.5 && k < 82.5) {",
+    "    vec2 lq = vec2(along + h, along - h) / 0.11, lf = abs(fract(lq) - 0.5);",
+    "    float slat = max(smoothstep(0.34, 0.24, lf.x), smoothstep(0.34, 0.24, lf.y));",
+    "    base *= mix(0.2, 1.0, fa(slat, 0.62, 13.0));",
+    "    bump = slat; deep = 0.006; per = 0.11;",
+    "  } else if (k > 80.5 && k < 81.5) {",
+    "    vec2 tp = abs(n.z) > 0.6 ? m : vec2(along, h), tl = fract(tp / 0.15);",
+    "    float grout = smoothstep(0.0, 0.07, min(tl.x, tl.y)) * smoothstep(1.0, 0.93, max(tl.x, tl.y));",
+    "    base *= 0.9 + 0.1 * fa(grout, 0.9, 140.0);",
+    "    vec2 cq = (m + vec2(h * 0.3, 0.0)) * 1.7;",
+    "    float c1 = 1.0 - abs(noise(cq + vec2(uTime * 0.12, uTime * 0.08)) * 2.0 - 1.0);",
+    "    float c2 = 1.0 - abs(noise(cq * 1.6 + vec2(3.1, 1.3) - vec2(uTime * 0.1, -uTime * 0.05)) * 2.0 - 1.0);",
+    "    emit += vec3(0.7, 0.9, 1.0) * pow(c1 * c2, 5.0) * 0.45 * (1.0 - uNight) * aa(1.7);",
+    "    emit += base * vec3(0.55, 0.95, 1.1) * uNight * (0.75 + 0.6 * pow(c1 * c2, 5.0));",
+    "    bump = grout; deep = 0.002; per = 0.15;",
     "  }",
     // far off, a fine pattern -- brick, shingles, boards -- shimmered: it
     // fades to its own color as it goes (walking round, 39-world.js)
@@ -566,10 +640,11 @@
     // (not the ceiling the light hangs from: nothing under the light shades
     // it, and in the light's own plane its shadow map only made stair-steps
     // across it -- 2026-10-03, "the ceilings seem to be a bit buggy")
-    "      float ls = n.z < -0.5 ? 1.0 : lampLit();",
+    "      float ls = n.z < -0.5 ? 1.0 : mix(1.0, lampLit(), gLampK);",
     "      float ao = 1.0;",
     "      if (uRoomBox.z > uRoomBox.x) {",
-    "        vec2 lo = (vPos.xy - uRoomBox.xy) / uPx, hi = (uRoomBox.zw - vPos.xy) / uPx;",
+    // (no darker edge along a side with no wall: the room goes on into the next)
+    "        vec2 lo = (vPos.xy - uRoomBox.xy) / uPx + uRoomOpen.xz * 100.0, hi = (uRoomBox.zw - vPos.xy) / uPx + uRoomOpen.yw * 100.0;",
     "        float hz = (vPos.z - uRoomZ.x) / uPx, cz = (uRoomZ.y - vPos.z) / uPx;",
     "        if (lo.x > -0.05 && lo.y > -0.05 && hi.x > -0.05 && hi.y > -0.05 && hz > -0.05 && cz > -0.05) {",
     "          float edge = min(min(lo.x, hi.x), min(lo.y, hi.y));",
@@ -590,7 +665,7 @@
     "      if (uLamp.z < -1.0e5) { amb *= mix(0.8, 0.3, uNight); }",          // its light switched off: dark after dark, dimmer by day
     "      lightCol *= 1.0 + 0.3 * uNight;",
     "    }",
-    "    col = mix(base, base * (amb + uSunCol * sun), dr);",
+    "    col = mix(base, base * (amb + uSunCol * sun * (uIndoor > 0.5 ? uSunIn : 1.0)), dr);",
     // after dark, seen from out of doors: every room's light on
     "    if (uNight > 0.01 && uIndoor < 0.5) {",
     "      float warm = 0.0;",
@@ -666,6 +741,17 @@
     "    col = mix(base * 0.55, sky, 0.35 + 0.5 * fr);",
     "    col += vec3(1.0, 0.97, 0.9) * pow(max(dot(reflect(-toEye, n), uSunDir), 0.0), 60.0) * 0.8 * (1.0 - uNight) * dr;",
     "    a = clamp(0.28 + 0.55 * fr, 0.0, 0.9);",
+    "  }",
+    "  if (k > 79.5 && k < 80.5) {",
+    "    float fw = pow(1.0 - max(dot(n, toEye), 0.0), 4.0);",
+    "    vec3 rw = reflect(-toEye, n);",
+    "    vec3 skw = uIndoor > 0.5 ? vec3(0.62, 0.64, 0.66) : mix(uFogCol, vec3(0.6, 0.76, 0.94), smoothstep(-0.1, 0.7, rw.z)) * (1.0 - 0.75 * uNight);",
+    "    col = mix(col, skw, 0.12 + 0.62 * fw);",
+    "    col += vec3(1.0, 0.97, 0.9) * pow(max(dot(rw, uSunDir), 0.0), 140.0) * 1.3 * (1.0 - uNight) * dr;",
+    "    a = clamp(0.38 + 0.55 * fw, 0.0, 0.95);",
+    // (after dark the lights under the water are on: the water lit from below, turquoise)
+    "    col += vec3(0.1, 0.55, 0.7) * uNight * (0.55 + 0.25 * (1.0 - fw));",
+    "    a = max(a, 0.55 * uNight);",
     "  }",
     "  col += emit * dr;",                         // what gives its own light: a lit window far off, a glint of snow
     "  if (uGlow > 0.0) { col = mix(col, vec3(1.0, 0.8, 0.5), uGlow); a = max(a, 0.9 * uGlow); }",   // the lights on inside
@@ -760,22 +846,31 @@
   // browser can say how a value changes from one pixel to the next; flat
   // where it cannot, as before.
   function gl3MainProgram(gl) {
+    // (how many rooms near you it knows the boxes of: as many as the
+    // browser has room for, three numbers of four a room, up to 32)
+    var most = 0;
+    try { most = +gl.getParameter(gl.MAX_FRAGMENT_UNIFORM_VECTORS) || 0; } catch (e0) { most = 0; }
+    GL3_ROOMS = Math.max(4, Math.min(32, Math.floor((most - 120) / 3)));
+    var FS = GL3_FS.replace(/__NR__/g, String(GL3_ROOMS));
     try {
       var made, two = typeof WebGL2RenderingContext !== "undefined" && gl instanceof WebGL2RenderingContext;
       if (two) {
         // (WebGL 2 tells how a value changes from pixel to pixel only in its
         // own shading language: the same program, said in that)
         var vs = "#version 300 es\n" + GL3_VS.replace(/\battribute\b/g, "in").replace(/\bvarying\b/g, "out");
-        var fs = "#version 300 es\n#define RELIEF 1\n" + GL3_FS.replace(/\bvarying\b/g, "in").replace(/\btexture2D\s*\(/g, "texture(")
+        var fs = "#version 300 es\n#define RELIEF 1\n" + FS.replace(/\bvarying\b/g, "in").replace(/\btexture2D\s*\(/g, "texture(")
                    .replace(/\bgl_FragColor\b/g, "fragOut").replace(/#endif\n/, "#endif\nout vec4 fragOut;\n");
         made = gl3Program(gl, vs, fs);
       } else {
         if (!gl.getExtension("OES_standard_derivatives")) { throw new Error("no derivatives"); }
-        made = gl3Program(gl, GL3_VS, "#extension GL_OES_standard_derivatives : enable\n#define RELIEF 1\n" + GL3_FS);
+        made = gl3Program(gl, GL3_VS, "#extension GL_OES_standard_derivatives : enable\n#define RELIEF 1\n" + FS);
       }
       made.relief = true;
       return made;
-    } catch (e) { return gl3Program(gl, GL3_VS, GL3_FS); }
+    } catch (e) {
+      try { return gl3Program(gl, GL3_VS, FS); }
+      catch (e2) { GL3_ROOMS = 4; return gl3Program(gl, GL3_VS, GL3_FS.replace(/__NR__/g, "4")); }   // (the fewest rooms, where more would not fit)
+    }
   }
 
   // How many samples a pixel the target of floats can take (both its
@@ -843,17 +938,18 @@
       gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, G.shadowTex, 0);
       gl.framebufferRenderbuffer(gl.FRAMEBUFFER, gl.DEPTH_ATTACHMENT, gl.RENDERBUFFER, G.shadowDepth);
       G.shadowOk = gl.checkFramebufferStatus(gl.FRAMEBUFFER) === gl.FRAMEBUFFER_COMPLETE;
-      // and the ceiling light's, indoors: the same, looking down from the light
+      // and the ceiling lights', indoors: the same, looking down from the
+      // light -- four rooms' at once, a quarter each
       G.lampTex = gl.createTexture();
       gl.bindTexture(gl.TEXTURE_2D, G.lampTex);
-      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, GL3_LAMP, GL3_LAMP, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 2 * GL3_LAMP, 2 * GL3_LAMP, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
       gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
       gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
       gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
       gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
       G.lampDepth = gl.createRenderbuffer();
       gl.bindRenderbuffer(gl.RENDERBUFFER, G.lampDepth);
-      gl.renderbufferStorage(gl.RENDERBUFFER, gl.DEPTH_COMPONENT16, GL3_LAMP, GL3_LAMP);
+      gl.renderbufferStorage(gl.RENDERBUFFER, gl.DEPTH_COMPONENT16, 2 * GL3_LAMP, 2 * GL3_LAMP);
       G.lampFb = gl.createFramebuffer();
       gl.bindFramebuffer(gl.FRAMEBUFFER, G.lampFb);
       gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, G.lampTex, 0);
@@ -1071,7 +1167,9 @@
     };
     model.faces.forEach(function (f) {
       var how = f.how || {};
-      sfx = apart || f.moves ? "~m" : "";
+      // (what the storm carried off and let fall, lying still: kept in batches of its own
+      // ("~r"), not joined again with all that moves each picture -- 40-stormfx.js)
+      sfx = f.rests ? "~r" : apart || f.moves ? "~m" : "";
       if (how.ghost) {                    // what walking bumps into, unseen
         // (or what only throws a shadow: drawn for the sun, not for the eye)
         if (how.caster) { gl3Poly(B.get("caster", { caster: true }).v, f.pts, f.n, [1, 1, 1], 1, null, PAT.plain); }
@@ -1163,7 +1261,8 @@
         batch = B.get("plain", {});
       }
       var uvs = pic ? gl3Uvs(f) : null;
-      if (f.ground && f.pts.length === 4) {      // the lawn's own numbers, in metres, for its stripes
+      if (f.ground && f.uvs && f.uvs.length === f.pts.length) { uvs = f.uvs; }   // (a piece of the lawn cut round a pool: its stripes as they were, 40-gatespool.js)
+      else if (f.ground && f.pts.length === 4) {      // the lawn's own numbers, in metres, for its stripes
         var lx = Math.hypot(f.pts[1][0] - f.pts[0][0], f.pts[1][1] - f.pts[0][1]) / FLOOR_PX;
         var ly = Math.hypot(f.pts[3][0] - f.pts[0][0], f.pts[3][1] - f.pts[0][1]) / FLOOR_PX;
         uvs = [[0, 0], [lx, 0], [lx, ly], [0, ly]];
@@ -1171,7 +1270,11 @@
       gl3Poly(batch.v, f.pts, f.n, base, a, uvs, pat);
       // its edges, the way a plan draws them -- not round the glass, a
       // picture laid on top, or the lawn
-      if (!how.glass && !how.decal && !f.ground && !how.bare) {
+      // (not round each piece of a wall: a wall is cut where a room ends, a
+      // storey, a window, a door, the end of a gable -- and each piece drawn
+      // round showed every cut as a line across the siding, 2026-10-04:
+      // "these weird lines")
+      if (!how.glass && !how.decal && !f.ground && !how.bare && !(how.wall && !f.top)) {
         var line = B.get("lines", { lines: true });
         gl3Lines(line.v, f.pts, edge, (how.floor || how.ceiling ? 0.22 : how.roof ? 0.3 : 0.42) * seen);
       }
@@ -1623,6 +1726,126 @@
     }
     return b;
   }
+  // ---- the rooms near you, each lit by its own light ----------------------------------
+  // (2026-10-04: "update the shadows and lighting so they are constant no
+  // matter what room you are in")  The whole picture was lit as the room you
+  // stood in: the room beyond its door by your room's light, from over your
+  // head, its corners not darkened and nothing in it throwing a shadow --
+  // until you stepped in and it all changed.  Now every point is lit by the
+  // room it is in (roomOf, the fragment program), so a room looks the same
+  // from its doorway, from the garden through a window, and from inside.
+  // The rooms the program knows are those nearest the eye (GL3_ROOMS); the
+  // four nearest with their light on throw that light's shadows, each into
+  // its quarter of the map.  A quarter is drawn again when its room or its
+  // light changed, or, while what stands in the house moves (a door
+  // swinging, a drawer, somebody walking), the nearest every picture and
+  // the other three one a picture in turn.  A room's shadows fade out as
+  // the next room without a quarter comes as near: no shadows that come and
+  // go at once as you walk.
+  function gl3RoomLights(G, inside, eye, batches) {
+    var NR = GL3_ROOMS, P = FLOOR_PX;
+    var L = { n: 0, A: new Float32Array(NR * 4), B: new Float32Array(NR * 4), C: new Float32Array(NR * 4),
+              mats: new Float32Array(64), lampN: 0, K: [0, 0, 0, 0], on: !!inside && !!eye };
+    if (!L.on) { return L; }
+    var pic = V3.picture || (V3.picture = {});
+    if (!pic.rmList) {
+      // each room's box as the house stands (its floor's place and height),
+      // and which of its sides have no wall (40-arrange.js): its own, or the
+      // room's across that side
+      var floors = typeof floorsOf === "function" ? floorsOf() : [], list = [];
+      hand.nodes.forEach(function (r) {
+        if (r.kind !== "i_room") { return; }
+        var f = floors.length ? floorAt(floors, r.x, r.y) : null, t = (((r.turn || 0) % 360) + 360) % 360, sq = t % 90 === 0;
+        var across = sq && (t / 90) % 2 === 1, z0 = f ? f.z : 0;
+        list.push({ r: r, x: r.x + (f ? f.dx : 0), y: r.y + (f ? f.dy : 0), z0: z0, z1: z0 + ceilOf(r) * P, level: f ? f.level : 0,
+                    hw: (sq && across ? r.h : r.w) / 2, hh: (sq && across ? r.w : r.h) / 2, turn: sq ? 0 : t * Math.PI / 180,
+                    open: [0, 0, 0, 0] });
+      });
+      // a side's way out, in the house's numbers: 0 -x, 1 +x, 2 -y, 3 +y
+      var sideOf = function (R, edge) {
+        var a = (R.r.turn || 0) * Math.PI / 180, l = edge === "top" ? [0, -1] : edge === "foot" ? [0, 1] : edge === "left" ? [-1, 0] : [1, 0];
+        var dx = l[0] * Math.cos(a) - l[1] * Math.sin(a), dy = l[0] * Math.sin(a) + l[1] * Math.cos(a);
+        return Math.abs(dx) > Math.abs(dy) ? (dx < 0 ? 0 : 1) : (dy < 0 ? 2 : 3);
+      };
+      var withOpen = list.filter(function (R) { return !R.turn && R.r.open && R.r.open.length; });
+      withOpen.forEach(function (R) {
+        R.r.open.forEach(function (edge) {
+          var s = sideOf(R, edge);
+          R.open[s] = 1;
+          // and the room across it: its side toward this one open too
+          list.forEach(function (O) {
+            if (O === R || O.turn || O.level !== R.level) { return; }
+            var meet = s < 2 ? Math.abs((s ? R.x + R.hw : R.x - R.hw) - (s ? O.x - O.hw : O.x + O.hw)) < 12 &&
+                               Math.min(R.y + R.hh, O.y + O.hh) - Math.max(R.y - R.hh, O.y - O.hh) > 20
+                             : Math.abs((s === 3 ? R.y + R.hh : R.y - R.hh) - (s === 3 ? O.y - O.hh : O.y + O.hh)) < 12 &&
+                               Math.min(R.x + R.hw, O.x + O.hw) - Math.max(R.x - R.hw, O.x - O.hw) > 20;
+            if (meet) { O.open[s ^ 1] = 1; }
+          });
+        });
+      });
+      pic.rmList = list;
+    }
+    // nearest first: how far the eye is from each box (a storey away counts double)
+    var rooms = pic.rmList.map(function (R) {
+      var dx = eye[0] - R.x, dy = eye[1] - R.y;
+      if (R.turn) { var c = Math.cos(R.turn), s = Math.sin(R.turn), u = c * dx + s * dy; dy = c * dy - s * dx; dx = u; }
+      var ex = Math.max(0, Math.abs(dx) - R.hw), ey = Math.max(0, Math.abs(dy) - R.hh);
+      var ez = eye[2] < R.z0 ? R.z0 - eye[2] : eye[2] > R.z1 ? eye[2] - R.z1 : 0;
+      return { R: R, far: Math.hypot(ex, ey, ez * 2), dark: typeof useDark === "function" && useDark(R.r) };
+    });
+    rooms.sort(function (p, q) { return p.far - q.far; });
+    rooms = rooms.slice(0, NR);
+    // the four with their own shadows: the nearest with the light on
+    var lit = G.lampOk ? rooms.filter(function (o) { return !o.dark; }) : [];
+    var tiles = lit.slice(0, 4), next = lit[4], rest = rooms.filter(function (o) { return tiles.indexOf(o) < 0; });
+    rooms = tiles.concat(rest);
+    L.n = rooms.length; L.lampN = tiles.length;
+    rooms.forEach(function (o, i) {
+      var R = o.R;
+      L.A.set([R.x, R.y, R.hw, R.hh], i * 4);
+      L.B.set([R.z0, R.z1, o.dark ? -1e6 : R.z0 + (ceilOf(R.r) - 0.35) * P, R.turn], i * 4);
+      L.C.set(R.open, i * 4);
+    });
+    // each quarter: looked down from under the light (under what hangs in the
+    // middle of the ceiling -- a fan's own light is under its blades)
+    var gl = G.gl, N = GL3_LAMP, kept = G.lampTiles || (G.lampTiles = []), moved = !G.same;
+    G.lampTurn = ((G.lampTurn || 0) + (moved ? 1 : 0)) % 3;
+    tiles.forEach(function (o, t) {
+      var R = o.R, lampZ = R.z0 + (ceilOf(R.r) - 0.35) * P;
+      hand.nodes.forEach(function (m) {
+        if (!FROM_CEILING[m.kind] || Math.hypot(m.x - R.r.x, m.y - R.r.y) > 1.3 * P) { return; }
+        lampZ = Math.min(lampZ, R.z0 + (ceilOf(R.r) - hangDrop(m)[0] - 0.06) * P);
+      });
+      var M = gl3LampView([R.x, R.y, Math.max(R.z0 + 1.7 * P, lampZ)]);
+      L.mats.set(M, t * 16);
+      L.K[t] = !next || o.far <= 0 ? 1 : Math.max(0, Math.min(1, (next.far - o.far) / (1.5 * P)));
+      var key = R.r.id + "|" + Array.prototype.join.call(M, ",");
+      var again = kept[t] !== key || (moved && (t === 0 || t === 1 + G.lampTurn));
+      if (!again) { return; }
+      kept[t] = key;
+      var tx = (t % 2) * N, ty = Math.floor(t / 2) * N;
+      gl.bindFramebuffer(gl.FRAMEBUFFER, G.lampFb);
+      gl.viewport(tx, ty, N, N);
+      gl.enable(gl.SCISSOR_TEST); gl.scissor(tx, ty, N, N);
+      gl.clearColor(1, 1, 1, 1);
+      gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+      gl.disable(gl.SCISSOR_TEST);
+      gl.enable(gl.DEPTH_TEST); gl.depthFunc(gl.LESS); gl.depthMask(true); gl.disable(gl.BLEND);
+      gl.useProgram(G.depth.p);
+      gl.uniformMatrix4fv(G.depth.at.uSunMvp, false, M);
+      batches.forEach(function (x) {
+        if (x.how.lines || x.how.blend || x.how.bill || x.how.caster) { return; }
+        gl3Upload(G, x.data, x.key);
+        gl.enableVertexAttribArray(G.depth.at.aPos);
+        gl.vertexAttribPointer(G.depth.at.aPos, 3, gl.FLOAT, false, GL3_STRIDE * 4, 0);
+        gl.drawArrays(gl.TRIANGLES, 0, x.data.length / GL3_STRIDE);
+      });
+      gl.disableVertexAttribArray(G.depth.at.aPos);
+      gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+    });
+    for (var t = tiles.length; t < 4; t++) { kept[t] = null; }
+    return L;
+  }
   function v3GlDraw(model, inside) {
     var G = gl3Ready();
     if (!G) { return false; }
@@ -1735,53 +1958,10 @@
         gl.disableVertexAttribArray(G.depth.at.aPos);
         gl.bindFramebuffer(gl.FRAMEBUFFER, null);
       }
-      // ---- indoors, the ceiling light's view: what stands under it, how near ----
-      // (2026-10-02: "accurate shadows and depth inside") and the room's box, for
-      // the shading into its corners and along the foot of its walls
-      var lampMvp = gl3Mat([0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 1]), lampOn = 0;
-      var roomBox = [0, 0, 0, 0], roomZ = [0, 0];
-      if (inside && V3.inRoom) {
-        var ir = V3.inRoom, irf = typeof floorsOf === "function" ? floorAt(floorsOf(), ir.x, ir.y) : null;
-        var irx = ir.x + (irf ? irf.dx : 0), iry = ir.y + (irf ? irf.dy : 0), irz = irf ? irf.z : 0, irt = (((ir.turn || 0) % 180) + 180) % 180;
-        if (irt === 0 || irt === 90) {
-          var hw2 = (irt ? ir.h : ir.w) / 2, hh2 = (irt ? ir.w : ir.h) / 2;
-          roomBox = [irx - hw2, iry - hh2, irx + hw2, iry + hh2];
-        }
-        roomZ = [irz, irz + ceilOf(ir) * FLOOR_PX];
-        var dark = typeof useDark === "function" && useDark(ir);
-        if (G.lampOk && !dark) {
-          // (the light under what hangs in the middle of the ceiling -- a fan's
-          // own light is under its blades, which threw a great round shadow)
-          var lampZ = irz + (ceilOf(ir) - 0.35) * FLOOR_PX;
-          hand.nodes.forEach(function (m) {
-            if (!FROM_CEILING[m.kind] || Math.hypot(m.x - ir.x, m.y - ir.y) > 1.3 * FLOOR_PX) { return; }
-            lampZ = Math.min(lampZ, irz + (ceilOf(ir) - hangDrop(m)[0] - 0.06) * FLOOR_PX);
-          });
-          lampMvp = gl3LampView([irx, iry, Math.max(irz + 1.7 * FLOOR_PX, lampZ)]);
-          lampOn = 1;
-          var lampKey = Array.prototype.join.call(lampMvp, ",");
-          var lampAgain = !(G.same && G.lampKey === lampKey);
-          G.lampKey = lampKey;
-        }
-        if (lampOn && lampAgain) {
-          gl.bindFramebuffer(gl.FRAMEBUFFER, G.lampFb);
-          gl.viewport(0, 0, GL3_LAMP, GL3_LAMP);
-          gl.clearColor(1, 1, 1, 1);
-          gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
-          gl.enable(gl.DEPTH_TEST); gl.depthFunc(gl.LESS); gl.depthMask(true); gl.disable(gl.BLEND);
-          gl.useProgram(G.depth.p);
-          gl.uniformMatrix4fv(G.depth.at.uSunMvp, false, lampMvp);
-          batches.forEach(function (x) {
-            if (x.how.lines || x.how.blend || x.how.bill || x.how.caster) { return; }
-            gl3Upload(G, x.data, x.key);
-            gl.enableVertexAttribArray(G.depth.at.aPos);
-            gl.vertexAttribPointer(G.depth.at.aPos, 3, gl.FLOAT, false, GL3_STRIDE * 4, 0);
-            gl.drawArrays(gl.TRIANGLES, 0, x.data.length / GL3_STRIDE);
-          });
-          gl.disableVertexAttribArray(G.depth.at.aPos);
-          gl.bindFramebuffer(gl.FRAMEBUFFER, null);
-        }
-      }
+      // ---- indoors, the ceiling lights' views: what stands under each, how near ----
+      // (2026-10-02: "accurate shadows and depth inside"; each room by its
+      // own light wherever you stand, 2026-10-04 -- gl3RoomLights)
+      var RL = gl3RoomLights(G, inside, eye, batches);
 
       // ---- the picture ------------------------------------------------------------
       // (into the target of floats, where there is one: far 0, near 1 -- gl3Reversed)
@@ -1835,9 +2015,11 @@
       gl.uniform3fv(U.uSunDir, sun);
       // indoors the sun lights only what it reaches through the windows (the
       // shadows say where); with no shadows to say so, it is dimmed all over
-      var indoorDim = inside && V3.inRoom ? (shadows ? 0.85 : 0.3) : 1;
-      gl.uniform3fv(U.uSunCol, [sky.sunCol[0] * indoorDim, sky.sunCol[1] * indoorDim, sky.sunCol[2] * indoorDim]);
-      gl.uniform3fv(U.uSkyAmb, inside && V3.inRoom ? [0.78, 0.78, 0.8] : gl3Mix([0.58, 0.62, 0.68], sky.skyAmb, dress));
+      // -- in a room, wherever you stand (uSunIn; out of doors as it is, the
+      // garden seen from a window as from the garden)
+      gl.uniform3fv(U.uSunCol, sky.sunCol);
+      if (U.uSunIn) { gl.uniform1f(U.uSunIn, shadows ? 0.85 : 0.3); }
+      gl.uniform3fv(U.uSkyAmb, gl3Mix([0.58, 0.62, 0.68], sky.skyAmb, dress));
       gl.uniform3fv(U.uGroundAmb, gl3Mix([0.42, 0.42, 0.4], sky.groundAmb, dress));
       gl.uniform1f(U.uNight, sky.night * dress);
       gl.uniform1f(U.uGlow, 0);
@@ -1860,15 +2042,16 @@
       gl.uniform1f(U.uPx, FLOOR_PX);
       gl.uniform1f(U.uTime, time);
       gl.uniform1f(U.uShadowOn, shadows ? 1 : 0);
-      gl.uniform1f(U.uIndoor, inside && V3.inRoom ? 1 : 0);
-      // the light in the room walked in: the middle of its ceiling
-      var lamp = [0, 0, 0];
-      if (inside && V3.inRoom) {
-        var lr = V3.inRoom, lf = typeof floorsOf === "function" ? floorAt(floorsOf(), lr.x, lr.y) : null;
-        lamp = [lr.x + (lf ? lf.dx : 0), lr.y + (lf ? lf.dy : 0), (lf ? lf.z : 0) + (ceilOf(lr) - 0.35) * FLOOR_PX];
-        if (typeof useDark === "function" && useDark(lr)) { lamp = [lr.x, lr.y, -1e6]; }   // switched off: no lamp at all
-      }
-      if (U.uLamp) { gl.uniform3fv(U.uLamp, lamp); }
+      // each room near you: its box, and its light in the middle of its
+      // ceiling (gl3RoomLights) -- walking round, in it or not
+      if (U.uWalkIn) { gl.uniform1f(U.uWalkIn, RL.on ? 1 : 0); }
+      if (U.uRmN) { gl.uniform1f(U.uRmN, RL.n); }
+      if (U["uRmA[0]"]) { gl.uniform4fv(U["uRmA[0]"], RL.A); }
+      if (U["uRmB[0]"]) { gl.uniform4fv(U["uRmB[0]"], RL.B); }
+      if (U["uRmC[0]"]) { gl.uniform4fv(U["uRmC[0]"], RL.C); }
+      if (U["uLampMs[0]"]) { gl.uniformMatrix4fv(U["uLampMs[0]"], false, RL.mats); }
+      if (U.uLampN) { gl.uniform1f(U.uLampN, RL.lampN); }
+      if (U.uLampK) { gl.uniform4fv(U.uLampK, RL.K); }
       // after dark, a light under every room's ceiling (the first sixteen)
       if (U["uRooms[0]"] && sky.night > 0.01) {
         var fl3 = typeof floorsOf === "function" ? floorsOf() : [], lights = new Float32Array(96), nl = 0;
@@ -1893,12 +2076,8 @@
       gl.uniform2fv(U.uMid, scenery.mid);
       gl.activeTexture(gl.TEXTURE1); gl.bindTexture(gl.TEXTURE_2D, G.shadowTex); gl.uniform1i(U.uShadow, 1);
       if (U.uLampShadow) {
-        gl.activeTexture(gl.TEXTURE2); gl.bindTexture(gl.TEXTURE_2D, lampOn ? G.lampTex : G.white); gl.uniform1i(U.uLampShadow, 2);
+        gl.activeTexture(gl.TEXTURE2); gl.bindTexture(gl.TEXTURE_2D, RL.lampN ? G.lampTex : G.white); gl.uniform1i(U.uLampShadow, 2);
       }
-      if (U.uLampMvp) { gl.uniformMatrix4fv(U.uLampMvp, false, lampMvp); }
-      if (U.uLampOn) { gl.uniform1f(U.uLampOn, lampOn); }
-      if (U.uRoomBox) { gl.uniform4fv(U.uRoomBox, roomBox); }
-      if (U.uRoomZ) { gl.uniform2fv(U.uRoomZ, roomZ); }
       gl.activeTexture(gl.TEXTURE0); gl.uniform1i(U.uTex, 0);
       // (the faces pushed a little away, so their edges' lines and the pictures
       // laid on them win: away is down the depth counted from far to near)
@@ -1920,6 +2099,17 @@
         if (how.blend) { gl.enable(gl.BLEND); gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA); } else { gl.disable(gl.BLEND); }
         gl.depthMask(!how.noDepthWrite);
         gl.drawArrays(mode, 0, data.length / GL3_STRIDE);
+      }
+      // (mirrors, 40-mirrors.js: what each near one sees drawn first, into a
+      // picture of its own -- the scene from the eye's reflection in it -- its
+      // glass then put in with the batches, that picture on it)
+      if (typeof mirrorPass === "function") {
+        try {
+          mirrorPass({ gl: gl, G: G, U: U, draw: draw, batches: batches, scenery: scenery, model: model, inside: inside, eye: eye,
+                       toward: toward, ahead: cam ? cam.ahead : null, D: D, W: W, H: H, dress: dress, under: under, horizon: horizon,
+                       depthK: depthK, setDepthK: function (k) { depthK = k; },
+                       mainMvp: D ? gl3Reversed(mvp, !!inside, GL3_NEAR) : mvp });
+        } catch (eMirror) { if (V3) { V3.mirrorErr = String(eMirror && eMirror.message); } }
       }
       // the ground and what grows on it; from above, it thins out at the edge
       if (dress > 0.01 && !under) {

@@ -242,11 +242,29 @@
   }
 
   // ---- an open plan --------------------------------------------------------------------------------
-  var ARRANGE_OPEN = { living: 1, kitchen: 1, dining: 1, great: 1, family: 1, hall: 1 };
+  var ARRANGE_OPEN = { living: 1, kitchen: 1, dining: 1, great: 1, family: 1, hall: 1, sunroom: 1 };
   if (typeof HOUSE_ICONS === "object") HOUSE_ICONS.openplan = '<path d="M2.6 4.4h14.8v11.2H2.6z"/><path d="M8.4 4.4v3M8.4 12.6v3M2.6 10h2.6M14.8 10h2.6" stroke-dasharray="1.6 1.4"/>' +
                          '<path d="M6.2 13.2h4.4M12.6 6.6h2.4v2.4"/>';
-  function arrangeOpen(made, J) {
+  // (2026-10-04: "there are either poles in the house or metal beams in the
+  // ceiling holding things up") What Start building's open plans are held
+  // up by: steel beams on show over where the walls were, posts only where a
+  // beam needs one -- or posts in a line where each wall was, beams over
+  // them (wallPostSpots, 39-inside.js; the beams drawn, 40-struct.js).
+  var ARRANGE_SUPPORT = ["beams", "posts"];
+  if (typeof HOUSE_ICONS === "object") {
+    HOUSE_ICONS.sup_beams = '<path d="M2.4 3.4h15.2M2.4 6.8h15.2M10 3.4v3.4"/><path d="M3.6 6.8V17M16.4 6.8V17M2.4 17h15.2"/>';
+    HOUSE_ICONS.sup_posts = '<path d="M2.4 4h15.2v2.6H2.4zM5 6.6V17M10 6.6V17M15 6.6V17M3.6 17h2.8M8.6 17h2.8M13.6 17h2.8"/>';
+  }
+  function arrangeSupport(want) {
+    var how = want && ARRANGE_SUPPORT.indexOf(want.support) >= 0 ? want.support : "beams";
+    // (`openSet`: these put here, to be taken off again by a house made without an open plan, 39-starter.js)
+    var h = Object.assign({}, hand.house || {}, { support: how, beams: "open", openSet: true });
+    if (how === "beams") { h.frame = "steel"; } else { delete h.frame; }
+    hand.house = h;
+  }
+  function arrangeOpen(made, J, want) {
     var floors = typeof floorsOf === "function" ? floorsOf() : [];
+    if (want && want.openPlan && (!want.type || want.type === "house")) { arrangeSupport(want); }
     var publicRooms = made.filter(function (o) {
       if (!ARRANGE_OPEN[o.kind]) { return false; }
       var f = floors.length ? floorAt(floors, o.room.x, o.room.y) : null;
@@ -254,17 +272,39 @@
     }).map(function (o) { return o.room; });
     var boxOf = function (n) { return (J && J.boxes && J.boxes[n.id]) || tieBox(n); };
     var opened = 0, halls = made.filter(function (o) { return o.kind === "hall"; }).map(function (o) { return o.room; });
+    // (a side toward living rooms only, out whole; toward some of them, the
+    // stretch shared with each -- a metre and more of it -- 39-inside.js)
+    function openSide(room, edge) {
+      var across = wallAcross(room, edge, boxOf), mine = across.filter(function (it) { return publicRooms.indexOf(it.room) >= 0; });
+      if (!mine.length) { return; }
+      if (mine.length === across.length) {
+        var list = (room.open || []).slice();
+        if (list.indexOf(edge) < 0) { list.push(edge); room.open = list; opened++; }
+        return;
+      }
+      mine.forEach(function (it) {
+        if (it.hi - it.lo < 1.2 * FLOOR_PX) { return; }
+        var to = (room.openTo || []).slice();
+        if (to.indexOf(it.room.id) < 0) { to.push(it.room.id); room.openTo = to; opened++; }
+      });
+    }
     publicRooms.forEach(function (room) {
       // (the living rooms' own walls, toward each other and the hall -- never
       // the hall's: its side ran along the bedrooms as well, and opened them)
       if (typeof wallAcross !== "function" || halls.indexOf(room) >= 0) { return; }
-      ["top", "foot", "left", "right"].forEach(function (edge) {
-        var across = wallAcross(room, edge, boxOf);
-        var open = across.length && across.every(function (it) { return publicRooms.indexOf(it.room) >= 0; });
-        if (!open) { return; }
-        var list = (room.open || []).slice();
-        if (list.indexOf(edge) < 0) { list.push(edge); room.open = list; opened++; }
-      });
+      ["top", "foot", "left", "right"].forEach(function (edge) { openSide(room, edge); });
+    });
+    // a flight of stairs on the living floor, open to it: its bay's sides
+    // toward the living rooms out -- not the side the flight stands against
+    made.forEach(function (o) {
+      if (o.kind !== "stairs" || typeof wallAcross !== "function") { return; }
+      var bay = o.room, f = floors.length ? floorAt(floors, bay.x, bay.y) : null;
+      if (f && f.level !== 0) { return; }
+      var flight = hand.nodes.filter(function (s) { return s.kind === "i_stairs" && insideArea(bay, s.x, s.y); })[0];
+      // (a floor with a hall: the stairs off it, as they were)
+      if (!flight || halls.some(function (h) { return !floors.length || floorAt(floors, h.x, h.y) === f; })) { return; }
+      var t = turned(flight), side = t.h > t.w ? (flight.x < bay.x ? "left" : "right") : (flight.y < bay.y ? "top" : "foot");
+      ["top", "foot", "left", "right"].forEach(function (edge) { if (edge !== side) { openSide(bay, edge); } });
     });
     // the doors those walls had, gone with them
     if (opened) {
@@ -278,17 +318,16 @@
     // came out, a post (Check would ask for them: 39-inside.js)
     if (opened && typeof wallInfo === "function" && typeof wallJoined === "function") {
       var W = wallJoined(), done = {}, closed = [];
-      publicRooms.forEach(function (room) {
-        (room.open || []).forEach(function (edge) {
+      var stairs = made.filter(function (o) { return o.kind === "stairs" && ((o.room.open && o.room.open.length) || o.room.openTo); }).map(function (o) { return o.room; });
+      publicRooms.concat(stairs).forEach(function (room) {
+        ["top", "foot", "left", "right"].forEach(function (edge) {
           wallInfo(room.id, edge).forEach(function (info) {
             var key = [Math.min(room.id, info.other), Math.max(room.id, info.other)].join("|");
-            if (done[key] || !info.s.bearing) { return; }
+            if (done[key] || !info.spots.length) { return; }
             done[key] = true;
-            var d = W.delta(room), made = [];
+            var made = [];
             info.spots.filter(function (p) { return !wallPostNear(W, p, 0.5 * FLOOR_PX); }).forEach(function (p) {
-              var post = adviceAdd("i_post", Math.round(p[0] - d[0]), Math.round(p[1] - d[1]));
-              post.postFor = room.id + ":" + edge; post.tall = ceilOf(room); post.own = true;
-              made.push(post);
+              made.push(arrangePostAt(W, room, edge, p));
             });
             // a post where a door swings: that wall stays
             var hit = made.some(function (post) {
@@ -298,6 +337,8 @@
               hand.nodes = hand.nodes.filter(function (n) { return made.indexOf(n) < 0; });
               var list = (room.open || []).filter(function (e) { return e !== edge; });
               if (list.length) { room.open = list; } else { delete room.open; }
+              var to = (room.openTo || []).filter(function (id) { return id !== info.other; });
+              if (to.length) { room.openTo = to; } else { delete room.openTo; }
               closed.push([room, edge]);
             }
           });
@@ -305,6 +346,46 @@
       });
     }
     return opened;
+  }
+
+  // A post under a beam where it needs one -- slid a little along the beam,
+  // under it still, off anything standing there.
+  function arrangePostAt(W, room, edge, p) {
+    var d = W.delta(room), P = FLOOR_PX, along = edge === "top" || edge === "foot", at = [Math.round(p[0] - d[0]), Math.round(p[1] - d[1])];
+    var size = ICONS.i_post ? ICONS.i_post.box : [8, 8];
+    var free = function (x, y) {
+      var probe = { kind: "i_post", x: x, y: y, w: size[0], h: size[1] };
+      return !hand.nodes.some(function (o) {
+        return o.kind !== "i_room" && !isArea(o.kind) && !LIES_FLAT[o.kind] && !ON_THE_WALL[o.kind] && !FROM_CEILING[o.kind] && o.kind !== "i_window" && boxesTouch(probe, o, 2);
+      });
+    };
+    [0, 0.25, -0.25, 0.5, -0.5].some(function (k) {
+      var x = at[0] + (along ? Math.round(k * P) : 0), y = at[1] + (along ? 0 : Math.round(k * P));
+      if (!free(x, y)) { return false; }
+      at = [x, y];
+      return true;
+    });
+    var post = adviceAdd("i_post", at[0], at[1]);
+    post.postFor = room.id + ":" + edge; post.tall = ceilOf(room); post.own = true;
+    return post;
+  }
+  // Every opening of an open plan with the posts its beam needs: once the
+  // house is finished -- an attic put over it after its walls came out
+  // (40-attic.js) makes those walls carry a floor.
+  function arrangeOpenPosts() {
+    if (!(hand.house && hand.house.openSet) || typeof wallInfo !== "function" || typeof wallJoined !== "function") { return 0; }
+    var W = wallJoined(), done = {}, added = 0;
+    hand.nodes.filter(function (n) { return typeof wallSomeOpen === "function" && wallSomeOpen(n); }).forEach(function (room) {
+      ["top", "foot", "left", "right"].forEach(function (edge) {
+        wallInfo(room.id, edge).forEach(function (info) {
+          var key = [Math.min(room.id, info.other), Math.max(room.id, info.other)].join("|");
+          if (done[key] || !info.spots.length) { return; }
+          done[key] = true;
+          info.spots.filter(function (p) { return !wallPostNear(W, p, 0.5 * FLOOR_PX); }).forEach(function (p) { arrangePostAt(W, room, edge, p); added++; });
+        });
+      });
+    });
+    return added;
   }
 
   // ---- after Start a house -----------------------------------------------------------------------------

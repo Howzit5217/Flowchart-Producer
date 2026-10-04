@@ -20,7 +20,8 @@
   // every door into a room, on the side it opens from; the panel in the
   // garage (or the utility room, the laundry, the basement, a hall).
   var WIRE_SKIP = { closet: 1, stairs: 1, lift: 1, fitting: 1 };
-  var WIRE_PANEL_ROOMS = ["garage", "utility", "laundry", "stock", "storage", "family", "hall"];
+  // (an open plan has no hall: the panel in the mudroom, or out in the living space -- not a bathroom, 2026-10-04)
+  var WIRE_PANEL_ROOMS = ["garage", "utility", "laundry", "mudroom", "stock", "storage", "family", "hall", "pantry", "kitchen", "great", "dining", "living"];
   function wireKindOf(plan, r) {
     var k = typeof roomKind === "function" ? roomKind(plan, r) : "room";
     if (r.use) { k = r.use === "stock" || r.use === "lift" ? r.use : k; }
@@ -477,7 +478,7 @@
       f.how = faint.get(h);
     });
     var key = JSON.stringify([V3.mode, V3.upTo, V3.myLevel, !!V3.inRoom, V3.xrayShow || null, hand.nodes.map(function (n) {
-      return [n.id, n.kind, Math.round(n.x), Math.round(n.y), n.w, n.h, n.turn || 0, n.ceil || 0, n.open || 0, n.lift || 0];
+      return [n.id, n.kind, Math.round(n.x), Math.round(n.y), n.w, n.h, n.turn || 0, n.ceil || 0, n.open || 0, n.openTo || 0, n.lift || 0];
     })]);
     if (!V3.xrayKept || V3.xrayKept.key !== key) {
       V3.xrayKept = { key: key, made: xrayBuild(model) };

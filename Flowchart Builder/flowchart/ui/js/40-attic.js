@@ -21,16 +21,33 @@
   // R305): a room 7 ft (2.13 m) high over at least half its floor, its knee
   // walls 4 ft, a flat ceiling across the top; a storage attic high enough
   // to stand up in down the middle.
-  var ATTIC_KNEE = { room: 1.2, storage: 0.15 };            // metres
+  //
+  // (2026-10-04: "there should be nothing exterior showing ... it should just
+  // have one of those panels in the ceiling that open with a ladder or
+  // staircase and you go up into the space that is already there so it
+  // should if it is there have that slanted roof but if the house type does
+  // not have that slanted roof it should not be able to have an attic")
+  // The attic is the space up in the house's own roof, not a storey with a
+  // roof of its own: the roof is the one the house would have without it --
+  // on the top floor's walls, and over a garage on the garage's -- made only
+  // as steep as the attic needs.  What is in the attic is drawn from that roof
+  // as it is drawn (atticRoofs), so nothing of it can come through.  A finished
+  // attic's knee walls stand in under the slopes where the roof is 4 ft up;
+  // storage runs out to the eaves.  A flat roof has no attic.  Over a garage
+  // the way up is from the garage: a ladder out of its ceiling, or stairs.
+  var ATTIC_KNEE = { room: 1.2, storage: 0 };               // metres
   var ATTIC_FLAT = { room: 2.3, storage: 2.0 };
   var ATTIC_HEAD = 2.13, ATTIC_STAND = 1.65, ATTIC_STEEPEST = Math.tan(62 * Math.PI / 180);
+  var ATTIC_UNDER = 0.14;                                   // metres: the roof's own depth, its boards to its top
   var ATTIC_KINDS = ["none", "storage", "room"];
   var ATTIC_GABLED = { gable: true, gambrel: true, stepped: true, aframe: true };
   var ATTIC_LADDER = [0.64, 1.37];                          // metres: a folding ladder's opening, 25 x 54 in
 
   // The attic rooms (looked for again only when the drawing changes).
-  var atticMemo = { list: null, count: -1, at: 0, rooms: [] };
+  // (while the roof is worked out without them, atticHiding: still these)
+  var atticMemo = { list: null, count: -1, at: 0, rooms: [] }, atticHiding = null;
   function atticRooms() {
+    if (atticHiding) { return atticHiding; }
     var K = atticMemo, list = hand.nodes, now = performance.now();
     if (K.list !== list || K.count !== list.length || now - K.at > 250) {
       K.list = list; K.count = list.length; K.at = now;
@@ -38,91 +55,232 @@
     }
     return K.rooms;
   }
+  // (and with them a school's open courtyard, 40-campus.js: rooms that are not rooms beyond a wall)
+  var airMemo = { list: null, count: -1, at: 0, rooms: [] };
+  function airRooms() {
+    var K = airMemo, list = hand.nodes, now = performance.now();
+    if (K.list !== list || K.count !== list.length || now - K.at > 250) {
+      K.list = list; K.count = list.length; K.at = now;
+      K.rooms = list.filter(function (n) { return n.kind === "i_room" && (n.attic || n.court); });
+    }
+    return K.rooms;
+  }
   function atticKnee(r) { return ATTIC_KNEE[r && r.attic] || 0; }
-  // How steep the roof over an attic `half` metres across to the middle must be.
+  // How steep the roof over an attic must be, its slopes `half` metres from
+  // the eaves to the ridge -- its floor where the roof starts: storage high
+  // enough down the middle to stand in; a room with its 7 ft over half its
+  // floor between knee walls 4 ft high, and at least 8 ft of it across.
   function atticSlope(kind, half) {
     if (!(half > 0.5)) { return 0; }
-    var knee = ATTIC_KNEE[kind] || 0;
-    var k = kind === "room" ? Math.max((ATTIC_HEAD - knee) / (half / 2), (ATTIC_FLAT.room + 0.25 - knee) / half)
-                            : (ATTIC_STAND - knee) / half;
+    var u = ATTIC_UNDER, D = 2 * half, k;
+    if (kind === "room") {
+      if (D <= 3.2) { return ATTIC_STEEPEST; }
+      k = Math.max(2 * (2 * (ATTIC_HEAD + u) - (ATTIC_KNEE.room + u)) / D, 2 * (ATTIC_HEAD + u) / (D - 2.4));
+    } else {
+      k = (ATTIC_STAND + u) / half;
+    }
     return Math.min(ATTIC_STEEPEST, k);
   }
+  // A roof that is flat (39-styles.js): no attic under it.
+  function atticFlat(shape) { return typeof STYLE_FLATS === "object" && !!STYLE_FLATS[shape]; }
+  function atticShapeBare() {
+    if (typeof styleRoofShapeAttic === "function") { return styleRoofShapeAttic(); }
+    return typeof styleRoofShape === "function" ? styleRoofShape() : "hip";
+  }
+  function atticAllowed() { return !atticFlat(atticShapeBare()); }
 
   // ---- the roof over it ----------------------------------------------------------------------
-  // Over an attic the roof starts at the top of its knee walls, and is as
-  // steep as the attic needs (never less steep than the house's style).
-  // A finished attic's roof is gabled -- its ends walls, a window in each --
-  // and any roof over an attic slopes: a flat one would leave none.
+  // A finished attic under a hip roof is gabled instead -- its ends walls, a
+  // window in each.  Any other roof stays as the house's style has it; a
+  // flat one is never changed to make room for an attic (there is none).
   if (typeof styleRoofShape === "function") {
     var styleRoofShapeAttic = styleRoofShape;
     styleRoofShape = function () {
-      var shape = styleRoofShapeAttic.apply(this, arguments), rooms = atticRooms();
-      if (!rooms.length || ATTIC_GABLED[shape]) { return shape; }
-      var finished = rooms.some(function (r) { return r.attic === "room"; });
-      if (!finished && (shape === "hip" || shape === "pagoda")) { return shape; }
-      return "gable";
+      var shape = styleRoofShapeAttic.apply(this, arguments);
+      if (ATTIC_GABLED[shape] || atticFlat(shape) || (shape !== "hip" && shape !== "pagoda")) { return shape; }
+      return atticRooms().some(function (r) { return r.attic === "room" && r.atticOf !== "garage"; }) ? "gable" : shape;
     };
   }
-  function atticUnder(R, floors, rooms) {
-    if (R.turn) { return null; }
-    var best = null;
-    rooms.forEach(function (r) {
-      var f = floors && floors.length ? floorAt(floors, r.x, r.y) : null, x = r.x + (f ? f.dx : 0), y = r.y + (f ? f.dy : 0);
-      if ((f ? f.level : 0) !== R.level || x < R.x0 || x > R.x1 || y < R.y0 || y > R.y1) { return; }
-      if (!best || (best.attic !== "room" && r.attic === "room")) { best = r; }
-    });
-    return best;
-  }
+  // The house roofed as it would be without its attics -- they are in its
+  // roof, not under roofs of their own -- and each roof over one as steep as
+  // it needs (all of a roof in one piece as steep, 39-house.js).
   if (typeof roofPlan === "function") {
     var roofPlanAttic = roofPlan;
     roofPlan = function (floors, upTo, wallTop) {
       var rooms = atticRooms();
-      if (!rooms.length) { return roofPlanAttic.apply(this, arguments); }
-      var out = roofPlanAttic.call(this, floors, upTo, function (r) { return r && r.attic ? atticKnee(r) * FLOOR_PX : wallTop(r); });
-      out.forEach(function (R) {
-        var a = atticUnder(R, floors, rooms);
-        if (!a) { return; }
-        var half = Math.min(R.x1 - R.x0, R.y1 - R.y0) / 2 / FLOOR_PX;
-        R.k = Math.max(R.k || (typeof stylePitch === "function" ? stylePitch() : ROOF_PITCH), atticSlope(a.attic, half));
-      });
+      if (!rooms.length || atticHiding) { return roofPlanAttic.apply(this, arguments); }
+      var keep = hand.nodes, out;
+      atticHiding = rooms;
+      try {
+        hand.nodes = keep.filter(function (n) { return !(n.kind === "i_room" && n.attic); });
+        out = roofPlanAttic.apply(this, arguments);
+      } finally { hand.nodes = keep; atticHiding = null; }
+      try {
+        rooms.forEach(function (a) {
+          var f = floors && floors.length ? floorAt(floors, a.x, a.y) : null, q = turned(a), x = a.x + (f ? f.dx : 0), y = a.y + (f ? f.dy : 0);
+          atticSteepen(out, { x0: x - q.w / 2, x1: x + q.w / 2, y0: y - q.h / 2, y1: y + q.h / 2 }, a.attic);
+        });
+      } catch (e) { /* as steep as it was */ }
       return out;
     };
   }
-  // The roof's profile across an attic room, as the roof over it is drawn:
-  // [distance in from the wall, height over its floor] in px, to the middle.
-  function atticProfile(room) {
-    var P = FLOOR_PX, half = Math.min(room.w, room.h) / 2, knee = atticKnee(room) * P, shape = styleRoofShape();
-    var pitch = typeof stylePitch === "function" ? stylePitch() : ROOF_PITCH;
-    var one = houseOpt("roof") === "one" || shape !== "hip";
-    if (one) { var ridge = typeof styleRidge === "function" ? styleRidge() : ROOF_RIDGE; pitch = Math.min(pitch, ridge * P / half); }
-    var k = Math.max(pitch, atticSlope(room.attic, half / P));
-    if (shape === "aframe") { k = Math.tan(60 * Math.PI / 180); }
-    if (shape === "gambrel") {
-      var k1 = Math.tan(62 * Math.PI / 180), k2 = Math.tan(24 * Math.PI / 180), run = half * 0.32;
-      return { pts: [[0, knee], [run, knee + run * k1], [half, knee + run * k1 + (half - run) * k2]], k: k1, hip: false };
-    }
-    return { pts: [[0, knee], [half, knee + half * k]], k: k, hip: shape === "hip" || shape === "pagoda" };
+  // Each roof over `A` (a rectangle in the ground floor's numbers) made as
+  // steep as an attic of `kind` there needs -- and the rest of its roof with it.
+  function atticSteepen(out, A, kind) {
+    var P = FLOOR_PX, pitch = typeof stylePitch === "function" ? stylePitch() : ROOF_PITCH;
+    out.forEach(function (R) {
+      if (R.turn) { return; }
+      var ox = Math.min(R.x1, A.x1) - Math.max(R.x0, A.x0), oy = Math.min(R.y1, A.y1) - Math.max(R.y0, A.y0);
+      if (ox < 0.5 * P || oy < 0.5 * P) { return; }
+      var k = atticSlope(kind, Math.min(R.x1 - R.x0, R.y1 - R.y0) / 2 / P);
+      if (!(k > 0)) { return; }
+      out.forEach(function (o) {
+        if (o === R || (R.cover && o.cover === R.cover)) { o.k = Math.max(o.k || pitch, k); }
+      });
+    });
   }
-  function atticHeightAt(prof, d) {
-    var p = prof.pts;
-    for (var i = 1; i < p.length; i++) {
-      if (d <= p[i][0]) { return p[i - 1][1] + (p[i][1] - p[i - 1][1]) * (d - p[i - 1][0]) / Math.max(1e-6, p[i][0] - p[i - 1][0]); }
+
+  // ---- the roof as it is drawn ----------------------------------------------------------------
+  // Every roof (roofPlan, its faces as roofFaces makes them): the planes of
+  // its slopes, z = a x + b y + c in the ground floor's numbers.  Over a spot
+  // a roof is the lowest of its planes (a gable's two, a hip's four, a
+  // gambrel's or a mansard's more); where two roofs overlap, the higher.
+  var atticRoofKept = { pic: null, key: "", list: [] };
+  function atticWallTop(floors) {
+    return function (r) {
+      var f = floors.length ? floorAt(floors, r.x, r.y) : null, up = f && typeof floorOver === "function" ? floorOver(floors, f) : null;
+      return Math.max(ceilOf(r) * FLOOR_PX, up ? up.z - f.z : 0);
+    };
+  }
+  function atticRoofs() {
+    var pic = typeof V3 !== "undefined" && V3 ? V3.picture : null;
+    var key = [hand.nodes.length, typeof styleRoofShape === "function" ? styleRoofShape() : "", typeof stylePitch === "function" ? stylePitch() : "", houseOpt("roof")].join("|");
+    if (pic && atticRoofKept.pic === pic && atticRoofKept.key === key) { return atticRoofKept.list; }
+    var list = atticRoofsWith(floorsOf(), []);
+    atticRoofKept = { pic: pic, key: key, list: list };
+    return list;
+  }
+  function atticRect3(floors, a) {
+    var f = floors && floors.length ? floorAt(floors, a.x, a.y) : null, q = turned(a), x = a.x + (f ? f.dx : 0), y = a.y + (f ? f.dy : 0);
+    return { x0: x - q.w / 2, x1: x + q.w / 2, y0: y - q.h / 2, y1: y + q.h / 2 };
+  }
+  // The roofs as roofPlan makes them with the attics there are, and those
+  // about to be made (`extra`: [{ A, kind, of }], A in the ground floor's
+  // numbers) -- each as steep as they need, its shape as it will be.
+  function atticRoofsWith(floors, extra) {
+    var rooms = atticRooms(), keep = hand.nodes, was = atticHiding, list = [];
+    atticHiding = rooms.concat(extra.map(function (e) { return { kind: "i_room", attic: e.kind, atticOf: e.of }; }));
+    try {
+      hand.nodes = keep.filter(function (n) { return !(n.kind === "i_room" && n.attic); });
+      var plan = roofPlan(floors, null, atticWallTop(floors));
+      rooms.forEach(function (a) { atticSteepen(plan, atticRect3(floors, a), a.attic); });
+      extra.forEach(function (e) { atticSteepen(plan, e.A, e.kind); });
+      list = atticRoofsOf(plan);
+    } finally { hand.nodes = keep; atticHiding = was; }
+    return list;
+  }
+  // Where in `rect` ({ l, r, t, b }, the ground floor's numbers) an attic of
+  // `kind` over a floor at `z0` has the roof over it high enough: a room
+  // between its knee walls; storage wherever it can be stood in, or null.
+  function atticFits(rect, z0, kind, of, floors) {
+    var P = FLOOR_PX, A = { x0: rect.l, x1: rect.r, y0: rect.t, y1: rect.b };
+    var list = atticRoofsWith(floors, [{ A: A, kind: kind, of: of }]).filter(function (o) {
+      var R = o.R; return R.x0 < A.x1 - 1 && R.x1 > A.x0 + 1 && R.y0 < A.y1 - 1 && R.y1 > A.y0 + 1;
+    });
+    if (!list.length) { return null; }
+    var need = kind === "room" ? (ATTIC_KNEE.room + ATTIC_UNDER) * P + 1 : (1.0 + ATTIC_UNDER) * P;
+    var got = atticRoomUnder(list, A, z0, need);
+    if (!got || got.x1 - got.x0 < (kind === "room" ? 2.4 : 0.8) * P || got.y1 - got.y0 < (kind === "room" ? 2.4 : 0.8) * P) { return null; }
+    return kind === "room" ? { l: Math.round(got.x0), r: Math.round(got.x1), t: Math.round(got.y0), b: Math.round(got.y1) } : rect;
+  }
+  function atticRoofsOf(plan) {
+    var probe = { roof: true, color: "#808080", edge: "#404040", atticProbe: true }, list = [];
+    // (worked out, not drawn: the solar panels' list of roofs left as it was, 40-solar.js)
+    var solarWas = typeof solarFaces !== "undefined" && solarFaces ? solarFaces.length : -1;
+    try {
+      plan.forEach(function (R) {
+        if (R.turn) { return; }
+        var tmp = [], planes = [];
+        roofFaces(tmp, R, 0, probe);
+        tmp.forEach(function (f) {
+          if (!f.roof || !f.how || !f.how.atticProbe || !f.n || f.n[2] < 0.05 || !f.pts || f.pts.length < 3) { return; }
+          var n = f.n, p = f.pts[0], a = -n[0] / n[2], b = -n[1] / n[2], c = p[2] - a * p[0] - b * p[1];
+          if (planes.some(function (q) { return Math.abs(q[0] - a) < 1e-3 && Math.abs(q[1] - b) < 1e-3 && Math.abs(q[2] - c) < 0.5; })) { return; }
+          planes.push([a, b, c]);
+        });
+        if (planes.length) { list.push({ R: R, planes: planes }); }
+      });
+    } finally { if (solarWas >= 0 && solarFaces.length > solarWas) { solarFaces.length = solarWas; } }
+    return list;
+  }
+  function atticRoofZ(list, x, y) {
+    var best = -Infinity;
+    for (var i = 0; i < list.length; i++) {
+      var o = list[i], R = o.R;
+      if (x < R.x0 - 1 || x > R.x1 + 1 || y < R.y0 - 1 || y > R.y1 + 1) { continue; }
+      var z = Infinity;
+      for (var j = 0; j < o.planes.length; j++) { var p = o.planes[j]; z = Math.min(z, p[0] * x + p[1] * y + p[2]); }
+      if (z > best) { best = z; }
     }
-    return p[p.length - 1][1];
+    return best;
+  }
+  // A flat polygon of [x, y] points, the part of it where a*x + b*y <= c.
+  function atticCut(pts, a, b, c) {
+    if (!pts) { return null; }
+    var out = [];
+    for (var i = 0; i < pts.length; i++) {
+      var p = pts[i], q = pts[(i + 1) % pts.length], dp = a * p[0] + b * p[1] - c, dq = a * q[0] + b * q[1] - c;
+      if (dp <= 1e-6) { out.push(p); }
+      if ((dp < -1e-6 && dq > 1e-6) || (dp > 1e-6 && dq < -1e-6)) { var t = dp / (dp - dq); out.push([p[0] + (q[0] - p[0]) * t, p[1] + (q[1] - p[1]) * t]); }
+    }
+    if (out.length < 3) { return null; }
+    var s = 0;
+    for (var k = 0; k < out.length; k++) { var u = out[k], w = out[(k + 1) % out.length]; s += u[0] * w[1] - w[0] * u[1]; }
+    return Math.abs(s) > 1 ? out : null;
+  }
+  function atticRectPoly(B) { return [[B.x0, B.y0], [B.x1, B.y0], [B.x1, B.y1], [B.x0, B.y1]]; }
+  // The pieces of the roofs over a rectangle: each slope where it is the lowest of its roof's.
+  function atticPieces(list, B) {
+    var out = [];
+    list.forEach(function (o) {
+      var R = o.R, base = atticCut(atticCut(atticCut(atticCut(atticRectPoly(B), 1, 0, R.x1), -1, 0, -R.x0), 0, 1, R.y1), 0, -1, -R.y0);
+      if (!base) { return; }
+      o.planes.forEach(function (p, i) {
+        var poly = base;
+        o.planes.forEach(function (r, j) { if (j !== i && poly) { poly = atticCut(poly, p[0] - r[0], p[1] - r[1], r[2] - p[2]); } });
+        if (poly) { out.push({ poly: poly, plane: p }); }
+      });
+    });
+    return out;
+  }
+  // The rectangle within B where the roof is at least `h` over `z0` (the
+  // biggest box of it, by the roof sampled across it), or null.
+  function atticRoomUnder(list, B, z0, h) {
+    var P = FLOOR_PX, step = 0.25 * P, nx = Math.max(2, Math.ceil((B.x1 - B.x0) / step)), ny = Math.max(2, Math.ceil((B.y1 - B.y0) / step));
+    var x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity;
+    for (var i = 0; i <= nx; i++) {
+      for (var j = 0; j <= ny; j++) {
+        var x = B.x0 + (B.x1 - B.x0) * i / nx, y = B.y0 + (B.y1 - B.y0) * j / ny;
+        if (atticRoofZ(list, x, y) - z0 >= h) { x0 = Math.min(x0, x); x1 = Math.max(x1, x); y0 = Math.min(y0, y); y1 = Math.max(y1, y); }
+      }
+    }
+    return x0 < x1 && y0 < y1 ? { x0: x0, x1: x1, y0: y0, y1: y1 } : null;
   }
 
   // ---- in 3D: inside it ---------------------------------------------------------------------------
-  // Its walls only as high as its knee walls; over them the ceiling under
-  // the roof (and, finished, flat across the top), its ends carried up to
-  // it -- a window in each where the roof's gable has one.
+  // A finished attic's walls only as high as its knee walls; over them the
+  // underside of the roof (and flat across the top), its ends carried up to
+  // it -- a window in each where the roof's gable has one.  A storage attic
+  // has no walls: the roof comes down to its floor at the eaves.
   var atticWallHow = {};
   if (typeof v3Wall === "function") {
     var v3WallAttic = v3Wall;
     v3Wall = function (faces, room, edge, T, holes, how, low, wallTop, keep) {
-      if (room && room.attic && !low) {
+      if (room && room.attic) {
         atticWallHow[room.id] = how;
-        wallTop = Math.min(wallTop || ceilOf(room) * FLOOR_PX, Math.max(1, atticKnee(room) * FLOOR_PX));
-        return v3WallAttic.call(this, faces, room, edge, T, holes, how, low, wallTop, keep);
+        if (room.attic !== "room") { return; }
+        if (!low) { wallTop = Math.min(wallTop || ceilOf(room) * FLOOR_PX, Math.max(1, atticKnee(room) * FLOOR_PX)); }
+        return v3WallAttic.call(this, faces, room, edge, T, holes, how, low, wallTop, keep, arguments[9]);
       }
       return v3WallAttic.apply(this, arguments);
     };
@@ -171,140 +329,309 @@
     });
     return out;
   }
+  // Inside, from the roof over it as it is drawn (atticRoofs): its
+  // underside -- bare boards over storage, a ceiling over a room, flat across
+  // the top -- just under the roof's own planes; a room's ends carried up to
+  // it, less their windows; storage's rafters, its insulation and boards.
+  function atticNormal(pts) {
+    var nx = 0, ny = 0, nz = 0;
+    for (var i = 0; i < pts.length; i++) {
+      var a = pts[i], b = pts[(i + 1) % pts.length];
+      nx += (a[1] - b[1]) * (a[2] + b[2]); ny += (a[2] - b[2]) * (a[0] + b[0]); nz += (a[0] - b[0]) * (a[1] + b[1]);
+    }
+    var l = Math.hypot(nx, ny, nz) || 1;
+    return [nx / l, ny / l, nz / l];
+  }
+  // (points [s, z] along a wall: those in a straight line with their neighbours left out)
+  function atticSimplify(pts) {
+    var out = [];
+    pts.forEach(function (p) {
+      var a = out[out.length - 2], b = out[out.length - 1];
+      if (b && Math.abs(p[0] - b[0]) + Math.abs(p[1] - b[1]) < 0.2) { return; }
+      if (a && b && Math.abs((b[0] - a[0]) * (p[1] - a[1]) - (b[1] - a[1]) * (p[0] - a[0])) < 0.5) { out[out.length - 1] = p; return; }
+      out.push(p);
+    });
+    return out;
+  }
   function atticInside(faces, room) {
-    var P = FLOOR_PX, prof = atticProfile(room), along = room.w >= room.h;
-    var hu = (along ? room.w : room.h) / 2, hv = (along ? room.h : room.w) / 2;
-    var T = Math.max(1, Math.min(6, Math.min(room.w, room.h) * 0.06)), finished = room.attic === "room";
-    var flat = finished ? ceilOf(room) * P : Infinity, top = Math.min(DOOR_TALL * P, ceilOf(room) * P - 0.1 * P);
-    // (the room's own flat ceiling, put up just before: taken down, this one in its place)
+    var P = FLOOR_PX, finished = room.attic === "room", T = Math.max(1, Math.min(6, Math.min(room.w, room.h) * 0.06));
+    var ceil = ceilOf(room) * P, flat = finished ? ceil : Infinity, top = Math.min(DOOR_TALL * P, ceil - 0.1 * P);
+    // (the room's own flat ceiling, put up just before, taken down: the roof's
+    // underside in its place.  Found by its middle -- by its first corner, a
+    // corner of the room, it was never inside it: it was left up, 2026-10-04,
+    // and stood out of the roof along both eaves, dark from above.)
     var ceilHow = null;
-    for (var i = faces.length - 1, seen = 0; i >= 0 && !faces[i].node && seen < 600; i--, seen++) {
-      var p0 = faces[i].ceiling && faces[i].pts && faces[i].pts[0];
-      if (p0 && insideArea(room, p0[0], p0[1], 3)) { ceilHow = ceilHow || faces[i].how; faces.splice(i, 1); }
+    for (var i = faces.length - 1, seen = 0; i >= 0 && seen < 1500; i--, seen++) {
+      var fc = faces[i];
+      if (!fc.pts || !fc.pts.length || !(fc.ceiling || (fc.how && fc.how.caster)) || (fc.node && fc.node !== room)) { continue; }
+      var p0 = [0, 0, fc.pts[0][2]];
+      fc.pts.forEach(function (p) { p0[0] += p[0] / fc.pts.length; p0[1] += p[1] / fc.pts.length; });
+      if (insideArea(room, p0[0], p0[1], -3) && p0[2] > ceil - 2 && p0[2] < ceil + 0.4 * P) {
+        if (fc.ceiling) { ceilHow = ceilHow || fc.how; }
+        faces.splice(i, 1);
+      }
     }
     var wallHow = atticWallHow[room.id] || { wall: true, color: "#f2efe8", edge: "#9a958c" };
-    if (!finished) {
-      ceilHow = { piece: true, color: "#c9a877", edge: v3Mix("#c9a877", "#000000", 0.3), pat: 21, ceiling: true };   // the roof's boards, bare
-    }
+    if (!finished) { ceilHow = { piece: true, color: "#c9a877", edge: v3Mix("#c9a877", "#000000", 0.3), pat: 21, ceiling: true }; }   // the roof's boards, bare
     ceilHow = ceilHow || { ceiling: true, color: "#f4f2ee", edge: "#9a958c" };
-    function W(u, v) { return along ? v3Local(room, u, v) : v3Local(room, v, u); }
+    var floors = floorsOf(), f = floors.length ? floorAt(floors, room.x, room.y) : null;
+    var dx = f ? f.dx : 0, dy = f ? f.dy : 0, z0 = f ? f.z : 0, q = turned(room);
+    var B = { x0: room.x + dx - q.w / 2, x1: room.x + dx + q.w / 2, y0: room.y + dy - q.h / 2, y1: room.y + dy + q.h / 2 };
+    var roofs = atticRoofs().filter(function (o) { var R = o.R; return R.x0 < B.x1 - 1 && R.x1 > B.x0 + 1 && R.y0 < B.y1 - 1 && R.y1 > B.y0 + 1; });
+    if (!roofs.length) { return; }
+    var under = ATTIC_UNDER * P, C = { faces: faces, room: room, B: B, roofs: roofs, dx: dx, dy: dy, z0: z0, under: under };
+    function L(x, y, z) { return [x - dx, y - dy, z - z0]; }
     // (a ceiling facing down into the room, an end wall facing in across it)
     function face(pts3, how, down) {
-      var n = typeof styleNormal === "function" ? styleNormal(pts3) : [0, 0, -1];
+      var n = atticNormal(pts3);
       if (down && n[2] > 0) { n = [-n[0], -n[1], -n[2]]; }
       if (!down && n[0] * (room.x - pts3[0][0]) + n[1] * (room.y - pts3[0][1]) < 0) { n = [-n[0], -n[1], -n[2]]; }
       faces.push({ pts: pts3, n: n, how: how, ceiling: down && how === ceilHow });
     }
-    function at(u, v, z) { var w = W(u, v); return [w[0], w[1], z]; }
-    var u0 = -hu + T, u1 = hu - T, capD = null;
-    // (under the roof by the roof's own thickness: laid in its very planes,
-    // the attic's boards showed through the roof over them, 2026-10-03)
-    var under = 0.14 * P, hAt = function (d) { return atticHeightAt(prof, d) - under; }, ridgeZ = hAt(hv);
-    // the slopes, from each long wall up -- to the flat ceiling, or the ridge
-    var stops = prof.pts.map(function (p) { return p[0]; }).filter(function (d) { return d > T && d < hv; });
-    if (flat < ridgeZ) {
-      for (var d = 0; d <= hv; d += 1) { if (hAt(d) >= flat) { capD = d; break; } }
-      stops = stops.filter(function (d) { return d < capD; }).concat([capD]);
-    } else { stops = stops.concat([hv]); }
-    var ds = [T].concat(stops);
-    if (prof.hip && !finished && hu > hv) {
-      // hipped: its ends sloping up too, to a ridge shorter than the room
-      var kz = prof.pts[0][1] - under;
-      [-1, 1].forEach(function (s) {
-        face([at(-hu, s * hv, kz), at(hu, s * hv, kz), at(hu - hv, 0, ridgeZ), at(-hu + hv, 0, ridgeZ)], ceilHow, true);
-        face([at(s * hu, -hv, kz), at(s * hu, hv, kz), at(s * (hu - hv), 0, ridgeZ)], ceilHow, true);
-      });
-    } else {
-      // (from the wall's outside line, as the roof is: begun at its inside
-      // face, the wall's top showed a strip of the sky over it)
-      var dsS = [0].concat(stops);
-      [-1, 1].forEach(function (s) {
-        for (var j = 0; j + 1 < dsS.length; j++) {
-          var a = dsS[j], b = dsS[j + 1], za = hAt(a), zb = hAt(b);
-          face([at(u0, s * (hv - a), za), at(u1, s * (hv - a), za), at(u1, s * (hv - b), zb), at(u0, s * (hv - b), zb)], ceilHow, true);
-        }
-      });
-      if (capD !== null && hv - capD > 0.5) {
-        face([at(u0, -(hv - capD), flat), at(u1, -(hv - capD), flat), at(u1, hv - capD, flat), at(u0, hv - capD, flat)], ceilHow, true);
+    // the underside of each slope over it -- none of it under the floor, by the
+    // eaves -- and in a room, flat across where the slopes are over its ceiling
+    var hiZ = z0 + flat + under, pieces = atticPieces(roofs, B);
+    // (the roof lifted off, looked at from above: no ceiling over it either -- looked into, as the rooms under it are)
+    var lidded = typeof V3 === "undefined" || !V3 || V3.mode === "walk" || (V3.roof !== false && (V3.roofV === undefined || V3.roofV > 0.5));
+    if (lidded) pieces.forEach(function (pc) {
+      var p = pc.plane, poly = atticCut(pc.poly, -p[0], -p[1], p[2] - z0 - under - 0.02 * P);
+      if (!poly) { return; }
+      var low = finished ? atticCut(poly, p[0], p[1], hiZ - p[2]) : poly;
+      if (low) { face(low.map(function (v) { return L(v[0], v[1], p[0] * v[0] + p[1] * v[1] + p[2] - under); }), ceilHow, true); }
+      if (finished) {
+        var high = atticCut(poly, -p[0], -p[1], p[2] - hiZ);
+        if (high) { face(high.map(function (v) { return L(v[0], v[1], z0 + flat); }), ceilHow, true); }
       }
-      // the ends: the wall carried up under the slopes, less its windows and doors
-      var outline = [[-hv + T, hAt(T) - 0.5]];
-      ds.forEach(function (d) { outline.push([-hv + d, Math.min(flat, hAt(d))]); });
-      ds.slice().reverse().forEach(function (d) { outline.push([hv - d, Math.min(flat, hAt(d))]); });
-      outline.push([hv - T, hAt(T) - 0.5]);
-      var knee = prof.pts[0][1];
-      outline = [[-hv + T, knee]].concat(outline.slice(1, -1), [[hv - T, knee]]);
-      [["neg", -1], ["pos", 1]].forEach(function (end) {
-        var s = end[1], edge = along ? (s < 0 ? "left" : "right") : (s < 0 ? "top" : "foot");
-        // (along the wall as v3Hole measures it: from the room's left, or its top)
-        var holes = atticHoles(room, edge, T, top).map(function (h) { return [h[0] - hv, h[1] - hv, h[2], h[3]]; });
-        var how = finished ? wallHow : ceilHow;
-        atticMinus(outline, holes).forEach(function (piece) {
-          face(piece.map(function (q) { return at(s * (hu - T), q[0], q[1]); }), how, false);
+    });
+    if (finished) {
+      // its ends: the wall carried up from its knee walls to the slopes (or the
+      // flat ceiling) along it -- where the roof rises along that side
+      var knee = atticKnee(room) * P;
+      [["top", true, -1], ["foot", true, 1], ["left", false, -1], ["right", false, 1]].forEach(function (e) {
+        var along = e[1], side = e[2], len = along ? room.w : room.h;
+        function W(s) {
+          return v3Local(room, along ? -room.w / 2 + s : side * (room.w / 2 - T), along ? side * (room.h / 2 - T) : -room.h / 2 + s);
+        }
+        var prof = [], n = Math.max(8, Math.ceil(len / (0.2 * P)));
+        for (var k = 0; k <= n; k++) {
+          var s = len * k / n, w = W(s);
+          prof.push([s, Math.min(flat, atticRoofZ(roofs, w[0] + dx, w[1] + dy) - z0 - under)]);
+        }
+        if (!prof.some(function (p) { return p[1] > knee + 0.1 * P; })) { return; }     // a knee wall's side: the slope comes down to it
+        var outline = atticSimplify([[0, knee]].concat(prof.map(function (p) { return [p[0], Math.max(knee, p[1])]; }), [[len, knee]]));
+        atticMinus(outline, atticHoles(room, e[0], T, top)).forEach(function (piece) {
+          face(piece.map(function (v) { var w = W(v[0]); return [w[0], w[1], v[1]]; }), wallHow, false);
         });
       });
+      if (lidded && typeof structShown === "function" && structShown()) {
+        atticRafterRods(C, pieces, structLook(structKind() === "steel" ? "steel" : "timber"), 0.07 * P, 1.2 * P, hiZ);
+      }
+    } else {
+      atticStorage(C, lidded ? pieces : []);
     }
-    if (!finished) { atticStorage(faces, room, prof, along, hu, hv, ridgeZ); }
-    else if (typeof structShown === "function" && structShown()) { atticRafters(faces, room, prof, along, hu, hv, flat, capD); }
+  }
+  // Rafters up each slope over the room, `gap` apart, just under its boards (and under `capZ`).
+  function atticRafterRods(C, pieces, how, r, gap, capZ) {
+    if (typeof powerRod !== "function") { return; }
+    var P = FLOOR_PX;
+    pieces.forEach(function (pc) {
+      var p = pc.plane, g = Math.hypot(p[0], p[1]);
+      if (g < 1e-4) { return; }                                   // a flat top: no rafters
+      var ux = p[0] / g, uy = p[1] / g, tx = -uy, ty = ux;        // up the slope, and across it
+      var poly = atticCut(pc.poly, -p[0], -p[1], p[2] - C.z0 - C.under - 0.08 * P);
+      if (poly && capZ < Infinity) { poly = atticCut(poly, p[0], p[1], capZ - p[2]); }
+      if (!poly) { return; }
+      var s0 = Infinity, s1 = -Infinity;
+      poly.forEach(function (v) { var s = v[0] * tx + v[1] * ty; s0 = Math.min(s0, s); s1 = Math.max(s1, s); });
+      for (var s = s0 + gap / 2; s < s1; s += gap) {
+        var u0 = Infinity, u1 = -Infinity;
+        for (var i = 0; i < poly.length; i++) {
+          var a = poly[i], b = poly[(i + 1) % poly.length], da = a[0] * tx + a[1] * ty - s, db = b[0] * tx + b[1] * ty - s;
+          if ((da <= 0 && db >= 0) || (da >= 0 && db <= 0)) {
+            var t = Math.abs(da - db) < 1e-9 ? 0 : da / (da - db), x = a[0] + (b[0] - a[0]) * t, y = a[1] + (b[1] - a[1]) * t, u = x * ux + y * uy;
+            u0 = Math.min(u0, u); u1 = Math.max(u1, u);
+          }
+        }
+        if (!(u1 - u0 > 0.2 * P)) { continue; }
+        var A = [s * tx + u0 * ux, s * ty + u0 * uy], Bp = [s * tx + u1 * ux, s * ty + u1 * uy];
+        var zA = p[0] * A[0] + p[1] * A[1] + p[2] - C.under - r, zB = p[0] * Bp[0] + p[1] * Bp[1] + p[2] - C.under - r;
+        powerRod(C.faces, [A[0] - C.dx, A[1] - C.dy, zA - C.z0], [Bp[0] - C.dx, Bp[1] - C.dy, zB - C.z0], r, how, 4);
+      }
+    });
   }
   // Storage: the rafters showing under the roof's boards, the joists' bays
-  // filled with insulation, boards down the middle to walk on.
-  function atticStorage(faces, room, prof, along, hu, hv, ridgeZ) {
-    var P = FLOOR_PX, wood = { piece: true, color: "#b98e5c", edge: "#6b4f33", pat: 21 };
+  // filled with insulation wherever it is deep enough under the roof, boards
+  // to walk on down the middle of where it is highest -- round the way up.
+  function atticStorage(C, pieces) {
+    var P = FLOOR_PX, faces = C.faces, room = C.room, B = C.B;
+    var wood = { piece: true, color: "#b98e5c", edge: "#6b4f33", pat: 21 };
     var fluff = { piece: true, color: "#f2b6c1", edge: "#c98c98", insulation: true };
-    function W(u, v) { return along ? v3Local(room, u, v) : v3Local(room, v, u); }
-    function at(u, v, z) { var w = W(u, v); return [w[0], w[1], z]; }
-    if (typeof powerRod === "function") {
-      for (var u = -hu + 0.3 * P; u < hu - 0.2 * P; u += 0.6 * P) {
-        [-1, 1].forEach(function (s) {
-          var lo = Math.min(hv, prof.hip && hu > hv ? Math.min(hv, hu - Math.abs(u)) : hv);
-          powerRod(faces, at(u, s * hv, atticHeightAt(prof, 0) - 0.05 * P), at(u, s * (hv - lo), atticHeightAt(prof, lo) - 0.06 * P), 0.035 * P, wood, 4);
-        });
-      }
-      powerRod(faces, at(-hu + (prof.hip && hu > hv ? hv : 0.1 * P), 0, ridgeZ - 0.08 * P), at(hu - (prof.hip && hu > hv ? hv : 0.1 * P), 0, ridgeZ - 0.08 * P), 0.05 * P, wood, 4);
-    }
-    // the insulation each side of the boards, round the way up through the floor
-    var walk = 0.35 * P, hatch = hand.nodes.filter(function (n) { return n.kind === "i_stairs" && n.attic && insideArea(room, n.x, n.y); })[0];
-    var hx = null;
-    if (hatch) {
-      var dx = hatch.x - room.x, dy = hatch.y - room.y, a = -(room.turn || 0) * Math.PI / 180;
-      var lx = dx * Math.cos(a) - dy * Math.sin(a), ly = dx * Math.sin(a) + dy * Math.cos(a), t = turned(hatch);
-      hx = along ? [lx - t.w / 2 - 6, lx + t.w / 2 + 6, ly - t.h / 2 - 6, ly + t.h / 2 + 6] : [ly - t.h / 2 - 6, ly + t.h / 2 + 6, lx - t.w / 2 - 6, lx + t.w / 2 + 6];
-    }
-    function slab(u0, u1, v0, v1, z0, z1, how) {
-      var parts = [[u0, u1, v0, v1]];
-      if (hx) {
-        parts = [];
-        [[u0, Math.min(u1, hx[0]), v0, v1], [Math.max(u0, hx[1]), u1, v0, v1],
-         [Math.max(u0, hx[0]), Math.min(u1, hx[1]), v0, Math.min(v1, hx[2])], [Math.max(u0, hx[0]), Math.min(u1, hx[1]), Math.max(v0, hx[3]), v1]]
-          .forEach(function (q) { if (q[1] - q[0] > 1 && q[3] - q[2] > 1) { parts.push(q); } });
+    var boards = { piece: true, color: "#d7b98c", edge: "#8a6d48", pat: 21 };
+    atticRafterRods(C, pieces, wood, 0.035 * P, 0.6 * P, Infinity);
+    // the way up through the floor, in the ground floor's numbers
+    var hatch = hand.nodes.filter(function (n) { return n.kind === "i_stairs" && n.attic && insideArea(room, n.x, n.y); })[0], hx = null;
+    if (hatch) { var t = turned(hatch); hx = [hatch.x + C.dx - t.w / 2 - 6, hatch.x + C.dx + t.w / 2 + 6, hatch.y + C.dy - t.h / 2 - 6, hatch.y + C.dy + t.h / 2 + 6]; }
+    function hits(x0, x1, y0, y1) { return hx && x0 < hx[1] && x1 > hx[0] && y0 < hx[3] && y1 > hx[2]; }
+    function slab(x0, x1, y0, y1, z1, how) {
+      var parts = [[x0, x1, y0, y1]];
+      if (hits(x0, x1, y0, y1)) {
+        parts = [[x0, Math.min(x1, hx[0]), y0, y1], [Math.max(x0, hx[1]), x1, y0, y1],
+                 [Math.max(x0, hx[0]), Math.min(x1, hx[1]), y0, Math.min(y1, hx[2])], [Math.max(x0, hx[0]), Math.min(x1, hx[1]), Math.max(y0, hx[3]), y1]];
       }
       parts.forEach(function (q) {
-        var base = [W(q[0], q[2]), W(q[1], q[2]), W(q[1], q[3]), W(q[0], q[3])];
-        v3Prism(faces, base, z0, z1, how);
+        if (q[1] - q[0] < 1 || q[3] - q[2] < 1) { return; }
+        v3Prism(faces, [[q[0] - C.dx, q[2] - C.dy], [q[1] - C.dx, q[2] - C.dy], [q[1] - C.dx, q[3] - C.dy], [q[0] - C.dx, q[3] - C.dy]], 0.2, z1, how);
       });
     }
-    // (kept in from the walls as far as the roof is lower than the fluff is
-    // deep: out to the wall's face it showed pink along the eaves, 2026-10-03)
-    var Tw = Math.max(1, Math.min(6, Math.min(room.w, room.h) * 0.06)), knee0 = atticHeightAt(prof, 0);
-    var inset = Tw + Math.max(2, (0.24 * P - knee0) / Math.max(0.2, prof.k || 0.5) + 3);
-    slab(-hu + inset, hu - inset, -hv + inset, -walk, 0.2, 0.24 * P, fluff);
-    slab(-hu + inset, hu - inset, walk, hv - inset, 0.2, 0.24 * P, fluff);
-    slab(-hu + 0.2 * P, hu - 0.2 * P, -walk, walk, 0.2, 0.25 * P, { piece: true, color: "#d7b98c", edge: "#8a6d48", pat: 21 });
+    // how high the roof's underside is over the floor, across it
+    var cell = 0.6 * P, nx = Math.max(1, Math.round((B.x1 - B.x0) / cell)), ny = Math.max(1, Math.round((B.y1 - B.y0) / cell));
+    var cw = (B.x1 - B.x0) / nx, ch = (B.y1 - B.y0) / ny, H = [], most = 0;
+    for (var i = 0; i <= nx; i++) {
+      H.push([]);
+      for (var j = 0; j <= ny; j++) {
+        var h = atticRoofZ(C.roofs, B.x0 + i * cw, B.y0 + j * ch) - C.z0 - C.under;
+        H[i].push(h); most = Math.max(most, h);
+      }
+    }
+    function low(i, j) { return Math.min(H[i][j], H[i + 1][j], H[i][j + 1], H[i + 1][j + 1]); }
+    // the boards: down the middle of where it is highest, the long way of that
+    var hb = null;
+    for (i = 0; i < nx; i++) {
+      for (j = 0; j < ny; j++) {
+        if (low(i, j) < most * 0.7) { continue; }
+        var x0 = B.x0 + i * cw, y0 = B.y0 + j * ch;
+        hb = hb ? { x0: Math.min(hb.x0, x0), x1: Math.max(hb.x1, x0 + cw), y0: Math.min(hb.y0, y0), y1: Math.max(hb.y1, y0 + ch) } : { x0: x0, x1: x0 + cw, y0: y0, y1: y0 + ch };
+      }
+    }
+    var walk = null;
+    if (hb && most > 0.9 * P) {
+      var mx = (hb.x0 + hb.x1) / 2, my = (hb.y0 + hb.y1) / 2, half = 0.35 * P;
+      walk = hb.x1 - hb.x0 >= hb.y1 - hb.y0 ? { x0: Math.max(B.x0 + 0.2 * P, hb.x0), x1: Math.min(B.x1 - 0.2 * P, hb.x1), y0: my - half, y1: my + half }
+                                            : { x0: mx - half, x1: mx + half, y0: Math.max(B.y0 + 0.2 * P, hb.y0), y1: Math.min(B.y1 - 0.2 * P, hb.y1) };
+      slab(walk.x0, walk.x1, walk.y0, walk.y1, 0.25 * P, boards);
+    }
+    // the insulation, a row of bays at a time, wherever the roof is over its depth
+    var deep = 0.24 * P;
+    for (j = 0; j < ny; j++) {
+      var run = null;
+      for (i = 0; i <= nx; i++) {
+        var cx0 = B.x0 + i * cw, cy0 = B.y0 + j * ch, ok = false;
+        if (i < nx) {
+          ok = low(i, j) >= deep + 0.06 * P;
+          if (ok && walk && cx0 < walk.x1 && cx0 + cw > walk.x0 && cy0 < walk.y1 && cy0 + ch > walk.y0) { ok = false; }
+        }
+        if (ok) { if (run) { run[1] = cx0 + cw; } else { run = [cx0, cx0 + cw]; } continue; }
+        if (run) { slab(run[0], run[1], cy0, cy0 + ch, deep, fluff); run = null; }
+      }
+    }
   }
-  // A finished attic with its beams on show (40-struct.js): its rafters
-  // down the slopes and a collar tie across under the flat ceiling.
-  function atticRafters(faces, room, prof, along, hu, hv, flat, capD) {
-    if (typeof powerRod !== "function") { return; }
-    var P = FLOOR_PX, look = structLook(structKind() === "steel" ? "steel" : "timber");
-    function at(u, v, z) { var w = along ? v3Local(room, u, v) : v3Local(room, v, u); return [w[0], w[1], z]; }
-    var top = capD === null ? hv : capD;
-    for (var u = -hu + 0.8 * P; u < hu - 0.5 * P; u += 1.2 * P) {
-      [-1, 1].forEach(function (s) {
-        powerRod(faces, at(u, s * (hv - 0.1 * P), atticHeightAt(prof, 0.1 * P) - 0.09 * P), at(u, s * (hv - top), Math.min(flat, atticHeightAt(prof, top)) - 0.09 * P), 0.07 * P, look, 4);
+
+  // ---- out of doors round it ----------------------------------------------------------------------
+  // A wall is an outside wall where what is beyond it is no room at its own
+  // height: the upstairs wall over a garage of one storey is in the open over
+  // the garage's roof (the garage under it, and the loft up in its roof, made
+  // it a wall indoors -- painted, panelled, over the garage, 2026-10-04).
+  if (typeof gl3Outside === "function") {
+    var gl3OutsideAttic = gl3Outside;
+    // (an attic room's own wall too: where it stands in the gable, out to the
+    // open, it is the gable's -- painted as indoors it showed through it, a
+    // grey band over the garage roof; into the attic, indoors)
+    gl3Outside = function (f, rooms) {
+      if (gl3OutsideAttic.apply(this, arguments)) { return true; }
+      if (!f.pts || !f.pts.length) { return false; }
+      var cx = 0, cy = 0, cz = 0, P = FLOOR_PX, floors = floorsOf(), own = f.node && f.node.attic ? f.node : null;
+      f.pts.forEach(function (p) { cx += p[0] / f.pts.length; cy += p[1] / f.pts.length; cz += p[2] / f.pts.length; });
+      var x = cx + f.n[0] * 9, y = cy + f.n[1] * 9;
+      var near = rooms.near ? rooms.near.around(x, y, x, y).map(function (o) { return o.r; }) : rooms;
+      return !near.some(function (r) {
+        if ((r.n && (r.n.attic || r.n.court) && r.n !== own) || !insideArea(r.n, x - r.dx, y - r.dy)) { return false; }
+        var fl = floors.length ? floorAt(floors, r.n.x, r.n.y) : null, z0 = fl ? fl.z : 0;
+        var up = fl && typeof floorOver === "function" ? floorOver(floors, fl) : null;
+        return cz >= z0 - 2 && cz <= z0 + Math.max(ceilOf(r.n) * P, up ? up.z - fl.z : 0) + 2;
       });
-      if (capD !== null) { powerRod(faces, at(u, -(hv - capD), flat - 0.09 * P), at(u, hv - capD, flat - 0.09 * P), 0.07 * P, look, 4); }
+    };
+  }
+  // From out of doors, roofed, only the walls with the open beyond them are
+  // drawn (38-view3d.js): an attic beside a wall -- the loft up in the garage's
+  // roof, beside the upstairs hall's end -- is not a room beyond it, and the
+  // wall is drawn (it was left out, a gap in the wall over the garage roof).
+  if (typeof wallKeepOpen === "function") {
+    var wallKeepOpenAttic = wallKeepOpen;
+    wallKeepOpen = function (room, edge, base) {
+      if (base && room && !room.attic && !room.court && airRooms().length) { base = atticOpenOnly(room); }
+      return wallKeepOpenAttic.call(this, room, edge, base);
+    };
+  }
+  function atticOpenOnly(room) {
+    var hw = room.w / 2, hh = room.h / 2, reach = Math.max(room.w, room.h) / 2 + 20;
+    var others = hand.nodes.filter(function (o) {
+      return o.kind === "i_room" && o !== room && !o.attic && !o.court && Math.abs(o.x - room.x) < reach + Math.max(o.w, o.h) / 2 && Math.abs(o.y - room.y) < reach + Math.max(o.w, o.h) / 2;
+    });
+    return function (edge, a, b) {
+      var runs = [], start = null;
+      for (var at = a; ; at = Math.min(b, at + 4)) {
+        var lx = edge === "left" ? -hw - 6 : edge === "right" ? hw + 6 : -hw + at;
+        var ly = edge === "top" ? -hh - 6 : edge === "foot" ? hh + 6 : -hh + at;
+        var pt = v3Local(room, lx, ly);
+        var open = !others.some(function (o) { return insideArea(o, pt[0], pt[1]); });
+        if (open && start === null) { start = at; }
+        if (!open && start !== null) { runs.push([start, at]); start = null; }
+        if (at >= b) { break; }
+      }
+      if (start !== null) { runs.push([start, b]); }
+      return runs;
+    };
+  }
+  // Nothing in an attic up through the roof: a piece taller than the roof
+  // where it stands is not drawn (the roof is the house's own, made steep
+  // enough for the attic; what is put up there is put where it is highest).
+  if (typeof v3Build === "function") {
+    var v3BuildAtticKeep = v3Build;
+    v3Build = function () {
+      var model = v3BuildAtticKeep.apply(this, arguments);
+      try {
+        if (model && model.faces && typeof V3 !== "undefined" && V3 && V3.scene !== "space" && atticRooms().length) { atticKeepUnder(model); }
+      } catch (e) { /* as it was */ }
+      return model;
+    };
+  }
+  function atticKeepUnder(model) {
+    var floors = floorsOf(), rooms = atticRooms(), roofs = atticRoofs(), P = FLOOR_PX, held = new Map(), tops = new Map();
+    if (!roofs.length) { return; }
+    function holder(n) {
+      if (held.has(n)) { return held.get(n); }
+      var got = null;
+      if (n.kind !== "i_room" && n.kind !== "i_floor" && n.kind !== "i_lot" && !WALK_DOORS[n.kind] && n.kind !== "i_window" && n.x !== undefined) {
+        var f = floors.length ? floorAt(floors, n.x, n.y) : null;
+        got = rooms.filter(function (r) { return (floors.length ? floorAt(floors, r.x, r.y) : null) === f && insideArea(r, n.x, n.y, 2); })[0] || null;
+        if (got) { got = { f: f }; }
+      }
+      held.set(n, got);
+      return got;
     }
+    // each piece's top, from its faces (a model's from its own points)
+    model.faces.forEach(function (fc) {
+      var n = fc.node;
+      if (!n || !fc.pts || !holder(n)) { return; }
+      var top = -Infinity;
+      if (fc.mesh && fc.mesh.p) {
+        var m = fc.mesh, hi = m.zTop;
+        if (hi === undefined) { hi = -Infinity; for (var i = 2; i < m.p.length; i += 3) { hi = Math.max(hi, m.p[i]); } m.zTop = hi; }
+        top = fc.pts[0][2] - (m.base ? m.base[2] : 0) + ((m.xf && m.xf[4]) || 0) + hi;
+      } else {
+        fc.pts.forEach(function (p) { top = Math.max(top, p[2]); });
+      }
+      tops.set(n, Math.max(tops.get(n) === undefined ? -Infinity : tops.get(n), top));
+    });
+    var out = new Set();
+    tops.forEach(function (top, n) {
+      var h = holder(n), dx = h.f ? h.f.dx : 0, dy = h.f ? h.f.dy : 0, t = turned(n), lo = Infinity;
+      [[0, 0], [-1, -1], [1, -1], [1, 1], [-1, 1]].forEach(function (k) {
+        lo = Math.min(lo, atticRoofZ(roofs, n.x + dx + k[0] * t.w / 2, n.y + dy + k[1] * t.h / 2));
+      });
+      if (top > lo - ATTIC_UNDER * P) { out.add(n); }
+    });
+    if (out.size) { model.faces = model.faces.filter(function (fc) { return !fc.node || !out.has(fc.node); }); }
   }
 
   // ---- a window in the roof's gable, where the attic has one --------------------------------------
@@ -491,6 +818,7 @@
     atticClear();
     var kind = ATTIC_KINDS.indexOf(want.attic) > 0 ? want.attic : "none", gkind = ATTIC_KINDS.indexOf(want.garage) > 0 ? want.garage : "none";
     if (kind === "none" && gkind === "none") { return 0; }
+    if (!atticAllowed()) { return 0; }             // a flat roof: no space up in it
     var P = FLOOR_PX, made = 0;
     var floors = floorsOf();
     if (!floors.length) {
@@ -651,8 +979,9 @@
       return [low, top];
     }
     // A place along a room for a way up `len` long and `wide` across: along
-    // its long way, against one side, clear of the doors in it.
-    function spotIn(r, len, wide, within) {
+    // its long way, against one side, clear of the doors in it (and, unless
+    // `anyway`, of what stands there -- a ladder can fold down over a car).
+    function spotIn(r, len, wide, within, anyway) {
       var B = box(r), long = B.r - B.l >= B.b - B.t, doors = hand.nodes.filter(function (d) { return WALK_DOORS[d.kind]; }).map(pieceAt);
       // (and clear of what stands in the room: a workbench, shelving, a car)
       var things = hand.nodes.filter(function (m) {
@@ -669,7 +998,7 @@
           else { cy = B.t + T2 + bh / 2 + t * (B.b - B.t - 2 * T2 - bh); cx = side ? B.r - T2 - bw / 2 : B.l + T2 + bw / 2; }
           if (within && (cx - bw / 2 < within.l || cx + bw / 2 > within.r || cy - bh / 2 < within.t || cy + bh / 2 > within.b)) { return; }
           var clear = doors.every(function (d) { return Math.abs(d[0] - cx) > bw / 2 + 0.7 * P || Math.abs(d[1] - cy) > bh / 2 + 0.7 * P; }) &&
-                      things.every(function (q) { return Math.abs(q.x - cx) * 2 >= q.w + bw + 0.4 * P || Math.abs(q.y - cy) * 2 >= q.h + bh + 0.4 * P; });
+                      (anyway || things.every(function (q) { return Math.abs(q.x - cx) * 2 >= q.w + bw + 0.4 * P || Math.abs(q.y - cy) * 2 >= q.h + bh + 0.4 * P; }));
           if (!clear) { return; }
           var score = Math.abs(t - 0.85);
           if (!best || score < best.score) { best = { x: cx, y: cy, long: long, score: score }; }
@@ -793,9 +1122,18 @@
     var houseRoom = null;
     if (kind !== "none") {
       var tops = roomsAll.filter(function (r) { var f = floorAt(floors, r.x, r.y); return f === Tf && garages.indexOf(r) < 0 && !((r.turn || 0) % 90); }).map(box);
-      var rect = atticBiggest(tops);
-      if (rect && rect.r - rect.l >= 3 * P && rect.b - rect.t >= 3 * P) {
-        var F = floorOver(Tf);
+      var rect = atticBiggest(tops), F = null;
+      if (rect && (rect.r - rect.l < 3 * P || rect.b - rect.t < 3 * P)) { rect = null; }
+      if (rect) {
+        F = floorOver(Tf);
+        // (where under the roof it fits: a room between its knee walls --
+        // too narrow for one, storage; no room under the roof at all, none)
+        var fz = (floorsOf().filter(function (o) { return o.n === F.n; })[0] || { z: 0 }).z;
+        var fit = atticFits(rect, fz, kind, "house", floorsOf());
+        if (!fit && kind === "room") { kind = "storage"; fit = atticFits(rect, fz, kind, "house", floorsOf()); }
+        rect = fit;
+      }
+      if (rect) {
         houseRoom = room(F, rect, kind, "house", kind === "room" ? TXT.at_room_name : TXT.at_store_name);
         var busy = [];
         if (kind === "room") {
@@ -848,8 +1186,10 @@
         furnish(houseRoom, kind, busy);
       }
     }
-    // over the garage: storage up a ladder, or a room -- a door into it
-    // from the floor beside it, else stairs up from the garage
+    // over the garage, up in its roof: storage up a ladder out of its
+    // ceiling, or a room up stairs from it.  (No door into it from upstairs,
+    // 2026-10-04: "it made an unnecessary door to that above area to the
+    // garage when it should just have the same panel in the ceiling too".)
     if (gkind !== "none") {
       garages.forEach(function (gr) {
         var B = box(gr), F2 = floorOver(B.f || G0), rect2 = { l: B.l, r: B.r, t: B.t, b: B.b };
@@ -862,40 +1202,32 @@
           return Math.min(q.r, rect2.r) - Math.max(q.l, rect2.l) > 0.5 * P && Math.min(q.b, rect2.b) - Math.max(q.t, rect2.t) > 0.5 * P;
         });
         if (taken) { return; }
-        // a door into it from the floor beside it, where a room there meets it
-        // (storage too: a walk-in loft) -- found before it is drawn: with a
-        // door it may be drawn where there is room, its arrow putting it over
-        // the garage; with none it is drawn where it goes
-        var door = hand.nodes.filter(function (r) {
-          if (r.kind !== "i_room") { return false; }
-          var f = r === houseRoom ? { level: F2.level } : floorAt(floors, r.x, r.y);
-          if (!f || f.level !== F2.level) { return false; }
-          var q = r === houseRoom ? { l: r.x - r.w / 2 + F2.dx, r: r.x + r.w / 2 + F2.dx, t: r.y - r.h / 2 + F2.dy, b: r.y + r.h / 2 + F2.dy } : box(r);
-          var side = Math.min(q.b, rect2.b) - Math.max(q.t, rect2.t), across = Math.min(q.r, rect2.r) - Math.max(q.l, rect2.l);
-          return (Math.abs(q.r - rect2.l) < 8 || Math.abs(q.l - rect2.r) < 8) && side > 1.0 * P ||
-                 (Math.abs(q.b - rect2.t) < 8 || Math.abs(q.t - rect2.b) < 8) && across > 1.0 * P;
-        }).sort(function (p, q) { return (kindOf(q) === "hall" ? 1 : 0) - (kindOf(p) === "hall" ? 1 : 0); })[0] || null;
-        var over = room(F2, rect2, gkind, "garage", gkind === "room" ? TXT.at_bonus_name : TXT.at_garage_name, door ? { room: door === houseRoom ? null : door } : null);
+        // (the upstairs windows looking out over the garage moved first: its roof can then rise to give it room)
         atticWindowsClear(rect2, F2.level);
+        var gz = (floorsOf().filter(function (o) { return o.n === F2.n; })[0] || { z: 0 }).z, gk = gkind;
+        var fit2 = atticFits(rect2, gz, gk, "garage", floorsOf());
+        if (!fit2 && gk === "room") { gk = "storage"; fit2 = atticFits(rect2, gz, gk, "garage", floorsOf()); }
+        if (!fit2) { return; }
+        rect2 = fit2;
+        var over = room(F2, rect2, gk, "garage", gk === "room" ? TXT.at_bonus_name : TXT.at_garage_name, null);
         // (where it is drawn against where it goes: what is put in it, put by where it is drawn)
         var jx = (rect2.l + rect2.r) / 2 - F2.dx, jy = (rect2.t + rect2.b) / 2 - F2.dy;
         var F2b = { n: F2.n, dx: F2.dx - (over.x - jx), dy: F2.dy - (over.y - jy), level: F2.level };
-        if (gkind === "room") { gableWindows(over, rect2, F2b); }
+        if (gk === "room") { gableWindows(over, rect2, F2b); }
         var busy2 = [];
-        if (door) {
-          var dq = door === houseRoom ? [door.x, door.y] : (J && J.boxes[door.id] ? [(J.boxes[door.id].l + J.boxes[door.id].r) / 2, (J.boxes[door.id].t + J.boxes[door.id].b) / 2] : [door.x, door.y]);
-          hand.links.push({ from: door.id, to: over.id, label: "", fit: [jx - dq[0], jy - dq[1]], attic: true });
-        } else {
-          var ladder = gkind === "storage", fw = ladder ? Math.round(ATTIC_LADDER[0] * P) : Math.round(0.95 * P), fl = ladder ? Math.round(ATTIC_LADDER[1] * P) : Math.round(2.9 * P);
-          var s = spotIn(gr, fl + (ladder ? 0.5 * P : 0), fw, rect2);
-          if (s) {
-            var pair = flight(toPaper(gr, [s.x, s.y]), F2b, [s.x, s.y], ladder, s.long ? 90 : 0, fw, fl);
-            busy2.push({ x: pair[1].x, y: pair[1].y, w: turned(pair[1]).w + 1.0 * P, h: turned(pair[1]).h + 1.0 * P });
-          }
+        var ladder = gk === "storage", fw = ladder ? Math.round(ATTIC_LADDER[0] * P) : Math.round(0.95 * P), fl = ladder ? Math.round(ATTIC_LADDER[1] * P) : Math.round(2.9 * P);
+        var s = spotIn(gr, fl + (ladder ? 0.5 * P : 0), fw, rect2) || spotIn(gr, fl + (ladder ? 0.5 * P : 0), fw, rect2, true);
+        if (s) {
+          var pair = flight(toPaper(gr, [s.x, s.y]), F2b, [s.x, s.y], ladder, s.long ? 90 : 0, fw, fl);
+          busy2.push({ x: pair[1].x, y: pair[1].y, w: turned(pair[1]).w + 1.0 * P, h: turned(pair[1]).h + 1.0 * P });
         }
-        furnish(over, gkind, busy2);
+        furnish(over, gk, busy2);
       });
     }
+    // (a Floor made for an attic that did not fit under the roof, taken out again)
+    hand.nodes = hand.nodes.filter(function (fn) {
+      return fn.kind !== "i_floor" || !fn.attic || hand.nodes.some(function (n) { return n !== fn && n.kind !== "i_floor" && insideArea(fn, n.x, n.y); });
+    });
     if (made) {
       floors = floorsOf();
       J = typeof tieLayout === "function" ? tieLayout() : null;
@@ -930,6 +1262,8 @@
           var near = (typeof starterLast === "object" ? starterLast : []).map(function (o) { return o.room; });
           if (near.length) {
             atticMake({ attic: want.attic || "none", garage: want.garage ? want.garageAttic || "none" : "none" }, near);
+            // (an open plan's walls taken out under it carry its floor now: their posts, 40-arrange.js)
+            if (typeof arrangeOpenPosts === "function") { arrangeOpenPosts(); }
             yield ["attic", 1];
           }
         }
@@ -945,6 +1279,15 @@
     if (want.attic === undefined) { want.attic = "none"; }
     if (want.garageAttic === undefined) { want.garageAttic = "none"; }
     ui.head(TXT.at_head);
+    // (the style asked for has a flat roof: no space up in it -- said, not asked)
+    var key = want.style !== undefined ? want.style : (typeof typeOf === "function" ? (typeOf(want) || {}).style || "" : "");
+    var S = key && typeof HOUSE_STYLES === "object" ? HOUSE_STYLES[key] : null;
+    if (S && atticFlat(S.shape)) {
+      want.attic = "none"; want.garageAttic = "none";
+      ui.tiles();
+      ui.tile(TXT.at_flat, "at_none", function () { return true; }, function () {}, true);
+      return;
+    }
     ui.tiles();
     ATTIC_KINDS.forEach(function (k) {
       ui.tile(TXT["at_" + k], "at_" + k, function () { return (want.attic || "none") === k; }, function () { want.attic = k; }, true);
@@ -1031,7 +1374,13 @@
       if (typeof groundsNow === "function" && groundsNow() !== "home") { return; }
       var now = atticNow();
       head(TXT.at_head);
-      if (typeof worldPicker === "function") {
+      if (!atticAllowed()) {
+        var p = document.createElement("p");
+        p.className = "hs-note";
+        p.innerHTML = (typeof houseIcon === "function" ? houseIcon("at_none") : "") + "<span></span>";
+        p.lastChild.textContent = TXT.at_flat;
+        sheet.appendChild(p);
+      } else if (typeof worldPicker === "function") {
         worldPicker(sheet, ATTIC_KINDS, now.attic, "at_", function (k) { atticSet({ attic: k }); if (draw) { draw(); } });
         head(TXT.at_garage_head);
         worldPicker(sheet, ATTIC_KINDS, now.garage, "atg_", function (k) { atticSet({ garage: k }); if (draw) { draw(); } });

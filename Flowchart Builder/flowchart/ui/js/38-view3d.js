@@ -99,7 +99,9 @@
                   i_proscreen: [0.9, 2.2], i_ac: [2.0, 2.3], i_whiteboard: [0.9, 2.0], i_dartboard: [1.5, 1.95],
                   i_evcharger: [0.9, 1.3], i_porchlight: [1.75, 2.15], i_floodlight: [2.45, 2.7],
                   // a socket a hand over the floor, a switch at the height of a hand by the door, the panel at eye level
-                  i_outlet: [0.3, 0.42], i_lightswitch: [1.15, 1.27], i_breaker: [1.2, 1.95], i_thermostat: [1.45, 1.57] };
+                  i_outlet: [0.3, 0.42], i_lightswitch: [1.15, 1.27], i_breaker: [1.2, 1.95], i_thermostat: [1.45, 1.57],
+                  // a garage door's button five feet up, out of a child's reach (40-garage.js)
+                  i_garagebtn: [1.52, 1.64] };
   var PERSON_TALL = 1.7;
 
   function v3Mix(a, b, k) {             // a color k of the way from a to b
@@ -152,7 +154,7 @@
   // The parts of one wall of a room, with what stands in it: where a door
   // is, only the part over the doorway; where a window is, the part under
   // it and over it, and the glass.
-  function v3Wall(faces, room, edge, T, holes, how, low, wallTop, keep) {
+  function v3Wall(faces, room, edge, T, holes, how, low, wallTop, keep, ends) {
     var hw = room.w / 2, hh = room.h / 2;
     var along = edge === "top" || edge === "foot";
     var len = along ? room.w : room.h;
@@ -178,6 +180,14 @@
     }
     function one(a, b, z0, z1, look, d0, d1) {
       if (b - a < 0.5 || z1 - z0 < 0.05) { return; }
+      // (the wall itself, where it meets the next room's in line: run on a
+      // little into it -- rooms laid side by side a half pixel apart left a
+      // hairline down every join, the room behind it showing through,
+      // 2026-10-04: "no weird holes ... visually or just in general")
+      if (!look && ends) {
+        if (a <= 0.01 && ends[0]) { a -= 0.75; }
+        if (b >= len - 0.01 && ends[1]) { b += 0.75; }
+      }
       if (d0 === undefined) { d0 = 0; d1 = T; }
       var x0, x1, y0, y1;
       if (edge === "top") { x0 = -hw + a; x1 = -hw + b; y0 = -hh + d0; y1 = -hh + d1; }
@@ -807,6 +817,16 @@
           }
         }
         var wallsUp = wallTop(n), keepOut = hush && !seenIn(n) ? outsideOnly(n) : null;
+        // whether the next room along carries a wall on past this one's end (0 its start, 1 its end)
+        var wallGoesOn = function (r, edge, T, which) {
+          var hw = r.w / 2, hh = r.h / 2, d = T / 2, e = 1.2, lx, ly;
+          if (edge === "top") { ly = -hh + d; lx = which ? hw + e : -hw - e; }
+          else if (edge === "foot") { ly = hh - d; lx = which ? hw + e : -hw - e; }
+          else if (edge === "left") { lx = -hw + d; ly = which ? hh + e : -hh - e; }
+          else { lx = hw - d; ly = which ? hh + e : -hh - e; }
+          var p = v3Local(r, lx, ly);
+          return roomsAt(p[0], p[1], 2).some(function (o) { return o !== r && o.kind === "i_room" && insideArea(o, p[0], p[1], -1.5); });
+        };
         if (hush) { walls.how.noTop = true; }
         // (the doors and windows near this room, once: every room's four walls
         // tried every door and window in the house, 4 ms a picture walking a big one)
@@ -824,7 +844,7 @@
           holes.sort(function (p, q) { return p.a - q.a; });
           // (a wall taken out between two rooms, and the beam over the opening: 39-inside.js)
           var keepHere = typeof wallKeepOpen === "function" ? wallKeepOpen(n, edge, keepOut) : keepOut;
-          v3Wall(faces, n, edge, T, holes, walls.how, low, wallsUp, keepHere);
+          v3Wall(faces, n, edge, T, holes, walls.how, low, wallsUp, keepHere, [wallGoesOn(n, edge, T, 0), wallGoesOn(n, edge, T, 1)]);
           if (!low && typeof wallBeams === "function") { wallBeams(faces, n, edge); }
         });
       } else if (n.kind === "i_wall") {
@@ -1849,6 +1869,15 @@
     simFrame(function () { if (!V3) { return; } V3.due = false; v3Draw(); });
   }
 
+  // How fast a door goes, degrees a second: as fast as a real one (2026-10-04:
+  // "all things are of accurate time") -- one pushed open by hand in about a
+  // second, a sliding or folding one in a second and a quarter (each was a
+  // third of a second); a garage door on its opener, 40-garage.js.
+  function doorRate(n) {
+    if (n.kind === "i_door" || n.kind === "i_door2") { return 95; }
+    if (n.kind === "i_slide" || n.kind === "i_bifold") { return 72; }
+    return 90;
+  }
   // While somebody walks, the planets go round, you walk, or a door
   // swings, it is drawn as they move; otherwise only when it is turned,
   // or a picture arrives.
@@ -1864,7 +1893,8 @@
       var want = typeof doorSwingTo === "function" ? doorSwingTo(n) : doorIsOpen(n) ? 90 : 0, at = V3.doorAt[n.id];
       if (at === undefined) { V3.doorAt[n.id] = want; return; }
       if (at !== want) {
-        V3.doorAt[n.id] = at < want ? Math.min(want, at + dt * 240) : Math.max(want, at - dt * 240);
+        var rate = doorRate(n);
+        V3.doorAt[n.id] = at < want ? Math.min(want, at + dt * rate) : Math.max(want, at - dt * rate);
         swung = true;
       }
     });
