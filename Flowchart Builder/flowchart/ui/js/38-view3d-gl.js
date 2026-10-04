@@ -504,7 +504,10 @@
     // (what stands under the light throws its shadow -- softened, light comes
     // back off the walls -- and a room is darker into its corners, along the
     // foot of its walls and up under its ceiling: 2026-10-02)
-    "      float ls = lampLit();",
+    // (not the ceiling the light hangs from: nothing under the light shades
+    // it, and in the light's own plane its shadow map only made stair-steps
+    // across it -- 2026-10-03, "the ceilings seem to be a bit buggy")
+    "      float ls = n.z < -0.5 ? 1.0 : lampLit();",
     "      float ao = 1.0;",
     "      if (uRoomBox.z > uRoomBox.x) {",
     "        vec2 lo = (vPos.xy - uRoomBox.xy) / uPx, hi = (uRoomBox.zw - vPos.xy) / uPx;",

@@ -386,6 +386,30 @@
         "C:/Users/origa/Downloads/GitHub/Flowchart-Producer/Flowchart Builder"
       ],
       "port": 9163
+    },
+    {
+      "name": "block-site",
+      "runtimeExecutable": "python",
+      "runtimeArgs": [
+        "-m",
+        "http.server",
+        "9191",
+        "--directory",
+        "C:/Users/origa/Downloads/GitHub/Flowchart-Producer/Flowchart Builder"
+      ],
+      "port": 9191
+    },
+    {
+      "name": "open3d-site",
+      "runtimeExecutable": "python",
+      "runtimeArgs": [
+        "-m",
+        "http.server",
+        "9207",
+        "--directory",
+        "C:/Users/origa/Downloads/GitHub/Flowchart-Producer/Flowchart Builder"
+      ],
+      "port": 9207
     }
   ]
 }

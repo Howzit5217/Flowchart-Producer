@@ -472,3 +472,72 @@
   }
   .v3-picked-name { font-weight: 600; font-size: 13px; color: var(--ink); max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
+  /* ---- walking, what is looked at (40-open3d.js): a dot in the middle of the view, a ring
+     on what is near enough to use, and under it the key and what it does */
+  .view3d .o3-aim {
+    position: absolute; left: 50%; top: 50%; z-index: 5; width: 6px; height: 6px; margin: -3px 0 0 -3px;
+    border-radius: 50%; background: rgba(255, 255, 255, .92); box-shadow: 0 0 0 1px rgba(0, 0, 0, .45); pointer-events: none;
+    transition: width .16s var(--ease, ease), height .16s var(--ease, ease), margin .16s var(--ease, ease),
+                background-color .16s ease, box-shadow .16s ease;
+  }
+  .view3d .o3-aim.on {
+    width: 24px; height: 24px; margin: -12px 0 0 -12px; background: rgba(255, 255, 255, .12);
+    box-shadow: 0 0 0 2px #fff, 0 0 0 3.5px rgba(0, 0, 0, .35), inset 0 0 0 1px rgba(0, 0, 0, .3);
+  }
+  .view3d .o3-aim.far {
+    width: 14px; height: 14px; margin: -7px 0 0 -7px; background: transparent;
+    box-shadow: 0 0 0 1.5px rgba(255, 255, 255, .6), 0 0 0 2.5px rgba(0, 0, 0, .22);
+  }
+  .view3d .o3-aim[hidden], .view3d .o3-tip[hidden] { display: none; }
+  .view3d .o3-tip {
+    position: absolute; left: 50%; top: calc(50% + 46px); z-index: 5; transform: translateX(-50%);
+    display: flex; align-items: center; gap: 8px; max-width: calc(100% - 40px); padding: 4px 11px 4px 4px;
+    border-radius: 999px; background: rgba(18, 20, 24, .74); color: #fff; font-size: 12.5px; line-height: 20px;
+    white-space: nowrap; pointer-events: none; -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px);
+    animation: o3-tip .16s var(--ease, ease) both;
+  }
+  .view3d .o3-tip kbd {
+    display: inline-grid; place-items: center; min-width: 20px; height: 20px; padding: 0 5px; border-radius: 6px;
+    background: #fff; color: #15171a; font-family: inherit; font-size: 11px; font-weight: 700; line-height: 1;
+    box-shadow: 0 1px 0 rgba(0, 0, 0, .45);
+  }
+  .view3d .o3-tip kbd:empty { display: none; }
+  .view3d .o3-tip .o3-do { font-weight: 600; }
+  .view3d .o3-tip .o3-what { opacity: .68; overflow: hidden; text-overflow: ellipsis; }
+  .view3d .o3-tip.far, .view3d .o3-tip:has(kbd:empty) { padding-left: 11px; }
+  @keyframes o3-tip { from { opacity: 0; transform: translate(-50%, 4px); } }
+  /* the cursor: a hand where a click uses something, the move arrows over what can be carried */
+  body .view3d > canvas:first-child.o3-can-move { cursor: move; }
+  body .view3d > canvas:first-child.o3-can-use { cursor: pointer; }
+  body .view3d > canvas:first-child.v3-carrying, body .view3d > canvas:first-child.o3-following { cursor: grabbing; }
+  /* the hint along the foot: for its first three seconds, then faded away */
+  .view3d .v3-hint { transition: opacity .8s var(--ease-soft, ease); }
+  .view3d .v3-hint.o3-gone { opacity: 0 !important; }
+  @media (prefers-reduced-motion: reduce) {
+    .view3d .o3-aim, .view3d .v3-hint { transition: none; }
+    .view3d .o3-tip { animation: none; }
+  }
+
+
+  /* ---- layers (40-layers.js): a shut layer dimmed on the paper, a click
+     going through it to what is under it; the button by Select, its list -- */
+  #chart .node.ly-lock { opacity: .3; }
+  #chart .node.ly-lock, #chart .node.ly-lock * { pointer-events: none !important; }
+  .ly-btn { display: inline-flex; align-items: center; gap: 6px; }
+  .ly-btn svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.4; stroke-linejoin: round; stroke-linecap: round; }
+  .ly-btn .ly-badge { font-size: 11px; line-height: 16px; padding: 0 6px; border-radius: 8px; background: var(--accent-soft); color: var(--ink); }
+  .ly-btn[hidden] { display: none; }
+  .ly-pop {
+    position: fixed; z-index: 70; width: 300px; max-width: calc(100vw - 16px); padding: 10px 12px 12px;
+    background: var(--panel); color: var(--ink); border: 1px solid var(--line); border-radius: 12px; box-shadow: var(--shadow);
+  }
+  .ly-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 4px; font-size: 13px; }
+  .ly-row { display: flex; align-items: center; gap: 8px; }
+  .ly-row .switch.wide { flex: 1; margin: 0; border-top: 0; padding: 6px 0; }
+  .ly-row .switch.wide em { font-style: normal; }
+  .ly-row .switch.wide small { color: var(--muted); margin-left: 4px; }
+  .ly-row .ly-only { flex: none; }
+  .ly-note { margin: 8px 0 0; font-size: 12px; color: var(--muted); }
+  .ly-pop { animation: ly-in .14s ease-out; transform-origin: bottom center; }
+  @keyframes ly-in { from { opacity: 0; transform: translateY(6px) scale(.98); } }
+  @media (prefers-reduced-motion: reduce) { .ly-pop { animation: none; } }

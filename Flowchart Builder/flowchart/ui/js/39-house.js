@@ -722,7 +722,9 @@
         mist.addColorStop(1, "rgba(" + tone + "," + (thick * 0.7) + ")");
         g.fillStyle = mist; g.fillRect(0, 0, W, H);
       }
-      if (me.w === "rain" || me.w === "storm") {
+      // (a storm let loose draws its own rain and lightning, driven by its wind: 40-storm.js)
+      var own = typeof smBits !== "undefined" && smBits;
+      if ((me.w === "rain" || me.w === "storm") && !own) {
         var slant = me.w === "storm" ? 0.32 : 0.12, len = me.w === "storm" ? 26 : 20;
         g.strokeStyle = night > 0.5 ? "rgba(170,185,205,0.5)" : "rgba(205,215,228,0.55)";
         g.lineWidth = 1;
@@ -740,7 +742,7 @@
           g.beginPath(); g.arc(x, y, 1.1 + d.s * 1.3, 0, 7); g.fill();
         });
       }
-      if (me.w === "storm") {
+      if (me.w === "storm" && !own) {
         me.next -= 1 / 60;
         if (me.next <= 0) { me.flash = 1; me.next = 3 + Math.random() * 7; }
         if (me.flash > 0.01) { g.fillStyle = "rgba(235,240,255," + (me.flash * 0.55) + ")"; g.fillRect(0, 0, W, H); me.flash *= 0.82; }

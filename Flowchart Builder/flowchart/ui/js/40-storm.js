@@ -300,44 +300,106 @@
     }
     var box = V3.box, rnd = gl3Rand(11), bits = [], still = typeof STILL !== "undefined" && STILL;
     var strong = SM_WINDY[St[2]] ? Math.min(1, (St[1] - 20) / 70) : St[2] === "hail" ? 0.45 : St[2] === "flood" ? 0.3 : 0.05;
-    var snowy = St[2] === "snow", hail = St[2] === "hail";
-    for (var i = 0; i < 160 + Math.round(strong * 260); i++) { bits.push({ x: rnd(), y: rnd(), s: 0.5 + rnd(), k: rnd() < 0.3 ? 1 : 0, p: rnd() * 6.28 }); }
-    var me = { cv: cv, St: St, bits: bits, t0: performance.now() };
+    var snowy = St[2] === "snow", hail = St[2] === "hail", wet = !snowy;
+    // (2026-10-03: "update the look for the different weather events too so
+    // they have better texturing and look better")  Rain in three depths --
+    // far off fine and faint, close by long and bright -- driven the way the
+    // wind blows across the view, in curtains that sweep past in the gusts;
+    // splashes where it lands; hail bouncing; snow near and far, streaming
+    // flat in a wind; forked lightning in a storm, the sky lit by it.
+    var count = snowy ? 520 : 260 + Math.round(strong * 520) + (St[2] === "hurricane" ? 260 : 0);
+    for (var i = 0; i < count; i++) { bits.push({ x: rnd(), y: rnd(), s: 0.5 + rnd(), k: rnd() < 0.12 ? 1 : 0, p: rnd() * 6.28, l: rnd() }); }
+    var me = { cv: cv, St: St, bits: bits, t0: performance.now(), bolt: null, flash: 0, next: 1.5 + rnd() * 3, rnd: rnd };
     smBits = me;
+    var thunder = SM_WINDY[St[2]] && St[1] >= 33 || hail;
     function frame(now) {
       if (smBits !== me || !V3 || V3.box !== box || !box.isConnected) { return; }
       var dpr = window.devicePixelRatio || 1, W = Math.max(1, box.clientWidth), H = Math.max(1, box.clientHeight);
       if (cv.width !== Math.round(W * dpr) || cv.height !== Math.round(H * dpr)) { cv.width = Math.round(W * dpr); cv.height = Math.round(H * dpr); }
-      var g = cv.getContext("2d"), t = (now - me.t0) / 1000;
+      var g = cv.getContext("2d"), t = (now - me.t0) / 1000, dt = Math.min(0.05, me.last ? (now - me.last) / 1000 : 1 / 60);
+      me.last = now;
       g.setTransform(dpr, 0, 0, dpr, 0, 0);
       g.clearRect(0, 0, W, H);
-      // a darker sky, and rain driven nearly flat
-      g.fillStyle = "rgba(40,46,56," + (0.12 + strong * 0.2) + ")";
+      var wind = smWindOnScreen(St), side = wind.side, gust = wind.k, walking = V3.mode === "walk";
+      // a little darker over all (the sky itself is the storm's, 40-stormfx.js)
+      g.fillStyle = "rgba(30,36,44," + (0.05 + strong * 0.12) + ")";
       g.fillRect(0, 0, W, H);
-      var slant = 0.6 + strong * 2.2;
       if (snowy) {
-        // (snow: flakes drifting down)
-        g.fillStyle = "rgba(250,251,253,0.85)";
+        // snow: far flakes small and slow, near ones large; in a wind, streaming
+        var drift = side * (0.04 + gust * 0.5);
         me.bits.forEach(function (d) {
-          var x = ((d.x + Math.sin(t * 0.7 + d.p) * 0.02 + t * 0.02 * d.s) % 1) * W, y = ((d.y + t * 0.08 * d.s) % 1) * H;
-          g.beginPath(); g.arc(x, y, 1.2 + d.s * 1.4, 0, 6.29); g.fill();
+          var near = d.l, r = 0.6 + near * near * 3.2, fall = 0.035 + near * 0.09;
+          var x = ((d.x + Math.sin(t * 0.7 + d.p) * 0.012 + t * drift * (0.4 + near)) % 1 + 1) % 1 * W, y = ((d.y + t * fall * d.s) % 1) * H;
+          g.fillStyle = "rgba(250,251,253," + (0.35 + near * 0.55) + ")";
+          if (gust > 0.3) { g.fillRect(x, y - r * 0.4, r * (1 + gust * 3) * Math.sign(side || 1), r * 0.8); }
+          else { g.beginPath(); g.arc(x, y, r, 0, 6.29); g.fill(); }
         });
       } else {
-        g.strokeStyle = hail ? "rgba(240,244,248,0.8)" : "rgba(205,215,228,0.45)"; g.lineWidth = hail ? 2 : 1; g.beginPath();
-        me.bits.forEach(function (d) {
-          if (d.k) { return; }
-          var x = ((d.x + t * 0.5 * slant * d.s) % 1) * (W + 60) - 30, y = ((d.y + t * (hail ? 1.6 : 0.9) * d.s) % 1) * H;
-          g.moveTo(x, y); g.lineTo(x + (hail ? 5 : 18) * slant, y + (hail ? 9 : 12));
+        var slant = side * (0.18 + gust * 1.5);
+        // the curtains: soft sheets of heavier rain sweeping across in the gusts
+        if (strong > 0.15) {
+          for (var c = 0; c < 4; c++) {
+            var cx = ((c * 0.29 + t * (0.05 + gust * 0.12) * (side >= 0 ? 1 : -1)) % 1.4 + 1.4) % 1.4 - 0.2, cw = W * (0.18 + 0.1 * Math.sin(c * 2.1));
+            var cg = g.createLinearGradient(cx * W - cw, 0, cx * W + cw, 0), ca = (0.04 + 0.08 * strong) * (0.6 + 0.4 * Math.sin(t * 0.9 + c * 1.7));
+            cg.addColorStop(0, "rgba(190,198,208,0)"); cg.addColorStop(0.5, "rgba(190,198,208," + ca.toFixed(3) + ")"); cg.addColorStop(1, "rgba(190,198,208,0)");
+            g.fillStyle = cg; g.fillRect(cx * W - cw, 0, cw * 2, H);
+          }
+        }
+        // the streaks, in three depths
+        var layers = [[0.0, 0.45, 9, 0.6, 0.22, 1.9], [0.45, 0.85, 17, 1.0, 0.36, 1.35], [0.85, 1.01, 32, 1.7, 0.5, 1.0]];
+        layers.forEach(function (L) {
+          g.strokeStyle = hail ? "rgba(236,241,246," + (L[4] + 0.25) + ")" : "rgba(200,210,224," + L[4] + ")";
+          g.lineWidth = L[3] * (hail ? 1.6 : 1);
+          g.beginPath();
+          me.bits.forEach(function (d) {
+            if (d.k || d.l < L[0] || d.l >= L[1]) { return; }
+            var len = L[2] * (hail ? 0.35 : 1) * (0.7 + 0.3 * d.s), v = (hail ? 1.7 : 1.15) * L[5] * d.s;
+            var y = ((d.y + t * v) % 1) * (H + len) - len, x = (((d.x + t * slant * 0.12 * L[5]) % 1) + 1) % 1 * (W + 80) - 40;
+            g.moveTo(x, y); g.lineTo(x + len * slant, y + len);
+          });
+          g.stroke();
         });
-        g.stroke();
+        // where it lands: splashes on the ground in front of you (walking), hail bouncing
+        if (walking) {
+          g.strokeStyle = hail ? "rgba(240,244,248,0.7)" : "rgba(214,222,232,0.45)";
+          g.lineWidth = 1;
+          g.beginPath();
+          me.bits.forEach(function (d, i) {
+            if (i % 3 || d.k) { return; }
+            var life = ((t * (1.6 + d.s) + d.p) % 1), x = d.x * W, y = H * (0.68 + d.y * 0.3), r = (2 + d.l * 5) * life;
+            if (hail) { var hop = Math.sin(life * Math.PI) * (6 + d.l * 10); g.moveTo(x + 2, y - hop); g.arc(x, y - hop, 1.5 + d.l * 1.5, 0, 6.29); }
+            else { g.moveTo(x - r, y); g.quadraticCurveTo(x, y - r * 0.9, x + r, y); }
+          });
+          g.stroke();
+        }
       }
-      // leaves and bits blown across
-      g.fillStyle = "rgba(70,62,48,0.75)";
-      me.bits.forEach(function (d) {
-        if (!d.k || snowy || !SM_WINDY[me.St[2]]) { return; }
-        var x = ((d.x + t * 0.35 * slant * d.s) % 1) * (W + 40) - 20, y = ((d.y + Math.sin(t * 3 + d.p) * 0.02 + t * 0.05) % 1) * H;
-        g.save(); g.translate(x, y); g.rotate(t * 6 * d.s + d.p); g.fillRect(-3 * d.s, -1.5 * d.s, 6 * d.s, 3 * d.s); g.restore();
-      });
+      // leaves and bits blown across, turning over
+      if (SM_WINDY[me.St[2]] && !snowy) {
+        me.bits.forEach(function (d) {
+          if (!d.k) { return; }
+          var x = (((d.x + t * (0.08 + gust * 0.3) * (side >= 0 ? 1 : -1) * d.s) % 1) + 1) % 1 * (W + 40) - 20;
+          var y = ((d.y + Math.sin(t * 3 + d.p) * 0.03 + t * 0.04) % 1) * H, sz = (2 + d.l * 5) * d.s;
+          g.fillStyle = d.l < 0.5 ? "rgba(92,82,60,0.75)" : "rgba(62,76,48,0.7)";
+          g.save(); g.translate(x, y); g.rotate(t * 6 * d.s + d.p); g.fillRect(-sz, -sz * 0.45, sz * 2, sz * 0.9); g.restore();
+        });
+      }
+      // lightning: a forked bolt down from the cloud now and then, the sky lit by it
+      if (thunder && !still) {
+        me.next -= dt;
+        if (me.next <= 0) { me.bolt = smBolt(me.rnd, W, H); me.flash = 1; me.next = 2.5 + me.rnd() * (6 - strong * 3); }
+        if (me.flash > 0.02) {
+          g.fillStyle = "rgba(225,232,255," + (me.flash * 0.35).toFixed(3) + ")"; g.fillRect(0, 0, W, H);
+          if (me.bolt && me.flash > 0.25) {
+            g.save(); g.lineJoin = "round"; g.lineCap = "round";
+            [[7, "rgba(170,190,255,0.25)"], [3, "rgba(225,232,255,0.7)"], [1.2, "rgba(255,255,255,0.95)"]].forEach(function (st) {
+              g.lineWidth = st[0] * (0.6 + me.flash * 0.4); g.strokeStyle = st[1];
+              me.bolt.forEach(function (line) { g.beginPath(); line.forEach(function (q, j) { if (j) { g.lineTo(q[0], q[1]); } else { g.moveTo(q[0], q[1]); } }); g.stroke(); });
+            });
+            g.restore();
+          }
+          me.flash *= Math.pow(0.04, dt);
+        }
+      }
       // a tornado: its funnel on the land, off to one side, turning
       // (its funnel out on the land in 3D instead, while the storm is let loose there: 40-stormfx.js)
       if (me.St[2] === "tornado" && !(typeof fxFunnelOn === "function" && fxFunnelOn())) {
@@ -364,6 +426,35 @@
       if (!still) { requestAnimationFrame(frame); }
     }
     requestAnimationFrame(frame);
+  }
+  // The wind as it crosses the view: which way across the screen (-1 left,
+  // 1 right) and how hard (0 to about 1.4) -- the storm's own wind where it
+  // is let loose (40-stormfx.js), else the storm's measure from the west.
+  function smWindOnScreen(St) {
+    var V = St[1], dir = [1, 0];
+    try {
+      if (typeof fxOn === "function" && fxOn() && FX.plan && FX.H) {
+        var w = fxWind(FX, FX.H[0], FX.H[1], 10, [0, 0, 0]), l = Math.hypot(w[0], w[1]);
+        if (l > 0.5) { dir = [w[0] / l, w[1] / l]; V = l; }
+      }
+    } catch (e) { /* from the west */ }
+    var right = V3.mode === "walk" && V3.me ? [-Math.sin(V3.me.head), Math.cos(V3.me.head)] : [Math.cos(V3.yaw || 0), -Math.sin(V3.yaw || 0)];
+    var side = dir[0] * right[0] + dir[1] * right[1];
+    return { side: Math.abs(side) < 0.15 ? (side < 0 ? -0.15 : 0.15) : side, k: SM_WINDY[St[2]] ? Math.max(0, Math.min(1.4, (V - 8) / 55)) : 0.1 };
+  }
+  // A bolt: from the cloud down, wandering, forking now and then.
+  function smBolt(rnd, W, H) {
+    var lines = [], x = W * (0.15 + rnd() * 0.7), y = -4, bottom = H * (0.35 + rnd() * 0.25), main = [[x, y]];
+    while (y < bottom) {
+      x += (rnd() - 0.5) * 34; y += 10 + rnd() * 18; main.push([x, y]);
+      if (rnd() < 0.18) {
+        var bx = x, by = y, fork = [[bx, by]], n = 3 + Math.floor(rnd() * 5), dirx = rnd() < 0.5 ? -1 : 1;
+        for (var k = 0; k < n; k++) { bx += dirx * (6 + rnd() * 18); by += 8 + rnd() * 14; fork.push([bx, by]); }
+        lines.push(fork);
+      }
+    }
+    lines.unshift(main);
+    return lines;
   }
   // what gives way, tinted: the roof red where it would lift, the walls where they would rack
   if (typeof v3Build === "function") {

@@ -145,6 +145,7 @@
   ];
 
   function levelKey(f, k) {
+    if (typeof f.storey === "number" && isFinite(f.storey)) { return f.storey * 10; }
     var said = String(f.text || ""), num = /(-?\d+)/.exec(said);
     for (var i = 0; i < LEVEL_SAID.length; i++) {
       if (!LEVEL_SAID[i][1].test(said)) { continue; }
@@ -186,11 +187,50 @@
   // between them, and a floor with neither going with the house whose
   // ground floor is nearest.  Each house's ground floor stays where it is
   // drawn; `up` is the floor over each in its own house.
+  // A floor that says which it is: its storey kept on it, or a name or number in its words.
+  function levelNamed(f) {
+    if (typeof f.storey === "number" && isFinite(f.storey)) { return true; }
+    var said = String(f.text || "");
+    return /(-?\d+)/.test(said) || LEVEL_SAID.some(function (L) { return L[1].test(said); });
+  }
   function floorsOf() {
     var list = hand.nodes.filter(function (n) { return n.kind === "i_floor"; });
     if (!list.length) { return []; }
     var left = list.slice().sort(function (p, q) { return p.x - q.x || p.y - q.y; });
     var all = list.map(function (n) { return { n: n, key: levelKey(n, left.indexOf(n)) }; });
+    // A floor saying nothing of which it is: over the floor its stairs come
+    // up from -- one flight up from a floor that says it is the first up is
+    // the second -- not where it lies on the paper (a block of five drawn in
+    // two rows was stacked in the paper's order, its top floor third: 2026-10-03)
+    if (all.length > 2 && all.some(function (o) { return !levelNamed(o.n); })) {
+      var inF = function (n) {
+        var best = null;
+        all.forEach(function (o) { if (insideArea(o.n, n.x, n.y) && (!best || o.n.w * o.n.h < best.n.w * best.n.h)) { best = o; } });
+        return best;
+      };
+      var near = [];
+      hand.links.forEach(function (l) {
+        var a = nodeById(l.from), b = nodeById(l.to);
+        // (flights only: a lift may stop at many floors, its links no measure of one storey)
+        if (!a || !b || a.kind === "i_elevator" || b.kind === "i_elevator" || !BETWEEN_FLOORS[a.kind] || !BETWEEN_FLOORS[b.kind]) { return; }
+        var fa = inF(a), fb = inF(b);
+        if (fa && fb && fa !== fb && (fa.n.bldg === undefined || fa.n.bldg === fb.n.bldg)) { near.push([fa, fb]); }
+      });
+      var known = all.filter(function (o) { return levelNamed(o.n); });
+      for (var pass = 0; pass < all.length && near.length; pass++) {
+        var grew = false;
+        near.forEach(function (e) {
+          [[e[0], e[1]], [e[1], e[0]]].forEach(function (q) {
+            var from = q[0], to = q[1];
+            if (known.indexOf(from) < 0 || known.indexOf(to) >= 0) { return; }
+            // away from the ground floor: up from one up, down from one down (up from the ground itself)
+            to.key = from.key + (from.key < 0 ? -10 : 10);
+            known.push(to); grew = true;
+          });
+        });
+        if (!grew) { break; }
+      }
+    }
     var top = all.map(function (o, i) { return i; });
     function root(i) { while (top[i] !== i) { i = top[i]; } return i; }
     function join(i, j) { top[root(i)] = root(j); }

@@ -434,6 +434,7 @@
   var MODEL_KEYED = { kind: true, w: true, h: true, fin: true };
   var modelOwn = {};                     // kinds whose models read more of the piece than their key
   var modelWaters = {};                  // id -> where its water comes out, as last put up (40-use3d.js)
+  var modelFronts = {};                  // id -> its doors, drawers and lids, in its own numbers (40-open3d.js)
   function modelSpy(n, kind) {
     if (typeof Proxy !== "function") { modelOwn[kind] = true; return n; }
     return new Proxy(n, { get: function (t, k) {
@@ -471,13 +472,18 @@
     // it stands: moved or turned, it is the same model, put somewhere else
     // as it is drawn (gl3Faces).
     var C = modelColors(n);
+    // (its doors and drawers standing open, its hob lit -- walking round, 40-open3d.js: made so,
+    // and while they are on their way open or shut, made again each picture rather than kept)
+    var state = typeof modelStateOf === "function" ? modelStateOf(n) : null;
+    if (state) { extra.state = state; }
     // (the design it is made in, 40-designs.js, is its finish's: in the key with it)
     var key = [n.kind, modelOwn[n.kind] ? n.id : "", Math.round(n.w * 10), Math.round(n.h * 10), Math.round(H * 10),
                Math.round((extra.cord || 0) * 10), JSON.stringify(C), n.fin ? JSON.stringify(n.fin) : "",
-               extra.onTop ? 1 : 0, extra.hung ? 1 : 0, extra.onWall ? 1 : 0].join("|");
+               extra.onTop ? 1 : 0, extra.hung ? 1 : 0, extra.onWall ? 1 : 0, state ? state.key : ""].join("|");
     var made = modelKept.get(key);
     if (!made) {
       var M = modelMaker(0, 0, 0, 0), wasOwn = !!modelOwn[n.kind];
+      if (state) { M.state = state; }
       try {
         make(M, Math.max(2, n.w), Math.max(2, n.h), Math.max(1, H), C, wasOwn ? n : modelSpy(n, n.kind), extra);
         if (!extra.onTop && !extra.hung && !extra.onWall && !LIES_FLAT[n.kind] && n.kind !== "i_fence" && n.kind !== "i_pool") {
@@ -495,7 +501,7 @@
         var drop = 0;
         modelKept.forEach(function (v, k) { if (drop++ < 400) { modelKept.delete(k); } });
       }
-      modelKept.set(key, made);
+      if (!state || !state.passing) { modelKept.set(key, made); }
     }
     var t = (n.turn || 0) * Math.PI / 180, tc = Math.cos(t), ts = Math.sin(t);
     if (made.waters && made.waters.length) {
@@ -503,6 +509,7 @@
         return { p: [n.x + w.p[0] * tc - w.p[1] * ts, n.y + w.p[0] * ts + w.p[1] * tc, z0 + w.p[2]], kind: w.kind, low: z0 + w.low };
       });
     }
+    if (made.fronts && !state) { modelFronts[n.id] = made.fronts; }
     made.forEach(function (f) {
       var pts = f.pts.map(function (p) { return [n.x + p[0] * tc - p[1] * ts, n.y + p[0] * ts + p[1] * tc, z0 + p[2]]; });
       faces.push({ pts: pts, n: f.n, how: f.how,

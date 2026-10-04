@@ -513,7 +513,7 @@
         else if (kind === "stock") {
           for (var more = 0; more < 6; more++) { var put = starterAlong(r, "i_shelving", null); if (!put) { break; } put(); }
         }
-        else if (kind === "lift" && ICONS.i_elevator) { lifts.push(adviceAdd("i_elevator", Math.round(r.x), Math.round(r.y))); }
+        else if (kind === "lift" && ICONS.i_elevator) { var at = typeLiftAt(r); lifts.push(adviceAdd("i_elevator", Math.round(at[0]), Math.round(at[1]))); }
         if (kind === "flat") { typeSofaFacing(r); typeTableBy(r, "i_counter"); }
         if (TYPE_LIT[kind]) { typeLights(r); }
         if (kind === "meeting" || kind === "staff" || kind === "kitchenette" || kind === "flat") {
@@ -523,8 +523,31 @@
       } catch (e) { /* the room as it is */ }
     });
     typeRoom = null;
-    // the lift, from each floor to the one over it (made floor by floor, in order)
-    for (var i = 0; i + 1 < lifts.length; i++) { hand.links.push({ from: lifts[i].id, to: lifts[i + 1].id, label: "" }); }
+    // the lift, from each floor to the one over it (made floor by floor, in
+    // order) -- each car to the one at the same place on the next floor: two
+    // side by side were linked one to the other, and each floor came twice
+    var fls = floorsOf(), byFloor = [];
+    lifts.forEach(function (l) {
+      var f = floorAt(fls, l.x, l.y), last = byFloor[byFloor.length - 1];
+      if (f && last && last.f === f) { last.l.push(l); } else { byFloor.push({ f: f, l: [l] }); }
+    });
+    if (byFloor.some(function (g) { return !g.f; })) { byFloor = lifts.map(function (l) { return { l: [l] }; }); }
+    for (var i = 0; i + 1 < byFloor.length; i++) {
+      byFloor[i].l.forEach(function (l, j) {
+        var up = byFloor[i + 1].l[j] || byFloor[i + 1].l[byFloor[i + 1].l.length - 1];
+        hand.links.push({ from: l.id, to: up.id, label: "" });
+      });
+    }
+  }
+  // Where in its room a lift stands: a car's depth in from its doors, not
+  // the middle of a room six metres long (the car is drawn round it, 40-climb.js).
+  function typeLiftAt(r) {
+    var door = hand.nodes.filter(function (d) { return WALK_DOORS[d.kind] && insideArea(r, d.x, d.y, 14); })
+      .sort(function (p, q) { return Math.hypot(p.x - r.x, p.y - r.y) - Math.hypot(q.x - r.x, q.y - r.y); })[0];
+    if (!door || r.turn) { return [r.x, r.y]; }
+    var hw = r.w / 2, hh = r.h / 2, lx = door.x - r.x, ly = door.y - r.y, b = 1.15 * FLOOR_PX;
+    if (Math.abs(ly) / hh >= Math.abs(lx) / hw) { return [r.x, ly < 0 ? r.y - hh + Math.min(b, hh) : r.y + hh - Math.min(b, hh)]; }
+    return [lx < 0 ? r.x - hw + Math.min(b, hw) : r.x + hw - Math.min(b, hw), r.y];
   }
   // what each of these rooms is for, kept on it (roomKind, 38-advice.js)
   var TYPE_USE = { restroom: 1, cafekitchen: 1, sales: 1, boutique: 1, cafe: 1, reception: 1, staff: 1, meeting: 1, openoffice: 1,

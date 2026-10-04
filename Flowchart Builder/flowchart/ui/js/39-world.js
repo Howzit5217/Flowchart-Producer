@@ -733,7 +733,7 @@
     // give in the spacing, never closer than a car and a half
     var ways = [{ n: Math.ceil(cars / 2), pace: (8 + rnd() * 4) * P, from: rnd() }, { n: Math.floor(cars / 2), pace: (8 + rnd() * 4) * P, from: rnd() }];
     for (var k = 0; k < cars; k++) {
-      var way = ways[k % 2], dir = k % 2 ? -1 : 1, laneY = hy + walkW + roadW * (dir > 0 ? 0.72 : 0.28), speed = way.pace;
+      var way = ways[k % 2], dir = k % 2 ? -1 : 1, laneY = hy + walkW + roadW * (dir > 0 ? 0.72 : worldNearLane()), speed = way.pace;
       var apart = 2 * roadSpan / Math.max(1, way.n), give = (rnd() - 0.5) * Math.max(0, apart - 9 * P) * 0.6;
       var pos = ((way.from * 2 * roadSpan + Math.floor(k / 2) * apart + give + t * speed) % (2 * roadSpan) + 2 * roadSpan) % (2 * roadSpan) - roadSpan, cx = dir * pos;
       var fade = Math.max(0, Math.min(1, (roadSpan - Math.abs(cx)) / (12 * P)));
@@ -753,6 +753,10 @@
       });
     }
   }
+
+  // How far out across the road the near lane runs (0 the kerb, 1 the far
+  // kerb): further out where cars are parked along it (40-site.js).
+  function worldNearLane() { return 0.28; }
 
   // ---- the lot's edge ----------------------------------------------------------------------------------
   // Walking, you keep to your own lot -- out as far as the pavement in

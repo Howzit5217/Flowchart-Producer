@@ -747,7 +747,9 @@
       if (BETWEEN_FLOORS[n.kind] && endOf[n.id] === "high") {
         // the top of a flight: the way down, with a rail along it
         if (n.kind === "i_elevator") {
-          v3Box(faces, n, -n.w / 2, n.w / 2, -n.h / 2, n.h / 2, 0, ceilAt(n) * FLOOR_PX, { piece: true, glass: true, edge: look.line });
+          // (the car, lined, its buttons by its doors: 40-climb.js)
+          if (typeof liftCarFaces === "function") { liftCarFaces(faces, n, ceilAt(n) * FLOOR_PX); }
+          else { v3Box(faces, n, -n.w / 2, n.w / 2, -n.h / 2, n.h / 2, 0, ceilAt(n) * FLOOR_PX, { piece: true, glass: true, edge: look.line }); }
         } else if (n.kind === "i_spiral") {
           v3Box(faces, n, -2, 2, -2, 2, 0, 1.0 * FLOOR_PX, { piece: true, color: look.line, edge: look.line });
         } else {
@@ -762,7 +764,8 @@
       if (n.kind === "i_spiral" || n.kind === "i_elevator") {
         var rise = (endOf[n.id] === "low" ? levelRise(n) : ceilAt(n) * FLOOR_PX);
         if (n.kind === "i_elevator") {
-          v3Box(faces, n, -n.w / 2, n.w / 2, -n.h / 2, n.h / 2, 0, ceilAt(n) * FLOOR_PX, { piece: true, glass: true, edge: look.line });
+          if (typeof liftCarFaces === "function") { liftCarFaces(faces, n, ceilAt(n) * FLOOR_PX); }
+          else { v3Box(faces, n, -n.w / 2, n.w / 2, -n.h / 2, n.h / 2, 0, ceilAt(n) * FLOOR_PX, { piece: true, glass: true, edge: look.line }); }
         } else {
           v3Box(faces, n, -2, 2, -2, 2, 0, rise, { piece: true, color: look.line, edge: look.line });
           for (var tr = 0; tr < 12; tr++) {

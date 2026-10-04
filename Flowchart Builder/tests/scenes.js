@@ -335,6 +335,34 @@ var tests = function () {
   check(!badly.length, "3D models made wrong: " + badly.join(", "));
   said.push(Object.keys(MODELS).length + " pieces made in 3D");
 
+  // ---- opened, each the way it is made (40-open3d.js): what opens the same
+  // shut, half open and open, every hole cut in what is behind it, no faults
+  var openBad = [], opened = 0;
+  Object.keys(MODELS).forEach(function (kind) {
+    if (!ICONS[kind]) { return; }
+    var n = { id: 1, kind: kind, text: "", x: 0, y: 0 };
+    measure(n);
+    var H = pieceHigh(n) * FLOOR_PX;
+    function make(k) {
+      o3Making = n;
+      var M = modelMaker(0, 0, 0, 0);
+      o3Making = null;
+      if (k !== null) { M.state = { k: function () { return k; }, on: true, key: "t", passing: k < 1 }; }
+      MODELS[kind](M, n.w, n.h, Math.max(1, H), {}, n, { cord: 20, state: M.state });
+      var cut = M.holes.every(function (h) { return !!o3HostOf(M, h); }), out = M.done(), fine = !!out.length;
+      out.forEach(function (f) { for (var i = 0; i < f.mesh.p.length; i++) { if (!isFinite(f.mesh.p[i])) { fine = false; } } });
+      return { fronts: (out.fronts || []).length, cut: cut, fine: fine };
+    }
+    try {
+      var shut = make(null), half = make(0.5), open = make(1);
+      if (!shut.fronts) { return; }
+      opened++;
+      if (half.fronts !== shut.fronts || open.fronts !== shut.fronts || !half.cut || !open.cut || !half.fine || !open.fine) { openBad.push(kind); }
+    } catch (e) { openBad.push(kind + " (" + e.message + ")"); }
+  });
+  check(opened > 30 && !openBad.length, "pieces opened wrong: " + openBad.join(", ") + " (" + opened + " open)");
+  said.push(opened + " pieces opened as made");
+
   // ---- rooms drawn apart, joined by arrows: put together in 3D
   hand.nodes = [{ id: 1, kind: "i_room", x: 0, y: 0, w: 300, h: 200, text: "" },
                 { id: 2, kind: "i_room", x: 520, y: 30, w: 200, h: 200, text: "" },
@@ -498,7 +526,7 @@ var tests = function () {
   return { bad: bad, said: said };
 };
 
-var src = stand + "\n" + ["03-icon-art.js", "03-icons.js", "13-hand-apart.js", "38-walk.js", "38-advice.js", "38-view3d.js", "38-models.js", "39-flows.js", "39-circuit.js", "39-design.js", "39-join.js", "39-starter.js"]
+var src = stand + "\n" + ["03-icon-art.js", "03-icons.js", "13-hand-apart.js", "38-walk.js", "38-advice.js", "38-view3d.js", "38-models.js", "39-flows.js", "39-circuit.js", "39-design.js", "39-join.js", "39-starter.js", "40-open3d.js"]
   .map(part).join("\n") + "\nreturn (" + tests.toString() + ")();";
 var out;
 try { out = new Function(src)(); }                 // eslint-disable-line no-new-func

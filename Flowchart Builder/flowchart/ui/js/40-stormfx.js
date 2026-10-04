@@ -43,7 +43,13 @@
   // the least, and how much more some stand), and how heavy they are; the
   // strongest winds -- an EF4 or EF5, a category 5 -- tear out what is
   // built in too, and leave the slab bare.
-  var FX_TREES = { i_tree: [44, 22, 900], i_palm: [52, 24, 450], i_shrub: [60, 20, 60], i_hedge: [64, 20, 140] };
+  // (2026-10-03, asked: "do some real research on this stuff to really drill
+  // in the physics") -- set from the damage surveys: trees break at about
+  // 42 m/s whatever their kind or size (Virot et al., Phys. Rev. E 93,
+  // 023001, 2016); the Enhanced Fujita scale's degrees of damage (NTP's
+  // guide, 3-second gusts at 10 m) have a fifth of grown trees down at
+  // 42 m/s, half at 53, four fifths at 65.  Palms stand hurricanes better.
+  var FX_TREES = { i_tree: [34, 38, 900], i_palm: [44, 30, 450], i_shrub: [50, 26, 60], i_hedge: [56, 24, 140] };
   var FX_STRONGEST = 74;
   var FX_BUILTIN = { i_counter: 1, i_kitchensink: 1, i_sink: 1, i_toilet: 1, i_shower: 1, i_bath: 1, i_bathtub: 1, i_tub: 1,
                      i_fireplace: 1, i_stairs: 1, i_spiral: 1, i_elevator: 1, i_island: 1, i_vanity: 1, i_waterheater: 1,
@@ -51,17 +57,38 @@
   var FX_SMALL = { i_outlet: 1, i_lightswitch: 1, i_smoke: 1, i_vent: 1, i_exhaustfan: 1, i_thermostat: 1, i_picture: 1,
                    i_mirror: 1, i_wallclock: 1, i_sconce: 1, i_porchlight: 1, i_doorbell: 1 };
   // kilograms, where size alone says too little; what holds it down (N); how it meets the wind
-  var FX_MASS = { i_bins: 18, i_grill: 45, i_trampoline: 55, i_shed: 450, i_parked: 1450, i_car: 1450, i_mailbox: 12,
+  var FX_MASS = { i_bins: 18, i_grill: 45, i_trampoline: 55, i_shed: 300, i_parked: 1450, i_car: 1450, i_mailbox: 12,
                   i_condenser: 75, i_dumpster: 700, i_pavilion: 900, i_swing: 120, i_playset: 250, i_bench: 35,
                   i_sofa: 70, i_bookcase: 110, i_piano: 250, i_fridge: 100, i_washer: 70, i_dryer: 50, i_dresser: 70,
                   i_bedking: 120, i_bed: 90, i_desk: 35, i_tv: 15, i_dining: 60, i_hutch: 90, i_armchair: 35, i_chest: 30,
                   i_coffee: 20, i_sidetable: 8, i_lamp: 5, i_plant: 6, i_ottoman: 10, i_beanbag: 6, i_barcart: 15, i_nightstand: 15 };
-  var FX_HOLD = { i_shed: 4000, i_mailbox: 2500, i_condenser: 1500, i_pavilion: 9000, i_swing: 3000, i_playset: 3000,
+  var FX_HOLD = { i_shed: 600, i_mailbox: 2500, i_condenser: 1500, i_pavilion: 9000, i_swing: 3000, i_playset: 3000,
                   i_fence: 2500, i_flagpole: 6000, i_hoop: 4000 };
   var FX_CD = { i_parked: 0.8, i_car: 0.8, i_trampoline: 0.5, i_tree: 0.6, i_palm: 0.6, i_shrub: 0.8, i_hedge: 0.8 };
   var FX_LIFT = { i_trampoline: 0.12, i_parked: 0.35, i_car: 0.35, i_pavilion: 0.6, i_shed: 0.4, i_tree: 0.08, i_palm: 0.08 };
 
   var FX = null;                               // the storm being let loose, while one is
+  // What a building stands at most, however it is built: the gust (m/s)
+  // at which the surveys find each part gone -- the engineer's check
+  // (40-storm.js) may say a part holds, but the record says what a storm
+  // that strong leaves (2026-10-03: "a category 5 tornado would basically
+  // destroy any building and everything").  A house of wood (FR12): its
+  // roof's covering and deck at 43-51 (to 64 strapped), more than half its
+  // roof at 54, its outside walls at 58, all its walls at 76, the slab
+  // swept clean at 89; pushed off its foundation at 46 not anchored, 63
+  // anchored; its windows broken at 43.  Steel and concrete, low or mid
+  // rise: the roof deck at 61, the curtain walls at 65.  A tower: glass
+  // low down broken by what flies at 42; its cladding's anchors at 46,
+  // much of its curtain wall at 58 -- the wind stronger the higher up.
+  function fxCaps(B) {
+    var h = typeof smHold === "function" ? smHold : function () { return false; };
+    if (!B) { return {}; }
+    if (B.frame === "wood") {
+      return { roof: h("straps") ? 64 : h("ties") ? 54 : 46, walls: h("shear") ? 60 : 50, anchors: h("anchors") ? 63 : 46, windows: h("impact") ? 62 : 43 };
+    }
+    if (B.frame === "steel") { return { roof: 61, walls: 64, windows: h("impact") ? 62 : 46 }; }
+    return { windows: h("impact") ? 58 : 42, skin: h("impact") ? 60 : 54 };
+  }
   function fxOn() { return !!(FX && typeof V3 !== "undefined" && V3 && V3.storm && FX.storm === V3.storm && FX.box === V3.box); }
   function fxFunnelOn() { return fxOn() && FX.kind === "tornado" && !!FX.plan; }
   function fxHash(s) { var h = 2166136261; for (var i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); } return ((h >>> 0) % 10007) / 10007; }
@@ -88,11 +115,16 @@
            expo: kind === "quake" || kind === "snow" ? 1 : 0.5,
            // (the insides drawn from the first, where the roof or the walls may go -- or the furniture, in an earthquake, or a
            // flood: not built in the middle of it all)
-           open: deep && !!(gives.roof || gives.walls || gives.anchors || kind === "quake" || (kind === "flood" && gives.contents)),
+           open: deep && !!(gives.roof || gives.walls || gives.anchors || kind === "quake" || (kind === "flood" && gives.contents) ||
+                            (SM_WINDY[kind] && fxCapsMin(B) <= St[1] * 1.05) || (kind === "hurricane" && fxSurgeMax(St[1]) > 0.9)),
            t: 0, tt: 0, plan: null, items: new Map(), free: [], bits: [], dust: [], seen: {}, said: "", done: false,
            rnd: gl3Rand(Math.round(St[1] * 13) + 7), w: [0, 0, 0], shAcc: 0, lfAcc: 0, check: 0, cost: 0, span: null };
     V3.dirty = true;
     fxLoop(FX);
+  }
+  function fxCapsMin(B) {
+    var c = fxCaps(B);
+    return Math.min(c.roof || Infinity, c.walls || Infinity, c.anchors || Infinity);
   }
   function fxLoop(F) {
     var last = 0;
@@ -176,7 +208,7 @@
            verts: 0, area: 0, hash: fxHash(id) };
     if (it.parent) { it.parent.kids.push(it); }
     F.items.set(id, it);
-    var L = F.plan, list = { wall: L.panels, roof: L.cells, ceil: L.ceils, plate: L.plates, extra: L.extras, glass: L.glass, thing: L.things }[kind];
+    var L = F.plan, list = { wall: L.panels, roof: L.cells, ceil: L.ceils, plate: L.plates, extra: L.extras, glass: L.glass, thing: L.things, skin: L.skins }[kind];
     if (list) { list.push(it); }
     return it;
   }
@@ -290,9 +322,20 @@
     if (h.roof || f.roof) { return L.split && !f.mesh ? "roof" : null; }
     if (n && n.kind !== "i_room" && !WALK_DOORS[n.kind] && n.kind !== "i_window") { return fxThing(F, n, f); }
     var c = fxMid(f);
+    // a tower's skin: each panel of it its own, torn from its anchors
+    if (h.tower && !h.glass && !f.mesh && f.n && Math.abs(f.n[2]) < 0.3 && L.vc.skin !== undefined && f.pts.length === 4) {
+      var sid = "sk" + Math.round(c[0]) + ":" + Math.round(c[1]) + ":" + Math.round(c[2]), sk = F.items.get(sid);
+      if (!sk) {
+        sk = fxItem(F, sid, "skin", null);
+        sk.n0 = [f.n[0], f.n[1], 0]; sk.pts = f.pts;
+        var e1 = Math.hypot(f.pts[1][0] - f.pts[0][0], f.pts[1][1] - f.pts[0][1]) / P, e2 = Math.abs((f.pts[2][2] || 0) - (f.pts[1][2] || 0)) / P;
+        sk.area = Math.max(0.5, e1 * e2);
+      }
+      return sk;
+    }
     // the glass: each pane its own, broken by what flies
     if (h.glass && !f.mesh && L.vc.windows !== undefined) {
-      if (!fxNear(L, c, 0.6 * P)) { return null; }
+      if (!fxNear(L, c, 0.6 * P) && !(h.tower || (F.T && F.T.B && F.T.B.tall && zIn(c[2], L.slab, L.slab + 8 * P)))) { return null; }
       var zg = fxZ(f), gl = F.items.get("g" + Math.round(c[0]) + ":" + Math.round(c[1]) + ":" + Math.round(c[2]));
       return gl || fxItem(F, "g" + Math.round(c[0]) + ":" + Math.round(c[1]) + ":" + Math.round(c[2]), "glass",
                           L.split ? (fxPanelAt(F, c, zg, n && n.kind === "i_room" ? n : null) || L.house) : null);
@@ -321,6 +364,7 @@
     return it;
   }
   // a brick chimney, standing on its own -- in an earthquake, one of the first things to fall
+  function zIn(z, a, b) { return z >= a && z <= b; }
   function fxChim(F, c) {
     if (!(F.kind === "quake" && F.plan.gives.chimney) && !(fxWindy(F) && F.V >= FX_STRONGEST)) { return null; }
     var s = 1.5 * F.plan.P, it = fxItem(F, "ch" + Math.round(c[0] / s) + ":" + Math.round(c[1] / s), "chim", null);
@@ -461,7 +505,7 @@
   function fxPlan(F, model) {
     var P = FLOOR_PX, T = F.T, B = T ? T.B : null, V = F.V;
     var L = { P: P, rooms: [], byId: {}, splits: new Map(), of: new WeakMap(), thing: new Map(), house: null, deep: false, split: false,
-              vc: {}, gives: {}, chim: [], chims: [], foot: [], slab: 0, top: 0, panels: [], cells: [], ceils: [], plates: [], extras: [], glass: [], things: [], spots: [] };
+              vc: {}, gives: {}, chim: [], chims: [], foot: [], slab: 0, top: 0, panels: [], cells: [], ceils: [], plates: [], extras: [], glass: [], things: [], spots: [], skins: [] };
     F.plan = L;
     (T ? T.list : []).forEach(function (c) {
       if (c.ok) { return; }
@@ -470,6 +514,15 @@
       if (c.k === "chimney" || c.k === "contents" || c.k === "cover" || c.k === "solar") { L.gives[c.k] = true; }
       if (c.k === "anchors") { L.lifts = !!c.lift; }
     });
+    if (fxWindy(F)) {
+      var cap = fxCaps(B);
+      ["roof", "walls", "anchors", "windows"].forEach(function (k) {
+        if (cap[k] !== undefined) { L.vc[k] = Math.min(L.vc[k] === undefined ? Infinity : L.vc[k], cap[k]); }
+      });
+      L.vc.skin = cap.skin;
+      // (in a tornado a house's roof pulls up as much as the wind pushes it along)
+      if (F.kind === "tornado" && cap.anchors !== undefined) { L.lifts = true; }
+    }
     L.deep = F.open || (!!B && B.frame !== "tall" && !(typeof v3Big === "function" && v3Big()));
     L.split = F.open;
     // the rooms as they stand in the picture: by their walls and floors
@@ -566,6 +619,7 @@
       case "chim": return d[0] * d[1] * d[2] * 1100;
       case "thing": return FX_MASS[k] || (FX_TREES[k] ? FX_TREES[k][2] : 0) || Math.max(2, Math.min(2000, d[0] * d[1] * d[2] * 60));
       case "debris": return it.mass || 500;
+      case "skin": return Math.max(1, it.area) * 45;          // (a curtain wall: glass and its frame, 40-50 kg a square metre)
       default: return 10;
     }
   }
@@ -599,7 +653,7 @@
     }
     if (kick) { b.v[0] += kick[0]; b.v[1] += kick[1]; b.v[2] += kick[2]; }
     // a sheet: the wind on it across its face
-    if (it.n0 && (it.kind === "roof" || it.kind === "ceil" || it.kind === "wall" || it.kind === "plate")) {
+    if (it.n0 && (it.kind === "roof" || it.kind === "ceil" || it.kind === "wall" || it.kind === "plate" || it.kind === "skin")) {
       b.n0 = it.n0;
       b.A = it.kind === "wall" ? Math.max(d[0], d[1]) * d[2] : it.kind === "plate" ? d[0] * d[1] : Math.max(0.3, it.area);
     }
@@ -656,7 +710,39 @@
     return out;
   }
   // where the water stands (m, over the land under the house)
-  function fxWater(F) { return F.kind === "flood" ? F.ground + fxLevel(F) : -Infinity; }
+  function fxWater(F) {
+    if (F.kind === "flood") { return F.ground + fxLevel(F); }
+    if (F.kind === "hurricane") { return F.ground + fxSurge(F); }
+    return -Infinity;
+  }
+  // (2026-10-03: "the hurricane stuff should bring about floods")  By the
+  // sea, the storm surge: the sea pushed up onto the land by the wind,
+  // over a metre in a category 1 and more than five and a half in a 5
+  // (the National Hurricane Center's figures); rising as the eyewall
+  // comes, staying while it passes, going down slowly.  Inland, the rain:
+  // streets and yards under a foot or more of water -- more from a storm
+  // that moves slowly than from a strong one, so less deep, rising later.
+  function fxCoastal() {
+    var list = typeof worldScapes === "function" ? worldScapes() : [typeof worldScape === "function" ? worldScape() : ""];
+    return list.indexOf("beach") >= 0 || list.indexOf("tropics") >= 0;
+  }
+  function fxSurgeMax(V) {
+    if (fxCoastal()) {
+      var pts = [[33, 1.2], [42, 1.4], [50, 2.1], [58, 3.2], [70, 4.8], [78, 6.0], [90, 7.5]];
+      for (var i = 0; i + 1 < pts.length; i++) {
+        if (V <= pts[i + 1][0]) { return pts[i][1] + (pts[i + 1][1] - pts[i][1]) * Math.max(0, (V - pts[i][0]) / (pts[i + 1][0] - pts[i][0])); }
+      }
+      return 7.5;
+    }
+    return 0.25 + Math.max(0, Math.min(1, (V - 33) / 45)) * 0.6;
+  }
+  function fxSurge(F) {
+    if (F.surgeMax === undefined) { F.surgeMax = fxSurgeMax(F.V); F.coastal = fxCoastal(); }
+    var t = F.t, a = F.coastal ? 4 : 8, b = F.coastal ? 20 : 26, k = Math.max(0, Math.min(1, (t - a) / (b - a)));
+    k = k * k * (3 - 2 * k);
+    if (t > F.tEnd) { k *= Math.max(0.35, 1 - (t - F.tEnd) / 14 * 0.65); }
+    return F.surgeMax * k;
+  }
   function fxAcross(F, it) {
     if (!fxWindy(F)) { return fxLevel(F); }
     var P = F.plan.P, c = fxMidOf(it), mv = fxMover(it.parent), p = mv ? fxApply(mv.T, c) : c;
@@ -678,7 +764,9 @@
     // the glass
     L.glass.forEach(function (g) {
       if (g.hide || g.state === "gone") { return; }
-      if (F.kind === "hail" ? Uh > 0 && F.t > 1.5 + g.hash * 14 : fxAcross(F, g) >= vc.windows * (0.9 + 0.35 * g.hash)) {
+      // (a tower's glass broken low down, by what the wind carries; higher up only once its cladding goes)
+      var hi = F.T && F.T.B && F.T.B.tall && fxMidOf(g)[2] > L.slab + 8 * P ? 1.4 : 1;
+      if (F.kind === "hail" ? Uh > 0 && F.t > 1.5 + g.hash * 14 : fxAcross(F, g) >= vc.windows * hi * (0.9 + 0.35 * g.hash)) {
         g.hide = true; F.seen.windows = true;
         var mv = fxMover(g), c = mv ? fxApply(mv.T, fxMidOf(g)) : fxMidOf(g);
         for (var i = 0; i < 7; i++) { fxShard(F, c); }
@@ -696,6 +784,43 @@
         fxLoose(F, p, [w[0] / l * 0.8, w[1] / l * 0.8, 0], 0);
       }
     });
+    // by the sea, the surge and its waves battering the ground floor: a wood
+    // house's walls give way under about a metre of breaking waves (FEMA's
+    // coastal construction manual) -- not one raised up out of it
+    if (F.kind === "hurricane" && F.coastal && held) {
+      var deepW = fxWater(F) - L.slab / P;
+      if (deepW > 0.6 && F.T && F.T.B && F.T.B.frame === "wood" && !smHold("raised")) {
+        L.panels.forEach(function (p) {
+          if (p.state !== "held" || !p.room || p.room.level !== 0 || deepW < 0.9 + 0.7 * p.hash) { return; }
+          fxLoose(F, p, [F.dir[0] * 0.6, F.dir[1] * 0.6, 0.2], 0);
+        });
+        F.seen.surge = true;
+      }
+    }
+    // a tower's skin, panel by panel: torn from its anchors where the wind
+    // on it gets past what they hold -- the wind is stronger the higher up
+    // (it goes as the height to the 0.14), and the cladding up there is
+    // built for more of it, but not for all of it
+    if (vc.skin !== undefined && L.skins.length) {
+      var flying = 0;
+      F.free.forEach(function (b) { if (b.awake && b.it.kind === "skin") { flying++; } });
+      var g0 = F.ground;
+      L.skins.forEach(function (sk) {
+        if (sk.state !== "held") { return; }
+        var c = fxMidOf(sk), z = Math.max(1.5, c[2] / P - g0), w = fxWind(F, c[0] / P, c[1] / P, z, F.w);
+        var U = Math.hypot(w[0], w[1], w[2]), hf = Math.pow(Math.max(z, 10) / 10, 0.14);
+        if (U < vc.skin * hf * (0.95 + 0.6 * sk.hash)) { return; }
+        F.seen.skin = true;
+        // (no more than so many in the air at once: past that, the panel just goes, in bits)
+        if (flying < 90) {
+          var n = sk.n0, sb = fxLoose(F, sk, [n[0] * 2 + w[0] * 0.08, n[1] * 2 + w[1] * 0.08, 0.6], 0.4);
+          if (sb) { flying++; }
+        } else {
+          sk.state = "gone";
+          for (var q = 0; q < 2; q++) { fxShard(F, [c[0], c[1], c[2]]); }
+        }
+      });
+    }
     var fallen = (held || F.kind === "quake") && tops > 0 && topsGone / tops >= 0.4;
     // the roof, a piece at a time: its edges first, and next to a piece gone
     // -- peeled, a few a second at first, faster the more is gone (a whole
@@ -753,6 +878,12 @@
     L.things.forEach(function (it) {
       if (it.state !== "held" || it.box[0] === Infinity) { return; }
       var r = it.room, open = 1;
+      // (a hurricane's water: what floats is floated off, as in a flood)
+      if (F.kind === "hurricane" && fxFloats(F, it)) {
+        var bh = fxLoose(F, it, null, 0);
+        if (bh) { busy += bh.verts; if (it.out) { F.yardOut = (F.yardOut || 0) + 1; } }
+        return;
+      }
       if (!windy) {
         if (F.kind === "quake" ? fxTopples(F, it, Uh) : F.kind === "flood" ? fxFloats(F, it) : false) {
           var bq = fxLoose(F, it, null, 0);
@@ -779,7 +910,7 @@
     // ground still shaking, or the water come up round it
     F.free.forEach(function (b) {
       if (b.awake || b.it.state === "gone") { return; }
-      if (F.kind === "quake" ? Uh > 0.12 : F.kind === "flood" ? fxWater(F) > b.x[2] - b.dims[2] / 2 + 0.05 : false) { b.awake = true; b.still = 0; return; }
+      if (F.kind === "quake" ? Uh > 0.12 : F.kind === "flood" || F.kind === "hurricane" ? fxWater(F) > b.x[2] - b.dims[2] / 2 + 0.05 : false) { b.awake = true; b.still = 0; return; }
       if (!windy) { return; }
       var w = fxWind(F, b.x[0], b.x[1], Math.max(1.5, b.dims[2] / 2), F.w), U = Math.hypot(w[0], w[1]), q = 0.5 * FX_RHO * U * U;
       var push = q * b.cd * Math.max(b.dims[0], b.dims[1]) * b.dims[2], lift = q * (b.n0 ? 0.6 * (b.A || 1) : b.cl * b.dims[0] * b.dims[1]);
@@ -811,7 +942,7 @@
     var P = F.plan.P, d = it.dims || (it.dims = fxDims(it.box, P)), m = it.m || (it.m = fxMassOf(F, it, d)), k = it.node ? it.node.kind : "";
     var q = 0.5 * FX_RHO * U * U, drag = q * (FX_CD[k] || 1.05) * Math.max(d[0], d[1]) * d[2], lift = q * (FX_LIFT[k] || 0.15) * d[0] * d[1];
     // (a fence, or its gate: held by a post every couple of metres along it)
-    var wgt = m * FX_G, hold = k === "i_fence" || k === "i_gate" ? 900 * Math.max(d[0], d[1]) : FX_HOLD[k] || 0;
+    var wgt = m * FX_G, hold = k === "i_fence" || k === "i_gate" ? 750 * Math.max(d[0], d[1]) : FX_HOLD[k] || 0;
     if (lift > wgt + hold) { return true; }
     var rest = Math.max(0, wgt - lift), slide = 0.55 * rest, tip = rest * Math.min(d[0], d[1]) / 2 / Math.max(0.1, d[2] / 2);
     return drag > hold + Math.min(slide, tip);
@@ -823,7 +954,8 @@
     L.cells.forEach(function (c) { cells++; if (c.state !== "held") { cg++; } });
     // (lifted off by the wind; fallen in, under snow or with the walls under it)
     if (cells && cg / cells >= (F.kind === "snow" ? 0.05 : 0.15)) { s[fxWindy(F) ? "roof" : "cave"] = true; }
-    if (F.kind === "flood" && fxWater(F) > L.slab / L.P + 0.02) { s.wet = true; }
+    if ((F.kind === "flood" || F.kind === "hurricane") && fxWater(F) > L.slab / L.P + 0.02) { s.wet = true; }
+    if (F.kind === "hurricane" && fxWater(F) - F.ground > 0.2) { s[F.coastal ? "surge" : "flooded"] = true; }
     if (F.kind === "hail" && F.t > 3) { if (L.gives.cover) { s.cover = true; } if (L.gives.solar) { s.solar = true; } }
     if (n && gone / n >= 0.15) { s.walls = true; }
     var hb = L.house.body;
@@ -844,7 +976,7 @@
   function fxSaid() {
     if (!fxOn()) { return ""; }
     var e = FX.seen, list = [];
-    ["windows", "roof", "cave", "cover", "solar", "chimney", "walls", "slid", "flew", "float", "wet", "shelves", "bare", "trees", "yard", "safe"].forEach(function (k) {
+    ["windows", "skin", "roof", "cave", "cover", "solar", "chimney", "walls", "slid", "flew", "float", "surge", "flooded", "wet", "shelves", "bare", "trees", "yard", "safe"].forEach(function (k) {
       if (e[k] && !(k === "slid" && (e.flew || e.float))) { list.push(TXT["sm_ev_" + k]); }
     });
     // (a tall building: how far its top swings, and how much larger it is drawn)
@@ -1061,9 +1193,16 @@
   var FX_LAND_TREES = { broad: 1, fir: 1, birch: 1, palm: 1, oak: 1, maple: 1, spruce: 1, redwood: 1, poplar: 1, willow: 1, cypress: 1,
                         fruit: 1, pine: 1, bamboo: 1, banana: 1, joshua: 1, snag: 1 };
   var FX_LAND_LOW = { bush: 1, flowering: 1, box: 1, agave: 1, fern: 1, dry: 1, dune: 1, grass: 1, flowers: 1, reeds: 1 };
+  // What each stands, by the same surveys: [least, how much more some
+  // stand] -- grown trees (0) a fifth gone at 42, half at 53, four fifths at
+  // 65; bushes (12); wooden power poles (16) broken at 40-61; street lamps
+  // (18) bent and down at 38-55; a house over the street (30) gone to its
+  // slab at 64-90.
+  var FX_SWEEP = { 0: [34, 38], 12: [40, 30], 16: [40, 21], 18: [38, 17], 30: [64, 26] };
   function fxSwept(at, more) {
-    if (!fxOn() || !fxWindy(FX) || !FX.plan || FX.V < 44) { return false; }
-    var F = FX, P = FLOOR_PX, x = at[0] / P, y = at[1] / P, h = Math.abs(Math.sin(x * 12.9898 + y * 78.233) * 43758.5453) % 1, need = 44 + 22 * h + (more || 0), most;
+    if (!fxOn() || !fxWindy(FX) || !FX.plan || FX.V < 30) { return false; }
+    var F = FX, P = FLOOR_PX, x = at[0] / P, y = at[1] / P, h = Math.abs(Math.sin(x * 12.9898 + y * 78.233) * 43758.5453) % 1;
+    var sw = FX_SWEEP[more || 0] || [44 + (more || 0), 22], need = sw[0] + sw[1] * h, most;
     if (F.kind === "tornado") {
       var s0 = fxEye(F, 0), dx = x - s0[0], dy = y - s0[1], along = dx * F.go[0] + dy * F.go[1];
       var across = Math.abs(dx * F.go[1] - dy * F.go[0]), now = F.Vt * Math.min(F.t, F.tEnd);
@@ -1071,7 +1210,7 @@
       most = F.Vr * F.Rc / near + F.Vt * Math.exp(-Math.pow(near / (3 * F.Rc), 2));
     } else {
       // (a wind from one side snaps and fells trees, not all at once: some stand)
-      most = (F.peak || 0) * 0.92; need = 50 + 30 * h + (more || 0);
+      most = (F.peak || 0) * 0.92;
     }
     return most >= need;
   }
@@ -1079,7 +1218,7 @@
   // -- only once a few more of what stands there would go (the land is
   // a while drawing): what it grows, as it was last drawn, counted
   function fxSweptKey() {
-    if (!fxOn() || !fxWindy(FX) || !FX.plan || FX.V < 44) { return ""; }
+    if (!fxOn() || !fxWindy(FX) || !FX.plan || FX.V < 30) { return ""; }
     var F = FX;
     if (!F.plants) { return "|sw0"; }
     if (F.keyAt !== undefined && F.t - F.keyAt < 0.4 && !F.done) { return F.key; }
@@ -1266,13 +1405,40 @@
     out.push({ pts: [at(b[0], b[2], z1), at(b[1], b[2], z1), at(b[1], b[3], z1), at(b[0], b[3], z1)], n: [0, 0, 1], how: how });
   }
   // The water over the land: as far as the land is drawn, rising and going down again.
+  // (2026-10-03: "update the look for the different weather events too so
+  // they have better texturing")  Flood water is brown with what it has
+  // picked up, not a pool's blue; the wind breaks its surface into waves
+  // that roll the way it blows, with foam on their crests -- a sea's surge
+  // greyer and rougher than the rain's water standing in the streets.
   function fxFlood(F, out) {
-    if (F.kind !== "flood") { return; }
+    if (F.kind !== "flood" && F.kind !== "hurricane") { return; }
     var P = FLOOR_PX, zw = fxWater(F), G = V3 && V3.gl, s = G && G.scenery, mid = s && s.mid ? s.mid : [F.H[0] * P, F.H[1] * P];
     var R = s && s.groundR ? s.groundR * 0.74 : 140 * P, pts = [];
     if (zw - F.ground < 0.02) { return; }
+    var sea = F.kind === "hurricane" && F.coastal, col = sea ? "#5f6f66" : "#7a6a4f", crestC = sea ? "#8d9b93" : "#9a8b70";
     for (var i = 0; i < 40; i++) { var a = -i / 40 * Math.PI * 2; pts.push([mid[0] + Math.cos(a) * R, mid[1] + Math.sin(a) * R, zw * P]); }
-    out.push({ pts: pts, n: [0, 0, 1], how: { piece: true, color: "#5d8aa3", edge: "#5d8aa3", alpha: 0.62, late: true, bare: true, pat: PAT.water } });
+    out.push({ pts: pts, n: [0, 0, 1], how: { piece: true, color: col, edge: col, alpha: sea ? 0.8 : 0.74, late: true, bare: true, pat: PAT.water } });
+    // the waves: long crests across the wind near the house, rolling on, white where they break
+    var dir = F.dir || F.flow || [1, 0], across = [-dir[1], dir[0]], rough = sea ? 1 : F.kind === "hurricane" ? 0.5 : 0.25;
+    var reach = Math.min(R / P, 70), gap = sea ? 7 : 4.5, speed = sea ? 3.2 : 1.4, t = F.t, foam = { piece: true, color: "#e8ebe6", edge: "#e8ebe6", alpha: 0.55, late: true, bare: true };
+    for (var k = -Math.floor(reach / gap); k <= Math.floor(reach / gap); k++) {
+      var off = k * gap + ((t * speed) % gap), cx = mid[0] / P + dir[0] * off, cy = mid[1] / P + dir[1] * off;
+      var half = Math.sqrt(Math.max(0, reach * reach - off * off)) * 0.9;
+      if (half < 2) { continue; }
+      var h = (0.12 + 0.35 * rough) * (0.7 + 0.3 * Math.sin(k * 1.7 + t)), wide = 0.5 + 0.9 * rough;
+      for (var j = -half; j < half; j += 6) {
+        var j1 = Math.min(half, j + 6), wob = Math.sin(j * 0.21 + k) * 0.6;
+        var a0 = [cx + across[0] * j + dir[0] * wob, cy + across[1] * j + dir[1] * wob], a1 = [cx + across[0] * j1 + dir[0] * wob, cy + across[1] * j1 + dir[1] * wob];
+        var crest = [[a0[0] * P, a0[1] * P, (zw + 0.01) * P], [a1[0] * P, a1[1] * P, (zw + 0.01) * P],
+                     [(a1[0] - dir[0] * wide) * P, (a1[1] - dir[1] * wide) * P, (zw + h) * P], [(a0[0] - dir[0] * wide) * P, (a0[1] - dir[1] * wide) * P, (zw + h) * P]];
+        out.push({ pts: crest, n: [-dir[0] * 0.35, -dir[1] * 0.35, 0.94], how: { piece: true, color: crestC, edge: crestC, alpha: 0.72, late: true, bare: true, pat: PAT.water } });
+        if (rough > 0.4 && (Math.abs(Math.sin(j * 0.37 + k * 2.1 + t * 0.7)) > 0.55)) {
+          out.push({ pts: [[(a0[0] - dir[0] * wide) * P, (a0[1] - dir[1] * wide) * P, (zw + h + 0.01) * P], [(a1[0] - dir[0] * wide) * P, (a1[1] - dir[1] * wide) * P, (zw + h + 0.01) * P],
+                           [(a1[0] - dir[0] * wide * 1.5) * P, (a1[1] - dir[1] * wide * 1.5) * P, (zw + h * 0.6) * P], [(a0[0] - dir[0] * wide * 1.5) * P, (a0[1] - dir[1] * wide * 1.5) * P, (zw + h * 0.6) * P]],
+                     n: [0, 0, 1], how: foam });
+        }
+      }
+    }
   }
   // The safe room, still standing where the house was: concrete, a steel door.
   function fxSafe(F, out) {
@@ -1407,6 +1573,14 @@
       if (gone.length) {
         labels = labels.filter(function (l) { return l.room || !gone.some(function (g) { return Math.abs(l.x - g[0]) < 0.4 * P && Math.abs(l.y - g[1]) < 0.4 * P; }); });
       }
+      // (a room's name, not over a slab with nothing on it: the house carried
+      // off, or most of the room's walls down)
+      labels = labels.filter(function (l) {
+        if (!l.room) { return true; }
+        var r = L.byId[l.room.id];
+        if (L.house.state !== "held" && (L.split || F.seen.flew || F.seen.bare)) { return false; }
+        return !(r && r.panels && r.gone / r.panels >= 0.6);
+      });
     }
     var was = model.passing || { faces: [], stand: [] };
     return Object.assign({}, model, { faces: out, labels: labels, passing: { faces: was.faces.concat(moving), stand: was.stand } });
@@ -1517,18 +1691,113 @@
       return out.filter(function (p) { var w = F2.world(p.lx, p.ly); return !fxSnapped(w, 16, 9 * FLOOR_PX, FX_POLE); });
     };
   }
+  // The houses next door and over the street (39-world.js), in the path
+  // of the wind: torn down to their slabs where it was strong enough --
+  // houses stand more than trees do -- their walls and roofs thrown.
+  var FX_NEXT_SLAB = [0.66, 0.65, 0.62];
+  function fxPanelFree(F, at, w, h, how) {
+    if ((F.panelsOut = (F.panelsOut || 0) + 1) > 24) { return; }
+    var P = FLOOR_PX, g = fxLand(at[0] / P, at[1] / P) * P, own = [], it = fxItem(F, "nb" + F.panelsOut, "debris", null), a = F.rnd() * Math.PI;
+    var ux = Math.cos(a) * w / 2, uy = Math.sin(a) * w / 2, t = 0.08 * P;
+    v3Prism(own, [[at[0] - ux - uy * t / w, at[1] - uy + ux * t / w], [at[0] + ux - uy * t / w, at[1] + uy + ux * t / w],
+                  [at[0] + ux + uy * t / w, at[1] + uy - ux * t / w], [at[0] - ux + uy * t / w, at[1] - uy - ux * t / w]], g + 1.0 * P, g + 1.0 * P + h, how);
+    it.own = own; it.mass = 260;
+    own.forEach(function (f) { fxGrow(it, f); });
+    var wd = fxWind(F, at[0] / P, at[1] / P, 5, [0, 0, 0]);
+    fxLoose(F, it, [wd[0] * 0.2, wd[1] * 0.2, 3], 0.4);
+  }
+  if (typeof worldNeighbor === "function") {
+    var worldNeighborFx = worldNeighbor;
+    worldNeighbor = function (v, L, s, W, D) {
+      var P = FLOOR_PX, flip = s.back ? -1 : 1, ly = 7 * P + 5.2 * P;
+      var mid = L && L.lotWorld ? L.lotWorld(s.x, s.front - flip * ly, 0) : null;
+      if (mid && fxOn() && fxWindy(FX) && FX.plan) {
+        var F = FX, key = "nb" + Math.round(mid[0]) + ":" + Math.round(mid[1]);
+        if (!F.plants) { F.plants = new Map(); }
+        if (!F.plants.has(key)) { F.plants.set(key, { at: [mid[0], mid[1]], more: 30 }); }
+        if (fxSwept(mid, 30)) {
+          // (drawn into nothing, so what comes after is where it always is)
+          var out = worldNeighborFx.apply(this, [[]].concat(Array.prototype.slice.call(arguments, 1)));
+          var e = L.lotWorld(s.x + 1, s.front, 0), o = L.lotWorld(s.x, s.front, 0), ex = [(e[0] - o[0]), (e[1] - o[1])], dy = [-ex[1] * flip, ex[0] * flip];
+          var hw = 7 * P, hd = 5.2 * P, slab = [[-1, -1], [1, -1], [1, 1], [-1, 1]].map(function (q) {
+            return [mid[0] + ex[0] * hw * q[0] + dy[0] * hd * q[1], mid[1] + ex[1] * hw * q[0] + dy[1] * hd * q[1], 0.12 * P];
+          });
+          gl3Poly(v, slab, [0, 0, 1], gl3Mix(FX_NEXT_SLAB, L.sheetC, 0.1), 1, null, PAT.concrete);
+          if (!F.swept) { F.swept = new Set(); }
+          if (!F.swept.has(key)) {
+            F.swept.add(key);
+            if (F.H && Math.hypot(mid[0] / P - F.H[0], mid[1] / P - F.H[1]) < 160) {
+              var looks = [{ piece: true, color: "#e6e1d6", edge: "#9f998d" }, { piece: true, color: "#4a4d50", edge: "#2c2e30", pat: 1 }];
+              for (var k = 0; k < 6; k++) {
+                fxPanelFree(F, [mid[0] + (F.rnd() - 0.5) * 10 * P, mid[1] + (F.rnd() - 0.5) * 8 * P], (2.4 + F.rnd() * 1.4) * P, 2.4 * P, looks[k % 2]);
+              }
+              for (var q = 0; q < 6; q++) { fxPlank(F, [mid[0], mid[1], 3 * P], [0, 0, 2]); }
+            }
+          }
+          return out;
+        }
+      }
+      return worldNeighborFx.apply(this, arguments);
+    };
+  }
   if (typeof houseSceneKey === "function") {
     var houseSceneKeyFx = houseSceneKey;
     houseSceneKey = function () { return houseSceneKeyFx.apply(this, arguments) + fxSweptKey(); };
   }
+  // (2026-10-03: "the sky does not match the weather")  A storm's sky: a
+  // gale's grey and raining, anything stronger a storm's -- low and dark,
+  // the sun gone and the shadows with it (under thick storm cloud at noon
+  // the light is a hundredth of the sun's or less) -- a tornado's tinged
+  // green, as the hail-laden cloud of a supercell is.
   if (typeof weatherNow === "function") {
     var weatherNowFx = weatherNow;
     weatherNow = function () {
       if (FX && typeof V3 !== "undefined" && V3 && V3.storm === FX.storm && FX.box === V3.box) {
         var w = { snow: "snow", flood: "rain", hail: "storm" }[FX.kind];
+        if (!w && fxWindy(FX)) { w = FX.V >= 30 ? "storm" : "rain"; }
         if (w) { return w; }
       }
       return weatherNowFx.apply(this, arguments);
+    };
+  }
+  function fxSkyHow() {
+    if (!fxOn() || FX.kind === "quake") { return null; }
+    var F = FX, k = fxWindy(F) ? Math.max(0, Math.min(1, (F.V - 22) / 60)) : F.kind === "hail" ? 0.6 : F.kind === "flood" ? 0.35 : 0.2;
+    var tint = F.kind === "tornado" || F.kind === "hail" ? [0.3, 0.4, 0.36] : F.kind === "hurricane" ? [0.36, 0.39, 0.43] : F.kind === "snow" ? [0.78, 0.8, 0.84] : [0.4, 0.42, 0.45];
+    return { k: k, tint: tint, snow: F.kind === "snow" };
+  }
+  if (typeof gl3SkyNow === "function") {
+    var gl3SkyNowFx = gl3SkyNow;
+    gl3SkyNow = function () {
+      var s = gl3SkyNowFx.apply(this, arguments), S = null;
+      try { S = fxSkyHow(); } catch (e) { S = null; }
+      if (!S || !s) { return s; }
+      var k = S.k, out = Object.assign({}, s), t = S.tint;
+      function dim(c, by) { return c.map(function (v) { return v * by; }); }
+      out.sunCol = dim(s.sunCol, Math.max(0.03, 1 - 0.95 * k));
+      out.skyAmb = dim(gl3Mix(s.skyAmb, t, 0.35 * k), 1 - 0.4 * k);
+      out.groundAmb = dim(s.groundAmb, 1 - 0.35 * k);
+      out.zenith = dim(gl3Mix(s.zenith, dim(t, 0.6), 0.7 * k), S.snow ? 1 : 1 - 0.45 * k);
+      out.horizon = dim(gl3Mix(s.horizon, t, 0.6 * k), S.snow ? 1 : 1 - 0.3 * k);
+      out.cloud = dim(gl3Mix(s.cloud, dim(t, 0.85), 0.75 * k), S.snow ? 1 : 1 - 0.35 * k);
+      out.glow = dim(s.glow, 1 - 0.9 * k);
+      return out;
+    };
+  }
+  // (2026-10-03: "there should not be people walking or cars if it is on in
+  // bad weather")  In a storm, or anything the storm test lets loose, the
+  // street is empty: nobody out walking, no cars going by.
+  function fxStreetEmpty() {
+    try {
+      if (fxOn() && FX.kind !== "quake") { return true; }
+      return weatherNow() === "storm";
+    } catch (e) { return false; }
+  }
+  if (typeof worldFolk === "function") {
+    var worldFolkFx = worldFolk;
+    worldFolk = function (model) {
+      if (fxStreetEmpty()) { model.passing = { faces: [], stand: [] }; return; }
+      return worldFolkFx.apply(this, arguments);
     };
   }
   if (typeof smRun === "function") {
@@ -1536,6 +1805,8 @@
     smRun = function () {
       var out = smRunFx.apply(this, arguments);
       try { fxStart(false); } catch (e) { FX = null; }
+      // (its sky, its rain: the weather's, as the storm has it)
+      try { if (typeof weatherRun === "function") { weatherRun(); } } catch (e) { /* the weather as it was */ }
       return out;
     };
   }

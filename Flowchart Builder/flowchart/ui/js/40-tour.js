@@ -17,10 +17,17 @@
   // allows -- and the room you stand in is named with its size.
 
   // ---- as wide as an eye sees ------------------------------------------------------------
-  var TOUR_UPDOWN = 70 * Math.PI / 180;
+  // (2026-10-03: "the person is the right size but the sizes of the rooms do
+  // not feel scaled properly like the height seems fine just the length and
+  // the width seem off" -- 70 degrees up and down was over 100 across on a
+  // wide window, a wide-angle lens: floors and walls ran away from the eye,
+  // a room stretched long and wide while the heights in the middle of the
+  // view stayed true.  Now 60 up and down, no more than 92 across: what a
+  // view on a screen looks natural at.)
+  var TOUR_UPDOWN = 60 * Math.PI / 180;
   function tourFov(w, h) {
     var across = 2 * Math.atan(Math.tan(TOUR_UPDOWN / 2) * Math.max(0.3, w / Math.max(1, h)));
-    return Math.max(72 * Math.PI / 180, Math.min(105 * Math.PI / 180, across));
+    return Math.max(70 * Math.PI / 180, Math.min(92 * Math.PI / 180, across));
   }
   if (typeof v3Draw === "function") {
     var v3DrawNarrow = v3Draw;

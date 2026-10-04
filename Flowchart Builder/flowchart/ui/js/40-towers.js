@@ -292,7 +292,7 @@
   // ground floor, a sky lounge at the top.
   if (typeof BUILDING_TYPES === "object") {
     BUILDING_TYPES.tower = {
-      icon: "tower", style: "contemporary", ceil: 3.3,
+      icon: "tower", ceil: 3.3,
       plan: function (want) {
         var S = Math.max(3, Math.min(TOWER_MOST, want.storeys || 30)), use = want.towerUse || "offices", s = Math.max(1, Math.min(3, want.size || 2));
         var W = [18, 21.6, 26][s - 1], Df = [6.4, 7.6, 9][s - 1], floors = [];
@@ -393,25 +393,53 @@
       plates.forEach(function (p, i) {
         if (!shown(p)) { return; }
         var t0 = plates.length > 1 ? i / (plates.length - 1) : 0, t1 = plates.length > 1 ? Math.min(1, (i + 1) / (plates.length - 1)) : 0;
-        var lo = towerOutline(b.form, c, S, t0, n), hi = towerOutline(b.form, c, S, t0, n);
-        // (between floors the form changes at the slab: each floor straight up)
+        var lo = towerOutline(b.form, c, S, t0, n), hi = lo, ledge = false;
+        // (2026-10-03: "make sure ... the ceiling and walls properly get
+        // aligned too rather than being jank" -- each floor stood straight
+        // up, the next turned or narrowed on it, a step at every slab.  Now
+        // the skin runs on from one floor's outline to the next, as the
+        // towers it is after do; only a setback steps, its ledge roofed.)
+        if (i + 1 < plates.length) {
+          var nx = towerOutline(b.form, c, S, t1, n);
+          if (towerFlows(b.form, lo, nx, c, S)) { hi = nx; } else { ledge = true; }
+        }
+        var zb = p.z0 - 0.3 * P, zt = p.z1 - 0.3 * P + (ledge ? 0.08 * P : 0), ways = [];
         if (i === 0) {
-          // the ground floor's glass with a way in cut through it at each
-          // door out of the lobby, the entrance built there (2026-10-03:
-          // "there was no door on the outside of the building")
-          var ways = towerEntries(b, sk, rooms), fine = towerOutline(b.form, c, S, t0, 160);
+          // the ground floor's glass with a way in at each door out of the
+          // lobby (2026-10-03: "there was no door on the outside of the
+          // building") -- set into the skin, its sides and the soffit over
+          // it closed back to the skin, the skin whole over the doors
+          // (2026-10-03: "the skin stops short ... a gap that shows the
+          // interior and grass")
+          ways = towerEntries(b, sk, rooms);
+          var fine = towerOutline(b.form, c, S, t0, 160);
+          var fineHi = hi === lo ? fine : towerOutline(b.form, c, S, t1, 160);
+          var zh = Math.min(zt, p.z0 + 3.75 * P), kh = (zh - zb) / Math.max(1, zt - zb), fineMid = towerMix(fine, fineHi, kh);
           towerBand(function (pts, nn, col, pat) {
             var mx = (pts[0][0] + pts[1][0]) / 2, my = (pts[0][1] + pts[1][1]) / 2;
             if (ways.some(function (w) { return (mx - c[0]) * w.d[0] + (my - c[1]) * w.d[1] > 0 && Math.abs((mx - w.pc[0]) * w.u[0] + (my - w.pc[1]) * w.u[1]) < w.hw; })) { return; }
             put(pts, nn, col, pat);
-          }, fine, fine, p.z0 - 0.3 * P, p.z1 - 0.3 * P, base, F.pat, c);
-          ways.forEach(function (w) { towerEntrance(faces, w, p.z0, p.z1 - 0.3 * P, base, dark, F.pat); });
+          }, fine, fineMid, zb, zh, base, F.pat, c);
+          if (zt - zh > 0.5) { towerBand(put, fineMid, fineHi, zh, zt, base, F.pat, c); }
+          ways.forEach(function (w) { towerRecess(faces, put, w, fine, c, p.z0, zb, zh, base, dark, F.pat); });
         } else {
-          towerBand(put, lo, hi, p.z0 - 0.3 * P, p.z1 - 0.3 * P, base, F.pat, c);
+          towerBand(put, lo, hi, zb, zt, base, F.pat, c);
         }
-        // the slab out to the skin, its edge a band of its own
-        put(lo.map(function (q) { return [q[0], q[1], p.z0 - 0.06 * P]; }), [0, 0, 1], "#9da2a6", 10);
-        put(lo.slice().reverse().map(function (q) { return [q[0], q[1], p.z0 - 0.3 * P]; }), [0, 0, -1], "#e6e4df", 10);
+        if (ledge) {
+          // a setback: the ledge it leaves, roofed (the floor over covers the rest)
+          put(lo.map(function (q) { return [q[0], q[1], zt]; }), [0, 0, 1], dark, 10);
+        }
+        // the steel: a column at the skin every seven metres or so, slab to
+        // slab, seen walking round inside between the rooms and the glass
+        if (V3.mode === "walk") { towerColumns(faces, b, p, plates[i + 1], lo, hi, c, ways, rooms); }
+        // the slab out to the skin, its edge a band of its own; its
+        // underside clear over the ceilings of the floor below, never in
+        // their plane (2026-10-03: "the ceilings seem to be a bit buggy" --
+        // the two fought, half the corridor's ceiling gone dark in steps)
+        // (the ground floor's just over the lawn -- it was under it, and the
+        // grass showed inside -- and under the rooms' floors)
+        put(lo.map(function (q) { return [q[0], q[1], i === 0 ? p.z0 - 0.4 : p.z0 - 0.06 * P]; }), [0, 0, 1], "#9da2a6", 10);
+        put(lo.slice().reverse().map(function (q) { return [q[0], q[1], towerUnder(plates[i - 1], p, b, rooms)]; }), [0, 0, -1], "#e6e4df", 10);
         if (b.form === "forest") {
           // balconies stepping out and back, a tree on each now and then
           var out = towerOutline(b.form, c, S + (i % 2 ? 1.6 : 0.8) * P, t0, n);
@@ -439,6 +467,102 @@
     towerKept = { key: key, faces: faces };
     return faces;
   }
+  // Whether the skin runs on smoothly from one floor's outline to the next:
+  // the forms that turn, swell or taper; any other where it hardly changes
+  // (a setback steps).
+  var TOWER_FLOWS = { twist: 1, diagrid: 1, taper: 1, chamfer: 1, slab: 1, forest: 1 };
+  function towerFlows(form, a, b, c, S) {
+    if (TOWER_FLOWS[form]) { return true; }
+    for (var i = 0; i < a.length; i++) {
+      if (Math.abs(Math.hypot(a[i][0] - c[0], a[i][1] - c[1]) - Math.hypot(b[i][0] - c[0], b[i][1] - c[1])) > 0.04 * S) { return false; }
+    }
+    return true;
+  }
+  function towerMix(a, b, k) {
+    if (a === b) { return a; }
+    return a.map(function (p, i) { return [p[0] + (b[i][0] - p[0]) * k, p[1] + (b[i][1] - p[1]) * k]; });
+  }
+  // A way in, set into the skin: the entrance's glass where the skin is
+  // furthest in across it, a cheek each side back out to the skin, a
+  // soffit over it to the skin, the entrance built there.
+  function towerRecess(faces, put, w, fine, c, z0, zb, zh, base, dark, pat) {
+    var P = FLOOR_PX, hw = w.hw;
+    function du(q) { return [(q[0] - w.pc[0]) * w.d[0] + (q[1] - w.pc[1]) * w.d[1], (q[0] - w.pc[0]) * w.u[0] + (q[1] - w.pc[1]) * w.u[1]]; }
+    function at(u, d) { return [w.pc[0] + w.u[0] * u + w.d[0] * d, w.pc[1] + w.u[1] * u + w.d[1] * d]; }
+    function front(q) { return (q[0] - c[0]) * w.d[0] + (q[1] - c[1]) * w.d[1] > 0; }
+    // how far in the skin goes across the way in
+    var dIn = 0, seg = 0;
+    fine.forEach(function (q, i) {
+      var r = fine[(i + 1) % fine.length];
+      seg = Math.max(seg, Math.hypot(r[0] - q[0], r[1] - q[1]));
+    });
+    fine.forEach(function (q) {
+      var m = du(q);
+      if (front(q) && Math.abs(m[1]) <= hw + seg) { dIn = Math.min(dIn, m[0]); }
+    });
+    dIn -= 0.15 * P;
+    // where the skin is, straight out from that plane at `u`
+    function skinAt(u) {
+      var hit = towerMeetFine(fine, at(u, dIn - 0.5 * P), w.d);
+      return hit ? du(hit)[0] : 0;
+    }
+    var half = Math.max(0.15 * P, seg / 2 + 0.05 * P), cheek = { piece: true, color: base, edge: dark, pat: pat, tower: true };
+    [-1, 1].forEach(function (s) {
+      var u0 = s * hw - half, u1 = s * hw + half, d0 = skinAt(u0) + 0.1 * P, d1 = skinAt(u1) + 0.1 * P;
+      v3Prism(faces, [at(u0, dIn), at(u1, dIn), at(u1, Math.max(dIn + 1, d1)), at(u0, Math.max(dIn + 1, d0))], zb, zh, cheek);
+    });
+    // the soffit, from the skin back to the glass, a strip a segment of the skin at a time
+    for (var i = 0; i < fine.length; i++) {
+      var a = fine[i], b2 = fine[(i + 1) % fine.length];
+      if (!front(a) || !front(b2)) { continue; }
+      var ma = du(a), mb = du(b2);
+      if (Math.max(Math.abs(ma[1]), Math.abs(mb[1])) > hw + half) { continue; }
+      var pa = at(ma[1], dIn), pb = at(mb[1], dIn);
+      put([[a[0], a[1], zh], [b2[0], b2[1], zh], [pb[0], pb[1], zh], [pa[0], pa[1], zh]], [0, 0, -1], dark, 10);
+    }
+    towerEntrance(faces, { d: w.d, u: w.u, pc: at(0, dIn), hw: hw }, z0, zh, base, dark, pat, -dIn / P);
+  }
+  // Where a line out from `from` the way `d` crosses an outline (its points round).
+  function towerMeetFine(pts, from, d) {
+    var best = null, bt = Infinity;
+    for (var i = 0; i < pts.length; i++) {
+      var a = pts[i], b = pts[(i + 1) % pts.length], ex = b[0] - a[0], ey = b[1] - a[1];
+      var den = d[0] * ey - d[1] * ex;
+      if (Math.abs(den) < 1e-9) { continue; }
+      var t = ((a[0] - from[0]) * ey - (a[1] - from[1]) * ex) / den, s = ((a[0] - from[0]) * d[1] - (a[1] - from[1]) * d[0]) / den;
+      if (t > 0 && s >= 0 && s <= 1 && t < bt) { bt = t; best = [from[0] + d[0] * t, from[1] + d[1] * t]; }
+    }
+    return best;
+  }
+  // The columns round a floor, just in from its skin: steel cased in fire
+  // board, from its slab to the underside of the one over it.
+  function towerColumns(faces, b, p, over, lo, hi, c, ways, rooms) {
+    var P = FLOOR_PX, per = 0;
+    lo.forEach(function (q, i) { var r = lo[(i + 1) % lo.length]; per += Math.hypot(r[0] - q[0], r[1] - q[1]); });
+    var count = Math.max(6, Math.round(per / (7.5 * P))), step = lo.length / count, half = 0.18 * P;
+    var z0 = p.z0 - 0.06 * P, z1 = over ? towerUnder(p, over, b, rooms) : p.z1 - 0.3 * P;
+    var mine = rooms.filter(function (r) { return floorAt(b.floors, r.x, r.y) === p.f; });
+    var look = { piece: true, color: "#c7c9c6", edge: "#8e918d", pat: 10 };
+    for (var k = 0; k < count; k++) {
+      var j = Math.round(k * step) % lo.length, a = Math.atan2(lo[j][1] - c[1], lo[j][0] - c[0]);
+      var r = Math.min(Math.hypot(lo[j][0] - c[0], lo[j][1] - c[1]), Math.hypot(hi[j][0] - c[0], hi[j][1] - c[1])) - 0.36 * P;
+      var cx = c[0] + Math.cos(a) * r, cy = c[1] + Math.sin(a) * r;
+      if (ways.some(function (w) { return (cx - c[0]) * w.d[0] + (cy - c[1]) * w.d[1] > 0 && Math.abs((cx - w.pc[0]) * w.u[0] + (cy - w.pc[1]) * w.u[1]) < w.hw + 1.2 * P; })) { continue; }
+      if (mine.some(function (rm) { return insideArea(rm, cx - p.f.dx, cy - p.f.dy, half + 2); })) { continue; }
+      var ux = Math.cos(a), uy = Math.sin(a), vx = -uy, vy = ux;
+      v3Prism(faces, [[cx - ux * half - vx * half, cy - uy * half - vy * half], [cx + ux * half - vx * half, cy + uy * half - vy * half],
+                      [cx + ux * half + vx * half, cy + uy * half + vy * half], [cx - ux * half + vx * half, cy - uy * half + vy * half]], z0, z1, look);
+    }
+  }
+  // How high a plate's underside: 0.3 m under its floor, or higher -- a
+  // tenth of a metre over the highest ceiling of the floor below.
+  function towerUnder(below, p, b, rooms) {
+    var P = FLOOR_PX, z = p.z0 - 0.3 * P;
+    if (!below) { return z; }
+    var top = -Infinity;
+    rooms.forEach(function (r) { if (floorAt(b.floors, r.x, r.y) === below.f) { top = Math.max(top, below.z0 + ceilOf(r) * P); } });
+    return top > -Infinity ? Math.min(p.z0 - 0.1 * P, Math.max(z, top + 0.1 * P)) : z;
+  }
   // ---- its size round its floors -----------------------------------------------------------------
   // Each floor's plate as the house stands, the middle of the lowest, and
   // how big round the outline must be to hold every floor (S).
@@ -457,10 +581,15 @@
     if (!plates.length) { return null; }
     var c = [(plates[0].bb.l + plates[0].bb.r) / 2, (plates[0].bb.t + plates[0].bb.b) / 2], S = 0;
     plates.forEach(function (p, i) {
-      var t = plates.length > 1 ? i / (plates.length - 1) : 0, turn = towerTurn(b.form, t), pw = towerP(b.form, t);
-      [[p.bb.l, p.bb.t], [p.bb.r, p.bb.t], [p.bb.r, p.bb.b], [p.bb.l, p.bb.b]].forEach(function (q) {
-        var dx = q[0] - c[0], dy = q[1] - c[1], a = Math.atan2(dy, dx), need = Math.hypot(dx, dy) / (towerR(b.form, a - turn, t) * pw);
-        S = Math.max(S, need);
+      // (inside its own outline, and the next floor's: the skin runs on from one to the other)
+      var ts = [plates.length > 1 ? i / (plates.length - 1) : 0];
+      if (TOWER_FLOWS[b.form] && i + 1 < plates.length) { ts.push((i + 1) / (plates.length - 1)); }
+      ts.forEach(function (t) {
+        var turn = towerTurn(b.form, t), pw = towerP(b.form, t);
+        [[p.bb.l, p.bb.t], [p.bb.r, p.bb.t], [p.bb.r, p.bb.b], [p.bb.l, p.bb.b]].forEach(function (q) {
+          var dx = q[0] - c[0], dy = q[1] - c[1], a = Math.atan2(dy, dx), need = Math.hypot(dx, dy) / (towerR(b.form, a - turn, t) * pw);
+          S = Math.max(S, need);
+        });
       });
     });
     S = S * 1.04 + 0.5 * P;
@@ -529,17 +658,21 @@
     return out;
   }
   // An entrance: a revolving door in the middle, a glass door either side
-  // of it for whoever cannot use one, glass over and round them, stone
-  // jambs, a canopy out over the way in and a stone apron under it.
-  function towerEntrance(faces, w, z0, zTop, base, dark, pat) {
+  // of it for whoever cannot use one, glass over and round them, a steel
+  // frame, a canopy out over the way in and a stone apron under it.
+  function towerEntrance(faces, w, z0, zTop, base, dark, pat, back) {
+    back = back || 0;               // how far in from the skin it is set (metres)
     var P = FLOOR_PX, hw = w.hw / P;
     function at(u, d) { return [w.pc[0] + w.u[0] * u * P + w.d[0] * d * P, w.pc[1] + w.u[1] * u * P + w.d[1] * d * P]; }
     function block(u0, u1, d0, d1, za, zb, look) { v3Prism(faces, [at(u0, d0), at(u1, d0), at(u1, d1), at(u0, d1)], z0 + za * P, z0 + zb * P, look); }
-    var steel = { piece: true, color: "#8f969b", edge: "#4a4f55" }, stone = { piece: true, color: "#3a3d42", edge: "#1f2226", pat: 41 };
+    var steel = { piece: true, color: "#8f969b", edge: "#4a4f55" };
     var glass = { glass: true, edge: "#7f9bb0", bare: true }, skin = { piece: true, color: base, edge: dark, pat: pat, tower: true };
     var head = 3.3, top = (zTop - z0) / P;
-    block(-hw - 0.4, -hw, -0.45, 0.45, 0, top, stone);                          // the jambs
-    block(hw, hw + 0.4, -0.45, 0.45, 0, top, stone);
+    // its frame, the tower's own dark steel (2026-10-03: stone jambs read as
+    // "a dark brick column ... in front of the revolving door")
+    var frame = { piece: true, color: dark, edge: dark, pat: 22 };
+    block(-hw - 0.12, -hw + 0.1, -0.3, 0.3, 0, top, frame);
+    block(hw - 0.1, hw + 0.12, -0.3, 0.3, 0, top, frame);
     if (top > head + 0.1) { block(-hw, hw, -0.25, 0.25, head, top, skin); }      // the floor's glass over it
     block(-hw, hw, -0.3, 0.3, head - 0.18, head, steel);                       // its head
     // the revolving door: a drum of glass, its four wings, its crown
@@ -575,9 +708,9 @@
     });
     block(-1.25, 1.25, -0.02, 0.02, 2.75, head - 0.18, glass);                  // and over the drum
     // the canopy out over the way in, and the apron under it
-    block(-hw - 0.6, hw + 0.6, 0, 3.2, head + 0.12, head + 0.36, steel);
-    block(-hw - 0.6, hw + 0.6, 3.1, 3.2, head - 0.05, head + 0.36, { piece: true, color: "#5d6166", edge: "#33373b" });
-    block(-hw - 1.2, hw + 1.2, -1.2, 4.6, -0.05, 0.03, { piece: true, color: "#cfcac0", edge: "#9a958c", pat: 10 });
+    block(-hw - 0.6, hw + 0.6, 0.3, 3.2 + back, head + 0.12, head + 0.36, steel);
+    block(-hw - 0.6, hw + 0.6, 3.1 + back, 3.2 + back, head - 0.05, head + 0.36, { piece: true, color: "#5d6166", edge: "#33373b" });
+    block(-hw - 1.2, hw + 1.2, -1.2, 4.6 + back, -0.05, 0.03, { piece: true, color: "#cfcac0", edge: "#9a958c", pat: 10 });
   }
   // ---- its lot -------------------------------------------------------------------------------------
   // The lot was drawn round the ground floor's rooms; the skin stands out

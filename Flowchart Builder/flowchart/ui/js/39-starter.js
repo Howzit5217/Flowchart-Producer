@@ -702,12 +702,16 @@
     });
     links.forEach(function (l) { hand.links.push(l); });
     var LEVEL_NAME = { "-1": TXT.fl_basement, "0": TXT.fl_ground, "1": TXT.fl_up_name };
+    // (every floor named, its storey kept on it: the floors over the first
+    // had no name, and a block of five drawn in two rows was stacked in the
+    // paper's order -- its top floor third, 2026-10-03; 38-walk.js levelKey)
+    function levelName(lv) { return LEVEL_NAME[lv] || (lv > 0 ? say("fl_upper", { n: lv }) : TXT.fl_basement + " " + (-lv)); }
     if (boxed) {
       floors.forEach(function (f) {
         var b = boxOf(f.nodes);
-        f.box = { id: hand.next++, kind: "i_floor", text: LEVEL_NAME[f.level], x: 0, y: 0, w: 140, h: 46 };
+        f.box = { id: hand.next++, kind: "i_floor", text: levelName(f.level), x: 0, y: 0, w: 140, h: 46 };
         measure(f.box);
-        f.box.text = LEVEL_NAME[f.level]; f.box.own = true;
+        f.box.text = levelName(f.level); f.box.own = true; f.box.storey = f.level;
         f.box.bldg = seed;                   // this house's floors, stacked on each other and no other (38-walk.js)
         f.box.x = Math.round((b.l + b.r) / 2); f.box.y = Math.round((b.t + b.b) / 2);
         f.box.w = Math.round(b.r - b.l + 2 * rim); f.box.h = Math.round(b.b - b.t + 2 * rim);

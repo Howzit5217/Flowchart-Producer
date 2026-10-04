@@ -603,6 +603,36 @@
       if (d) { out.push("t " + d.trim()); }
       return out;
     });
+    // (2026-10-03) the site round a building (40-site.js): a walk in slabs,
+    // paving for cars (its middle line), a bed of plants, bike parking (its hoops)
+    fitted("i_sidewalk", 200, 100, function (w, h) {
+      var out = ["o " + R(0, 0, w, h, 1)], d = "", long = w >= h, L = long ? w : h;
+      for (var u = 75; u < L - 10; u += 75) { d += long ? "M" + n2(u) + " 0 V" + n2(h) + " " : "M0 " + n2(u) + " H" + n2(w) + " "; }
+      if (d) { out.push("t " + d.trim()); }
+      return out;
+    });
+    fitted("i_asphalt", 330, 330, function (w, h) {
+      var long = w >= h, d = long ? "M8 " + n2(h / 2) + " H" + n2(w - 8) : "M" + n2(w / 2) + " 8 V" + n2(h - 8);
+      return ["o " + R(0, 0, w, h, 1), "t- " + d];
+    });
+    fitted("i_plantbed", 150, 60, function (w, h) {
+      var out = ["o " + R(0, 0, w, h, Math.min(6, w / 4, h / 4))], d = "", r = Math.max(2, Math.min(11, w / 6, h / 3));
+      var cols = Math.max(1, Math.floor(w / (r * 3))), rows = Math.max(1, Math.floor(h / (r * 3)));
+      for (var i = 0; i < cols; i++) {
+        for (var j = 0; j < rows; j++) { d += C((i + 0.5) * w / cols, (j + 0.5) * h / rows, r) + " "; }
+      }
+      if (d) { out.push("t " + d.trim()); }
+      return out;
+    });
+    fitted("i_bikepark", 260, 110, function (w, h) {
+      var out = ["o " + R(0, 0, w, h, 2)], d = "", long = w >= h, L = long ? w : h, A = long ? h : w, n = Math.max(1, Math.floor((L - 30) / 45));
+      for (var k = 0; k < n; k++) {
+        var u = L / 2 + (k - (n - 1) / 2) * 45;
+        d += long ? "M" + n2(u) + " " + n2(A * 0.18) + " V" + n2(A * 0.82) + " " : "M" + n2(A * 0.18) + " " + n2(u) + " H" + n2(A * 0.82) + " ";
+      }
+      out.push("t2 " + d.trim());
+      return out;
+    });
     plan("i_pavilion", 300, 200, ["o " + R(0, 0, 300, 200, 2), "t M0 0 L75 100 H225 L300 0 M0 200 L75 100 M225 100 L300 200",
                                   "k " + R(10, 10, 12, 12, 1) + " " + R(144, 10, 12, 12, 1) + " " + R(278, 10, 12, 12, 1) + " " +
                                   R(10, 178, 12, 12, 1) + " " + R(144, 178, 12, 12, 1) + " " + R(278, 178, 12, 12, 1)]);
@@ -962,7 +992,8 @@
                     "i_parked", "i_shrub", "i_grill", "i_pool", "i_patio", "i_gardenbench", "i_hottub",
                     "i_dogbed", "i_cattree", "i_firepit", "i_lounger", "i_gazebo", "i_shed", "i_planter",
                     "i_birdbath", "i_lamppost", "i_pathlight", "i_porchlight", "i_floodlight", "i_mailbox", "i_bikerack",
-                    "i_bins", "i_condenser", "i_dumpster", "i_parking", "i_pavilion", "i_court", "i_gate"]],
+                    "i_bins", "i_condenser", "i_dumpster", "i_parking", "i_pavilion", "i_court", "i_gate",
+                    "i_sidewalk", "i_asphalt", "i_plantbed", "i_bikepark"]],
     ["ic_fitness", ["i_treadmill", "i_exbike", "i_weightbench", "i_yogamat", "i_pooltable", "i_pingpong",
                     "i_dartboard", "i_easel", "i_trampoline", "i_swing"]],
     ["ic_store", ["i_gondola", "i_checkout", "i_cooler", "i_display", "i_register", "i_counter", "i_shelving",
