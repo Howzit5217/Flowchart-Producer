@@ -293,17 +293,68 @@
     else { y0 = -hh + a; y1 = -hh + b; x0 = hw - d1; x1 = hw - d0; }
     v3Box(faces, at, x0, x1, y0, y1, dz + z0, dz + z1, how);
   }
-  // Insulation: batts in the outside walls, between the studs; and over the
-  // top floor's ceilings, blown in deep.
+  // Insulation: batts in the walls, between the studs -- every wall, the
+  // ones between rooms too (for quiet), round the doors and the windows,
+  // not a garage's or a shed's (2026-10-03: "there should be insulation on
+  // all walls for a building unless it is like a shed"); and over the top
+  // floor's ceilings, blown in deep.
+  var SYS_BARE = { garage: 1, carport: 1, shed: 1, barn: 1, porch: 1 };
+  function sysBattRuns(r, edge, T) {
+    var len = edge === "top" || edge === "foot" ? r.w : r.h, spans = [[0, len]];
+    (typeof wallOpenRuns === "function" ? wallOpenRuns(r, edge) : []).forEach(function (o) {
+      var next = [];
+      spans.forEach(function (s) { if (o.b <= s[0] || o.a >= s[1]) { next.push(s); return; } if (o.a > s[0]) { next.push([s[0], o.a]); } if (o.b < s[1]) { next.push([o.b, s[1]]); } });
+      spans = next;
+    });
+    var holes = [];
+    hand.nodes.forEach(function (m) {
+      if (!WALK_DOORS[m.kind] && m.kind !== "i_window") { return; }
+      var h = typeof v3Hole === "function" ? v3Hole(r, edge, T, m) : null;
+      if (h) { h.n = m; holes.push(h); }
+    });
+    return { spans: spans, holes: holes };
+  }
+  // The pieces of a stretch of wall a..b (z0..z1) round its openings: full
+  // height between them, under a window's sill and over a head (`over`
+  // above it: the header's depth) the rest.
+  function sysAround(holes, a, b, top, z0, z1, over) {
+    var out = [], cut = [[a, b]];
+    holes.forEach(function (h) {
+      var next = [];
+      cut.forEach(function (c) { if (h.b <= c[0] || h.a >= c[1]) { next.push(c); return; } if (h.a > c[0]) { next.push([c[0], h.a]); } if (h.b < c[1]) { next.push([h.b, c[1]]); } });
+      cut = next;
+    });
+    cut.forEach(function (c) { if (c[1] - c[0] > 2) { out.push([c[0], c[1], z0, z1]); } });
+    holes.forEach(function (h) {
+      var a0 = Math.max(a, h.a), b0 = Math.min(b, h.b);
+      if (b0 - a0 < 2) { return; }
+      var head = (typeof openHead === "function" ? openHead(h.n, top) : top * 0.8) + over;
+      if (head < z1) { out.push([a0, b0, head, z1]); }
+      if (h.n.kind === "i_window" && typeof openSill === "function") {
+        var sill = openSill(h.n) - (over ? 0.04 * FLOOR_PX : 0);
+        if (sill > z0 + 2) { out.push([a0, b0, z0, sill]); }
+      }
+    });
+    return out;
+  }
   function sysInsulation(faces, F, rooms, all, look) {
     // (seen through, as the rest of the walls are: from above, the blown-in over the ceilings hid all under it)
     var P = FLOOR_PX, batt = look(XRAY_COLORS.insulation, { insulation: true, alpha: 0.75, late: true }), loose = look("#e9dcbc", { insulation: true, alpha: 0.3, late: true });
+    var plan = typeof walkPlan === "function" ? walkPlan() : null;
     rooms.forEach(function (r) {
       if ((r.turn || 0) % 90) { return; }
-      var T = Math.max(1, Math.min(6, Math.min(r.w, r.h) * 0.06)), top = ceilOf(r) * P;
-      sysOutside(r, F, all).forEach(function (s) { sysWallSlab(faces, r, F, s[0], s[1] + 1, s[2] - 1, T * 0.15, T * 0.85, 0.05 * P, top - 0.09 * P, batt); });
+      var kind = plan && typeof wireKindOf === "function" ? wireKindOf(plan, r) : "", bare = SYS_BARE[kind] || /shed|barn|carport/i.test(String(r.text || ""));
+      var T = Math.max(1, Math.min(6, Math.min(r.w, r.h) * 0.06)), top = ceilOf(r) * P, z0 = 0.05 * P, z1 = top - 0.09 * P;
+      if (!bare) {
+        WALL_EDGES.forEach(function (edge) {
+          var R = sysBattRuns(r, edge, T);
+          R.spans.forEach(function (s) {
+            sysAround(R.holes, s[0] + 1, s[1] - 1, top, z0, z1, 0.24 * P).forEach(function (q) { sysWallSlab(faces, r, F, edge, q[0], q[1], T * 0.15, T * 0.85, q[2], q[3], batt); });
+          });
+        });
+      }
       // over the ceiling, where nothing is built over it (an attic room's own slopes are its own)
-      if (r.attic) { return; }
+      if (r.attic || bare) { return; }
       var f = F.of(r), up = f && typeof floorOver === "function" ? floorOver(F.floors, f) : null;
       var covered = up && all.some(function (o) { return F.of(o) === up && insideArea(o, r.x + (f.dx - up.dx), r.y + (f.dy - up.dy)) && o.attic !== "storage"; });
       if (covered) { return; }
@@ -318,7 +369,12 @@
     rooms.forEach(function (r) {
       if ((r.turn || 0) % 90) { return; }
       var T = Math.max(1, Math.min(6, Math.min(r.w, r.h) * 0.06)), top = ceilOf(r) * P;
-      sysOutside(r, F, all).forEach(function (s) { sysWallSlab(faces, r, F, s[0], s[1], s[2], -0.012 * P, 0, 0, top, osb); });
+      // (cut round the windows and the doors: it covered them over)
+      var holes = {};
+      sysOutside(r, F, all).forEach(function (s) {
+        if (!holes[s[0]]) { holes[s[0]] = sysBattRuns(r, s[0], T).holes; }
+        sysAround(holes[s[0]], s[1], s[2], top, 0, top, 0).forEach(function (q) { sysWallSlab(faces, r, F, s[0], q[0], q[1], -0.012 * P, 0, q[2], q[3], osb); });
+      });
     });
   }
   // Low voltage: a network box by the panel, a data cable (blue) to every

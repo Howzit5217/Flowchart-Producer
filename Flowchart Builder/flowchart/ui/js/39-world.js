@@ -33,7 +33,7 @@
     mountains: { ground: [0.42, 0.56, 0.34], pat: 3, grow: { fir: 8, broad: 1, rock: 3 }, dense: 1.3, sky: "peaks" },
     forest:    { ground: [0.34, 0.48, 0.27], pat: 3, grow: { fir: 5, broad: 4, birch: 2, bush: 2 }, dense: 3, sky: "woods" },
     lake:      { ground: [0.45, 0.62, 0.33], pat: 3, grow: { broad: 4, fir: 3, birch: 2 }, dense: 1.1, sky: "hills", water: "lake" },
-    beach:     { ground: [0.88, 0.8, 0.62], pat: 71, lawn: [[0.64, 0.68, 0.44], 3], grow: { palm: 6, dune: 3 }, dense: 0.8, sky: "sea", water: "sea" },
+    beach:     { ground: [0.88, 0.8, 0.62], pat: 71, lawn: [[0.85, 0.77, 0.58], 71], grow: { palm: 6, dune: 3 }, dense: 0.8, sky: "sea", water: "sea" },
     desert:    { ground: [0.84, 0.68, 0.49], pat: 71, lawn: [[0.77, 0.67, 0.55], 10], grow: { cactus: 6, rock: 4, dry: 3 }, dense: 0.75, sky: "mesas" },
     tropics:   { ground: [0.34, 0.58, 0.27], pat: 3, grow: { palm: 6, broad: 3, bush: 4 }, dense: 1.7, sky: "volcano" },
     arctic:    { ground: [0.93, 0.95, 0.98], pat: 72, lawn: [[0.94, 0.95, 0.98], 72], grow: { fir: 6, rock: 2 }, dense: 0.7, sky: "peaks", snow: true },
@@ -400,10 +400,30 @@
     var A = L.lotWorld(0, 0, 0), E = L.lotWorld(1, 0, 0), D = L.lotWorld(0, 1, 0);
     return { e: [E[0] - A[0], E[1] - A[1]], d: [D[0] - A[0], D[1] - A[1]] };
   }
+  // Along the street every 18 m, the row of them slid along till none
+  // stands in a walk or a drive (2026-10-03: one stood in the front walk,
+  // a power pole beside it -- 40-utility.js keeps its poles off these).
+  function worldLampShift() {
+    var P = FLOOR_PX, every = 18 * P, lot = typeof houseStreetLot === "function" ? houseStreetLot() : null, busy = [];
+    if (!lot) { return every / 2; }
+    var a = -(lot.turn || 0) * Math.PI / 180, c = Math.cos(a), s = Math.sin(a);
+    hand.nodes.forEach(function (n) {
+      // (the walks and the drives out to it: a house's every door, inside ones too, left nowhere)
+      if (n.kind !== "i_driveway" && n.kind !== "i_path") { return; }
+      var dx = n.x - lot.x, dy = n.y - lot.y, lx = dx * c - dy * s, half = turned(n).w / 2 + 1.2 * P;
+      busy.push([lx - half, lx + half]);
+    });
+    for (var o = 0; o < 18; o += 0.5) {
+      var off = (9 + o) % 18 * P, ok = true;
+      for (var k = -4; k <= 4 && ok; k++) { var x = off + k * every; if (busy.some(function (b) { return x > b[0] && x < b[1]; })) { ok = false; } }
+      if (ok) { return off; }
+    }
+    return every / 2;
+  }
   function worldLamps(v, L, reach) {
-    var kind = worldLampKind(), P = FLOOR_PX, every = 18 * P, ax = worldStreetAxes(L);
+    var kind = worldLampKind(), P = FLOOR_PX, every = 18 * P, ax = worldStreetAxes(L), shift = worldLampShift();
     if (kind === "none") { return true; }
-    for (var lx = -Math.floor(reach / every) * every + every / 2; lx < reach; lx += every) {
+    for (var lx = -Math.floor(reach / every) * every + shift; lx < reach; lx += every) {
       worldLamp(v, kind, L.lotWorld(lx, L.hy + L.walkW - 0.35 * P, 0), ax.e, ax.d, L.sheetC);
       // and along the far side, where there are houses over there
       if (houseOpt("hood")) {

@@ -297,14 +297,21 @@
     var kinds = typeof PLANT_YARD === "object" ? ((PLANT_YARD[scapeNow] || PLANT_YARD.plains).big || []) : [];
     if (!kinds.length) { kinds = ["oak", "maple", "broad"]; }
     var lt = turned(lot), want = Math.max(1, Math.min(7, Math.round(lt.w * lt.h / (P * P) / 240))), placed = [];
-    var built = hand.nodes.filter(function (n) { return n !== lot && (n.kind === "i_room" || n.kind === "i_floor" || edit3dBlocks(n.kind) || isArea(n.kind)); });
+    // (and what lies flat out of doors -- a deck, a pool, a drive, a walk: a
+    // tree came up through the deck, 2026-10-03)
+    var built = hand.nodes.filter(function (n) {
+      return n !== lot && (n.kind === "i_room" || n.kind === "i_floor" || edit3dBlocks(n.kind) || isArea(n.kind) ||
+                           (!!ICONS[n.kind] && n.kind !== "i_tree" && !ON_THE_WALL[n.kind] && !FROM_CEILING[n.kind] && !WALK_DOORS[n.kind] && n.kind !== "i_window"));
+    });
     var doors = hand.nodes.filter(function (d) { return WALK_DOORS[d.kind]; });
+    var towers = typeof towerTaken === "function" ? towerTaken() : [];      // (under a tower's skin, 40-towers.js)
     for (var tries = 0; placed.length < want && tries < want * 60; tries++) {
       var sp = kinds[Math.floor(rnd() * kinds.length)], wide = ((typeof PLANT_SPREAD === "object" && PLANT_SPREAD[sp]) || 4) * P;
       var x = lot.x + (rnd() - 0.5) * (lt.w - 2 * P), y = lot.y + (rnd() - 0.5) * (lt.h - 2 * P);
       if (!insideArea(lot, x, y, 1.2 * P)) { continue; }
       if (built.some(function (b) { var q = turned(b); return Math.abs(b.x - x) * 2 < q.w + wide * 0.55 + 4 * P && Math.abs(b.y - y) * 2 < q.h + wide * 0.55 + 4 * P; })) { continue; }
       if (doors.some(function (d) { return Math.hypot(d.x - x, d.y - y) < wide * 0.4 + 3.5 * P; })) { continue; }
+      if (towers.some(function (t) { return Math.hypot(t[0] - x, t[1] - y) < t[2] + wide * 0.5; })) { continue; }
       if (placed.some(function (p) { return Math.hypot(p.x - x, p.y - y) < (p.wide + wide) * 0.4; })) { continue; }
       placed.push({ x: x, y: y, sp: sp, wide: wide });
     }

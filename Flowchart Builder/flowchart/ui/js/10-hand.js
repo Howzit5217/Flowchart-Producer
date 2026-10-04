@@ -1970,6 +1970,21 @@
     oy = key.tall;                     // the chart sits below the key
     var wide = Math.round(Math.max(maxx + pad + ox, (key.wide || 0) + pad));
     var tall = Math.round(maxy + pad + key.tall);
+    // (2026-10-03: "when it makes the blueprints for the design it needs to
+    // always be in a 4:3 aspect ratio or 16:9 aspect ratio and nothing
+    // else")  A design's paper is the one of the two nearer what is on it,
+    // grown on its short side, the drawing in its middle -- moved by whole
+    // squares, so the ruling stays with the shapes.
+    if (typeof designMode === "function" && designMode()) {
+      var ratio = wide / tall >= (4 / 3 + 16 / 9) / 2 ? 16 / 9 : 4 / 3;
+      if (wide / tall < ratio) {
+        var moreW = Math.round(tall * ratio) - wide, shiftX = Math.floor(moreW / 2 / HAND_RULE) * HAND_RULE;
+        ox += shiftX; wide = Math.round(tall * ratio);
+      } else {
+        var moreH = Math.round(wide / ratio) - tall, shiftY = Math.floor(moreH / 2 / HAND_RULE) * HAND_RULE;
+        oy += shiftY; tall = Math.round(wide / ratio);
+      }
+    }
     // Where the design's 0,0 is on the screen before this drawing replaces
     // the last, so the view can be kept still over it afterwards.
     // (only where the paper grows or its 0,0 moves: reading where it is

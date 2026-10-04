@@ -175,6 +175,46 @@
       useIt(best.n);
     }, 1);
   }
+  // A click on a door, or on something to use, uses it: whichever within
+  // reach lies the way the click points, not only what is straight ahead
+  // (2026-10-03: "when I hit E or click on a door nothing happens" -- a
+  // first click only took hold of the mouse to look round with).  `sx` is
+  // across the view from its left, in its own pixels.  True if one was used.
+  function v3ClickUse(sx) {
+    if (!V3 || V3.mode !== "walk" || !V3.me || !V3.w) { return false; }
+    var f = (V3.w / 2) / Math.tan(V3_FOV / 2), want = Math.atan((sx - V3.w / 2) / f), me = V3.me, best = null;
+    useTargetsAround().forEach(function (t) {
+      var dx = t.n.x - me.x, dy = t.n.y - me.y, ahead = dx * Math.cos(me.head) + dy * Math.sin(me.head);
+      if (ahead <= 2) { return; }
+      var across = -dx * Math.sin(me.head) + dy * Math.cos(me.head), ang = Math.atan2(across, ahead);
+      var half = Math.atan2(Math.max(t.n.w, t.n.h) / 2 + 6, Math.hypot(dx, dy));
+      var miss = Math.abs(ang - want) - half;
+      if (miss > 0.04) { return; }
+      var cost = Math.hypot(dx, dy) + Math.max(0, miss) * 300;
+      if (!best || cost < best.cost) { best = { ang: ang, cost: cost }; }
+    });
+    if (!best) { return false; }
+    // turned to it for the moment it takes to use it
+    var was = me.head;
+    me.head = was + best.ang;
+    try { v3UseDoor(); } finally { me.head = was; }
+    V3.dirty = true;
+    return true;
+  }
+  // (every door and usable thing within reach, any way round: useTargets
+  // keeps to what is in front)
+  var useTargetsAround = (typeof tieWith === "function" ? tieWith : function (fn) { return fn; })(function () {
+    var plan = v3Ground(), me = V3.me, floors = plan.floors || [], mine = floors.length ? floorAt(floors, me.x, me.y) : null, out = [];
+    hand.nodes.forEach(function (n) {
+      var doorish = WALK_DOORS[n.kind];
+      if (!doorish && !useKind(n)) { return; }
+      if (floors.length && floorAt(floors, n.x, n.y) !== mine) { return; }
+      var far = Math.hypot(n.x - me.x, n.y - me.y), size = Math.min(n.w, n.h) / 2;
+      if (far > (doorish ? 110 : FROM_CEILING[n.kind] ? 150 : 90 + size)) { return; }
+      out.push({ n: { x: n.x, y: n.y, w: n.w, h: n.h } });
+    });
+    return out;
+  }, 1);
   // Sitting, you are lower; a step and you are up again.
   if (typeof v3Stride === "function") {
     var v3StrideUse = v3Stride;

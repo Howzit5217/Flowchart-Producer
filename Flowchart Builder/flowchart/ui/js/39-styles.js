@@ -486,7 +486,7 @@
         if (!room) { return; }
         var q = turned(room), face = Math.abs(sx) > 0.5 ? room.x + Math.sign(sx) * q.w / 2 : room.y + Math.sign(sy) * q.h / 2;
         var dx = f ? f.dx : 0, dy = f ? f.dy : 0, dz = f ? f.z : 0;
-        var top = Math.min(DOOR_TALL * px, ceilOf(room) * px - 0.1 * px), sill = SILL * px;
+        var top = openHead(w, ceilOf(room) * px), sill = openSill(w);
         var wide = Math.min(0.5 * px, w.w * 0.42), th = 0.035 * px;
         [-1, 1].forEach(function (side) {
           var along = side * (w.w / 2 + wide / 2 + 0.05 * px), base;
@@ -503,6 +503,12 @@
     }
     if (S.porch && whole) { stylePorch(model, S, floors, rooms, inRoom); }
     if (S.chimney && whole && typeof roofKept === "object" && roofKept.out) { styleChimney(model, S); }
+  }
+  // The square round some points, as v3Prism wants it: its corners in turn.
+  function styleBoxOf(pts) {
+    var xs = pts.map(function (p) { return p[0]; }), ys = pts.map(function (p) { return p[1]; });
+    var l = Math.min.apply(null, xs), r = Math.max.apply(null, xs), t = Math.min.apply(null, ys), b = Math.max.apply(null, ys);
+    return [[l, t], [r, t], [r, b], [l, b]];
   }
   // A porch over the door out to the front: a roof on two posts.
   function stylePorch(model, S, floors, rooms, inRoom) {
@@ -535,6 +541,22 @@
       if (sn[2] < 0) { sn = [-sn[0], -sn[1], -sn[2]]; }
       model.faces.push({ pts: slab, n: sn, how: roofHow, roof: true });
       v3Prism(model.faces, p, zf, zf + 0.12 * px, { piece: true, color: trimC, edge: post.edge, bare: true, noTop: true });
+      // a gutter along its low edge and a downpipe down the outside of one
+      // post, as the house has (2026-10-03: "a front porch not getting
+      // gutters when they are turned on")
+      if (typeof houseOpt === "function" && houseOpt("gutters")) {
+        var gC = typeof GUTTER === "string" ? GUTTER : "#dedbd4", gLook = { piece: true, color: gC, edge: v3Mix(gC, "#000000", 0.3) };
+        var e0 = deep + 0.15 * px, e1 = e0 + 0.12 * px, gTop = zf + 0.1 * px, ga = half + 0.1 * px;
+        var gq = [W(-ga, e0), W(ga, e0), W(ga, e1), W(-ga, e1)];
+        v3Prism(model.faces, styleBoxOf(gq), gTop - 0.1 * px, gTop, gLook);
+        var pa = half - 0.1 * px, po = e0 + 0.06 * px, pr = 0.035 * px, pc = W(pa, po);
+        var pg = typeof terrGround === "function" ? terrGround(pc[0], pc[1]) : 0;
+        v3Prism(model.faces, styleBoxOf([W(pa - pr, po - pr), W(pa + pr, po + pr)]), pg + 0.08 * px, gTop - 0.1 * px, gLook);
+        v3Prism(model.faces, styleBoxOf([W(pa - pr, po - pr), W(pa + pr, po + 0.35 * px)]), pg + 0.04 * px, pg + 0.11 * px, gLook);
+        var sbC = typeof terrGround === "function" ? terrGround(W(pa, po + 0.5 * px)[0], W(pa, po + 0.5 * px)[1]) : 0;
+        v3Prism(model.faces, styleBoxOf([W(pa - 0.14 * px, po + 0.2 * px), W(pa + 0.14 * px, po + 0.75 * px)]), sbC - 0.02 * px, sbC + 0.03 * px,
+                { piece: true, color: "#c9c5bb", edge: "#8d897f" });
+      }
       // its posts, and a step up to the door
       [-half + 0.1 * px, half - 0.1 * px].forEach(function (a) {
         var c = W(a, deep), r = 0.08 * px;

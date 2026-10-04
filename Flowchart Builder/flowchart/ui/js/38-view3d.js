@@ -32,6 +32,15 @@
   // is the edges and the tops of the walls, as a plan draws them.
   var V3 = null;                         // the view, while it is open
   var WALL_TALL = 2.6, DOOR_TALL = 2.1, SILL = 0.9;   // metres
+  // A window's sill and an opening's head, in pixels: its own where it has
+  // them (`n.sill`, `n.head`, metres: a shop's glass from near the floor, a
+  // lobby's tall doors, 40-fronts.js), else a house's -- the head kept a
+  // hand under the ceiling (`ceilPx`).
+  function openSill(n) { return (n && n.sill !== undefined ? n.sill : SILL) * FLOOR_PX; }
+  function openHead(n, ceilPx) {
+    var h = (n && n.head ? n.head : DOOR_TALL) * FLOOR_PX;
+    return ceilPx ? Math.min(h, ceilPx - 0.1 * FLOOR_PX) : h;
+  }
   var EYE_TALL = 1.6;                    // where the eyes are, walking round
   var V3_FOV = 75 * Math.PI / 180;       // how wide it sees, walking round
   var V3_NEAR = 4;                       // nothing nearer the eye than this is drawn
@@ -182,10 +191,11 @@
     spans.forEach(function (s) { part(s[0], s[1], 0, tall); });
     holes.forEach(function (hole) {
       var a = Math.max(0, hole.a), b = Math.min(len, hole.b);
+      var top = openHead(hole.n, ceil);
       if (hole.door) {
         if (!low) { part(a, b, top, tall); }
       } else {
-        var sill = SILL * FLOOR_PX;
+        var sill = openSill(hole.n);
         part(a, b, 0, Math.min(tall, sill));
         if (!low) {
           part(a, b, top, tall);
@@ -255,7 +265,7 @@
   // thin box turning about its hinge on the threshold, the way the plan
   // draws its swing.
   function v3Door(faces, n, open) {
-    var leaf = DOOR_TALL * FLOOR_PX, a = open * Math.PI / 180, own = simLook(n);
+    var leaf = openHead(n), a = open * Math.PI / 180, own = simLook(n);
     var look = { leaf: true, color: own.fill, edge: own.line };
     function slab(hx, hy, dx, dy, len, thick) {
       var nx = -dy * thick / 2, ny = dx * thick / 2;
@@ -805,7 +815,7 @@
           nearBy.forEach(function (m) {
             if (WALK_DOORS[m.kind] && doorLocked(m) && false) { return; }
             var hole = v3Hole(n, edge, T, m);
-            if (hole) { hole.door = m.kind !== "i_window"; holes.push(hole); }
+            if (hole) { hole.door = m.kind !== "i_window"; hole.n = m; holes.push(hole); }
           });
           holes.sort(function (p, q) { return p.a - q.a; });
           // (a wall taken out between two rooms, and the beam over the opening: 39-inside.js)
@@ -814,8 +824,9 @@
           if (!low && typeof wallBeams === "function") { wallBeams(faces, n, edge); }
         });
       } else if (n.kind === "i_wall") {
+        // (a wall as tall as it was made: a desk's screen, 40-kinds.js)
         v3Box(faces, n, -n.w / 2, n.w / 2, -n.h / 2, n.h / 2, 0,
-              (low ? 1.1 : WALL_TALL) * FLOOR_PX, wallsOf(n));
+              (low ? Math.min(1.1, n.tall || 1.1) : n.tall || WALL_TALL) * FLOOR_PX, n.screen ? { piece: true, color: "#8f969b", edge: "#5d6166", pat: 21 } : wallsOf(n));
       } else if (WALK_DOORS[n.kind]) {
         if (typeof wallDoorGone === "function" && wallDoorGone(n, roomsAt(n.x, n.y, 30))) { return; }   // its wall taken out
         v3Door(faces, n, V3.doorAt[n.id] !== undefined ? V3.doorAt[n.id] : (typeof doorSwingTo === "function" ? doorSwingTo(n) : doorIsOpen(n) ? 90 : 0));
@@ -1027,6 +1038,8 @@
     function nameOf(n) {
         var f = floorOfNode(n), room = n.kind === "i_room";
         if (!shown(f) || (isArea(n.kind) && !room) || NO_LABEL[n.kind]) { return null; }
+        // (a part of another room, 40-oddrooms.js: named once, over its main part)
+        if (room && n.partOf !== undefined) { return null; }
         var inRoom = room ? null : roomsAt(n.x, n.y, 0).filter(function (r) { return insideArea(r, n.x, n.y); })[0] || null;
         // from above, what has a floor over it is under that floor, not seen
         if (!inside && f && coveredAbove(n, f)) { return null; }
@@ -2271,6 +2284,9 @@
       delete downs[ev.pointerId];
       if (Object.keys(downs).length < 2) { pinch = null; }
       if (ev.type === "pointerup" && V3 && V3.mode === "walk" && dragged < 6) {
+        // (a click on a door or on something to use, uses it: 39-inside.js)
+        var rc = canvas.getBoundingClientRect();
+        if (document.pointerLockElement !== canvas && typeof v3ClickUse === "function" && v3ClickUse((ev.clientX - rc.left) * (V3.w / (rc.width || V3.w)))) { return; }
         if (document.pointerLockElement === canvas || ev.pointerType !== "mouse" || !canvas.requestPointerLock) { v3UseDoor(); }
         else {
           try { var p = canvas.requestPointerLock(); if (p && p.catch) { p.catch(function () { /* not allowed here */ }); } } catch (e) { /* fine */ }

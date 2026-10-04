@@ -13,7 +13,7 @@
   // How a door is made is kept on it, as `n.dd`: { st: its style, hd: its
   // handle, mt: the metal of its handle and hinges, fin: the leaf's finish,
   // hand: "r" hung from the other side, op: how far it opens, in degrees }.
-  var DOOR_STYLES = ["flush", "panel6", "panel2", "shaker", "craftsman", "halfglass", "french", "modern", "barn", "louver"];
+  var DOOR_STYLES = ["flush", "panel6", "panel2", "shaker", "craftsman", "halfglass", "french", "modern", "barn", "louver", "storefront"];
   var DOOR_HANDLES = ["lever", "knob", "pull"];
   var DOOR_METALS = { brass: ["#c9a14a", 35], chrome: ["#d3d7dc", 23], black: ["#2a2a2b", 22], bronze: ["#6b5643", 22], nickel: ["#b6b4ac", 22] };
   var DOOR_FINS = { drawn: null, white: ["#f3f1ec", 36], oak: ["#c49a62", 21], walnut: ["#6b4a33", 21], black: ["#2b2b2c", 36],
@@ -45,7 +45,7 @@
     };
   }
   function doorBuild(faces, n, open) {
-    var P = FLOOR_PX, H = DOOR_TALL * P, own = simLook(n), D = doorDesign(n);
+    var P = FLOOR_PX, H = openHead(n), own = simLook(n), D = doorDesign(n);
     var hw = n.w / 2, hh = n.h / 2, line = SNAP_IN_WALL[n.kind] === "swing" ? hh : 0, J = 1.5, deep = 6.5;
     var trimC = typeof styleTrim === "function" ? styleTrim("#f1eee8") : "#f1eee8";
     var trim = { piece: true, color: trimC, edge: own.line };
@@ -142,6 +142,19 @@
       onFaces(0.6, L - 0.6, 0.1 * H, 0.1 * H + 5, 0.9, raised);
       onFaces(0.6, L - 0.6, 0.86 * H - 5, 0.86 * H, 0.9, raised);
       [-1, 1].forEach(function (sd) { doorBrace(faces, LN, sd, t / 2 + 0.9, 1.4, 0.1 * H + 5, L - 1.4, 0.86 * H - 5, 4.6, raised); });
+    } else if (st === "storefront") {
+      // (2026-10-03) a shop's, an office's: a narrow aluminium frame round
+      // glass the whole height, a push bar across both faces
+      var alu = { leaf: true, color: f ? col : "#a9adb2", edge: "#5d6166", pat: f ? f[1] : 23 }, ns = Math.min(2.6, L * 0.08), nb = 0.09 * H;
+      box(0, ns, -t / 2, t / 2, 0, H, alu); box(L - ns, L, -t / 2, t / 2, 0, H, alu);
+      box(ns, L - ns, -t / 2, t / 2, 0, nb, alu); box(ns, L - ns, -t / 2, t / 2, H - ns, H, alu);
+      box(ns, L - ns, -0.3, 0.3, nb, H - ns, glass);
+      [-1, 1].forEach(function (sd) {
+        var v0 = sd < 0 ? -(t / 2 + 2.4) : t / 2 + 1.6, v1 = sd < 0 ? -(t / 2 + 1.6) : t / 2 + 2.4;
+        box(ns + 1, L - ns - 1, v0, v1, 0.98 * P, 1.04 * P, alu);
+        [ns + 1.6, L - ns - 1.6].forEach(function (u) { var w0 = sd < 0 ? -(t / 2 + 1.6) : t / 2, w1 = sd < 0 ? -t / 2 : t / 2 + 1.6; box(u - 0.4, u + 0.4, w0, w1, 0.99 * P, 1.03 * P, alu); });
+      });
+      D = Object.assign({}, D, { hd: "none" });
     } else if (st === "louver") {
       box(0, s, -t / 2, t / 2, 0, H, wood); box(L - s, L, -t / 2, t / 2, 0, H, wood);
       box(s, L - s, -t / 2, t / 2, 0, rb, wood); box(s, L - s, -t / 2, t / 2, H - rt, H, wood);
@@ -150,7 +163,8 @@
         for (var z2 = zz[0] + 1; z2 + 1.4 < zz[1]; z2 += 2.2) { box(s, L - s, -t / 2 + 0.3, t / 2 - 0.3, z2, z2 + 1.4, deepC); }
       });
     }
-    // the handle, toward the edge it shuts on, both faces
+    // the handle, toward the edge it shuts on, both faces (none on a door with a push bar)
+    if (D.hd === "none") { return; }
     var uh = L - 3.4, zh = 1.0 * P;
     [-1, 1].forEach(function (sd) {
       var o = t / 2;
@@ -197,20 +211,28 @@
     faces.push({ pts: pts, n: out, how: how });
   }
 
-  // ---- opened a little, or all the way ---------------------------------------------------------
-  // E (or a press on it) at a shut door opens it a little; again, all the
-  // way; again, shut.
+  // ---- opened all the way, or a little ---------------------------------------------------------
+  // E (or a press on it) at a shut door opens it all the way, to walk
+  // through; again, shut.  Shift+E opens it a little, and again all the
+  // way.  (2026-10-03: "when I hit E or click on a door nothing happens" --
+  // and a door opened only a little was no way through.)
+  var doorShift = false;
+  window.addEventListener("keydown", function (ev) { if (ev.code === "KeyE" || ev.key === "e" || ev.key === "E") { doorShift = !!ev.shiftKey; } }, true);
+  window.addEventListener("pointerdown", function (ev) { doorShift = !!ev.shiftKey; }, true);
   if (typeof v3UseDoor === "function") {
-    var v3UseDoorPlain = v3UseDoor;
+    var v3UseDoorStyled = v3UseDoor;
     v3UseDoor = function () {
-      var was = {};
+      var was = {}, little = doorShift;
+      doorShift = false;
       Object.keys(doorOpen).forEach(function (k) { was[k] = doorOpen[k]; });
-      var out = v3UseDoorPlain.apply(this, arguments);
+      var out = v3UseDoorStyled.apply(this, arguments);
       // which door it was: the one whose state just changed
       Object.keys(doorOpen).forEach(function (k) {
         if (was[k] === doorOpen[k]) { return; }
-        if (doorOpen[k]) { DOOR_AJAR[k] = true; v3Say(TXT.dd_ajar); }                       // shut -> a little
-        else if (DOOR_AJAR[k]) { DOOR_AJAR[k] = false; doorOpen[k] = true; v3Say(TXT.dd_wide); }   // a little -> all the way
+        if (doorOpen[k]) {                                                                   // shut -> open
+          DOOR_AJAR[k] = little;
+          v3Say(little ? TXT.dd_ajar : TXT.dd_wide);
+        } else if (DOOR_AJAR[k]) { DOOR_AJAR[k] = false; doorOpen[k] = true; v3Say(TXT.dd_wide); }   // a little -> all the way
         else { v3Say(TXT.dd_shut); }
       });
       return out;
@@ -241,6 +263,7 @@
     else if (st === "french") { g = r(15, 4, 25, 23, "#bcd3e0") + '<path d="M20 4v19M15 7.8h10M15 11.6h10M15 15.4h10M15 19.2h10"/>'; }
     else if (st === "modern") { g = r(21.5, 5, 23.5, 24, "#bcd3e0"); }
     else if (st === "barn") { g = '<path d="M16.5 2v25M20 2v25M23.5 2v25M14 5.5h12M14 23.5h12M14.5 23 25.5 6"/>'; }
+    else if (st === "storefront") { g = r(14.2, 3, 25.8, 26.4, "#bcd3e0") + '<path d="M14.6 15h10.8"/>'; }
     else if (st === "louver") { g = '<path d="M15 5h10M15 7h10M15 9h10M15 11h10M15 13h10M15 16h10M15 18h10M15 20h10M15 22h10M15 24h10"/>'; }
     return '<svg viewBox="0 0 40 28" aria-hidden="true"><g fill="none" stroke="currentColor" stroke-width="1">' +
            r(x0, y0, x1, y1) + g + '<circle cx="24.6" cy="15.5" r=".9" fill="currentColor"/></g></svg>';

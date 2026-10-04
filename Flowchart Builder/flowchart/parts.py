@@ -45,7 +45,7 @@ JS = ["js/01-start.js", "js/02-paint.js", "js/02-read.js", "js/02-depth.js", "js
       "js/28-puzzles.js", "js/29-saves.js", "js/30-blocks.js", "js/31-app.js",
       "js/32-code-side.js", "js/33-told.js", "js/34-tests.js", "js/35-wipe.js", "js/36-sync.js",
       "js/37-games.js", "js/37-board.js", "js/38-walk.js", "js/38-advice.js", "js/38-view3d.js", "js/38-models.js", "js/38-view3d-gl.js", "js/38-view3d-more.js",
-      "js/39-flows.js", "js/39-circuit.js", "js/39-orbit.js", "js/39-design.js", "js/39-join.js", "js/39-starter.js", "js/39-house.js", "js/39-world.js", "js/39-styles.js", "js/39-types.js", "js/39-inside.js", "js/39-xray.js", "js/40-plants.js", "js/40-roofs.js", "js/40-texture.js", "js/40-units.js", "js/40-utility.js", "js/40-dock.js", "js/40-mix.js", "js/40-solar.js", "js/40-touch.js", "js/40-hood.js", "js/40-edit.js", "js/40-flat3d.js", "js/40-condos.js", "js/40-yard.js", "js/40-designs.js", "js/40-arrange.js", "js/40-land.js", "js/40-tour.js", "js/40-drag.js", "js/40-plan.js", "js/40-web.js", "js/40-things3d.js", "js/40-doors.js", "js/40-climb.js", "js/40-use3d.js", "js/40-edit3d.js", "js/40-grounds.js", "js/40-struct.js", "js/40-attic.js", "js/40-foliage.js", "js/40-systems.js", "js/40-towers.js", "js/40-rooms.js", "js/40-smooth.js", "js/40-work.js", "js/99-go.js"]
+      "js/39-flows.js", "js/39-circuit.js", "js/39-orbit.js", "js/39-design.js", "js/39-join.js", "js/39-starter.js", "js/39-house.js", "js/39-world.js", "js/39-styles.js", "js/39-types.js", "js/39-inside.js", "js/39-xray.js", "js/40-plants.js", "js/40-roofs.js", "js/40-texture.js", "js/40-units.js", "js/40-utility.js", "js/40-dock.js", "js/40-mix.js", "js/40-solar.js", "js/40-touch.js", "js/40-hood.js", "js/40-edit.js", "js/40-flat3d.js", "js/40-condos.js", "js/40-yard.js", "js/40-designs.js", "js/40-arrange.js", "js/40-land.js", "js/40-tour.js", "js/40-drag.js", "js/40-plan.js", "js/40-web.js", "js/40-things3d.js", "js/40-doors.js", "js/40-climb.js", "js/40-use3d.js", "js/40-edit3d.js", "js/40-grounds.js", "js/40-struct.js", "js/40-attic.js", "js/40-foliage.js", "js/40-systems.js", "js/40-towers.js", "js/40-rooms.js", "js/40-smooth.js", "js/40-sized.js", "js/40-oddrooms.js", "js/40-civic.js", "js/40-fronts.js", "js/40-kinds.js", "js/40-outside.js", "js/40-street.js", "js/40-panels.js", "js/40-parking.js", "js/40-storm.js", "js/40-styleart.js", "js/40-blueprint.js", "js/40-stormfx.js", "js/40-holds.js", "js/40-address.js", "js/40-fences.js", "js/40-firesafe.js", "js/40-access.js", "js/40-work.js", "js/99-go.js"]
 
 # Each part of the page carries a header saying what it is and that it is
 # one part of something; the page itself wants the part, not the header.
@@ -150,12 +150,32 @@ def clashes():
     seen, found = {}, []
     for name in JS:
         text = without_header(read_ui(name), JS_HEAD_END)
+        # A var inside an if or a for at the top of a part (not inside a
+        # function) is the shared function's too: two parts each keeping
+        # "the one before" under the same name inside `if (...) {` had the
+        # second overwrite the first's, and E in 3D called itself until the
+        # stack ran out (2026-10-03).  Each block opened at each depth is
+        # remembered as plain or a function's.
+        opened = {}
         for line in text.split("\n"):
+            bare = line.strip()
+            if not bare:
+                continue
+            depth = len(line) - len(line.lstrip(" "))
+            for k in [k for k in opened if k >= depth]:
+                del opened[k]
+            if bare.endswith("{"):
+                opened[depth] = "fn" if re.search(r"\bfunction\b|=>", bare) else "plain"
+            shared = depth > 2 and depth % 2 == 0 and all(
+                opened.get(k) == "plain" for k in range(2, depth, 2))
             got = re.match(r"^  (?:async\s+)?(function|var|let|const)\s+(.*)$",
                            line)
+            if not got and shared:
+                got = re.match(r"^\s+(var)\s+(.*)$", line)
             if not got:
                 continue
-            rest = got.group(2)
+            # (not the words of a comment after it: "{ path, at, phase }")
+            rest = re.sub(r"\s//.*$", "", got.group(2))
             if got.group(1) == "function":
                 words = re.findall(r"^([A-Za-z_$][\w$]*)", rest)
             else:               # var a, b = 1, c;  -- every name in the line

@@ -129,6 +129,20 @@
     var n = want[many] !== undefined ? +want[many] : one ? (want[one] ? 1 : 0) : 1;
     return Math.max(0, Math.min(most, Math.round(n) || 0));
   }
+  // ---- which way round ---------------------------------------------------------------
+  // (2026-10-03) A house of one floor: its bedrooms together along the back
+  // (as it was), split -- the main bedroom at one end, the rest at the
+  // other, the day rooms between -- or in a wing at one end, either side of
+  // the hall.  Of two floors: the bedrooms upstairs, or the main bedroom
+  // downstairs.  Asked (want.zones), or the seed's own ("any"): Shuffle
+  // then gives another plan, not the same one turned round.
+  var STARTER_ZONES = { one: ["together", "split", "wing"], two: ["together", "downstairs"] };
+  function starterZones(want, rnd, two) {
+    var list = STARTER_ZONES[two ? "two" : "one"], asked = want.zones;
+    var pick = list[Math.floor(rnd() * list.length) % list.length];
+    if (asked && asked !== "any") { return list.indexOf(asked) >= 0 ? asked : "together"; }
+    return pick;
+  }
   // ---- the house, laid out -----------------------------------------------------------
   // Each floor: { level, back: [...], front: [...] }, each room in a band
   // { kind, label, w } in metres, the main bedroom's own rooms a column
@@ -147,6 +161,9 @@
     }
     function width(band) { return band.reduce(function (s, r) { return s + r.w; }, 0); }
     var two = want.floors > 1;
+    // (2026-10-03: "creative layouts ... Shuffle must change a lot") which
+    // way round it is: as asked, or the seed's own (starterZones)
+    var zones = starterZones(want, rnd, two);
     var beds = [];
     for (var b = 0; b < want.beds; b++) {
       beds.push(it(b ? "bed" : "main", want.beds > 1 ? (b ? say("st_bed_n", { n: b + 1 }) : TXT.st_main) : ""));
@@ -188,6 +205,21 @@
       var chain = [living].concat(more.filter(function (r) { return r.kind === "family"; }), [kitchen],
                                   more.filter(function (r) { return r.kind === "kitchen"; }), [dining]).filter(Boolean);
       G.front = (office && rnd() < 0.5 ? [office].concat(chain) : chain.concat(office ? [office] : [])).concat(offices, laundries, laundry ? [laundry] : []);
+      var cooking = [kitchen].concat(more.filter(function (r) { return r.kind === "kitchen"; }), dining ? [dining] : []);
+      var sitting = [living].concat(more.filter(function (r) { return r.kind === "family"; }), office ? [office] : [], offices);
+      var utility = laundries.concat(laundry ? [laundry] : []);
+      if (zones === "split") {
+        // the main bedroom at one end, the other bedrooms at the other, the
+        // kitchen between them -- across the hall from the living room
+        G.back = suiteBlock.concat(cooking, rest);
+        G.front = sitting.concat(utility);
+      } else if (zones === "wing") {
+        // the bedrooms all at one end, either side of the hall; the day
+        // rooms at the other, by the garage
+        var half = Math.ceil(rest.length / 2);
+        G.back = suiteBlock.concat(rest.slice(0, half), cooking);
+        G.front = rest.slice(half).concat(sitting, utility);
+      }
       // the pantry after the kitchen, the mudroom at the end by the garage, the rest where the bands are shortest
       extra.day.concat(extra.up).forEach(function (r) {
         if (extraPut(G.front, r)) { return; }
@@ -199,7 +231,9 @@
       while (width(G.back) - width(G.front) > 3 && G.back.some(function (r) { return r.kind === "bed"; })) {
         var last = G.back.filter(function (r) { return r.kind === "bed"; }).pop();
         G.back.splice(G.back.indexOf(last), 1);
-        G.front.unshift(last);
+        // (in a bedroom wing, round to the wing's own end of the front)
+        if (zones === "wing") { G.front.splice(G.front.filter(function (r) { return r.kind === "bed" || r.kind === "bath"; }).length, 0, last); }
+        else { G.front.unshift(last); }
       }
       [office].concat(offices, laundries, [laundry]).forEach(function (r) {
         if (r && width(G.front) - width(G.back) > 3) { G.front.splice(G.front.indexOf(r), 1); G.back.push(r); }
@@ -207,9 +241,12 @@
     } else {
       // two: the kitchen at the back downstairs, the living room at the
       // front; the bedrooms upstairs, the stairs at the end of the hall
-      var U = { level: 1, back: [it("stairs", TXT.st_stairs)].concat(col && rnd() < 0.5 ? [col, main] : [main].concat(col ? [col] : [])), front: [] };
+      var mainBlock = col && rnd() < 0.5 ? [col, main] : [main].concat(col ? [col] : []);
+      var U = { level: 1, back: [it("stairs", TXT.st_stairs)].concat(zones === "downstairs" ? [] : mainBlock), front: [] };
       beds = starterShuffle(rnd, beds);
       G.back = [it("stairs", TXT.st_stairs), kitchen].concat(more.filter(function (r) { return r.kind === "kitchen"; }), dining ? [dining] : []);
+      // (a main bedroom downstairs, at the far end of the back from the stairs: the rest up)
+      if (zones === "downstairs") { G.back = G.back.concat(mainBlock.slice().reverse()); }
       G.front = [living].concat(more.filter(function (r) { return r.kind === "family"; }), office ? [office] : []);
       if (baths.length > 1) { (width(G.back) <= width(G.front) ? G.back : G.front).push(baths.shift()); }
       if (laundry) { G.front.push(laundry); }
@@ -232,6 +269,8 @@
       floors.push({ level: -1, back: [it("family", TXT.st_family)],
                     front: [it("stairs", TXT.st_stairs)].concat(starterShuffle(rnd, [it("utility", TXT.st_utility), it("storage", TXT.st_storage)])) });
     }
+    // (2026-10-03) a nook beside a room now and then, part of it (40-oddrooms.js)
+    if (typeof oddNooks === "function") { oddNooks(floors, want, rnd, it); }
     // (2026-10-03) a long house folded into more rows (starterFold)
     starterFold(floors, want, rnd, it, width, two);
     // as wide as the widest band; each band grown out to that, the floor
@@ -276,7 +315,11 @@
       });
       fill(f.front, whole || (f.level === 0 && want.garage));
     });
-    return { floors: floors, W: W, two: two };
+    // (a deeper front band, the living rooms broad, or a deeper back, the
+    // bedrooms -- the same on every floor, each over the other)
+    var skew = starterPick(rnd, [0, 0.4, 0.8, -0.4, 0.6]);
+    floors.forEach(function (f) { f.dF = skew; f.dB = skew < 0 ? -skew : -skew / 2; });
+    return { floors: floors, W: W, two: two, zones: zones };
   }
 
   // ---- a long house folded into more rows -----------------------------------------------------
@@ -339,14 +382,18 @@
     function bandOf(r) { return f.back.indexOf(r) >= 0 ? f.back : f.front; }
     all.forEach(function (r) {
       if (!r || held.has(r)) { return; }
+      if (r.kind === "suite" && r.nookHost) { return; }                                         // (with its room, below)
+      var band = bandOf(r), at = band.indexOf(r), unit = [r];
       if (r.kind === "main") {
-        var band = bandOf(r), at = band.indexOf(r), mate = band[at + 1] && band[at + 1].kind === "suite" ? band[at + 1]
-                 : band[at - 1] && band[at - 1].kind === "suite" ? band[at - 1] : null;
-        if (mate) { held.add(mate); held.add(r); units.push({ rooms: band.indexOf(mate) < at ? [mate, r] : [r, mate], kind: "main" }); return; }
-      }
-      if (r.kind === "suite" && all.some(function (m) { return m.kind === "main"; })) { return; }   // (with its bedroom)
+        var mate = band[at + 1] && band[at + 1].kind === "suite" && !band[at + 1].nookHost ? band[at + 1]
+                 : band[at - 1] && band[at - 1].kind === "suite" && !band[at - 1].nookHost ? band[at - 1] : null;
+        if (mate) { held.add(mate); unit.push(mate); }
+      } else if (r.kind === "suite" && all.some(function (m) { return m.kind === "main"; })) { return; }   // (with its bedroom)
+      // a nook beside its room, where it was
+      if (r.nookCol && band.indexOf(r.nookCol) >= 0) { held.add(r.nookCol); unit.push(r.nookCol); }
+      unit.sort(function (p, q) { return band.indexOf(p) - band.indexOf(q); });
       held.add(r);
-      units.push({ rooms: [r], kind: r.kind });
+      units.push({ rooms: unit, kind: r.kind });
     });
     function uw(u) { return width(u.rooms); }
     var total = units.reduce(function (t, u) { return t + uw(u); }, 0) + (up ? up.w : 0) + (down ? down.w : 0) + k * STARTER_HALL;
@@ -369,7 +416,8 @@
       function ends(pref) { mids.forEach(function (row) { if (!row.left) { out.push({ row: row, how: "left", pref: pref }); } if (!row.right) { out.push({ row: row, how: "right", pref: pref }); } }); }
       function middle(pref) { mids.forEach(function (row) { out.push({ row: row, how: "middle", pref: pref }); }); }
       if (u.kind === "living") { out.push({ row: front, how: "list", pref: 0 }); }
-      else if (u.kind === "main") { outer(); }
+      // (a room with a nook beside it, 40-oddrooms.js: on an outside row, the nook against its outside wall)
+      else if (u.kind === "main" || u.rooms.some(function (r) { return r.nookHost; })) { outer(); }
       else if (u.kind === "bed" || u.kind === "kitchen" || u.kind === "great") { outer(); ends(0.5); }
       else if (u.kind === "office" || u.kind === "dining" || u.kind === "family" || (typeof STARTER_OUTER === "object" && STARTER_OUTER[u.kind])) { outer(); ends(0.3); }     // (they want a window too)
       else { middle(0); outer(); out.forEach(function (o) { if (o.how === "list") { o.pref = 1.5; } }); }
@@ -412,7 +460,7 @@
     f.front = flat(fr);
     // each row inside: its ends, what is between, and the short hall across it somewhere along
     f.mid = rows.slice(1, -1).map(function (row) {
-      var middle = flat(row.middle), cross = { kind: "hall", label: "", w: STARTER_HALL, cross: true };
+      var middle = flat(row.middle), cross = { kind: "hall", label: TXT.st_hall, w: STARTER_HALL, cross: true };
       middle.splice(Math.floor(rnd() * (middle.length + 1)), 0, cross);
       return (row.left ? row.left.rooms : []).concat(middle, row.right ? row.right.rooms : []);
     });
@@ -446,7 +494,7 @@
       // (other buildings, 39-types.js: a room may open off another of its
       // own home's rather than the hall, be a way in from the street, or be
       // a stairwell's bay -- a flight up or down in it, or none)
-      if (spec) { n.starterId = spec.id; n.starterVia = spec.via; n.starterEntry = spec.entry; n.starterGo = spec.go; n.starterBay = spec.bay; }
+      if (spec) { n.starterId = spec.id; n.starterVia = spec.via; n.starterEntry = spec.entry; n.starterGo = spec.go; n.starterBay = spec.bay; n.starterNook = spec.nook; }
       n.home = [(x0 + x1) / 2, (y0 + y1) / 2];           // where it is put together
       n.x = n.home[0] + sx; n.y = n.home[1] + sy;        // and where on the paper
       made.push(n);
@@ -475,7 +523,7 @@
       // (each band as deep as the floor has it -- a shop's floor deeper
       // than a bedroom -- and the hall none at all where the building's
       // rooms open off each other, 39-types.js)
-      var Db = fp.Db || D, Df = fp.Df || D, Hh = fp.H === undefined ? H : fp.H;
+      var Db = fp.Db || D + (fp.dB || 0), Df = fp.Df || D + (fp.dF || 0), Hh = fp.H === undefined ? H : fp.H;
       // (a folded house, starterFold: rows between halls, each as deep as the rest)
       var mids = Hh > 0 ? fp.mid || [] : [], Dm = fp.Dm || D, Ys = Db + Hh + mids.length * (Dm + Hh);
       f.depth = Ys + Df;
@@ -511,7 +559,7 @@
           at += r.w;
         });
         f.mids.push(band);
-        f.halls.push(room(f, "hall", "", 0, X(y0 + Dm), X(wide), X(y0 + Dm + Hh), (across - 1) * G / 2, G * (2 * j + 2)));
+        f.halls.push(room(f, "hall", TXT.st_hall, 0, X(y0 + Dm), X(wide), X(y0 + Dm + Hh), (across - 1) * G / 2, G * (2 * j + 2)));
       });
       at = 0;
       fp.front.forEach(function (r, i) {
@@ -563,6 +611,14 @@
           else if (hall) { join(hall, r); }
         });
       });
+      // (a nook: part of the room it opens off, no wall between, 40-oddrooms.js)
+      every.forEach(function (r) {
+        if (!r.starterNook || !r.starterVia || !byId[r.starterVia] || typeof oddJoin !== "function") { return; }
+        // (which side meets its room, where they go together -- drawn apart, they may not meet on the paper)
+        var h = byId[r.starterVia], a = r.local, b = h.local;
+        var side = Math.abs(a[0] - b[2]) < 2 ? "left" : Math.abs(a[2] - b[0]) < 2 ? "right" : Math.abs(a[1] - b[3]) < 2 ? "top" : Math.abs(a[3] - b[1]) < 2 ? "foot" : null;
+        if (side) { oddJoin(h, r, side); }
+      });
       if (f.garage) {
         var end = f.front[f.front.length - 1];
         // (the laundry room only where its end is the garage's wall)
@@ -613,6 +669,8 @@
       links.push({ from: living.id, to: front.id, label: "" });
       fronts.push(front);
     });
+    // and a way out at the back, to the deck and the yard (40-outside.js)
+    if (typeof ybBackDoors === "function") { ybBackDoors(ground, ways, links, want, fronts); }
 
     // on the paper: beside anything already there, each floor beside the
     // last, in a Floor of its own where there is more than one or a lot
@@ -704,15 +762,34 @@
       ground.lot = lot;
     }
     // close up: each floor (and the lot with the ground floor) beside the last
-    cursor = right === -Infinity ? 140 : right + 240;
-    floors.forEach(function (f) {
+    // -- in rows, as many as bring the whole nearest a sheet 16 by 9: a
+    // tower's forty floors in one row were a strip the paper (4:3 or 16:9,
+    // 10-hand.js) was mostly empty round (2026-10-03)
+    var placing = floors.map(function (f) {
       var parts = f.box ? [f.box] : f.nodes;
       if (f.lot) { parts = parts.concat([f.lot]); }
-      var b = boxOf(parts);
-      var dx = cursor - b.l, dy = 160 - b.t;
+      var b0 = boxOf(parts);
+      return { f: f, parts: parts, w: b0.r - b0.l + 240, h: b0.b - b0.t + 240 };
+    });
+    var perRow = placing.length;
+    if (placing.length > 3) {
+      var wAll = 0, hMost = 0, bestErr = Infinity;
+      placing.forEach(function (p) { wAll += p.w; hMost = Math.max(hMost, p.h); });
+      for (var rowsN = 1; rowsN <= placing.length; rowsN++) {
+        var cols = Math.ceil(placing.length / rowsN), err = Math.abs(Math.log((wAll / placing.length * cols) / (hMost * rowsN) / (16 / 9)));
+        if (err < bestErr) { bestErr = err; perRow = cols; }
+      }
+    }
+    cursor = right === -Infinity ? 140 : right + 240;
+    var rowLeft = cursor, rowTop = 160, rowTall = 0;
+    placing.forEach(function (p, i) {
+      if (i && i % perRow === 0) { cursor = rowLeft; rowTop += rowTall + 240; rowTall = 0; }
+      var f = p.f, b = boxOf(p.parts);
+      var dx = cursor - b.l, dy = rowTop - b.t;
       shift(f, dx, dy);
       if (f.lot) { f.lot.x = Math.round(f.lot.x + dx); f.lot.y = Math.round(f.lot.y + dy); }
       cursor += b.r - b.l + 240;
+      rowTall = Math.max(rowTall, b.b - b.t);
     });
     tieSeen = { H: null, key: null, J: null };
     // (a roof over each room asked for in so many words: one piece is the plain way, 40-roofs.js)
@@ -789,7 +866,7 @@
             near = starterNear(r, 0).filter(function (n) { return n.kind === STARTER_BY[kind] && insideArea(r, n.x, n.y); })[0] || near;
           }
           if (kind === "i_tv") {
-            var sofa = starterNear(r, 0).filter(function (n) { return n.kind === "i_sofa" && insideArea(r, n.x, n.y); })[0];
+            var sofa = starterNear(r, 0).filter(function (n) { return (n.kind === "i_sofa" || n.kind === "i_sectional" || n.kind === "i_loveseat") && insideArea(r, n.x, n.y); })[0];
             if (sofa) { near = { x: 2 * r.x - sofa.x, y: 2 * r.y - sofa.y }; }
           }
           var put = starterAlong(r, kind, near);
@@ -913,7 +990,7 @@
     starterLast = made.map(function (r) { return { room: r, kind: r.starter }; });
     made.forEach(function (r) {
       delete r.starter; delete r.home; delete r.local;
-      delete r.starterId; delete r.starterVia; delete r.starterEntry; delete r.starterGo; delete r.starterBay;
+      delete r.starterId; delete r.starterVia; delete r.starterEntry; delete r.starterGo; delete r.starterBay; delete r.starterNook;
     });
     picked = null; chosen = null; many = [];
     starterShown(say("st_made", { rooms: made.length }));
@@ -961,22 +1038,39 @@
   // as near the middle as it can be and still clear of every door's swing
   // and of what stands there already (a rug is walked over, and may be under).
   function starterMid(r, kind) {
+    // (sized to the room, and turned along it: a table for two or for
+    // eight, a rug as big as the room has floor for -- furnFit, 40-sized.js)
+    var fit = typeof furnFit === "function" ? furnFit(r, kind) : null;
+    if (fit === false) { return null; }
+    if (fit) { kind = fit.kind; }
     var probe = { kind: kind, text: "", x: r.x, y: r.y, w: 140, h: 46 };
     measure(probe);
-    var flat = !!LIES_FLAT[kind], inner = 8 + roomWallOf(r);
+    if (fit) { probe.w = fit.w; probe.h = fit.h; }
+    var turn = fit && fit.turn ? fit.turn : 0;
+    var flat = !!LIES_FLAT[kind], inner = 8 + roomWallOf(r), clear = fit && fit.clear || 0;
     var others = starterNear(r, 130).filter(function (o) {
       return o !== r && !isArea(o.kind) && !ON_THE_WALL[o.kind] && o.kind !== "i_window" &&
              (WALK_DOORS[o.kind] || (!flat && !LIES_FLAT[o.kind]));
     });
+    var tw = turn % 180 ? probe.h : probe.w, th = turn % 180 ? probe.w : probe.h;
     for (var ring = 0; ring <= 8; ring++) {
       for (var k = 0; k < (ring ? 8 : 1); k++) {
         var a = k * Math.PI / 4, x = Math.round(r.x + Math.cos(a) * ring * 12), y = Math.round(r.y + Math.sin(a) * ring * 12);
-        var spot = { kind: kind, x: x, y: y, w: probe.w, h: probe.h };
-        if (!insideArea(r, x, y, Math.max(probe.w, probe.h) / 2 + inner)) { continue; }
-        if (others.some(function (o) { return boxesTouch(spot, o, WALK_DOORS[o.kind] ? 6 : 2); }) || starterFrontClash(spot, others)) { continue; }
-        return adviceAdd(kind, x, y);
+        var spot = { kind: kind, x: x, y: y, w: probe.w, h: probe.h, turn: turn };
+        if (fit) {
+          // its own box inside the room, the way round it lies, and the walk round it
+          var pad = inner + clear;
+          if (!insideArea(r, x - tw / 2, y - th / 2, pad) || !insideArea(r, x + tw / 2, y + th / 2, pad) ||
+              !insideArea(r, x - tw / 2, y + th / 2, pad) || !insideArea(r, x + tw / 2, y - th / 2, pad)) { continue; }
+        } else if (!insideArea(r, x, y, Math.max(probe.w, probe.h) / 2 + inner)) { continue; }
+        if (others.some(function (o) { return boxesTouch(spot, o, WALK_DOORS[o.kind] ? 6 + clear : 2 + clear); }) || starterFrontClash(spot, others)) { continue; }
+        var node = adviceAdd(kind, x, y, turn);
+        if (fit) { node.w = fit.w; node.h = fit.h; node.own = true; }
+        return node;
       }
     }
+    // (sized, and there was no room for it so: the next size down)
+    if (fit && fit.less) { return starterMid(r, fit.less); }
     return null;
   }
 
@@ -986,7 +1080,12 @@
   // (38-advice.js), looked along in finer steps, which a crowded small room
   // needs: in tens there was no room for a washer between two doors.
   function starterAlong(r, kind, near, extra) {     // (extra: more to keep clear of -- the doors as 3D joins them, 39-xray.js)
-    var icon = ICONS[kind], w = icon.box[0], h = icon.box[1], T = roomWallOf(r), b = tieBox(r), spots = [];
+    // (a bed, a sofa, a desk the size the room suits -- furnFit, 40-sized.js;
+    // false: the room has enough in it already)
+    var fit = typeof furnFit === "function" ? furnFit(r, kind, true) : null;
+    if (fit === false) { return null; }
+    if (fit) { kind = fit.kind; }
+    var icon = ICONS[kind], w = fit ? fit.w : icon.box[0], h = fit ? fit.h : icon.box[1], T = roomWallOf(r), b = tieBox(r), spots = [];
     // a bath lies along its wall, not out across the room
     var long = !!STARTER_LONG[kind] && h > w;
     if (long) { var was = w; w = h; h = was; }
@@ -1012,6 +1111,15 @@
       var q = turned(o);
       return { x0: o.x - q.w / 2 - FRAME, x1: o.x + q.w / 2 + FRAME, y0: o.y - q.h / 2 - FRAME, y1: o.y + q.h / 2 + FRAME, x: o.x, y: o.y };
     }) : [];
+    // (where the room goes on into the rest of itself, 40-oddrooms.js: no wall there)
+    var seams = typeof oddSeams === "function" ? oddSeams(r) : [];
+    function overSeam(e, at) {
+      return seams.some(function (sm) {
+        if (sm.edge !== e.name) { return false; }
+        var mid = e.across ? r.x : r.y;
+        return at + w / 2 > mid + sm.a - 3 && at - w / 2 < mid + sm.b + 3;
+      });
+    }
     function overOpening(e, at) {
       return openings.some(function (o) {
         if (Math.abs((e.across ? o.y : o.x) - e.line) > T + 30) { return false; }     // not in this wall
@@ -1022,19 +1130,25 @@
      { name: "foot", across: true, line: b.b, from: b.l, to: b.r, into: -1, turn: 180 },
      { name: "left", across: false, line: b.l, from: b.t, to: b.b, into: 1, turn: 270 },
      { name: "right", across: false, line: b.r, from: b.t, to: b.b, into: -1, turn: 90 }].forEach(function (e) {
+      // (as deep as the room is across from that wall, or not against it:
+      // a chaise three metres long went through the far side of a nook)
+      if ((e.across ? b.b - b.t : b.r - b.l) < h + 2 * T + 2) { return; }
       for (var at = e.from + T + w / 2 + 3; at <= e.to - T - w / 2 - 3; at += 4) {
         var off = e.line + e.into * (T + h / 2 + 1);
         var spot = { kind: kind, x: e.across ? at : off, y: e.across ? off : at, w: w, h: h, turn: e.turn,
                      put: long ? (e.turn + 90) % 360 : e.turn };
-        if (!overOpening(e, at) && !others.some(function (o) { return boxesTouch(spot, o, 3); }) &&
-            !starterFrontClash({ kind: kind, x: spot.x, y: spot.y, w: ICONS[kind].box[0], h: ICONS[kind].box[1], turn: spot.put }, others)) { spots.push(spot); }
+        if (!overOpening(e, at) && !overSeam(e, at) && !(fit && fit.ok && !fit.ok(spot)) && !others.some(function (o) { return boxesTouch(spot, o, 3); }) &&
+            !starterFrontClash({ kind: kind, x: spot.x, y: spot.y, w: fit ? fit.w : ICONS[kind].box[0], h: fit ? fit.h : ICONS[kind].box[1], turn: spot.put }, others)) { spots.push(spot); }
       }
     });
-    if (!spots.length) { return null; }
+    if (!spots.length) { return fit && fit.less ? starterAlong(r, fit.less, near, extra) : null; }
     var aim = near || { x: r.x, y: r.y };
     spots.sort(function (p, q) { return Math.hypot(p.x - aim.x, p.y - aim.y) - Math.hypot(q.x - aim.x, q.y - aim.y); });
     var s0 = spots[0];
-    return function () { adviceAdd(kind, Math.round(s0.x), Math.round(s0.y), s0.put); };
+    return function () {
+      var node = adviceAdd(kind, Math.round(s0.x), Math.round(s0.y), s0.put);
+      if (fit) { node.w = fit.w; node.h = fit.h; node.own = true; }
+    };
   }
 
   // ---- what is near a room, quickly -------------------------------------------------------------
@@ -1074,7 +1188,7 @@
   }
 
   var STARTER_CORNER = { i_bathtub: true, i_shower: true, i_wardrobe: true, i_fridge: true, i_workbench: true,
-                         i_closetrod: true, i_bookcase: true, i_washer: true, i_bed: true, i_bedking: true,
+                         i_closetrod: true, i_bookcase: true, i_washer: true, i_bed: true, i_bedking: true, i_bed1: true,
                          i_counter: true };
   var STARTER_BY = { i_kitchensink: "i_counter", i_stove: "i_counter", i_dishwasher: "i_kitchensink", i_dryer: "i_washer",
                      i_toilet: "i_bathtub", i_desk: "i_window" };
@@ -1135,7 +1249,7 @@
                           // (a room in the middle of a folded house has no window: a light of its own)
                           laundry: "i_pendant", utility: "i_pendant" };
   var STARTER_WALLS = { living: [["i_picture", "i_sofa"], ["i_picture", null]], family: [["i_picture", "i_sectional|i_sofa"]],
-                        main: [["i_picture", "i_bedking"]], bed: [["i_picture", "i_bed"]], dining: [["i_picture", null]],
+                        main: [["i_picture", "i_bedking|i_bed"]], bed: [["i_picture", "i_bed|i_bed1"]], dining: [["i_picture", null]],
                         hall: [["i_picture", null], ["i_picture", null]], kitchen: [["i_wallclock", null]], great: [["i_wallclock", null]],
                         bath: [["i_mirror", "i_vanity|i_sink"]], ensuite: [["i_mirror", "i_sink"]], office: [["i_shelf", "i_desk"]] };
   var STARTER_VENTED = { living: 1, family: 1, main: 1, bed: 1, office: 1, kitchen: 1, dining: 1, great: 1, bath: 1, ensuite: 1, laundry: 1, hall: 1 };
@@ -1149,7 +1263,7 @@
       // on the ceiling: over the table where there is one, else the middle
       var hang = STARTER_CEILING[kind];
       // (a small room of another building -- a restroom, a stockroom -- a light all the same, 39-types.js)
-      if (hang && ICONS[hang] && Math.min(r.w, r.h) >= ((r.use || kind === "laundry" || kind === "utility" || kind === "pantry" || kind === "mudroom") && hang === "i_pendant" ? 1.4 : 2.6) * P) {
+      if (hang && ICONS[hang] && Math.min(r.w, r.h) >= ((r.use || kind === "laundry" || kind === "utility" || kind === "pantry" || kind === "mudroom" || (typeof ODD_SMALL === "object" && ODD_SMALL[kind])) && hang === "i_pendant" ? 1.4 : 2.6) * P) {
         var over = (hang === "i_chandelier" && inRoom("i_dining|i_roundtable")) || null;
         adviceAdd(hang, Math.round(over ? over.x : r.x), Math.round(over ? over.y : r.y));
       }
@@ -1209,7 +1323,7 @@
   // The bed in a room, for the nightstands to go beside.
   function starterBedOf(room) {
     return hand.nodes.filter(function (n) {
-      return (n.kind === "i_bed" || n.kind === "i_bedking") && insideArea(room, n.x, n.y);
+      return (n.kind === "i_bed" || n.kind === "i_bedking" || n.kind === "i_bed1") && insideArea(room, n.x, n.y);
     })[0] || null;
   }
 
@@ -1234,7 +1348,7 @@
     var D = starterPick(rnd, [STARTER_BAND, STARTER_BAND + 0.2, STARTER_BAND + 0.4]) * starterDeep(want), flip = rnd() < 0.5;
     var out = [];
     plan.floors.forEach(function (fp) {
-      var rooms = [], Db = fp.Db || D, Df = fp.Df || D, Hh = fp.H === undefined ? H : fp.H;
+      var rooms = [], Db = fp.Db || D + (fp.dB || 0), Df = fp.Df || D + (fp.dF || 0), Hh = fp.H === undefined ? H : fp.H;
       function put(kind, label, x0, y0, x1, y1) {
         if (flip) { var was = x0; x0 = -x1; x1 = -was; }
         rooms.push({ kind: kind, label: label, x0: x0, y0: y0, x1: x1, y1: y1 });
@@ -1454,6 +1568,21 @@
           tile(TXT["lay_" + m[0]], "lay_" + m[0], function () { return !!want.open === m[1] && !!want.openPlan === m[2]; },
                function () { want.open = m[1]; want.openPlan = m[2]; }, true);
         });
+        // (2026-10-03) which way round: the bedrooms together, split, in a
+        // wing -- or the main bedroom downstairs in a house of two floors;
+        // Any, the seed's choice, another each Shuffle (starterZones)
+        head(TXT.zn_head);
+        tiles();
+        // (all of them there, those a house of so many floors cannot have hidden
+        // as the floors are chosen: a tile chosen is not the page drawn again)
+        var fits = function (z) { return z === "any" || STARTER_ZONES[want.floors > 1 ? "two" : "one"].indexOf(z) >= 0; };
+        ["any", "together", "split", "wing", "downstairs"].forEach(function (z) {
+          tile(TXT["zn_" + z], "zn_" + z, function () { return fits(z) && ((want.zones || "any") === z || (z === "any" && !fits(want.zones || "any"))); },
+               function () { want.zones = z; }, true);
+          var b = grid.lastChild, was = b.refresh;
+          b.refresh = function () { was(); b.style.display = fits(z) ? "" : "none"; };
+          b.refresh();
+        });
         head(TXT.st_extras_head);
         tiles();
         // (an office and a laundry room are counted above now)
@@ -1485,6 +1614,8 @@
       // (39-xray.js) outlets, switches and a breaker panel, put where the code puts them
       if (typeof wireHouse === "function") { tile(TXT.xr_wire_tile, "xr_power", function () { return !!want.wire; }, function () { want.wire = !want.wire; }); }
       if (typeof typeStyleRow === "function") { typeStyleRow(pick, want, function () { redraw(); }); }
+      // where it stands, and what is out of doors -- the 3D view's, asked now (40-street.js)
+      if (typeof siteAsk === "function") { siteAsk({ head: head, tiles: tiles, tile: tile }, want); }
     }
     // the house, drawn as it will be made
     function redraw() {
@@ -1513,6 +1644,7 @@
     yes.onclick = function () {
       var keep = Object.assign({}, want);
       delete keep.seed;                    // the choices kept; the seed new next time
+      delete keep.site;                    // (where it stands: the view's own next time, 40-street.js)
       starterWant = keep;
       try { localStorage.setItem("flowchart-starter", JSON.stringify(keep)); } catch (e) { /* this visit only */ }
       shut();

@@ -684,6 +684,8 @@
       // Another like it -- colors and all, which it used to leave behind.
       // (Turning it is the round handle over it now, 13-hand-turn.js.)
       { icon: "another", name: TXT.m_copy, go: function () { duplicateShapes([node.id]); } },
+      // (a room that is part of another, or has parts: apart again, 40-oddrooms.js)
+      typeof oddRow === "function" ? oddRow([node.id]) : null,
       "-",
       plainRow(which, mine),
       { icon: "format", name: TXT.m_format, go: formatPicked },  // 07-sides.js

@@ -785,18 +785,38 @@
   // A table's top, and under it legs -- four, or one in the middle for a
   // round one -- with the chairs round it the plan draws.
   function mTableTop(M, x0, x1, y0, y1, z, thick, m, r) { M.box(x0, x1, y0, y1, z - thick, z, m, r === undefined ? 0.8 * cm : r); }
+  // (2026-10-03: "furniture sized to the room ... a 2 seat table vs a 6 or
+  // 8 seat") A table seats as many as it is long enough for: a place 72 cm
+  // wide along each long side, and one at each end once it is a metre long
+  // -- two across a little one, eight down one of 2.4 m.  The plan draws
+  // the same chairs (03-icon-art.js), so a table drawn longer by hand
+  // gets more of them.  In paper pixels, centred; `deg` the way each faces.
+  function furnSeats(W, D) {
+    var k = Math.min(1, D / 64, W / 60), inset = 9 * k, cw = 20 * k, cd = 14 * k;
+    var L = W - 2 * inset, side = Math.max(1, Math.floor(L / (36 * k) + 0.02)), chairs = [];
+    for (var i = 0; i < side; i++) {
+      var x = -L / 2 + (i + 0.5) * L / side;
+      chairs.push({ x: x, y: -D / 2 + cd / 2, deg: 0, end: false }, { x: x, y: D / 2 - cd / 2, deg: 180, end: false });
+    }
+    if (L >= 50 * k && D - 2 * inset >= 30 * k) {
+      chairs.push({ x: -W / 2 + cd / 2, y: 0, deg: -90, end: true }, { x: W / 2 - cd / 2, y: 0, deg: 90, end: true });
+    }
+    return { inset: inset, cw: cw, cd: cd, chairs: chairs };
+  }
   mDef("i_dining", function (M, W, D, H, C) {
     C = mPick(C, "#c9b8a0", "#8a6240");
-    var wood = M.mat("wood", C.frame), sx = W / 100, sy = D / 80;
-    var tx0 = -W / 2 + 9 * sx, tx1 = W / 2 - 9 * sx, ty0 = -D / 2 + 9 * sy, ty1 = D / 2 - 9 * sy;
+    var wood = M.mat("wood", C.frame), S = furnSeats(W, D);
+    var tx0 = -W / 2 + S.inset, tx1 = W / 2 - S.inset, ty0 = -D / 2 + S.inset, ty1 = D / 2 - S.inset;
     mTableTop(M, tx0, tx1, ty0, ty1, H, 3.5 * cm, wood);
     M.box(tx0 + 4 * cm, tx1 - 4 * cm, ty0 + 4 * cm, ty1 - 4 * cm, H - 12 * cm, H - 3.5 * cm, wood);
     mLegs(M, tx0, tx1, ty0, ty1, 4 * cm, 0, H - 3.5 * cm, 2.6 * cm, wood, false);
-    var cw = 20 * sx, cd = Math.max(cw * 0.95, 14 * sy);
-    // the chairs the plan draws: two along each long side, one at each end
-    [[-23 * sx, -D / 2 + cd / 2, 0], [23 * sx, -D / 2 + cd / 2, 0], [-23 * sx, D / 2 - cd / 2, 180], [23 * sx, D / 2 - cd / 2, 180],
-     [-W / 2 + cd / 2, 0, -90], [W / 2 - cd / 2, 0, 90]].forEach(function (c) {
-      mChair(M, c[0], c[1], c[2], cw, cd, C, "pad");
+    // a long table a leg in the middle of each side as well, as a trestle has
+    if (tx1 - tx0 > 200 * cm) {
+      [ty0 + 4 * cm, ty1 - 4 * cm].forEach(function (y) { M.box(-2.6 * cm, 2.6 * cm, y - 2.6 * cm, y + 2.6 * cm, 0, H - 3.5 * cm, wood); });
+    }
+    var cw = S.cw, cd = Math.max(cw * 0.95, S.cd);
+    S.chairs.forEach(function (c) {
+      mChair(M, c.x, c.end ? 0 : (c.y < 0 ? -D / 2 + cd / 2 : D / 2 - cd / 2), c.deg, cw, cd, C, "pad");
     });
   });
   mDef("i_roundtable", function (M, W, D, H, C) {

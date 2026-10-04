@@ -309,8 +309,12 @@
       var f = floors.length ? floorAt(floors, n.x, n.y) : null;
       if (f && f.z > top) { return; }
       var x = n.x + (f ? f.dx : 0), y = n.y + (f ? f.dy : 0), q = turned(n);
-      if (Math.abs((across ? y : x) - line) > 0.35 * P) { return; }
-      var half = (across ? q.w : q.h) / 2, mid = across ? x : y;
+      // (a door's box is mostly the floor it swings over, its middle half a
+      // metre in from its wall: kept to 35 cm of the line, no door was ever
+      // in the way, and downpipes came down through the middle of them)
+      var deep = WALK_DOORS[n.kind] ? (across ? q.h : q.w) / 2 : 0;
+      if (Math.abs((across ? y : x) - line) > 0.35 * P + deep) { return; }
+      var half = (across ? q.w : q.h) / 2 + (WALK_DOORS[n.kind] ? 0.12 * P : 0), mid = across ? x : y;
       out.push({ lo: mid - half, hi: mid + half });
     });
     return out;
@@ -819,6 +823,12 @@
     lay_semi: '<rect x="2.6" y="3.4" width="14.8" height="13.2" rx="1"/><path d="M10 3.4v4.4M10 10.4v6.2M2.6 10h4.6"/>',
     lay_open: '<rect x="2.6" y="3.4" width="14.8" height="13.2" rx="1"/><path d="M10 13.2v3.4M7 10h.01M13 10h.01"/>',
     lay_great: '<rect x="2.6" y="3.4" width="14.8" height="13.2" rx="1"/><path d="M5.6 12.6h4M12.4 7.4l2 2-2 2"/>',
+    // (the plans, Start building: a house's two bands and its hall, a bed where the bedrooms are)
+    zn_any: '<rect x="2.6" y="3.4" width="14.8" height="13.2" rx="1"/><path d="M2.6 8.8h14.8M2.6 11.2h14.8M6.4 6.2h2.2c1.6 0 1.8 7.6 3.6 7.6h1.6M6.4 13.8h2.2c.5 0 .9-.6 1.2-1.4M11.4 7.6c.4-.9.8-1.4 1.2-1.4h1.6"/>',
+    zn_together: '<rect x="2.6" y="3.4" width="14.8" height="13.2" rx="1"/><path d="M2.6 8.8h14.8M2.6 11.2h14.8M7.6 3.4v5.4M12.4 3.4v5.4M4 7.4h2.2M9 7.4h2.2M13.8 7.4H16"/>',
+    zn_split: '<rect x="2.6" y="3.4" width="14.8" height="13.2" rx="1"/><path d="M2.6 8.8h14.8M2.6 11.2h14.8M7.6 3.4v5.4M12.4 3.4v5.4M4 7.4h2.2M13.8 7.4H16"/>',
+    zn_wing: '<rect x="2.6" y="3.4" width="14.8" height="13.2" rx="1"/><path d="M2.6 8.8h14.8M2.6 11.2h14.8M8.4 3.4v5.4M8.4 11.2v5.4M4 7.4h3M4 15.2h3"/>',
+    zn_downstairs: '<path d="M3 8.2 10 2.8l7 5.4M4.6 7v9.4h10.8V7M4.6 11.4h10.8M6.4 15h4.4M6.4 15v-1.6h1.8"/>',
     living: '<path d="M3.6 10V7.6a1.6 1.6 0 0 1 1.6-1.6h9.6a1.6 1.6 0 0 1 1.6 1.6V10"/><path d="M2.6 10.4a1.4 1.4 0 0 1 2.8 0v1.6h9.2v-1.6a1.4 1.4 0 0 1 2.8 0v4.2H2.6z"/><path d="M4.4 14.6v1.6M15.6 14.6v1.6"/>',
     office: '<path d="M2.6 9h14.8M4.4 9v7.4M15.6 9v7.4M6 9V3.6h8V9M8.6 12h2.8"/>',
     laundry: '<rect x="4" y="3" width="12" height="14" rx="1.6"/><circle cx="10" cy="11" r="3.4"/><path d="M6.4 5.6h1.4M10 5.6h3.6"/>',
@@ -951,6 +961,8 @@
         };
         strip.appendChild(b);
       });
+      // (its own close button, 40-panels.js)
+      if (typeof pnCloser === "function") { strip.appendChild(pnCloser('[data-v3="set"]')); }
       sheet.appendChild(strip);
       if (tab === "house") {
         if (typeof styleSection === "function") { styleSection(sheet, head, draw); }
@@ -992,6 +1004,8 @@
         head(TXT.wl_head);
         var lamps = worldPicker(sheet, WORLD_LAMPS, worldLampKind(), "wl_", function (k) { houseSetOpt("lamps", k); draw(); });
         if (noStreet) { all("button", lamps).forEach(function (b) { b.disabled = true; b.title = noStreet; }); }
+        // which side of it the lot is on, and its shape (40-street.js)
+        if (typeof streetSection === "function") { streetSection(sheet, head, draw, noStreet); }
         sheet.scrollTop = keepScroll;
         return;
       }
@@ -1021,6 +1035,8 @@
         p.lastChild.textContent = says;
         sheet.appendChild(p);
       }
+      // tried against a storm, and what holds it together (40-storm.js)
+      if (typeof stormSection === "function") { stormSection(sheet, head, tiles, draw); }
     }
     btn.onclick = function (ev) {
       ev.stopPropagation();

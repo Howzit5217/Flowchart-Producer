@@ -107,6 +107,16 @@
     return out.join("");
   }
 
+  // One drawn at the size it is, each size worked out once.
+  function iconFitParts(icon, w, h) {
+    var key = Math.round(w) + "x" + Math.round(h), done = icon.sized || (icon.sized = new Map());
+    if (!done.has(key)) {
+      if (done.size > 300) { done.clear(); }
+      done.set(key, iconParts(icon.art(w, h)));
+    }
+    return done.get(key);
+  }
+
   function iconMade(kind) {
     var icon = ICONS[kind];
     if (!icon.parts && typeof icon.art !== "function") { icon.parts = iconParts(icon.art); }
@@ -121,7 +131,7 @@
   function iconFrame(kind, cx, cy, w, h, words, line) {
     var icon = ICONS[kind], l = cx - w / 2, t = cy - h / 2;
     var bw = icon.box[0], bh = icon.box[1];
-    if (icon.area) { return { sx: 1, sy: 1, ox: l, oy: t }; }
+    if (icon.area || icon.fit) { return { sx: 1, sy: 1, ox: l, oy: t }; }
     if (!icon.fig) { return { sx: w / bw, sy: h / bh, ox: l, oy: t }; }
     var named = saidSomething(words) ? nameRoom(words, line) : 0;
     var room = Math.max(8, h - named);
@@ -135,7 +145,7 @@
     var icon = iconMade(kind), paint = fill || "#ffffff";
     var l = cx - w / 2, t = cy - h / 2;
     var at = iconFrame(kind, cx, cy, w, h, words, line);
-    var parts = icon.parts || iconParts(icon.art(w, h));
+    var parts = icon.parts || (icon.fit ? iconFitParts(icon, w, h) : iconParts(icon.art(w, h)));
     // A pane of clear glass over the whole box, as a words-only shape has,
     // so the space round a figure or inside a door's swing takes a click.
     var out = ['<rect class="ghost" x="' + iconR(l) + '" y="' + iconR(t) + '" width="' + iconR(w) +
@@ -155,15 +165,17 @@
     // A room says how big it is under its name, the way a plan does -- and,
     // labeled and given no name, what it is by what is in it.
     var mine = iconNode && iconNode.kind === kind ? iconNode : null, said = saidSomething(words);
-    var called = kind === "i_room" && mine && !said && planLabelsOn() ? roomLabel(mine) : null;
+    // (a part of another room, 40-oddrooms.js: named, and its size said, by the room it is part of)
+    var part = !!(mine && kind === "i_room" && mine.partOf !== undefined);
+    var called = kind === "i_room" && mine && !said && !part && planLabelsOn() ? roomLabel(mine) : null;
     if (called && w >= 70 && h >= 50) {
       out.push(labelArt(called, cx, cy - 4, mine.turn, "tag room-tag"));
     }
-    if (kind === "i_room" && w >= 90 && h >= 70) {
+    if (kind === "i_room" && w >= 90 && h >= 70 && !part) {
       var below = said ? words.length * line / 2 + 13 : called ? 14 : 4;
       out.push('<text class="sized" x="' + iconR(cx) + '" y="' + iconR(cy + below) +
                '" text-anchor="middle" font-size="80%" opacity="0.6" stroke="none" fill="#000000">' +
-               escaped(floorSays(w, h)) + "</text>");
+               escaped(mine && typeof oddArea === "function" ? oddArea(mine, w, h) : floorSays(w, h)) + "</text>");
       if (mine && planSizesOn() && w >= 120 && h >= 90) {
         out.push('<text class="sized" x="' + iconR(cx) + '" y="' + iconR(cy + below + 12) +
                  '" text-anchor="middle" font-size="68%" opacity="0.55" stroke="none" fill="#000000">' +

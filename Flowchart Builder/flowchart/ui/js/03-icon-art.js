@@ -108,6 +108,8 @@
     function figure(kind, art) { made[kind] = { box: [48, 48], fig: true, art: art }; }
     function plan(kind, w, h, art) { made[kind] = { box: [w, h], art: art }; }
     function area(kind, w, h, art) { made[kind] = { box: [w, h], area: true, art: art }; }
+    // drawn afresh at the size it is (the parts as many as there is room for)
+    function fitted(kind, w, h, art) { made[kind] = { box: [w, h], fit: true, art: art }; }
 
     // ------------------------------------------------------ people at work --
     figure("i_person", person());
@@ -315,16 +317,29 @@
     plan("i_crib", 40, 70, ["o " + R(0, 0, 40, 70, 2), "t " + R(3, 3, 34, 64, 1),
       "t M3 12 H0 M3 22 H0 M3 32 H0 M3 42 H0 M3 52 H0 M3 62 H0 M37 12 H40 M37 22 H40 M37 32 H40 M37 42 H40 M37 52 H40 M37 62 H40",
       "o " + R(10, 7, 20, 10, 3)]);
-    plan("i_sofa", 100, 40, ["o " + R(0, 0, 100, 40, 5), "o " + R(0, 0, 100, 11, 4),
-                             "o " + R(0, 0, 11, 40, 4), "o " + R(89, 0, 11, 40, 4),
-                             "t M37 11 V40 M63 11 V40"]);
+    // (its seats as many as the 3D one has, mSofa: a short one two, a long one four)
+    fitted("i_sofa", 100, 40, function (w, h) {
+      var arm = Math.min(w * 0.11, 11), back = Math.min(h * 0.275, 11), inner = w - 2 * arm;
+      var seats = Math.max(1, Math.min(4, Math.round(inner / 31))), cuts = [];
+      for (var i = 1; i < seats; i++) { cuts.push("M" + n2(arm + inner * i / seats) + " " + n2(back) + " V" + n2(h)); }
+      var out = ["o " + R(0, 0, w, h, 5), "o " + R(0, 0, w, back, 4), "o " + R(0, 0, arm, h, 4), "o " + R(w - arm, 0, arm, h, 4)];
+      if (cuts.length) { out.push("t " + cuts.join(" ")); }
+      return out;
+    });
     plan("i_armchair", 40, 40, ["o " + R(0, 0, 40, 40, 5), "o " + R(0, 0, 40, 11, 4),
                                 "o " + R(0, 0, 9, 40, 3), "o " + R(31, 0, 9, 40, 3)]);
     plan("i_chair", 30, 30, ["o " + R(3, 6, 24, 22, 3), "o " + R(2, 0, 26, 7, 2)]);
-    plan("i_dining", 100, 80, ["o " + R(17, 0, 20, 14, 3), "o " + R(63, 0, 20, 14, 3),
-                               "o " + R(17, 66, 20, 14, 3), "o " + R(63, 66, 20, 14, 3),
-                               "o " + R(0, 30, 14, 20, 3), "o " + R(86, 30, 14, 20, 3),
-                               "o " + R(9, 9, 82, 62, 2)]);
+    // (a table's chairs are as many as its length seats -- furnSeats,
+    // 38-models.js -- so it is drawn at the size it is, not stretched)
+    fitted("i_dining", 100, 80, function (w, h) {
+      var S = furnSeats(w, h), out = [];
+      S.chairs.forEach(function (c) {
+        var cw = c.end ? S.cd : S.cw, ch = c.end ? S.cw : S.cd;
+        out.push("o " + R(w / 2 + c.x - cw / 2, h / 2 + c.y - ch / 2, cw, ch, 3));
+      });
+      out.push("o " + R(S.inset, S.inset, w - 2 * S.inset, h - 2 * S.inset, 2));
+      return out;
+    });
     plan("i_roundtable", 80, 80, ["o " + R(30, 0, 20, 14, 3), "o " + R(30, 66, 20, 14, 3),
                                   "o " + R(0, 30, 14, 20, 3), "o " + R(66, 30, 14, 20, 3),
                                   "o " + C(40, 40, 29)]);
@@ -574,6 +589,25 @@
     plan("i_floodlight", 22, 12, ["o " + R(8, 0, 6, 3, 0.5), "o M3 4.5 H19 L22 12 H0 Z", "t M5 8 H17"]);
     plan("i_mailbox", 20, 14, ["o " + R(0, 0, 20, 14, 5), "t M6 7 H14", "k " + R(15, 1.5, 3, 5, 0.5)]);
     plan("i_bikerack", 80, 40, ["o " + R(6, 16, 68, 8, 2), "t2 M14 2 V38 M30 2 V38 M46 2 V38 M62 2 V38"]);
+    // (2026-10-03) put out by every building: the bins, the air conditioner's unit, a dumpster
+    plan("i_bins", 62, 36, ["o " + R(0, 5, 29, 31, 3) + " " + R(33, 5, 29, 31, 3), "o " + R(0, 0, 29, 6, 1.5) + " " + R(33, 0, 29, 6, 1.5),
+                            "t M47.5 14 L53 23 H42 Z"]);
+    plan("i_condenser", 40, 40, ["o " + R(0, 0, 40, 40, 3), "o " + C(20, 20, 14), "t M20 6 V34 M6 20 H34", "k " + C(20, 20, 3)]);
+    // a parking lot, its stalls as many as its size holds (parkLayout, 40-parking.js);
+    // a pavilion; half a basketball court
+    fitted("i_parking", 520, 605, function (w, h) {
+      var out = ["o " + R(0, 0, w, h, 2)], S = typeof parkLayout === "function" ? parkLayout(w, h) : null, d = "";
+      if (S) {
+        S.rows.forEach(function (r) { for (var i = 0; i <= S.n; i++) { var x = S.x0 + i * S.sw; d += "M" + n2(x) + " " + n2(r.y0) + " V" + n2(r.y1) + " "; } });
+      }
+      if (d) { out.push("t " + d.trim()); }
+      return out;
+    });
+    plan("i_pavilion", 300, 200, ["o " + R(0, 0, 300, 200, 2), "t M0 0 L75 100 H225 L300 0 M0 200 L75 100 M225 100 L300 200",
+                                  "k " + R(10, 10, 12, 12, 1) + " " + R(144, 10, 12, 12, 1) + " " + R(278, 10, 12, 12, 1) + " " +
+                                  R(10, 178, 12, 12, 1) + " " + R(144, 178, 12, 12, 1) + " " + R(278, 178, 12, 12, 1)]);
+    plan("i_court", 750, 700, ["o " + R(0, 0, 750, 700, 2), "t M253 0 V290 H497 V0 M38 0 V80 A337 337 0 0 0 712 80 V0 M0 700 H750", "k " + C(375, 80, 12)]);
+    plan("i_dumpster", 92, 62, ["o " + R(0, 6, 92, 56, 3), "o " + R(2, 0, 43, 8, 1.5) + " " + R(47, 0, 43, 8, 1.5), "t M46 12 V58 M8 34 H84"]);
     // garage and utility
     plan("i_workbench", 120, 60, ["o " + R(0, 0, 120, 60, 1), "t M0 8 H120", "o " + R(6, 14, 24, 16, 2), "t " + R(82, 18, 30, 34, 1), "t M82 30 H112 M82 41 H112"]);
     plan("i_shelving", 100, 40, ["o " + R(0, 0, 100, 40, 0), "t M0 10 H100 M0 20 H100 M0 30 H100",
@@ -634,6 +668,8 @@
     plan("i_deck", 150, 100, ["o " + R(0, 0, 150, 100, 0), "t M0 10 H150 M0 20 H150 M0 30 H150 M0 40 H150 M0 50 H150 " +
                               "M0 60 H150 M0 70 H150 M0 80 H150 M0 90 H150"]);
     plan("i_fence", 150, 8, ["t2 M0 4 H150", "k " + R(0, 1, 6, 6, 0) + " " + R(48, 1, 6, 6, 0) + " " + R(96, 1, 6, 6, 0) + " " + R(144, 1, 6, 6, 0)]);
+    // (2026-10-03) a gate in a fence: its posts, its leaf, its latch (40-fences.js)
+    plan("i_gate", 60, 10, ["k " + R(0, 1, 8, 8, 0) + " " + R(52, 1, 8, 8, 0), "o " + R(9, 3, 42, 4, 1), "t M19 3 V7 M30 3 V7 M41 3 V7", "k " + C(47, 5, 1.2)]);
     plan("i_hedge", 100, 20, ["o M0 10 C0 3 6 0 12 2 C17 -1 24 -1 28 2 C33 -1 40 -1 44 2 C49 -1 56 -1 60 2 C65 -1 72 -1 76 2 " +
                               "C81 -1 88 -1 92 2 C98 1 100 5 100 10 C100 15 98 19 92 18 C88 21 81 21 76 18 C72 21 65 21 60 18 " +
                               "C56 21 49 21 44 18 C40 21 33 21 28 18 C24 21 17 21 12 18 C6 20 0 17 0 10 Z", "t M8 10 H92"]);
@@ -925,7 +961,8 @@
     ["ic_outdoor", ["i_lot", "i_driveway", "i_path", "i_deck", "i_fence", "i_hedge", "i_flowerbed",
                     "i_parked", "i_shrub", "i_grill", "i_pool", "i_patio", "i_gardenbench", "i_hottub",
                     "i_dogbed", "i_cattree", "i_firepit", "i_lounger", "i_gazebo", "i_shed", "i_planter",
-                    "i_birdbath", "i_lamppost", "i_pathlight", "i_porchlight", "i_floodlight", "i_mailbox", "i_bikerack"]],
+                    "i_birdbath", "i_lamppost", "i_pathlight", "i_porchlight", "i_floodlight", "i_mailbox", "i_bikerack",
+                    "i_bins", "i_condenser", "i_dumpster", "i_parking", "i_pavilion", "i_court", "i_gate"]],
     ["ic_fitness", ["i_treadmill", "i_exbike", "i_weightbench", "i_yogamat", "i_pooltable", "i_pingpong",
                     "i_dartboard", "i_easel", "i_trampoline", "i_swing"]],
     ["ic_store", ["i_gondola", "i_checkout", "i_cooler", "i_display", "i_register", "i_counter", "i_shelving",

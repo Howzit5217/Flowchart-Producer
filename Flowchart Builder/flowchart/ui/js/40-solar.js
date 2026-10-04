@@ -165,6 +165,8 @@
         }
       }
     } catch (e) { /* no chimney to keep from */ }
+    // (and a chimney over every fireplace, 40-outside.js)
+    try { if (typeof flueKeepOff === "function") { flueKeepOff().forEach(function (k) { off.push(k); }); } } catch (e) { /* none */ }
     function fits(pts) {
       var b = [Infinity, -Infinity, Infinity, -Infinity];
       pts.forEach(function (p) { b[0] = Math.min(b[0], p[0]); b[1] = Math.max(b[1], p[0]); b[2] = Math.min(b[2], p[1]); b[3] = Math.max(b[3], p[1]); });

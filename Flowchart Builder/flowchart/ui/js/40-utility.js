@@ -43,9 +43,11 @@
       else if (WALK_DOORS[n.kind] && n.kind !== "i_garagedoor") { busy.push([q[0] - 1.3 * P, q[0] + 2.6 * P]); }   // its path, and the mailbox by it
     });
     var lamps = !back && typeof worldLampKind === "function" && worldLampKind() !== "none";
+    var lampAt = typeof worldLampShift === "function" ? worldLampShift() / P : 9;
     var best = 0;
     for (var o = 0; o < POWER_EVERY; o += 1) {
-      if (lamps && (o % 18 < 3 || o % 18 > 15)) { continue; }
+      // (off the street lamps, wherever they were slid to, 39-world.js)
+      if (lamps) { var lo = ((o - lampAt) % 18 + 18) % 18; if (lo < 3 || lo > 15) { continue; } }
       var ok = true;
       for (var k = -3; k <= 3 && ok; k++) {
         var x = (o + k * POWER_EVERY) * P;

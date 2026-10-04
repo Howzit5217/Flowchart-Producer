@@ -488,14 +488,17 @@
             allPaint("line", TXT.c_line || "Border", style.ink || "#000000"),
             allPaint("text", TXT.c_words || "Words", style.words || style.ink || "#000000")
           ];
-        } },
+        } }
+    ].concat(
+      // (rooms side by side made one room, 40-oddrooms.js)
+      typeof oddRow === "function" && oddRow(ids) ? [oddRow(ids)] : [], [
       "-",
       { icon: "drop", name: TXT.delete, danger: true, go: function () {
           keepUndo();
           dropShapes(ids);
           drawHand(); drawHandPanel(); showReport();
         } }
-    ]);
+    ]));
   }
 
   // And in the panel, where one shape's words and sizes would be.

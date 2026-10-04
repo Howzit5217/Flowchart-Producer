@@ -503,6 +503,11 @@
       });
       if (there) { J.ways.push({ a: p.a, b: p.b, door: null, x: there.x, y: there.y }); return; }
       if (w.hi - w.lo < 34) { return; }
+      // (one room in two rectangles, 40-oddrooms.js: the way through is the whole of it, no door)
+      if (typeof oddOne === "function" && oddOne(p.a, p.b)) {
+        J.ways.push({ a: p.a, b: p.b, door: null, x: w.across ? (w.lo + w.hi) / 2 : w.line, y: w.across ? w.line : (w.lo + w.hi) / 2 });
+        return;
+      }
       var made = { id: TIE_DOOR + (p.link.id || hand.links.indexOf(p.link) + 1), kind: "i_door", text: "",
                    w: Math.min(50, w.hi - w.lo - 4), h: 50, made: true };
       var spot = tieSet(made, w, (w.lo + w.hi) / 2, w.into, 0);
@@ -732,6 +737,8 @@
       if (a.kind !== "i_room" || b.kind !== "i_room" || !tieSquare(a) || !tieSquare(b)) { return true; }
       var w = tieWall(tieBox(a), tieBox(b));
       if (!w || w.hi - w.lo < 34) { return true; }
+      // (one room, in two rectangles, 40-oddrooms.js: no wall between, so no door in it)
+      if (typeof oddOne === "function" && oddOne(a, b)) { changed = true; return false; }
       var already = hand.nodes.some(function (d) { return WALK_DOORS[d.kind] && doorIn(d, a) && doorIn(d, b); });
       if (!already) {
         var door = { id: hand.next++, kind: "i_door", text: firstWords("i_door"), x: a.x, y: a.y, w: 140, h: 46 };

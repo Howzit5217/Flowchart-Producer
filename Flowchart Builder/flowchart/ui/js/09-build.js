@@ -577,9 +577,9 @@
     : { whole: 0.03, page: 0.065 };
   var BAR_PACE_KEY = "flowchart-bar-pace:" + MODE;
   try {
-    var paceWas = JSON.parse(localStorage.getItem(BAR_PACE_KEY));
+    var barPaceKept = JSON.parse(localStorage.getItem(BAR_PACE_KEY));
     Object.keys(barPace).forEach(function (k) {
-      if (paceWas && paceWas[k] > 0) { barPace[k] = paceWas[k]; }
+      if (barPaceKept && barPaceKept[k] > 0) { barPace[k] = barPaceKept[k]; }
     });
   } catch (e) { /* nothing kept: the first guess it is */ }
   var BAR_FIXED = 30;                    // ms any stage costs, however short

@@ -112,11 +112,18 @@
       }
       var at = coffee ? [coffee.x, coffee.y] : [sofa.x + fx * (sofa.h / 2 + 0.9 * P), sofa.y + fy * (sofa.h / 2 + 0.9 * P)];
       var reach = (coffee ? coffee.w / 2 : 0.5 * P) + 0.5 * P;
+      // (and not with its back to the television: a long sofa's table put
+      // the chairs drawn up to it far enough out to face away, 2026-10-03)
+      var screen = inRoom("i_tv i_walltv")[0];
       inRoom("i_armchair i_rocker").forEach(function (chair, i) {
         var tried = i % 2 ? [-1, 1] : [1, -1];
         tried.some(function (side) {
           var cx = at[0] + sx * side * (reach + chair.h / 2), cy = at[1] + sy * side * (reach + chair.h / 2);
           var turn = arrangeFacing([cx, cy], at);
+          if (screen) {
+            var ta = turn * Math.PI / 180, dx = screen.x - cx, dy = screen.y - cy;
+            if ((-Math.sin(ta) * dx + Math.cos(ta) * dy) / (Math.hypot(dx, dy) || 1) <= 0.35) { return false; }
+          }
           if (arrangeMove(r, chair, cx, cy, turn, [], ways)) { moved++; return true; }
           return false;
         });
@@ -199,17 +206,28 @@
       }
     }
     // A desk: its chair pulled up to it, facing it; what stands on it, on it.
-    inRoom("i_desk i_standdesk i_lshapedesk i_vanitytable").forEach(function (desk) {
-      var D = arrangeAxes(desk), chair = inRoom("i_officechair i_chair i_stool").filter(function (c) {
-        return Math.hypot(c.x - desk.x, c.y - desk.y) < 3 * P;
+    // (each chair and each screen to the desk nearest it, one chair a desk:
+    // in an office of many desks every screen in the room was set on each
+    // desk in turn, and ended up in a row by the last, 2026-10-03)
+    var desks = inRoom("i_desk i_standdesk i_lshapedesk i_vanitytable"), seats = inRoom("i_officechair i_chair i_stool");
+    var tops = inRoom("i_desklamp i_monitor"), claimed = new Set();
+    function nearestDesk(t) {
+      var best = null, bd = Infinity;
+      desks.forEach(function (d) { var dd = Math.hypot(t.x - d.x, t.y - d.y); if (dd < bd) { bd = dd; best = d; } });
+      return best;
+    }
+    desks.forEach(function (desk) {
+      var D = arrangeAxes(desk), chair = seats.filter(function (c) {
+        return !claimed.has(c) && Math.hypot(c.x - desk.x, c.y - desk.y) < 3 * P && nearestDesk(c) === desk;
       })[0];
       if (chair) {
+        claimed.add(chair);
         var dC = desk.h / 2 + chair.h / 2 + 0.03 * P;
         if (arrangeMove(r, chair, desk.x + D.f[0] * dC, desk.y + D.f[1] * dC, (desk.turn || 0) + 180, [desk], ways) ||
             arrangeMove(r, chair, desk.x + D.f[0] * (dC + chair.h * 0.35), desk.y + D.f[1] * (dC + chair.h * 0.35), (desk.turn || 0) + 180, [], ways)) { moved++; }
       }
-      inRoom("i_desklamp i_monitor").forEach(function (thing, i) {
-        var off = (i - 0.5) * desk.w * 0.45;
+      tops.filter(function (t) { return nearestDesk(t) === desk && Math.hypot(t.x - desk.x, t.y - desk.y) < Math.max(desk.w, desk.h); }).forEach(function (thing, i, mine) {
+        var off = mine.length > 1 ? (i - (mine.length - 1) / 2) * desk.w * 0.45 : 0;
         thing.x = Math.round(desk.x + D.s[0] * off - D.f[0] * desk.h * 0.15);
         thing.y = Math.round(desk.y + D.s[1] * off - D.f[1] * desk.h * 0.15);
         thing.turn = desk.turn || 0;

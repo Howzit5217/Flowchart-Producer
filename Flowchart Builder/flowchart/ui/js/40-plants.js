@@ -363,6 +363,8 @@
       if (f && f.level !== 0) { return; }
       taken.push([n.x, n.y, Math.hypot(n.w, n.h) / 2 + 1.2 * P]);
     });
+    // (a tower's skin stands out past its rooms: nothing planted under it, 40-towers.js)
+    if (typeof towerTaken === "function") { towerTaken().forEach(function (t) { taken.push(t); }); }
     // a way kept clear from each door out to the street
     hand.nodes.forEach(function (d) {
       if (!WALK_DOORS[d.kind]) { return; }

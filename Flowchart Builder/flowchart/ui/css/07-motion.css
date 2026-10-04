@@ -917,6 +917,18 @@
     }
   }
   @keyframes born-grow { from { transform: scale(.72); } }
+  /* A building just made, drawn in (40-blueprint.js): each room's walls
+     ruled across at the pen's speed, what is set in them and what stands
+     in them springing in behind, a room at a time. */
+  #chart .node.bp-wipe { animation: bp-wipe var(--bp-dur, 300ms) linear backwards; animation-delay: var(--bp-delay, 0ms); }
+  @keyframes bp-wipe { from { clip-path: inset(0 100% 0 0); } to { clip-path: inset(0 0 0 0); } }
+  #chart .node.bp-pop { animation: fade-in .26s var(--ease-soft) backwards; animation-delay: var(--bp-delay, 0ms); }
+  #chart .bp-curtain { transform-box: fill-box; transform-origin: right center; animation: bp-curtain 1.2s cubic-bezier(.4, 0, .2, 1) forwards;
+                       animation-delay: var(--bp-delay, 0ms); }
+  @keyframes bp-curtain { from { transform: scaleX(1); } to { transform: scaleX(0); } }
+  @supports (transform-box: fill-box) {
+    #chart .node.bp-pop > * { transform-box: fill-box; transform-origin: center; animation: born-grow .3s var(--ease-back) backwards; animation-delay: var(--bp-delay, 0ms); }
+  }
   @keyframes gone-shrink { to { transform: scale(.84); } }
   @keyframes swipe { from { transform: scaleX(0); } }
   @keyframes wipe { to { transform: scaleX(0); } }

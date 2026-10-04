@@ -196,17 +196,20 @@
       faces.push({ pts: pts3, n: n, how: how, ceiling: down && how === ceilHow });
     }
     function at(u, v, z) { var w = W(u, v); return [w[0], w[1], z]; }
-    var u0 = -hu + T, u1 = hu - T, ridgeZ = atticHeightAt(prof, hv), capD = null;
+    var u0 = -hu + T, u1 = hu - T, capD = null;
+    // (under the roof by the roof's own thickness: laid in its very planes,
+    // the attic's boards showed through the roof over them, 2026-10-03)
+    var under = 0.14 * P, hAt = function (d) { return atticHeightAt(prof, d) - under; }, ridgeZ = hAt(hv);
     // the slopes, from each long wall up -- to the flat ceiling, or the ridge
     var stops = prof.pts.map(function (p) { return p[0]; }).filter(function (d) { return d > T && d < hv; });
     if (flat < ridgeZ) {
-      for (var d = 0; d <= hv; d += 1) { if (atticHeightAt(prof, d) >= flat) { capD = d; break; } }
+      for (var d = 0; d <= hv; d += 1) { if (hAt(d) >= flat) { capD = d; break; } }
       stops = stops.filter(function (d) { return d < capD; }).concat([capD]);
     } else { stops = stops.concat([hv]); }
     var ds = [T].concat(stops);
     if (prof.hip && !finished && hu > hv) {
       // hipped: its ends sloping up too, to a ridge shorter than the room
-      var kz = prof.pts[0][1];
+      var kz = prof.pts[0][1] - under;
       [-1, 1].forEach(function (s) {
         face([at(-hu, s * hv, kz), at(hu, s * hv, kz), at(hu - hv, 0, ridgeZ), at(-hu + hv, 0, ridgeZ)], ceilHow, true);
         face([at(s * hu, -hv, kz), at(s * hu, hv, kz), at(s * (hu - hv), 0, ridgeZ)], ceilHow, true);
@@ -217,7 +220,7 @@
       var dsS = [0].concat(stops);
       [-1, 1].forEach(function (s) {
         for (var j = 0; j + 1 < dsS.length; j++) {
-          var a = dsS[j], b = dsS[j + 1], za = atticHeightAt(prof, a), zb = atticHeightAt(prof, b);
+          var a = dsS[j], b = dsS[j + 1], za = hAt(a), zb = hAt(b);
           face([at(u0, s * (hv - a), za), at(u1, s * (hv - a), za), at(u1, s * (hv - b), zb), at(u0, s * (hv - b), zb)], ceilHow, true);
         }
       });
@@ -225,10 +228,10 @@
         face([at(u0, -(hv - capD), flat), at(u1, -(hv - capD), flat), at(u1, hv - capD, flat), at(u0, hv - capD, flat)], ceilHow, true);
       }
       // the ends: the wall carried up under the slopes, less its windows and doors
-      var outline = [[-hv + T, atticHeightAt(prof, T) - 0.5]];
-      ds.forEach(function (d) { outline.push([-hv + d, Math.min(flat, atticHeightAt(prof, d))]); });
-      ds.slice().reverse().forEach(function (d) { outline.push([hv - d, Math.min(flat, atticHeightAt(prof, d))]); });
-      outline.push([hv - T, atticHeightAt(prof, T) - 0.5]);
+      var outline = [[-hv + T, hAt(T) - 0.5]];
+      ds.forEach(function (d) { outline.push([-hv + d, Math.min(flat, hAt(d))]); });
+      ds.slice().reverse().forEach(function (d) { outline.push([hv - d, Math.min(flat, hAt(d))]); });
+      outline.push([hv - T, hAt(T) - 0.5]);
       var knee = prof.pts[0][1];
       outline = [[-hv + T, knee]].concat(outline.slice(1, -1), [[hv - T, knee]]);
       [["neg", -1], ["pos", 1]].forEach(function (end) {
@@ -281,8 +284,12 @@
         v3Prism(faces, base, z0, z1, how);
       });
     }
-    slab(-hu + 2, hu - 2, -hv + 2, -walk, 0.2, 0.24 * P, fluff);
-    slab(-hu + 2, hu - 2, walk, hv - 2, 0.2, 0.24 * P, fluff);
+    // (kept in from the walls as far as the roof is lower than the fluff is
+    // deep: out to the wall's face it showed pink along the eaves, 2026-10-03)
+    var Tw = Math.max(1, Math.min(6, Math.min(room.w, room.h) * 0.06)), knee0 = atticHeightAt(prof, 0);
+    var inset = Tw + Math.max(2, (0.24 * P - knee0) / Math.max(0.2, prof.k || 0.5) + 3);
+    slab(-hu + inset, hu - inset, -hv + inset, -walk, 0.2, 0.24 * P, fluff);
+    slab(-hu + inset, hu - inset, walk, hv - inset, 0.2, 0.24 * P, fluff);
     slab(-hu + 0.2 * P, hu - 0.2 * P, -walk, walk, 0.2, 0.25 * P, { piece: true, color: "#d7b98c", edge: "#8a6d48", pat: 21 });
   }
   // A finished attic with its beams on show (40-struct.js): its rafters
@@ -569,8 +576,14 @@
         // drawn in the nearest place clear of them, its arrow putting it where
         // it goes; the house put together is not centred on it, 39-join.js)
         var fNow2 = floorAt(floors, F.n.x, F.n.y), mates = hand.nodes.filter(function (m) { return m.kind === "i_room" && floorAt(floors, m.x, m.y) === fNow2; });
+        // (a floor drawn put together already -- a house Start building
+        // folded -- has its rooms wall to wall: only over one is a clash
+        // there.  Kept apart from them, it was drawn off its place, and the
+        // house put together then centred it on the hall it opens off.)
+        var together = !J || mates.every(function (m) { var d = J.delta[m.id]; return !d || Math.abs(d[0]) < 1 && Math.abs(d[1]) < 1; });
+        var apart = together ? -4 : 1.2 * P;
         var clash = function (x, y) {
-          return mates.some(function (m) { var q = turned(m); return Math.abs(m.x - x) * 2 < q.w + n.w + 1.2 * P && Math.abs(m.y - y) * 2 < q.h + n.h + 1.2 * P; });
+          return mates.some(function (m) { var q = turned(m); return Math.abs(m.x - x) * 2 < q.w + n.w + apart && Math.abs(m.y - y) * 2 < q.h + n.h + apart; });
         };
         // (out along the way it lies from the room its door opens off, as it
         // does in the house: drawn round another side, the house put
@@ -663,6 +676,60 @@
         });
       });
       return best;
+    }
+    // A room over the garage stands against the upstairs rooms beside it: a
+    // window of theirs in that wall looked into it (2026-10-03, found by a
+    // sweep).  Each such window moved to the nearest place in an outside
+    // wall of its room -- along the same wall clear of it, else round in
+    // another -- clear of the doors, the other windows and what hangs
+    // there; where there is none, taken out if its room has another.
+    function atticWindowsClear(rect, level) {
+      var gap = 0.3 * P;
+      hand.nodes.filter(function (w) { return w.kind === "i_window" && !w.attic; }).forEach(function (w) {
+        var at = pieceAt(w), f = at[2];
+        if (!f || f.level !== level) { return; }
+        var t = (w.turn || 0) * Math.PI / 180, nx = Math.round(Math.sin(t)), ny = Math.round(-Math.cos(t));
+        var into = [-1, 1].some(function (s) {
+          var px = at[0] + nx * s * 14, py = at[1] + ny * s * 14;
+          return px > rect.l && px < rect.r && py > rect.t && py < rect.b;
+        });
+        if (!into) { return; }
+        var holder = roomsAll.filter(function (r) { return insideArea(r, w.x, w.y, -14) && floorAt(floors, r.x, r.y) === f; })
+          .sort(function (p, q) { return Math.hypot(p.x - w.x, p.y - w.y) - Math.hypot(q.x - w.x, q.y - w.y); })[0];
+        if (!holder) { return; }
+        var B = box(holder);
+        // what is beyond a wall: a room on this floor, or the one over the garage
+        var beyond = roomsAll.filter(function (r) { return r !== holder && floorAt(floors, r.x, r.y) === f; }).map(box).concat([rect]);
+        function outside(px, py) { return !beyond.some(function (q) { return px > q.l && px < q.r && py > q.t && py < q.b; }); }
+        var busy = hand.nodes.filter(function (o) {
+          return o !== w && (WALK_DOORS[o.kind] || o.kind === "i_window" || ON_THE_WALL[o.kind]);
+        }).map(function (o) { var p = pieceAt(o), q = turned(o); return { x: p[0], y: p[1], w: q.w, h: q.h, f: p[2] }; }).filter(function (o) { return o.f === f; });
+        var best = null;
+        [{ across: true, line: B.t, out: -1, turn: 0 }, { across: true, line: B.b, out: 1, turn: 0 },
+         { across: false, line: B.l, out: -1, turn: 90 }, { across: false, line: B.r, out: 1, turn: 90 }].forEach(function (e) {
+          var lo = (e.across ? B.l : B.t) + w.w / 2 + gap, hi = (e.across ? B.r : B.b) - w.w / 2 - gap;
+          var mine = busy.filter(function (o) { return Math.abs((e.across ? o.y : o.x) - e.line) < 24; });
+          for (var s = lo; s <= hi; s += 4) {
+            var x = e.across ? s : e.line, y = e.across ? e.line : s;
+            // outside all along it, not only at its middle
+            var clear = [-w.w / 2, 0, w.w / 2].every(function (k) {
+              return outside(e.across ? x + k : x + e.out * 14, e.across ? y + e.out * 14 : y + k);
+            });
+            if (!clear) { continue; }
+            if (mine.some(function (o) { var c = e.across ? o.x : o.y, half = (e.across ? o.w : o.h) / 2; return Math.abs(c - s) < half + w.w / 2 + gap; })) { continue; }
+            var d = Math.hypot(x - at[0], y - at[1]);
+            if (!best || d < best.d) { best = { x: x, y: y, d: d, turn: e.turn }; }
+          }
+        });
+        if (best) {
+          var p = toPaper(holder, [best.x, best.y]);
+          w.x = Math.round(p[0]); w.y = Math.round(p[1]);
+          if (best.turn) { w.turn = best.turn; } else { delete w.turn; }
+          return;
+        }
+        var more = hand.nodes.some(function (o) { return o !== w && o.kind === "i_window" && insideArea(holder, o.x, o.y, -14); });
+        if (more) { hand.nodes.splice(hand.nodes.indexOf(w), 1); }
+      });
     }
     function toPaper(r, p) { var f = floorAt(floors, r.x, r.y), d = J && J.delta[r.id] ? J.delta[r.id] : [0, 0]; return [p[0] - (f ? f.dx : 0) - d[0], p[1] - (f ? f.dy : 0) - d[1]]; }
     // A window in each end of a room under a roof that is open to the air.
@@ -809,6 +876,7 @@
                  (Math.abs(q.b - rect2.t) < 8 || Math.abs(q.t - rect2.b) < 8) && across > 1.0 * P;
         }).sort(function (p, q) { return (kindOf(q) === "hall" ? 1 : 0) - (kindOf(p) === "hall" ? 1 : 0); })[0] || null;
         var over = room(F2, rect2, gkind, "garage", gkind === "room" ? TXT.at_bonus_name : TXT.at_garage_name, door ? { room: door === houseRoom ? null : door } : null);
+        atticWindowsClear(rect2, F2.level);
         // (where it is drawn against where it goes: what is put in it, put by where it is drawn)
         var jx = (rect2.l + rect2.r) / 2 - F2.dx, jy = (rect2.t + rect2.b) / 2 - F2.dy;
         var F2b = { n: F2.n, dx: F2.dx - (over.x - jx), dy: F2.dy - (over.y - jy), level: F2.level };

@@ -58,11 +58,16 @@
      waiting cursor belongs to the one that is busy, not to every button
      that happens to be switched off. */
   .btn[disabled] { opacity: .5; cursor: default; }
-  /* What cannot be taken back: red, outlined while it only leads on to a
-     question, filled when it is the thing itself (35-wipe.js). */
-  .btn.danger-line { color: var(--bad); border-color: var(--bad); }
-  .btn.danger-line:hover, .btn.danger-line:focus-visible { background-color: var(--bad); color: var(--panel); }
-  .btn.danger { background-color: var(--bad); border-color: var(--bad); color: var(--panel); }
+  /* What cannot be taken back: red, filled -- the button that only leads
+     on to a question as well as the thing itself (35-wipe.js).  (2026-10-03:
+     "the buttons are just red and not the hollow design they currently are")
+     A darker red under the pointer, so it still answers it. */
+  /* (one firm red in both themes: the dark theme's own red is a pale one,
+     white on it hard to read) */
+  .btn.danger-line { background-color: #d23b3b; border-color: #d23b3b; color: #ffffff; }
+  .btn.danger-line:hover, .btn.danger-line:focus-visible { background-color: #b02e2e; border-color: #b02e2e; color: #ffffff; }
+  .btn.danger { background-color: #d23b3b; border-color: #d23b3b; color: #ffffff; }
+  .btn.danger:not([disabled]):is(:hover, :focus-visible) { background-color: #b02e2e; border-color: #b02e2e; }
   .btn.danger[disabled] { opacity: .4; }
   .btn.small { padding: 4px 9px; font-size: 12.5px; border-radius: 7px; }
   /* a button that is a dropdown: the same box, with the words starting

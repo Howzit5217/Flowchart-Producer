@@ -1097,11 +1097,22 @@
   // and kept while that stays the same.
   function gl3Scenery(G, model, walk, sheet) {
     var x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity;
+    // (measured by what stands on the ground -- the rooms' floors -- not by
+    // every face: a style's eaves, porch or chimney moved the middle, and
+    // every tree with it, when the style was changed, 2026-10-03)
     model.faces.forEach(function (f) {
+      if (!f.node || f.node.kind !== "i_room" || !f.pts.every(function (p) { return Math.abs(p[2] || 0) < 6; })) { return; }
       f.pts.forEach(function (p) {
         x0 = Math.min(x0, p[0]); x1 = Math.max(x1, p[0]); y0 = Math.min(y0, p[1]); y1 = Math.max(y1, p[1]);
       });
     });
+    if (x0 === Infinity) {
+      model.faces.forEach(function (f) {
+        f.pts.forEach(function (p) {
+          x0 = Math.min(x0, p[0]); x1 = Math.max(x1, p[0]); y0 = Math.min(y0, p[1]); y1 = Math.max(y1, p[1]);
+        });
+      });
+    }
     if (x0 === Infinity) { x0 = y0 = -200; x1 = y1 = 200; }
     var mid = [(x0 + x1) / 2, (y0 + y1) / 2], radius = Math.max(150, Math.hypot(x1 - x0, y1 - y0) / 2);
     // the street runs along the lot's front -- the lot drawn, or the least
@@ -1120,6 +1131,17 @@
     if (gl3SnowNow) { grass = gl3Mix(grass, [0.93, 0.94, 0.97], 0.88 * gl3SnowNow); }
     else if (typeof houseWet === "function" && houseWet()) { grass = gl3Mix(grass, [0.16, 0.26, 0.12], 0.25); }
     var groundR = walk ? GL3_FAR * 0.9 : radius * 2.3 + 600;
+    // (out past the lot's corners -- and, by the water, past the dock and
+    // the boats -- before the ground fades: they stood in the haze, 2026-10-03)
+    if (!walk && lot) {
+      var lotFar = 0, lt = (lot.turn || 0) * Math.PI / 180;
+      [[-1, -1], [1, -1], [1, 1], [-1, 1]].forEach(function (s) {
+        var lx = s[0] * lot.w / 2, ly = s[1] * lot.h / 2;
+        lotFar = Math.max(lotFar, Math.hypot(lot.x + lx * Math.cos(lt) - ly * Math.sin(lt) - mid[0], lot.y + lx * Math.sin(lt) + ly * Math.cos(lt) - mid[1]));
+      });
+      var wet = typeof worldLook === "function" && worldLook() && worldLook().water;
+      groundR = Math.max(groundR, (lotFar + (wet ? 34 : 14) * FLOOR_PX) / 0.72 * 0.85);
+    }
     // which spots are taken: the plot, the house, the road
     var keepOff = [];
     function lotLocal(p) {

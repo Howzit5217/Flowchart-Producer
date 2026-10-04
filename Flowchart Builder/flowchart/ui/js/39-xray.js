@@ -204,7 +204,7 @@
       hand.nodes.forEach(function (m) {
         if (!WALK_DOORS[m.kind] && m.kind !== "i_window") { return; }
         var hole = v3Hole(room, edge, T, m);
-        if (hole) { hole.window = m.kind === "i_window"; holes.push(hole); }
+        if (hole) { hole.window = m.kind === "i_window"; hole.n = m; holes.push(hole); }
       });
       var runs = typeof wallOpenRuns === "function" ? wallOpenRuns(room, edge) : [];
       function within(a) { return holes.some(function (h) { return a > h.a - 1 && a < h.b + 1; }) || runs.some(function (r) { return a > r.a && a < r.b; }); }
@@ -237,10 +237,10 @@
       }
       part(len - stud - 1, len - 1, stud, top - 2 * stud);
       holes.forEach(function (h) {
-        var head = Math.min(DOOR_TALL * P, top - 0.1 * P);
+        var head = openHead(h.n, top);
         part(h.a - stud, h.b + stud, head, head + 0.24 * P);                        // the header
         part(h.a - stud, h.a, stud, head); part(h.b, h.b + stud, stud, head);        // king and jack studs
-        if (h.window) { part(h.a, h.b, SILL * P - stud, SILL * P); }               // the sill plate
+        if (h.window) { part(h.a, h.b, openSill(h.n) - stud, openSill(h.n)); }     // the sill plate
       });
     });
     // joists over the ceiling, across its shorter way
@@ -250,6 +250,72 @@
       if (across) { box(-hw + T, hw - T, v - stud / 2, v + stud / 2, top, top + 0.235 * P); }
       else { box(v - stud / 2, v + stud / 2, -hh + T, hh - T, top, top + 0.235 * P); }
     }
+  }
+  // The roof's own framing (2026-10-03: "for a roof there needs to be
+  // supports and joists up there to when I look at the inside walls
+  // mode"): under every face of every roof, whatever its shape, a rafter
+  // up its slope every 24 in (610 mm) -- the same lines on every piece of
+  // one slope, so they meet -- and from the top of each a post down to the
+  // ceiling under it, a strut from the rafter's middle to the post's foot:
+  // a truss.  A flat roof, joists across its shorter way.
+  function xrayBeam(faces, A, B, side, up, w, d, how) {
+    function at(p, s1, s2) { return [p[0] + side[0] * s1 * w / 2 + up[0] * s2 * d / 2, p[1] + side[1] * s1 * w / 2 + up[1] * s2 * d / 2, p[2] + side[2] * s1 * w / 2 + up[2] * s2 * d / 2]; }
+    var ring = [[-1, -1], [1, -1], [1, 1], [-1, 1]];
+    for (var i = 0; i < 4; i++) {
+      var p = ring[i], q = ring[(i + 1) % 4], mid = [(p[0] + q[0]) / 2, (p[1] + q[1]) / 2];
+      var n = [side[0] * mid[0] + up[0] * mid[1], side[1] * mid[0] + up[1] * mid[1], side[2] * mid[0] + up[2] * mid[1]];
+      faces.push({ pts: [at(A, p[0], p[1]), at(B, p[0], p[1]), at(B, q[0], q[1]), at(A, q[0], q[1])], n: n, how: how });
+    }
+  }
+  function xrayRoofFrame(faces, model, how) {
+    var P = FLOOR_PX, every = 0.61 * P, w = 0.045 * P, d = 0.184 * P, below = 0.07 * P + d / 2, made = 0;
+    function unit(v) { var l = Math.hypot(v[0], v[1], v[2]) || 1; return [v[0] / l, v[1] / l, v[2] / l]; }
+    function dot2(p, a) { return p[0] * a[0] + p[1] * a[1]; }
+    model.faces.forEach(function (f) {
+      if (made > 6000 || !f.how || !(f.roof || f.how.roof) || f.how.xray || f.mesh || !f.pts || f.pts.length < 3) { return; }
+      var n = unit(f.n || [0, 0, 1]);
+      if (n[2] < 0) { n = [-n[0], -n[1], -n[2]]; }
+      if (n[2] < 0.12) { return; }                                  // (a wall of the roof: a mansard's, a dormer's cheek)
+      var pts = f.pts, flat = n[2] > 0.985, a, t;
+      if (flat) {
+        var xs = pts.map(function (p) { return p[0]; }), ys = pts.map(function (p) { return p[1]; });
+        var spanX = Math.max.apply(null, xs) - Math.min.apply(null, xs), spanY = Math.max.apply(null, ys) - Math.min.apply(null, ys);
+        a = spanX <= spanY ? [0, 1, 0] : [1, 0, 0];                 // across the joists: along the longer way
+        t = spanX <= spanY ? [1, 0, 0] : [0, 1, 0];
+      } else {
+        var g = unit([n[0], n[1], 0]);                               // downhill, level
+        a = [-g[1], g[0], 0];
+        t = unit([-n[0] * n[2], -n[1] * n[2], n[0] * n[0] + n[1] * n[1]]);   // up the slope
+      }
+      var cs = pts.map(function (p) { return dot2(p, a); }), lo = Math.min.apply(null, cs), hi = Math.max.apply(null, cs);
+      for (var c = Math.ceil((lo + 0.02 * P) / every) * every; c < hi - 0.02 * P; c += every) {
+        // where the line across at c meets the face's edges
+        var hits = [];
+        for (var i = 0; i < pts.length; i++) {
+          var A = pts[i], B = pts[(i + 1) % pts.length], ca = cs[i], cb = cs[(i + 1) % pts.length];
+          if ((ca - c) * (cb - c) > 0 || ca === cb) { continue; }
+          var k = (c - ca) / (cb - ca);
+          hits.push([A[0] + (B[0] - A[0]) * k, A[1] + (B[1] - A[1]) * k, (A[2] || 0) + ((B[2] || 0) - (A[2] || 0)) * k]);
+        }
+        if (hits.length < 2) { continue; }
+        hits.sort(function (p, q) { return (p[0] * t[0] + p[1] * t[1] + p[2] * t[2]) - (q[0] * t[0] + q[1] * t[1] + q[2] * t[2]); });
+        var lo3 = hits[0], hi3 = hits[hits.length - 1];
+        if (Math.hypot(hi3[0] - lo3[0], hi3[1] - lo3[1], hi3[2] - lo3[2]) < 0.3 * P) { continue; }
+        var dn = [-n[0] * below, -n[1] * below, -n[2] * below];
+        var E = [lo3[0] + dn[0], lo3[1] + dn[1], lo3[2] + dn[2]], T = [hi3[0] + dn[0], hi3[1] + dn[1], hi3[2] + dn[2]];
+        xrayBeam(faces, E, T, a, n, w, d, how);
+        made++;
+        // the truss under it: a post from its top down to the ceiling, a strut to the post's foot
+        if (!flat && T[2] - E[2] > 0.6 * P) {
+          var foot = [T[0], T[1], E[2] - d / 2];
+          xrayBeam(faces, [T[0], T[1], T[2] - d / 2], foot, a, unit([t[0], t[1], 0]), w, w * 2, how);
+          var M = [(E[0] + T[0]) / 2, (E[1] + T[1]) / 2, (E[2] + T[2]) / 2 - d / 2];
+          var sd = unit([foot[0] - M[0], foot[1] - M[1], foot[2] - M[2]]), sup = unit([sd[1] * a[2] - sd[2] * a[1], sd[2] * a[0] - sd[0] * a[2], sd[0] * a[1] - sd[1] * a[0]]);
+          xrayBeam(faces, M, foot, a, sup, w, w * 2, how);
+          made += 2;
+        }
+      }
+    });
   }
   // Where the panel, the water heater, the furnace are -- drawn where none is.
   function xrayPlant(F, rooms) {
@@ -290,6 +356,7 @@
     if (xrayLayer("frame")) {
       var wood = look(XRAY_COLORS.frame, { pat: 21 });
       rooms.forEach(function (r) { if (!((r.turn || 0) % 90)) { xrayFrame(faces, r, F, wood); } });
+      xrayRoofFrame(faces, model, wood);
     }
     // the wiring: from the panel up, over the ceilings, to each room; down to each outlet and switch, up to each light
     if (xrayLayer("power")) {
@@ -388,10 +455,13 @@
   }
   // Put into the picture: what is drawn faint, and what is inside -- the
   // latter kept while the house stays the same.
+  var xrayFaintKept = new WeakMap();
   function xrayApply(model) {
     if (!xrayOn() || (V3.flat && V3.flatDone)) { return; }
     if (V3.mode !== "walk" && (V3.rise === undefined ? 1 : V3.rise) < 0.98) { return; }
-    var faint = new Map();
+    // (each look made faint once, and kept: the same faint look from picture
+    // to picture, so the picture keeps the corners of what has not moved)
+    var faint = xrayFaintKept;
     model.faces.forEach(function (f) {
       var h = f.how;
       if (!h || h.xray || f.mesh) { return; }
@@ -403,9 +473,19 @@
     var key = JSON.stringify([V3.mode, V3.upTo, V3.myLevel, !!V3.inRoom, V3.xrayShow || null, hand.nodes.map(function (n) {
       return [n.id, n.kind, Math.round(n.x), Math.round(n.y), n.w, n.h, n.turn || 0, n.ceil || 0, n.open || 0, n.lift || 0];
     })]);
-    if (!V3.xrayKept || V3.xrayKept.key !== key) { V3.xrayKept = { key: key, made: xrayBuild(model) }; }
-    Array.prototype.push.apply(model.faces, V3.xrayKept.made.faces);
-    if ((V3.labelV === undefined ? 1 : V3.labelV) > 0.01) { Array.prototype.push.apply(model.labels, V3.xrayKept.made.labels); }
+    if (!V3.xrayKept || V3.xrayKept.key !== key) {
+      V3.xrayKept = { key: key, made: xrayBuild(model) };
+      // (each its own to keep its corners by, picture to picture: gl3Faces)
+      V3.xrayKept.made.faces.forEach(function (f) { if (!f.src) { f.src = f; } });
+    }
+    // (one at a time: a tower's hundred and fifty thousand, handed over at
+    // once, were more than a call can take -- nothing was shown inside it)
+    var add = V3.xrayKept.made.faces;
+    for (var ai = 0; ai < add.length; ai++) { model.faces.push(add[ai]); }
+    if ((V3.labelV === undefined ? 1 : V3.labelV) > 0.01) {
+      var said = V3.xrayKept.made.labels;
+      for (var li = 0; li < said.length; li++) { model.labels.push(said[li]); }
+    }
   }
   if (typeof v3Build === "function") {
     var v3BuildXray = v3Build;

@@ -1812,6 +1812,8 @@
       var head = document.createElement("div");
       head.className = "v3-mats-head";
       head.textContent = TXT.mt_house;
+      // (its own close button, 40-panels.js)
+      if (typeof pnCloser === "function") { head.appendChild(pnCloser('[data-v3="mats"]')); }
       sheet.appendChild(head);
       sheet.appendChild(matRow(here, "out", drawBoth, true));
       sheet.appendChild(matRow(here, "roof", drawBoth, true));
