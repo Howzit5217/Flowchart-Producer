@@ -421,6 +421,8 @@
     plan("i_dryrack", 60, 30, ["o " + R(0, 0, 60, 30, 1), "t M0 6 H60 M0 12 H60 M0 18 H60 M0 24 H60"]);
     plan("i_heater", 50, 50, ["o " + C(25, 25, 24), "t " + C(25, 25, 8), "k " + C(25, 25, 2)]);
     plan("i_utilitysink", 50, 45, ["o " + R(0, 0, 50, 45, 2), "o " + R(5, 8, 40, 32, 5), "k " + C(25, 24, 1.3), "t M25 2 V8"]);
+    // (2026-10-04) a drinking fountain on the wall: a basin, its bubbler (40-mep.js)
+    plan("i_fountain", 40, 34, ["o " + R(0, 0, 40, 34, 4), "o " + R(6, 8, 28, 20, 8), "k " + C(20, 16, 2.2), "t M10 4 H30"]);
     // bedroom
     plan("i_bedking", 100, 110, ["o " + R(0, 0, 100, 110, 3), "o " + R(6, 5, 41, 17, 4), "o " + R(53, 5, 41, 17, 4),
                                  "o " + R(0, 32, 100, 78, 3), "t M0 40 H100"]);
@@ -520,7 +522,9 @@
     plan("i_soundbar", 60, 8, ["o " + R(0, 0, 60, 8, 3), "k " + C(10, 4, 1) + " " + C(30, 4, 1) + " " + C(50, 4, 1)]);
     plan("i_console", 25, 18, ["o " + R(0, 0, 25, 18, 3), "t M5 12 H20", "k " + C(20, 5, 1)]);
     plan("i_pc", 20, 45, ["o " + R(0, 0, 20, 45, 1.5), "t M4 6 H16 M4 10 H16", "k " + C(10, 40, 1.5)]);
-    plan("i_projector", 30, 25, ["t- " + R(-6, -6, 42, 37, 4), "o " + R(0, 0, 30, 25, 3), "o " + C(21, 12.5, 6), "t " + C(21, 12.5, 3)]);
+    // (its overhead outline on its own box, as every other hung thing's is -- it
+    // stood six pixels out past the box it is moved and sized by, 2026-10-04)
+    plan("i_projector", 30, 25, ["t- " + R(0.5, 0.5, 29, 24, 3), "o " + R(3, 3, 24, 19, 2.5), "o " + C(19.5, 12.5, 4.8), "t " + C(19.5, 12.5, 2.4)]);
     plan("i_proscreen", 160, 8, ["o " + R(0, 0, 160, 5, 1), "t M3 2.5 H157", "o " + R(0, 5, 8, 3, 1) + " " + R(152, 5, 8, 3, 1)]);
     plan("i_recordplayer", 35, 30, ["o " + R(0, 0, 35, 30, 2), "o " + C(15, 15, 11), "t " + C(15, 15, 6),
                                     "k " + C(15, 15, 1.5), "t2 M31 5 L23 19"]);
@@ -978,7 +982,7 @@
                     "i_toaster", "i_kettle", "i_fruitbowl", "i_oven", "i_winecooler", "i_freezer", "i_hutch",
                     "i_barcart", "i_highchair"]],
     ["ic_bath", ["i_toilet", "i_sink", "i_vanity", "i_bathtub", "i_shower", "i_bathmat", "i_hamper",
-                 "i_washer", "i_dryer", "i_ironing", "i_dryrack", "i_utilitysink", "i_heater", "i_cornertub",
+                 "i_washer", "i_dryer", "i_ironing", "i_dryrack", "i_utilitysink", "i_fountain", "i_heater", "i_cornertub",
                  "i_linencab"]],
     ["ic_decor", ["i_tablelamp", "i_desklamp", "i_vase", "i_candle", "i_books", "i_frame", "i_basket",
                   "i_monitor", "i_plant", "i_succulent", "i_herbs", "i_palm", "i_cactus", "i_flowers",

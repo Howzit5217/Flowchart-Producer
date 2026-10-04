@@ -1485,7 +1485,8 @@
     var o = R.o, boxes = {}, list = [], wall = Infinity, reach = far + 3 * FLOOR_PX, small = O3_MIN * FLOOR_PX;
     model.faces.forEach(function (f) {
       var P = f.pts;
-      if (f.me || f.found || !P || P.length < 3) { return; }
+      // (nor what is on its way -- carried in, going up: 40-movein.js)
+      if (f.me || f.found || f.moves || !P || P.length < 3) { return; }
       var n = f.node, how = f.how || {};
       var fixed = n ? !!(O3_FIXED[n.kind] || (typeof BETWEEN_FLOORS === "object" && BETWEEN_FLOORS[n.kind])) : !!(how.wall || how.roof);
       if (!n && !fixed) { return; }                // water running, a plug's cord, the grid carried over: not in the way

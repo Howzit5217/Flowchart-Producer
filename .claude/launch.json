@@ -400,6 +400,18 @@
       "port": 9191
     },
     {
+      "name": "flicker-site",
+      "runtimeExecutable": "python",
+      "runtimeArgs": [
+        "-m",
+        "http.server",
+        "9253",
+        "--directory",
+        "C:/Users/origa/Downloads/GitHub/Flowchart-Producer/Flowchart Builder"
+      ],
+      "port": 9253
+    },
+    {
       "name": "open3d-site",
       "runtimeExecutable": "python",
       "runtimeArgs": [

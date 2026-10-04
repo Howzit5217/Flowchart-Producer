@@ -854,6 +854,9 @@
       });
     });
     Array.prototype.push.apply(hand.nodes, stand);
+    // (the building's own plan kept: `plan` is the walking plan from here on,
+    // and a shop's or an office's ceilings were never put on -- 2026-10-04)
+    var typePlan = plan;
     var plan = walkPlan();
     var furnish = function (r) {
       var spec = STARTER_ROOMS[r.starter];
@@ -904,7 +907,7 @@
     }
     starterDress(made, rnd);
     // a shop's aisles, an office's desks, a classroom's (39-types.js)
-    if (typeof typeFurnish === "function") { typeFurnish(made, rnd, want, plan); }
+    if (typeof typeFurnish === "function") { typeFurnish(made, rnd, want, typePlan); }
     // daylight: a window in an outside wall of every room that is lived in,
     // and the garage's door
     var lot = ground.lot || null;

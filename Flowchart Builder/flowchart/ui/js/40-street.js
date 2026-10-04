@@ -84,7 +84,7 @@
     var lot = houseStreetLot();
     if (!lot) { return null; }
     var P = FLOOR_PX, a = (lot.turn || 0) * Math.PI / 180, c = Math.cos(a), s = Math.sin(a);
-    var B = { P: P, x0: lot.w / 2 + 1.5 * P, yb: lot.h / 2 + 1.6 * P + 3.5 * P, R: RD_R * P, step: 2.5 * P };
+    var B = { P: P, x0: lot.w / 2 + 1.5 * P, yb: lot.h / 2 + (typeof streetWalkPx === "function" ? streetWalkPx() : 1.6 * P) + 3.5 * P, R: RD_R * P, step: 2.5 * P };
     B.local = function (x, y) { var dx = x - lot.x, dy = y - lot.y; return [dx * c + dy * s, -dx * s + dy * c]; };
     B.world = function (lx, ly) { return [lot.x + lx * c - ly * s, lot.y + lx * s + ly * c]; };
     // a point in the lot's numbers bent: [x, y, how far turned] -- or null, as it was

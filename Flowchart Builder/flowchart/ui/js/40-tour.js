@@ -132,6 +132,15 @@
       var as = -swing * side * 0.8, sh = at(0, side * 0.21, 1.42);
       var elbow = at(Math.sin(as) * 0.3, side * 0.24, 1.42 - Math.cos(as) * 0.3);
       var wrist = at(Math.sin(as) * 0.3 + Math.sin(as + 0.25) * 0.27, side * 0.25, 1.42 - Math.cos(as) * 0.3 - Math.cos(as + 0.25) * 0.27);
+      // (what the hands are doing, 40-crew.js: both out in front holding
+      // what is carried; one swinging a hammer, armK how high, the other
+      // steadying the work)
+      var arms = look.arms, up = Math.max(0, Math.min(1, look.armK || 0));
+      if (arms === "carry" || (arms === "hammer" && side < 0)) {
+        elbow = at(0.17, side * 0.25, 1.19); wrist = at(0.43, side * 0.21, 1.13);
+      } else if (arms === "hammer") {
+        elbow = at(0.2, side * 0.27, 1.22 + up * 0.26); wrist = at(0.42 - up * 0.14, side * 0.23, 1.16 + up * 0.48);
+      }
       tourLimb(faces, sh, elbow, 0.055 * P, 0.045 * P, shirt);
       tourLimb(faces, elbow, wrist, 0.045 * P, 0.036 * P, skin);
       tourLump(faces, wrist, f, s, 0.05 * P, 0.03 * P, 0.06 * P, skin);
@@ -173,6 +182,7 @@
     var wear = look && look.own ? look : mine || null, paper = simSheet();
     if (wear && wear.fill && wear.fill !== paper && wear.fill !== "#ffffff") { out.shirt = tourHex(wear.fill); }
     if (wear && wear.line && wear.line !== simInk() && wear.line !== wear.fill) { out.pants = tourHex(v3Mix(wear.line, "#2e3846", 0.5)); }
+    if (look && look.arms) { out.arms = look.arms; out.armK = look.armK || 0; }
     return out;
   }
   // A person as a body: `n` the one drawn (its kind, its number, its

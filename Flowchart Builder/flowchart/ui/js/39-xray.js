@@ -332,11 +332,14 @@
     var room = pick(["utility", "laundry", "garage", "storage", "stock", "family", "hall"]);
     var b = room ? tieBox(room) : null, P = FLOOR_PX;
     function corner(dx, dy) { return b ? F.at(room, b.l + dx * P, b.t + dy * P) : [0, 0, 0, 0]; }
+    // (the water heater where it stands, if there is one: 40-mep.js)
+    var heaterNode = hand.nodes.filter(function (n) { return n.kind === "i_waterheater"; })[0];
     return {
       room: room,
       panel: panel ? F.at(panel) : corner(0.3, 0.2),
       panelMade: !!panel,
-      heater: corner(0.55, 0.55),
+      heater: heaterNode ? F.at(heaterNode) : corner(0.55, 0.55),
+      heaterMade: !!heaterNode,
       furnace: furnace ? F.at(furnace) : corner(1.4, 0.55),
       furnaceMade: !!furnace
     };
@@ -393,7 +396,7 @@
       var cold = look(XRAY_COLORS.water), hot = look(XRAY_COLORS.hot), heat = plant.heater;
       var tank = [];
       for (var k = 0; k < 14; k++) { var q = k / 14 * Math.PI * 2; tank.push([heat[0] + Math.cos(q) * 0.28 * P, heat[1] + Math.sin(q) * 0.28 * P]); }
-      v3Prism(faces, tank, heat[2], heat[2] + 1.5 * P, look("#e8e6e1"));
+      if (!plant.heaterMade) { v3Prism(faces, tank, heat[2], heat[2] + 1.5 * P, look("#e8e6e1")); }
       labels.push({ x: heat[0], y: heat[1], z: heat[2] + 1.75 * P, text: TXT.xr_heater });
       labels.push({ x: main[0], y: main[1], z: 0.3 * P, text: TXT.xr_main });
       xraySeg(faces, [main[0], main[1] + 1.2 * P, main[2]], main, 0.03 * P, cold);
@@ -402,7 +405,9 @@
         var p = F.at(n), tap = [p[0], p[1], p[2] + (XRAY_WET[n.kind] === "shower" ? 1.0 : 0.5) * P], below = p[2] - 0.12 * P;
         xrayRoute(faces, main, tap, below, 0.018 * P, cold);
         if (XRAY_WET[n.kind] !== "toilet") {
-          xrayRoute(faces, [heat[0], heat[1], heat[2] + 1.5 * P], [tap[0] + 0.07 * P, tap[1], tap[2]], below + 0.05 * P, 0.018 * P, hot);
+          // (from the heater that feeds it, where it stands: 40-mep.js)
+          var src = typeof mpHeaterFor === "function" ? mpHeaterFor(n) : null;
+          xrayRoute(faces, src || [heat[0], heat[1], heat[2] + 1.5 * P], [tap[0] + 0.07 * P, tap[1], tap[2]], below + 0.05 * P, 0.018 * P, hot);
         }
       });
     }
@@ -421,8 +426,9 @@
         }
       });
     }
-    // the gas
-    if (xrayLayer("gas")) {
+    // the gas (the network's own, sized, to what burns it: 40-mep.js)
+    if (xrayLayer("gas") && typeof mpGasDraw === "function") { mpGasDraw(faces, labels, look); }
+    else if (xrayLayer("gas")) {
       var gas = look(XRAY_COLORS.gas), meter = [fb.r + 0.15 * P, (fb.t + fb.b) / 2, 0.6 * P], any = false;
       hand.nodes.forEach(function (n) {
         if (!XRAY_GAS[n.kind] || !shown(n)) { return; }

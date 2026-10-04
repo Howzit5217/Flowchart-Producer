@@ -23,7 +23,8 @@
     var S = parkLayout(lot.w, lot.h), t = (lot.turn || 0) * Math.PI / 180, c = Math.cos(t), s = Math.sin(t);
     return S.stalls.map(function (st, i) {
       var lx = st.x - lot.w / 2, ly = st.y - lot.h / 2;
-      return { i: i, x: lot.x + lx * c - ly * s, y: lot.y + lx * s + ly * c, lx: st.x, ly: st.y, head: st.head, c: c, s: s, turn: lot.turn || 0 };
+      return { i: i, x: lot.x + lx * c - ly * s, y: lot.y + lx * s + ly * c, lx: st.x, ly: st.y, head: st.head, c: c, s: s, turn: lot.turn || 0,
+               w: st.w, h: st.h };
     });
   }
   // The ways in: the doors out of the ground floor (not a garage's).
@@ -94,43 +95,101 @@
   var AC_BLUE = { piece: true, color: "#1f5fa8", edge: "#123d6d" };
   var AC_CHARGER = { piece: true, color: "#34383d", edge: "#1c1f22", pat: 22 };
   var AC_GLOW = { piece: true, color: "#5ad17a", edge: "#2f8a49", pat: 31 };
-  function acSvg(kind) {
-    // (the international symbol: a head, the back upright, the arm out, the seat and the legs, the wheel round them)
-    var wheel = '<g fill="none" stroke="#ffffff" stroke-linecap="round" stroke-linejoin="round"><circle cx="118" cy="128" r="20" fill="#ffffff" stroke="none"/>' +
-                '<path d="M114 160v74h60l28 62" stroke-width="22"/><path d="M114 192h50" stroke-width="18"/>' +
-                '<path d="M92 214a60 60 0 1 0 86 84" stroke-width="16"/></g>';
+  // (the international symbol: a head, the back upright, the arm out, the seat and the legs, the wheel round them)
+  var AC_WHEEL = '<g fill="none" stroke="#ffffff" stroke-linecap="round" stroke-linejoin="round"><circle cx="118" cy="128" r="20" fill="#ffffff" stroke="none"/>' +
+                 '<path d="M114 160v74h60l28 62" stroke-width="22"/><path d="M114 192h50" stroke-width="18"/>' +
+                 '<path d="M92 214a60 60 0 1 0 86 84" stroke-width="16"/></g>';
+  var AC_SIGN = '<rect width="256" height="256" rx="18" fill="#1f5fa8"/><g transform="translate(-40 -60) scale(1.05)">' + AC_WHEEL + '</g>';
+  var AC_LINE = 10;                      // cm: a painted line's width, as the lot's own (38-models.js / 40-parking.js)
+  // What is painted in a stall, drawn the stall's own size in centimetres
+  // (Wc across, line to line over the lines, Dc from its head down to its
+  // open end): its two side lines exactly over the lot's white ones, in
+  // its own color, and its mark between them.  (2026-10-04: "the symbols in
+  // the parking lot ... matched with the border they are given" -- each was
+  // drawn 2.4 by 5.3 metres with its own box round it, in a stall 2.6 by
+  // 5.5: its lines ran inside the stall's, with the white ones showing past
+  // them, and the far end of it under the paving.)
+  function acSvg(kind, Wc, Dc) {
+    if (kind === "sign") {
+      return '<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256">' + AC_SIGN + '</svg>';
+    }
+    var L = AC_LINE, k = 2, inner = Wc - 2 * L;
+    var out = '<svg xmlns="http://www.w3.org/2000/svg" width="' + Math.round(Wc * k) + '" height="' + Math.round(Dc * k) + '" viewBox="0 0 ' + Wc + " " + Dc + '">';
+    function sides(color) {
+      return '<rect x="0" y="0" width="' + L + '" height="' + Dc + '" fill="' + color + '"/>' +
+             '<rect x="' + (Wc - L) + '" y="0" width="' + L + '" height="' + Dc + '" fill="' + color + '"/>';
+    }
     if (kind === "access") {
-      return '<svg xmlns="http://www.w3.org/2000/svg" width="256" height="540" viewBox="0 0 256 540"><rect x="6" y="6" width="244" height="528" fill="none" stroke="#1f5fa8" stroke-width="10"/>' +
-             '<rect x="30" y="90" width="196" height="250" rx="12" fill="#1f5fa8"/><g transform="translate(-30 30) scale(1.05)">' + wheel + '</g></svg>';
+      // the blue square with the figure, past the wheel stop at the head (60 cm in)
+      var sq = Math.max(60, Math.min(150, inner - 50)), sx = (Wc - sq) / 2, sy = Math.min(Dc - sq - 40, 110);
+      return out + sides("#1f5fa8") + '<g transform="translate(' + sx + " " + sy + ") scale(" + (sq / 256) + ')">' + AC_SIGN + "</g></svg>";
     }
     if (kind === "aisle") {
-      var lines = "";
-      for (var y = -256; y < 540; y += 36) { lines += '<path d="M0 ' + y + ' L256 ' + (y + 256) + '" stroke="#f4f6f7" stroke-width="12"/>'; }
-      return '<svg xmlns="http://www.w3.org/2000/svg" width="256" height="540" viewBox="0 0 256 540"><rect x="6" y="6" width="244" height="528" fill="none" stroke="#f4f6f7" stroke-width="10"/>' + lines + '</svg>';
+      // striped, the stripes kept between its lines and short of its ends
+      var stripes = "";
+      for (var y = -inner; y < Dc + inner; y += 45) { stripes += '<path d="M' + L + " " + y + " L" + (Wc - L) + " " + (y + inner) + '"/>'; }
+      return out + sides("#f4f6f7") + '<clipPath id="ac-in"><rect x="' + L + '" y="15" width="' + inner + '" height="' + (Dc - 30) + '"/></clipPath>' +
+             '<g clip-path="url(#ac-in)" stroke="#f4f6f7" stroke-width="10">' + stripes + "</g></svg>";
     }
-    if (kind === "sign") {
-      return '<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256"><rect width="256" height="256" rx="18" fill="#1f5fa8"/>' +
-             '<g transform="translate(-40 -60) scale(1.05)">' + wheel + '</g></svg>';
-    }
-    return '<svg xmlns="http://www.w3.org/2000/svg" width="256" height="540" viewBox="0 0 256 540"><rect x="6" y="6" width="244" height="528" fill="none" stroke="#2f9e57" stroke-width="12"/>' +
-           '<text x="128" y="300" font-family="Arial, sans-serif" font-weight="700" font-size="120" fill="#2f9e57" text-anchor="middle">EV</text></svg>';
+    return out + sides("#2f9e57") + '<text x="' + Wc / 2 + '" y="' + Math.min(Dc - 60, 260) + '" font-family="Arial, sans-serif" font-weight="700" font-size="' +
+           Math.round(Math.min(110, inner * 0.55)) + '" fill="#2f9e57" text-anchor="middle">EV</text></svg>';
   }
-  function acPic(kind) { return v3Pic("ac|" + kind, acSvg(kind), kind === "sign" ? 4 : 4, kind === "sign" ? 4 : 8.4); }
+  function acPic(kind, Wc, Dc) {
+    if (kind === "sign") { return v3Pic("ac|sign", acSvg("sign"), 4, 4); }
+    Wc = Math.round(Wc); Dc = Math.round(Dc);
+    return v3Pic("ac|" + kind + "|" + Wc + "x" + Dc, acSvg(kind, Wc, Dc), Wc / 50, Dc / 50);
+  }
+  // The top of a lot's paving at a spot, in the lot's own numbers from its
+  // middle: its model's top is one flat quad laid on the land by its
+  // corners (38-models.js; draped, 40-land.js), cut into two triangles from
+  // its first corner to its third -- worked out the same way here, so what
+  // is painted on it lies on it, and not half under it where the land falls.
+  function acTop(lot) {
+    var P = FLOOR_PX, t = (lot.turn || 0) * Math.PI / 180, c = Math.cos(t), s = Math.sin(t), W = lot.w, D = lot.h;
+    var drape = typeof TERR_ON !== "undefined" && TERR_ON && typeof terrAt === "function";
+    function ground(u, v) { return drape ? terrAt(lot.x + u * c - v * s, lot.y + u * s + v * c) + 0.8 : 0; }
+    var zA = ground(-W / 2, -D / 2), zB = ground(W / 2, -D / 2), zC = ground(W / 2, D / 2), zD = ground(-W / 2, D / 2);
+    // its top, and its painted lines on that (40-parking.js: at least a centimetre and a half; lines 0.4 cm)
+    var cm = P / 100, top = Math.max(Math.max(1, pieceHigh(lot) * P), 1.5 * cm) + 0.4 * cm;
+    var bend = Math.abs(zA + zC - zB - zD) / 2;          // (how far its two triangles are from one plane)
+    return {
+      at: function (u, v) {
+        var a = (u + W / 2) / W, b = (v + D / 2) / D;
+        var z = a >= b ? zA + a * (zB - zA) + b * (zC - zB) : zA + b * (zD - zA) + a * (zC - zD);
+        return z + top + bend;
+      },
+      world: function (u, v) { return [lot.x + u * c - v * s, lot.y + u * s + v * c]; }
+    };
+  }
   function acFaces() {
     var P = FLOOR_PX, faces = [];
     hand.nodes.forEach(function (lot) {
       if (lot.kind !== "i_parking" || !(lot.access || lot.aisle || lot.ev)) { return; }
+      var top = acTop(lot);
       acStalls(lot).forEach(function (st) {
         var kind = (lot.access || []).indexOf(st.i) >= 0 ? "access" : (lot.aisle || []).indexOf(st.i) >= 0 ? "aisle" : (lot.ev || []).indexOf(st.i) >= 0 ? "ev" : null;
         if (!kind) { return; }
-        // the stall flat on the ground, its picture read from its open end
-        var hw = 1.2 * P, hd = 2.65 * P, ax = [st.c, st.s], ay = [-st.s, st.c], g = (typeof terrGround === "function" ? terrGround(st.x, st.y) : 0) + 0.035 * P;
-        var f = st.head < 0 ? 1 : -1;
-        // (turned to be read from its open end, the figure's head toward the kerb)
-        function at(u, v) { return [st.x - ax[0] * u - ay[0] * v * f, st.y - ax[1] * u - ay[1] * v * f, g]; }
-        faces.push({ pts: [at(-hw, hd), at(hw, hd), at(hw, -hd), at(-hw, -hd)], n: [0, 0, 1], how: { decal: true }, tex: acPic(kind), texAt: [0, 1, 3] });
+        // the stall flat on the paving, line to line (over its lines) and head to open end,
+        // its picture read from its open end, the figure's head toward the kerb
+        var cm = P / 100, hw = (st.w || 2.6 * P) / 2 + AC_LINE * cm / 2, hd = (st.h || 5.5 * P) / 2;
+        var ay = [-st.s, st.c], f = st.head < 0 ? 1 : -1;
+        var cu = st.lx - lot.w / 2, cv = st.ly - lot.h / 2;
+        // (turned whole, not mirrored, for the row whose heads point the other
+        // way; read from the open end, its left to right is the reader's -- the
+        // letters and the figure came out back to front)
+        // (two marked stalls side by side paint the line between them both: the
+        // accessible stall's blue over the rest, then a charger's green, then
+        // the aisle's white -- each a hair higher, not the two in one plane)
+        var over = kind === "access" ? 0.09 : kind === "ev" ? 0.06 : 0.03;
+        function at(u, v) {
+          var lu = cu + u * f, lv = cv - v * f, w = top.world(lu, lv);
+          return [w[0], w[1], top.at(lu, lv) + over];
+        }
+        faces.push({ pts: [at(-hw, hd), at(hw, hd), at(hw, -hd), at(-hw, -hd)], n: [0, 0, 1], how: { decal: true },
+                     tex: acPic(kind, 2 * hw / cm, 2 * hd / cm), texAt: [0, 1, 3] });
         // at its head: the sign on its post, or the charger
-        var head = [st.x - ay[0] * f * (hd + 0.25 * P), st.y - ay[1] * f * (hd + 0.25 * P)], out = [ay[0] * f, ay[1] * f], hz = g - 0.035 * P;
+        var head = [st.x - ay[0] * f * (hd + 0.25 * P), st.y - ay[1] * f * (hd + 0.25 * P)], out = [ay[0] * f, ay[1] * f];
+        var hz = typeof terrGround === "function" ? terrGround(head[0], head[1]) : 0;
         if (kind === "access") {
           v3Prism(faces, acRing(head, 0.03 * P, 6), hz, hz + 2.1 * P, AC_POST);
           if (typeof adrPlate === "function") { adrPlate(faces, head, out, 0.3 * P, 0.3 * P, hz + 1.85 * P, acPic("sign"), AC_BLUE, true); }

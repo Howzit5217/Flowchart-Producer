@@ -6,7 +6,7 @@
 //  looked at, built: the walls going up out of the ground course by
 //  course under scaffolding, the builders at work round it (a crane by a
 //  tower), the roof going on last.  A press, a key or the wheel finishes
-//  either.
+//  the drawing; Skip or Enter the building (the view is yours meanwhile).
 //
 //  One part of the studio's script.  The parts run inside one function,
 //  in the order parts.py lists them, and share everything between them.
@@ -176,15 +176,44 @@
       return out;
     };
   }
-  // It going up, from the ground: stopped by a press on the view or a key.
+  // It going up, from the ground.  Looked round meanwhile -- turned, moved,
+  // zoomed, walked through -- it goes on going up (2026-10-04: "when the
+  // building is being built you can move the camera and it will still be
+  // building rather than skipping the animation"); Skip, or Enter, finishes
+  // it -- the button filling as it goes up.
   function bpGo(tall, wait) {
     bpSite = { start: performance.now() + (wait || 0), ms: tall ? BP_BUILD_TALL : BP_BUILD, tall: tall };
     var box = V3.box, me = bpSite;
-    var stop = function () { if (bpSite === me) { bpSite = null; } if (V3) { V3.dirty = true; } box.removeEventListener("pointerdown", stop, true); document.removeEventListener("keydown", stop, true); };
-    box.addEventListener("pointerdown", stop, true);
-    document.addEventListener("keydown", stop, true);
+    all(".v3-skip", box).forEach(function (b) { b.remove(); });
+    var skip = document.createElement("button");
+    skip.type = "button";
+    skip.className = "v3-skip";
+    skip.innerHTML = '<span class="v3-skip-lbl"></span><svg viewBox="0 0 12 12" aria-hidden="true"><path d="M2 2.2 7.4 6 2 9.8zM8.6 2.2v7.6"/></svg>';
+    el(".v3-skip-lbl", skip).textContent = TXT.mo_skip;
+    skip.title = TXT.mo_skip_tip;
+    skip.setAttribute("aria-label", TXT.mo_skip_tip);
+    box.appendChild(skip);
+    var key = function (ev) {
+      if (ev.key !== "Enter" || ev.repeat || ev.altKey || ev.ctrlKey || ev.metaKey) { return; }
+      if (ev.target && ev.target.closest && ev.target.closest("input, textarea, select, button, [contenteditable], .menu")) { return; }
+      ev.preventDefault();
+      ev.stopPropagation();
+      stop();
+    };
+    var stop = function () {
+      if (bpSite === me) { bpSite = null; }
+      if (V3) { V3.dirty = true; }
+      document.removeEventListener("keydown", key, true);
+      if (skip.parentNode) { skip.remove(); }
+      if (typeof moDone === "function") { moDone(); }     // (the doors the movers opened, as they were: 40-movein.js)
+    };
+    skip.onclick = function (ev) { ev.stopPropagation(); stop(); };
+    document.addEventListener("keydown", key, true);
+    var shown = -1;
     (function tick() {
       if (bpSite !== me || !V3 || V3.box !== box) { stop(); return; }
+      var done = Math.round(Math.max(0, Math.min(1, (performance.now() - me.start) / me.ms)) * 100);
+      if (done !== shown) { shown = done; skip.style.setProperty("--done", done + "%"); }
       V3.dirty = true;
       requestAnimationFrame(tick);
     })();

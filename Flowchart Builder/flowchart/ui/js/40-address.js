@@ -153,10 +153,17 @@
             var xa = x0 + sg * a, xb = x0 + sg * b, lo = Math.min(xa, xb), hi = Math.max(xa, xb);
             gl3Poly(v, [lotWorld(lo, -reach, z), lotWorld(hi, -reach, z), lotWorld(hi, end, z), lotWorld(lo, end, z)], [0, 0, 1], color, 1, uv, pat);
           }
-          strip(0, walkW, -1.5, pave, [[-reach / P, 0], [-reach / P, 1.6], [end / P, 1.6], [end / P, 0]], PAT.walk);
+          // (the sidewalk stepped back from the kerb by a strip of grass, as along the front: 40-verge.js)
+          var vg = typeof streetVergePx === "function" ? streetVergePx() : 0, sideW = walkW - vg;
+          strip(0, sideW, -1.5, pave, [[-reach / P, 0], [-reach / P, 1.6], [end / P, 1.6], [end / P, 0]], PAT.walk);
+          if (vg && typeof vgGrass === "function") {
+            var gr = vgGrass(sheetC), guv = [[-reach / P, 0], [-reach / P, vg / P], [end / P, vg / P], [end / P, 0]];
+            strip(sideW, walkW, -1.5, gr.c, guv, gr.pat);
+            strip(walkW + roadW, walkW + roadW + vg, -1.5, gr.c, guv, gr.pat);
+          }
           // (its middle line along its length: the road's picture turned)
           strip(walkW, walkW + roadW, -2, road, [[-reach / P, -3.5], [-reach / P, 3.5], [end / P, 3.5], [end / P, -3.5]], PAT.road);
-          strip(walkW + roadW, walkW * 2 + roadW, -1.5, pave, [[-reach / P, 0], [-reach / P, 1.6], [end / P, 1.6], [end / P, 0]], PAT.walk);
+          strip(walkW + roadW + vg, walkW * 2 + roadW, -1.5, pave, [[-reach / P, 0], [-reach / P, 1.6], [end / P, 1.6], [end / P, 0]], PAT.walk);
           // and where it meets the street, the road carried across the pavement in front
           var a0 = x0 + sg * walkW, a1 = x0 + sg * (walkW + roadW);
           gl3Poly(v, [lotWorld(Math.min(a0, a1), hy, -1.4), lotWorld(Math.max(a0, a1), hy, -1.4), lotWorld(Math.max(a0, a1), hy + walkW, -1.4), lotWorld(Math.min(a0, a1), hy + walkW, -1.4)],

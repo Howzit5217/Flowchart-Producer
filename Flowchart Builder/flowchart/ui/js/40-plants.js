@@ -339,6 +339,9 @@
   // How wide each crown is (metres), for keeping them off the house and each other.
   var PLANT_SPREAD = { oak: 8, maple: 5, broad: 3.5, spruce: 4.5, fir: 2.5, birch: 2.5, redwood: 5, pine: 4, palm: 3, willow: 6.5,
                        cypress: 1.5, banana: 2.2, joshua: 2, cactus: 1.5, poplar: 2.5, fruit: 2 };
+  // How far the low ones reach out from their middle (metres): kept that far off the house.
+  // (measured over forty of each, 2026-10-04)
+  var PLANT_REACH = { agave: 1.25, dry: 1.1, bush: 1.05, flowering: 1.05, fern: 1.05, box: 0.95, grass: 0.7, bamboo: 2.45 };
 
   // ---- on the lot ---------------------------------------------------------------------------------
   // Trunks a body walking round goes round (x, y, radius), for the scenery made last.
@@ -419,11 +422,15 @@
           if (facing < 60) { return; }            // the front, more or less
           var len = e[0] ? R.hh * 2 : R.hw * 2, count = Math.floor(len / (1.7 * P));
           for (var i = 0; i < count; i++) {
-            var t = -len / 2 + (i + 0.5) * len / count, lxR = e[0] ? e[0] * (R.hw + 0.9 * P) : t, lyR = e[0] ? t : e[1] * (R.hh + 0.9 * P);
+            // (as far out as it reaches, and a hand more: an agave's blades, a metre
+            // and a quarter long, stood 0.9 m off the wall went through it into the
+            // room, 2026-10-04)
+            var lowKind = low[Math.floor(rnd() * low.length)], reach = (PLANT_REACH[lowKind] || 1) * P, off = Math.max(0.9 * P, reach + 0.15 * P);
+            var t = -len / 2 + (i + 0.5) * len / count, lxR = e[0] ? e[0] * (R.hw + off) : t, lyR = e[0] ? t : e[1] * (R.hh + off);
             var at = terrPt(R, lxR, lyR);
-            if (inHouse(at[0], at[1]) || !inLot(at[0], at[1], 0.6 * P) || onWay(at[0], at[1], 0.4 * P) || !free(at[0], at[1], 0.5 * P)) { continue; }
+            if (inHouse(at[0], at[1]) || fromHouse(at[0], at[1]) < reach + 0.1 * P || !inLot(at[0], at[1], 0.6 * P) || onWay(at[0], at[1], 0.4 * P) || !free(at[0], at[1], 0.5 * P)) { continue; }
             if (rnd() < 0.25) { continue; }
-            worldPlant(v, low[Math.floor(rnd() * low.length)], at, rnd, L.sheetC);
+            worldPlant(v, lowKind, at, rnd, L.sheetC);
             taken.push([at[0], at[1], 0.6 * P]);
           }
         });

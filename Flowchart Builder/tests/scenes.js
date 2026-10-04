@@ -523,10 +523,38 @@ var tests = function () {
         "the meters read wrong: " + partOf(s9, 2).amps + " A, " + partOf(s9, 4).volts + " V");
   said.push("circuits worked out");
 
+  // ---- people made whole (40-bodies.js): every outfit on a man and a woman,
+  // a child, standing, walking, carrying, hammering -- every number a number,
+  // standing on the ground, as tall as a person, and not too many corners
+  var bodyBad = [], bodies = 0, most = 0;
+  Object.keys(BD_OUTFITS).forEach(function (outfit) {
+    ["m", "f"].forEach(function (sex) {
+      ["short", "long", "pony", "bun"].forEach(function (hair, hi) {
+        var sp = bdSpec({ sex: sex, outfit: outfit, hairStyle: hair, beard: sex === "m" && hi % 2 === 0, child: hi === 3 });
+        [[0, "", 0, true], [1.3, "", 0, true], [2.9, "carry", 0, true], [0, "hammer", 0.7, true], [4, "", 0, false]].forEach(function (pose) {
+          var made = bdMake(sp, pose[0], pose[1], pose[2], pose[3], 50), verts = 0, lo = Infinity, hi2 = -Infinity, ok = true;
+          made.order.forEach(function (slot) {
+            var g = made.slots[slot];
+            if (g.p.length % 9 || g.n.length !== g.p.length) { ok = false; }
+            for (var i = 0; i < g.p.length; i++) { if (!isFinite(g.p[i]) || !isFinite(g.n[i])) { ok = false; break; } }
+            verts += g.p.length / 3; lo = Math.min(lo, g.lo[2]); hi2 = Math.max(hi2, g.hi[2]);
+          });
+          most = Math.max(most, verts); bodies++;
+          var tall = hi2 / 50, want = pose[3] ? (sp.child ? [1.7, 2.1] : [1.68, 1.95]) : [0.6, 1.0];
+          if (!ok || verts > 9000 || lo < -0.02 * 50 || lo > 0.02 * 50 || tall < want[0] || tall > want[1]) {
+            bodyBad.push(sex + " " + outfit + " " + hair + " " + pose.join("/") + ": " + verts + " corners, " + (lo / 50).toFixed(2) + ".." + tall.toFixed(2) + " m" + (ok ? "" : ", bad numbers"));
+          }
+        });
+      });
+    });
+  });
+  check(!bodyBad.length, "people made wrong: " + bodyBad.slice(0, 4).join("; "));
+  said.push(bodies + " people made whole (" + Object.keys(BD_OUTFITS).length + " outfits, up to " + most + " corners)");
+
   return { bad: bad, said: said };
 };
 
-var src = stand + "\n" + ["03-icon-art.js", "03-icons.js", "13-hand-apart.js", "38-walk.js", "38-advice.js", "38-view3d.js", "38-models.js", "39-flows.js", "39-circuit.js", "39-design.js", "39-join.js", "39-starter.js", "40-open3d.js"]
+var src = stand + "\n" + ["03-icon-art.js", "03-icons.js", "13-hand-apart.js", "38-walk.js", "38-advice.js", "38-view3d.js", "38-models.js", "39-flows.js", "39-circuit.js", "39-design.js", "39-join.js", "39-starter.js", "40-open3d.js", "40-bodies.js"]
   .map(part).join("\n") + "\nreturn (" + tests.toString() + ")();";
 var out;
 try { out = new Function(src)(); }                 // eslint-disable-line no-new-func

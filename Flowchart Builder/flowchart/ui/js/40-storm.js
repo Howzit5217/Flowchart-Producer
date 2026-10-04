@@ -270,7 +270,8 @@
       });
       var sum = document.createElement("p");
       sum.className = "hs-note sm-sum";
-      sum.textContent = T.ok ? TXT.sm_all_ok : TXT.sm_not_ok;
+      var own = T.storm && (T.storm[2] === "fire" ? "wf" : T.storm[2] === "drill" ? "ev" : null);
+      sum.textContent = own && TXT[own + "_all_ok"] ? (T.ok ? TXT[own + "_all_ok"] : TXT[own + "_not_ok"]) : (T.ok ? TXT.sm_all_ok : TXT.sm_not_ok);
       list.appendChild(sum);
       sheet.appendChild(list);
       if (typeof fxSection === "function") { fxSection(sheet); }
@@ -278,7 +279,9 @@
     // what holds it together, as asked for
     var B = smBuilding();
     head(TXT.sm_hold_head);
-    tiles((B && B.tall ? SM_HOLDS_TALL : SM_HOLDS_HOME).map(function (k) {
+    // (a wildfire's own, chosen: 40-wildfire.js)
+    var holdsNow = (typeof wfHolds === "function" && wfHolds()) || (typeof evHolds === "function" && evHolds()) || (B && B.tall ? SM_HOLDS_TALL : SM_HOLDS_HOME);
+    tiles(holdsNow.map(function (k) {
       return { icon: "sm_h_" + k, label: TXT["sm_h_" + k], on: smHold(k), set: function (v) { smHoldSet(k, v); } };
     }));
   }
@@ -287,10 +290,12 @@
   // (debris and rain across the view, a funnel out on the land in a
   // tornado; the parts that do not hold tinted)
   var smBits = null;
+  // (the storm's own time: stopped or slowed with it, 40-damage.js)
+  function smNow(t) { return typeof dmClock === "function" ? dmClock(t) : t; }
   function smRun() {
     if (!V3 || !V3.box) { return; }
     var cv = el(".v3-storm", V3.box), St = V3.storm ? smStormOf(V3.storm) : null;
-    if (!St || V3.scene === "space" || St[2] === "quake") { if (cv) { cv.remove(); } smBits = null; return; }
+    if (!St || V3.scene === "space" || St[2] === "quake" || St[2] === "drill") { if (cv) { cv.remove(); } smBits = null; return; }
     if (!cv) {
       cv = document.createElement("canvas");
       cv.className = "v3-storm";
@@ -309,11 +314,12 @@
     // flat in a wind; forked lightning in a storm, the sky lit by it.
     var count = snowy ? 520 : 260 + Math.round(strong * 520) + (St[2] === "hurricane" ? 260 : 0);
     for (var i = 0; i < count; i++) { bits.push({ x: rnd(), y: rnd(), s: 0.5 + rnd(), k: rnd() < 0.12 ? 1 : 0, p: rnd() * 6.28, l: rnd() }); }
-    var me = { cv: cv, St: St, bits: bits, t0: performance.now(), bolt: null, flash: 0, next: 1.5 + rnd() * 3, rnd: rnd };
+    var me = { cv: cv, St: St, bits: bits, t0: smNow(performance.now()), bolt: null, flash: 0, next: 1.5 + rnd() * 3, rnd: rnd };
     smBits = me;
     var thunder = SM_WINDY[St[2]] && St[1] >= 33 || hail;
     function frame(now) {
       if (smBits !== me || !V3 || V3.box !== box || !box.isConnected) { return; }
+      now = smNow(now);
       var dpr = window.devicePixelRatio || 1, W = Math.max(1, box.clientWidth), H = Math.max(1, box.clientHeight);
       if (cv.width !== Math.round(W * dpr) || cv.height !== Math.round(H * dpr)) { cv.width = Math.round(W * dpr); cv.height = Math.round(H * dpr); }
       var g = cv.getContext("2d"), t = (now - me.t0) / 1000, dt = Math.min(0.05, me.last ? (now - me.last) / 1000 : 1 / 60);
@@ -324,7 +330,10 @@
       // a little darker over all (the sky itself is the storm's, 40-stormfx.js)
       g.fillStyle = "rgba(30,36,44," + (0.05 + strong * 0.12) + ")";
       g.fillRect(0, 0, W, H);
-      if (snowy) {
+      if (St[2] === "fire" && typeof wfOverlay === "function") {
+        // a wildfire: ash and embers, a warm haze (40-wildfire.js)
+        wfOverlay(g, W, H, t, me, side);
+      } else if (snowy) {
         // snow: far flakes small and slow, near ones large; in a wind, streaming
         var drift = side * (0.04 + gust * 0.5);
         me.bits.forEach(function (d) {

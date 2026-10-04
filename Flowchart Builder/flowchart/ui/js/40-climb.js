@@ -29,7 +29,8 @@
       var one = { low: low.n, high: high.n, fl: low.f, fh: high.f, rise: high.f.z - low.f.z };
       if (a.kind === "i_elevator" || b.kind === "i_elevator") { out.lifts.push(one); }
       else if (a.kind === "i_spiral" || b.kind === "i_spiral") { out.spirals.push(one); }
-      else if (a.kind === "i_stairs" && b.kind === "i_stairs") { out.flights.push(one); }
+      // (an escalator walked up as a flight is: its foot at +y, its top at -y -- 40-items.js)
+      else if ((a.kind === "i_stairs" && b.kind === "i_stairs") || (a.kind === "i_escalator" && b.kind === "i_escalator")) { out.flights.push(one); }
     });
     return out;
   }

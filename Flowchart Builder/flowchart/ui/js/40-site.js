@@ -257,8 +257,13 @@
         for (var j = 0; j < rows; j++) {
           var x = -iw / 2 + (i + 0.5) * iw / cols + (mix === "box" ? 0 : (rnd() - 0.5) * iw / cols * 0.5);
           var y = -id / 2 + (j + 0.5) * id / rows + (mix === "box" ? 0 : (rnd() - 0.5) * id / rows * 0.5);
-          var s = Math.min(iw / cols, id / rows) / 2;
-          lwPlantOne(M, mix, x, y, top, Math.min(s * 1.1, 0.55 * P), H, rnd, green);
+          var s = Math.min(iw / cols, id / rows) / 2, pr = Math.min(s * 1.1, 0.55 * P, (Math.min(W, D) / 2 - rt) / 1.5);
+          // (its leaves kept over the bed -- a clump of them bulges to half as wide
+          // again as it is round, 40-foliage.js: one at the edge of a bed against
+          // a wall leaned out through the wall, 2026-10-04)
+          var mx = Math.max(0, W / 2 - rt - pr * 1.5), my = Math.max(0, D / 2 - rt - pr * 1.5);
+          x = Math.max(-mx, Math.min(mx, x)); y = Math.max(-my, Math.min(my, y));
+          lwPlantOne(M, mix, x, y, top, pr, H, rnd, green);
         }
       }
     });
@@ -1030,10 +1035,15 @@
     Object.keys(LW_KEYS).forEach(function (k) { if (lwPieces(k).length) { keys[k] = true; } });
     (add || []).forEach(function (k) { keys[k] = true; });
     (drop || []).forEach(function (k) { delete keys[k]; });
-    lwTake(Object.keys(LW_KEYS));
-    if (!Object.keys(keys).length) { return 0; }
+    // (what stood out in front -- carts in the parking, benches on the walk --
+    // goes again where the new layout has room for it)
+    var front = Object.keys(LW_FRONT).filter(function (k) { return lwPieces(k).length; });
+    lwTake(Object.keys(LW_KEYS).concat(front));
     var put = 0;
-    yardHouses().forEach(function (H) { try { put += lwSite(H, type, keys, false); } catch (e) { if (window.console) { console.warn("site:", e && e.message); } } });
+    if (Object.keys(keys).length) {
+      yardHouses().forEach(function (H) { try { put += lwSite(H, type, keys, false); } catch (e) { if (window.console) { console.warn("site:", e && e.message); } } });
+    }
+    front.forEach(function (k) { put += lwFrontItems(k); });
     return put;
   }
 
@@ -1344,7 +1354,10 @@
         G.l = Math.min(G.l, p[0]); G.r = Math.max(G.r, p[0]); G.t = Math.min(G.t, p[1]); G.b = Math.max(G.b, p[1]);
       });
     });
-    G.l -= 0.5 * P; G.r += 0.5 * P; G.t -= 0.5 * P; G.b += 0.5 * P;
+    // (level a square of the land's mesh past it -- 1.5 m, 40-land.js -- or the
+    // mesh, rising across that square, came up through the paving's edge on
+    // a slope: 2026-10-04)
+    G.l -= 1.8 * P; G.r += 1.8 * P; G.t -= 1.8 * P; G.b += 1.8 * P;
     // a plane through the land as it lies under it (least squares, on a grid)
     var n0 = 0, sx = 0, sy = 0, sz = 0, sxx = 0, syy = 0, sxy = 0, sxz = 0, syz = 0, N = 9;
     var cx = (G.l + G.r) / 2, cy = (G.t + G.b) / 2;
@@ -2125,4 +2138,196 @@
       T.plan = function (want) { return lwVaryPlan(t, plain.apply(this, arguments), want || {}); };
       T.lwVaried = true;
     });
+  }
+
+  // ---- what goes round it, out in front -----------------------------------------------------------
+  // (asked for, 2026-10-04: "it is putting the cart chorale in the back of
+  // the store rather than on the front or the sides where the parking is",
+  // "nothing really gets put behind stores and stuff unless it is like the
+  // dumpster")  The grounds' things for the front (40-grounds.js: carts,
+  // benches, planters, lamps, tables) were sent to the spot nearest a point
+  // that, for the front, was the house's back (yardSpot has no front of its
+  // own): every one of them went behind.  Now each goes where it is used:
+  // cart corrals in the parking, a stall each, spread along the rows;
+  // benches and planters on the walk by the way in; lamps along the walk;
+  // a cafe's tables out on its front walk.  Behind a shop there is only
+  // what serves it -- the dumpster, the door to the stock room.
+  var LW_FRONT = { carts: 1, benches: 1, planters: 1, lamps: 1, seating: 1 };
+  function lwFrontFrame(H) {
+    var F = ybFrame(H), P = F.P, doors = ybDoors(F), main = lwMainDoor(F, doors), band = H.lot.lwBand || null;
+    ybZones(F, doors);
+    // the walk along the front, in the lot's numbers: as laid out, else a strip by the wall
+    var w0 = F.hb.b + (band && band.walk ? band.walk[0] : 0.4 * P), w1 = F.hb.b + (band && band.walk ? band.walk[1] : 2.2 * P);
+    var hold = { i_sidewalk: 1 };
+    var busy = hand.nodes.filter(function (n) { return !hold[n.kind] && ybStands(F, n); }).map(function (n) { return F.box(n, 0.05 * P); });
+    function free(b) {
+      if (b.l < F.L.l + 0.2 * P || b.r > F.L.r - 0.2 * P || b.t < F.L.t + 0.2 * P || b.b > F.L.b - 0.2 * P) { return false; }
+      if (F.house.some(function (o) { return b.l < o.r && b.r > o.l && b.t < o.b && b.b > o.t; })) { return false; }
+      if (F.zones.some(function (o) { return b.l < o.r && b.r > o.l && b.t < o.b && b.b > o.t; })) { return false; }
+      return !busy.some(function (o) { return b.l < o.r && b.r > o.l && b.t < o.b && b.b > o.t; });
+    }
+    function take(n) { busy.push(F.box(n, 0.05 * P)); }
+    return { F: F, P: P, doors: doors, main: main, w0: w0, w1: w1, free: free, take: take };
+  }
+  // Spots along the front walk, out from the way in both sides by turns: [x, side].
+  function lwAlongFront(Q, gap, from) {
+    var P = Q.P, F = Q.F, mx = Q.main && Q.main.oy > 0.5 ? Q.main.x : (F.hb.l + F.hb.r) / 2, out = [];
+    for (var k = 0; k < 40; k++) {
+      var s = k % 2 ? -1 : 1, x = mx + s * (from + Math.floor(k / 2) * gap);
+      if (x < F.hb.l - 1 * P || x > F.hb.r + 1 * P) { continue; }
+      out.push([x, s]);
+    }
+    return out;
+  }
+  function lwPutOut(Q, kind, x, y, turn, key) {
+    var icon = ICONS[kind];
+    if (!icon) { return null; }
+    var q = turned({ w: icon.box[0], h: icon.box[1], turn: turn }), b = { l: x - q.w / 2, r: x + q.w / 2, t: y - q.h / 2, b: y + q.h / 2 };
+    if (!Q.free(b)) { return null; }
+    var n = ybPut(Q.F, kind, x, y, turn);
+    n.yard = key;
+    Q.take(n);
+    return n;
+  }
+  function lwFrontBenches(Q, key) {
+    var P = Q.P, icon = ICONS.i_gardenbench, put = 0, want = Math.max(2, Math.min(4, Math.round((Q.F.hb.r - Q.F.hb.l) / (10 * P))));
+    if (!icon) { return 0; }
+    var y = Q.w1 - Q.w0 >= 1.8 * P ? Q.w0 + icon.box[1] / 2 + 0.15 * P : Q.w1 + icon.box[1] / 2 + 0.4 * P;
+    // (past the planters either side of the way in)
+    lwAlongFront(Q, 3.6 * P, (Q.main ? Q.main.w / 2 : 0) + 3.4 * P).some(function (s) { if (lwPutOut(Q, "i_gardenbench", s[0], y, 0, key)) { put++; } return put >= want; });
+    return put;
+  }
+  // Spots on the walks down the building's sides, from its front corners
+  // back as far as a third of its depth (not round the back): [x, y, side].
+  function lwAlongSides(Q, gap) {
+    var P = Q.P, hb = Q.F.hb, out = [], deep = (hb.b - hb.t) / 3;
+    for (var d = 1.2 * P; d <= deep; d += gap) {
+      [-1, 1].forEach(function (s) { out.push([s < 0 ? hb.l - 1.4 * P : hb.r + 1.4 * P, hb.b - d, s]); });
+    }
+    return out;
+  }
+  function lwFrontPlanters(Q, key) {
+    var P = Q.P, icon = ICONS.i_planter, put = 0;
+    if (!icon || !Q.main) { return 0; }
+    var y = Q.w0 + icon.box[1] / 2 + 0.12 * P, d = Q.main.w / 2 + 1.0 * P + icon.box[0] / 2;
+    [1, -1, 2, -2].forEach(function (k) {
+      var x = Q.main.x + Math.sign(k) * (d + (Math.abs(k) - 1) * (icon.box[0] + 0.6 * P));
+      if (lwPutOut(Q, "i_planter", x, y, 0, key)) { put++; }
+    });
+    return put;
+  }
+  function lwFrontLamps(Q, key) {
+    var P = Q.P, put = 0, y = Q.w1 - 0.3 * P;
+    for (var x = Q.F.hb.l + 2 * P; x <= Q.F.hb.r - 2 * P; x += 9 * P) { if (lwPutOut(Q, "i_lamppost", x, y, 0, key)) { put++; } }
+    return put;
+  }
+  // A cafe's tables on its walk, a chair each side, toward the sun and the street.
+  function lwFrontTables(Q, key) {
+    var P = Q.P, icon = ICONS.i_roundtable, put = 0;
+    if (!icon) { return 0; }
+    var deep = Q.w1 - Q.w0, y = deep >= 2.6 * P ? Q.w0 + deep / 2 : Q.w1 + 1.4 * P;
+    function table(x, ty) {
+      if (!lwPutOut(Q, "i_roundtable", x, ty, 0, key)) { return false; }
+      put++;
+      [-1, 1].forEach(function (k) { lwPutOut(Q, "i_chair", x + k * (icon.box[0] / 2 + 0.35 * P), ty, k < 0 ? 90 : 270, key); });
+      return true;
+    }
+    lwAlongFront(Q, 2.8 * P, (Q.main ? Q.main.w / 2 : 0) + 2.4 * P).some(function (s) { table(s[0], y); return put >= 4; });
+    // (no room out in front -- the parking comes up to the walk: a corner down the side)
+    if (put < 2) { lwAlongSides(Q, 2.4 * P).some(function (s) { table(s[0], s[1]); return put >= 3; }); }
+    return put;
+  }
+  // Cart corrals: in the parking, a stall each, one to every twenty-five or
+  // so -- along the rows, not by the way in, never a stall kept for a
+  // wheelchair or a charger; no parking, a cart rail on the walk by the door.
+  function lwCartCorrals(Q, key) {
+    var P = Q.P, F = Q.F, rows = hand.nodes.filter(function (n) { return n.kind === "i_parking" && n.yard === "parking" && insideArea(F.lot, n.x, n.y, -P); });
+    var spots = [], total = 0;
+    rows.forEach(function (lot) {
+      var S = parkLayout(lot.w, lot.h), t = (lot.turn || 0) * Math.PI / 180, c = Math.cos(t), s = Math.sin(t);
+      total += S.stalls.length;
+      var keep = [].concat(lot.access || [], lot.aisle || [], lot.ev || []);
+      S.stalls.forEach(function (st, i) {
+        if (keep.indexOf(i) >= 0 || S.stalls.length < 4 || i === 0 || i === S.stalls.length - 1) { return; }
+        var lx = st.x - lot.w / 2, ly = st.y - lot.h / 2, x = lot.x + lx * c - ly * s, y = lot.y + lx * s + ly * c;
+        var q = F.local(x, y), door = Q.main ? Math.hypot(q[0] - Q.main.x, q[1] - Q.main.y) : 0;
+        spots.push({ lot: lot, i: i, x: x, y: y, turn: (lot.turn || 0) + (st.head < 0 ? 0 : 180), door: door, rowAt: i / Math.max(1, S.stalls.length - 1) });
+      });
+    });
+    var want = Math.max(1, Math.min(8, Math.round(total / 25))), put = 0;
+    if (spots.length) {
+      // (spread out: the stalls a third and two thirds along the rows first, the nearer the door the sooner)
+      spots.sort(function (a, b) { return Math.abs(Math.abs(a.rowAt - 0.5) - 0.18) - Math.abs(Math.abs(b.rowAt - 0.5) - 0.18) || a.door - b.door; });
+      var chosen = [];
+      spots.forEach(function (sp) {
+        if (chosen.length >= want || chosen.some(function (o) { return Math.hypot(o.x - sp.x, o.y - sp.y) < 14 * P; })) { return; }
+        chosen.push(sp);
+      });
+      chosen.forEach(function (sp) {
+        var gone = {};
+        hand.nodes.forEach(function (n) { if (n.kind === "i_parked" && Math.hypot(n.x - sp.x, n.y - sp.y) < 1.3 * P) { gone[n.id] = true; } });
+        hand.nodes = hand.nodes.filter(function (n) { return !gone[n.id]; });
+        var n = adviceAdd("i_cartcorral", Math.round(sp.x), Math.round(sp.y), ((Math.round(sp.turn) % 360) + 360) % 360);
+        n.own = true; n.yard = key;
+        sp.lot.corrals = (sp.lot.corrals || []).concat([sp.i]);
+        put++;
+      });
+      return put;
+    }
+    // No parking of its own (a shop on a street): no corral, a few carts
+    // nested in a line against the wall beside the way in, out of the way
+    // of the door; down the side where the front has no room.
+    var cart = ICONS.i_cart;
+    if (!cart) { return 0; }
+    var cl = Math.max(cart.box[0], cart.box[1]), cw = Math.min(cart.box[0], cart.box[1]), count = 4, step = 0.3 * P, len = cl + (count - 1) * step;
+    var turn = cart.box[1] >= cart.box[0] ? 90 : 0, from = (Q.main ? Q.main.w / 2 : 0) + 1.0 * P + len / 2, rowY = Q.w0 + cw / 2 + 0.12 * P;
+    function line(cx, cy, along) {
+      var b = along ? { l: cx - len / 2, r: cx + len / 2, t: cy - cw / 2, b: cy + cw / 2 } : { l: cx - cw / 2, r: cx + cw / 2, t: cy - len / 2, b: cy + len / 2 };
+      if (!Q.free(b)) { return false; }
+      for (var i = 0; i < count; i++) {
+        var o = -len / 2 + cl / 2 + i * step, n = ybPut(Q.F, "i_cart", along ? cx + o : cx, along ? cy : cy + o, along ? turn : turn + 90);
+        n.yard = key; Q.take(n); put++;
+      }
+      return true;
+    }
+    if (!lwAlongFront(Q, len + 0.6 * P, from).some(function (s) { return line(s[0], rowY, true); })) {
+      lwAlongSides(Q, len + 0.4 * P).some(function (s) { return line(s[0] + (s[2] < 0 ? 0.6 * P : -0.6 * P), s[1] - len / 2, false); });
+    }
+    return put;
+  }
+  function lwFrontItems(key, houses) {
+    var put = 0;
+    (houses || yardHouses()).forEach(function (H) {
+      try {
+        var Q = lwFrontFrame(H);
+        if (!Q.F.house.length) { return; }
+        put += key === "carts" ? lwCartCorrals(Q, key) : key === "benches" ? lwFrontBenches(Q, key) : key === "planters" ? lwFrontPlanters(Q, key)
+             : key === "lamps" ? lwFrontLamps(Q, key) : lwFrontTables(Q, key);
+      } catch (e) { if (window.console) { console.warn("front:", e && e.message); } }
+    });
+    picked = null; chosen = null; many = [];
+    return put;
+  }
+  if (typeof yardPut === "function") {
+    var yardPutFront = yardPut;
+    yardPut = function (key, houses) {
+      if (LW_FRONT[key] && lwSiteType(lwTypeNow())) {
+        var got = lwFrontItems(key, houses);
+        // (none of these behind a building: where the front has no room for
+        // them, none -- but lamps, which light a back lot as well)
+        if (got || key !== "lamps") { return got; }
+      }
+      return yardPutFront.apply(this, arguments);
+    };
+  }
+  // A store's carts come with its parking, as its parking does (the grounds' tile still takes them away).
+  if (typeof GROUNDS_FOR === "object" && GROUNDS_FOR.store && GROUNDS_FOR.store.indexOf("carts") < 0) { GROUNDS_FOR.store.splice(1, 0, "carts"); }
+  if (typeof groundsAsk === "function") {
+    var groundsAskCarts = groundsAsk;
+    groundsAsk = function (ui, want) {
+      if (want && (want.type === "shop") && (!want.yard || want.yard.carts === undefined)) {
+        want.yard = Object.assign({}, want.yard && typeof want.yard === "object" ? want.yard : {}, { carts: true });
+      }
+      return groundsAskCarts.apply(this, arguments);
+    };
   }

@@ -546,7 +546,8 @@
     var floors = floorsOf(), links = floorLinks(floors), endOf = {};
     links.forEach(function (pair) { endOf[pair[0].id] = "low"; endOf[pair[1].id] = "high"; });
     // (the flights between floors, for the holes over them: 40-climb.js)
-    var flightEnds = hand.nodes.filter(function (m) { return m.kind === "i_stairs" && endOf[m.id] && !((m.turn || 0) % 90); });
+    // (an escalator comes up through a well as a flight does: 40-items.js, 40-mall.js)
+    var flightEnds = hand.nodes.filter(function (m) { return (m.kind === "i_stairs" || m.kind === "i_escalator") && endOf[m.id] && !((m.turn || 0) % 90); });
     function wellIn(room, end) {
       if ((room.turn || 0) % 90) { return null; }
       var s = flightEnds.filter(function (m) { return endOf[m.id] === end && insideArea(room, m.x, m.y); })[0];

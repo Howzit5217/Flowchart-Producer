@@ -299,6 +299,7 @@
     // points (what the view is fitted round), its triangles alongside.
     M.done = function () {
       var out = [];
+      try { mUnflush(M); } catch (e) { /* left as made */ }
       M.order.forEach(function (key) {
         var b = M.parts[key];
         if (!b.p.length) { return; }
@@ -316,6 +317,112 @@
       return out;
     };
     return M;
+  }
+
+  // (2026-10-04: "no more flickering anywhere in any scenario") Two parts of
+  // a piece lying in one plane and facing the same way -- a screen flush
+  // with its bezel, a picture with its frame, a dartboard's rings, a shelf's
+  // edge with the post beside it: neither was in front, and as the piece was
+  // looked at the depth buffer showed first one and then the other.  Where
+  // parts of different stuff overlap so, the one with less of itself in
+  // that plane (what is laid on: the screen, the picture) is lifted a hair
+  // off it, along the way it faces -- one on another, a hair more each.
+  var MODEL_FLUSH = 0.07;                // px: under a millimetre and a half (an odd size: not where a part was put on purpose)
+  function mUnflush(M) {
+    // (again, while anything was lifted: lifted, a tyre came within a hair of the hub on it)
+    for (var pass = 0; pass < 3 && M.order.length > 1; pass++) {
+      if (!mUnflushOnce(M)) { break; }
+    }
+  }
+  function mUnflushOnce(M) {
+    var keys = M.order, tris = [], moved = 0;
+    keys.forEach(function (key, mi) {
+      var b = M.parts[key];
+      if (!b.p.length || b.how.shade || b.how.glass) { return; }
+      var p = b.p, nn = b.n;
+      for (var i = 0; i + 8 < p.length; i += 9) {
+        var ux = p[i + 3] - p[i], uy = p[i + 4] - p[i + 1], uz = p[i + 5] - p[i + 2];
+        var vx = p[i + 6] - p[i], vy = p[i + 7] - p[i + 1], vz = p[i + 8] - p[i + 2];
+        var nx = uy * vz - uz * vy, ny = uz * vx - ux * vz, nz = ux * vy - uy * vx, L = Math.hypot(nx, ny, nz);
+        if (!(L > 1e-6)) { continue; }
+        nx /= L; ny /= L; nz /= L;
+        // (the way it faces is its shading's: nothing is culled, which way round it was wound means nothing)
+        if (nx * (nn[i] + nn[i + 3] + nn[i + 6]) + ny * (nn[i + 1] + nn[i + 4] + nn[i + 7]) + nz * (nn[i + 2] + nn[i + 5] + nn[i + 8]) < 0) {
+          nx = -nx; ny = -ny; nz = -nz;
+        }
+        var ax = Math.abs(nx) >= Math.abs(ny) && Math.abs(nx) >= Math.abs(nz) ? 0 : Math.abs(ny) >= Math.abs(nz) ? 1 : 2;
+        var u = ax === 0 ? 1 : 0, v = ax === 2 ? 1 : 2;
+        tris.push({ mi: mi, b: b, at: i, n: [nx, ny, nz], d: nx * p[i] + ny * p[i + 1] + nz * p[i + 2], area: L / 2,
+                    q: [[p[i + u], p[i + v]], [p[i + 3 + u], p[i + 3 + v]], [p[i + 6 + u], p[i + 6 + v]]] });
+      }
+    });
+    // by plane: its way (to a third of a degree) and where it lies (to a tenth of a pixel)
+    var planes = new Map();
+    tris.forEach(function (t) {
+      var key = Math.round(t.n[0] * 180) + "," + Math.round(t.n[1] * 180) + "," + Math.round(t.n[2] * 180) + "," + Math.round(t.d * 10);
+      var list = planes.get(key);
+      if (!list) { list = []; planes.set(key, list); }
+      list.push(t);
+    });
+    // two triangles in a plane: whether they share some of it, more than a sliver
+    function apart(A, B) {
+      for (var s = 0; s < 2; s++) {
+        var P = s ? B : A;
+        for (var e = 0; e < 3; e++) {
+          var a = P[e], c = P[(e + 1) % 3], ex = c[1] - a[1], ey = a[0] - c[0], l = Math.hypot(ex, ey);
+          if (l < 1e-9) { continue; }
+          ex /= l; ey /= l;
+          var lo1 = Infinity, hi1 = -Infinity, lo2 = Infinity, hi2 = -Infinity;
+          for (var k = 0; k < 3; k++) {
+            var d1 = A[k][0] * ex + A[k][1] * ey, d2 = B[k][0] * ex + B[k][1] * ey;
+            if (d1 < lo1) { lo1 = d1; } if (d1 > hi1) { hi1 = d1; }
+            if (d2 < lo2) { lo2 = d2; } if (d2 > hi2) { hi2 = d2; }
+          }
+          if (hi1 <= lo2 + 0.02 || hi2 <= lo1 + 0.02) { return true; }
+        }
+      }
+      return false;
+    }
+    var lifted = new Set();
+    planes.forEach(function (list, key) {
+      if (list.length < 2) { return; }
+      var parts = key.split(","), next = planes.get(parts.slice(0, 3).join(",") + "," + (Number(parts[3]) + 1));
+      var all = next ? list.concat(next) : list;
+      var mats = {};
+      all.forEach(function (t) {
+        var m = mats[t.mi] || (mats[t.mi] = { mi: t.mi, area: 0, dA: 0, tris: [] });
+        m.area += t.area; m.dA += t.d * t.area; m.tris.push(t);
+      });
+      var ms = Object.keys(mats).map(function (k) { var m = mats[k]; m.d = m.dA / (m.area || 1); return m; });
+      if (ms.length < 2) { return; }
+      // which is meant to be on top: one standing out a little already is
+      // (a screen a half-millimetre proud of its phone); where they are
+      // level, what the piece was made with later -- the detail on the body,
+      // the tyre in the car's side, the inner ring on the board
+      ms.sort(function (p, q) { return Math.abs(p.d - q.d) > 0.002 ? p.d - q.d : p.mi - q.mi; });
+      var to = ms.map(function (m) { return m.d; });
+      for (var j = 1; j < ms.length; j++) {
+        for (var i = 0; i < j; i++) {
+          if (to[j] >= to[i] + MODEL_FLUSH - 1e-6) { continue; }
+          var meets = ms[j].tris.some(function (t) {
+            return ms[i].tris.some(function (o) { return Math.abs(t.d - o.d) < 0.06 && !apart(t.q, o.q); });
+          });
+          if (meets) { to[j] = to[i] + MODEL_FLUSH; }
+        }
+      }
+      ms.forEach(function (m, j) {
+        var lift = to[j] - m.d;
+        if (!(lift > 1e-6)) { return; }
+        m.tris.forEach(function (t) {
+          if (lifted.has(t)) { return; }            // (a plane next to another is looked at with it too)
+          lifted.add(t);
+          var p = t.b.p;
+          for (var k = 0; k < 9; k += 3) { p[t.at + k] += t.n[0] * lift; p[t.at + k + 1] += t.n[1] * lift; p[t.at + k + 2] += t.n[2] * lift; }
+          moved++;
+        });
+      });
+    });
+    return moved;
   }
 
   // ---- what a piece is colored --------------------------------------------------
@@ -479,7 +586,8 @@
     // (the design it is made in, 40-designs.js, is its finish's: in the key with it)
     var key = [n.kind, modelOwn[n.kind] ? n.id : "", Math.round(n.w * 10), Math.round(n.h * 10), Math.round(H * 10),
                Math.round((extra.cord || 0) * 10), JSON.stringify(C), n.fin ? JSON.stringify(n.fin) : "",
-               extra.onTop ? 1 : 0, extra.hung ? 1 : 0, extra.onWall ? 1 : 0, state ? state.key : ""].join("|");
+               extra.onTop ? 1 : 0, extra.hung ? 1 : 0, extra.onWall ? 1 : 0, state ? state.key : "",
+               n.sp || ""].join("|");          // (what kind of tree, shrub or bed it is: 40-flora.js)
     var made = modelKept.get(key);
     if (!made) {
       var M = modelMaker(0, 0, 0, 0), wasOwn = !!modelOwn[n.kind];
@@ -623,6 +731,7 @@
   }
   // a row of books from x0 to x1 standing on z, their backs to y0
   function mBooks(M, x0, x1, y0, y1, z, hiMost, rnd, lean) {
+    if (M.state && M.state.empty) { return; }          // (carried in empty, its things after it: 40-movein.js)
     var x = x0, colors = ["#8c3b2f", "#2f4f6f", "#c9a24a", "#3d5c43", "#6a4c7a", "#d8d2c4", "#1f2a33", "#b5653a"];
     while (x < x1 - 1.6 * cm) {
       var w = (2 + rnd() * 2.4) * cm, h = Math.min(hiMost, (17 + rnd() * 11) * cm), d = Math.min(y1 - y0, (14 + rnd() * 8) * cm);
@@ -1023,6 +1132,7 @@
         M.box(-W / 2 + 1.8 * cm, W / 2 - 1.8 * cm, a, a + D / 3 - 1.5 * cm, z - 1.4 * cm, z, wood, 0.3 * cm);
       }
     });
+    if (M.state && M.state.empty) { return; }          // (carried in empty: 40-movein.js)
     var shoes = ["#1f2a33", "#8c3b2f", "#d8d2c4", "#6b4a33"];
     for (var x = -W / 2 + 7 * cm; x < W / 2 - 7 * cm; x += 14 * cm) {
       var col = M.mat("leather", shoes[Math.floor(rnd() * shoes.length)]);
@@ -1065,7 +1175,7 @@
     var cols = ["#2f4f6f", "#d8d2c4", "#8c3b2f", "#3d5c43", "#e3c3a0", "#5d6d7e"];
     for (var z = 0; z < H - 2 * cm; z += 40 * cm) {
       M.box(-W / 2 + 1.6 * cm, W / 2 - 1.6 * cm, -D / 2 + 1 * cm, D / 2, z, z + 1.6 * cm, board);
-      if (z + 30 * cm > H) { continue; }
+      if (z + 30 * cm > H || (M.state && M.state.empty)) { continue; }
       [-0.24, 0.24].forEach(function (k) {
         var pile = 2 + Math.floor(rnd() * 4), zz = z + 1.6 * cm;
         for (var p = 0; p < pile; p++) {
@@ -2689,7 +2799,7 @@
       var z = 8 * cm + k * (H - 12 * cm) / 3;
       M.box(-W / 2, W / 2, -D / 2, D / 2, z, z + 2 * cm, met, 0.3 * cm);
       for (var x = -W / 2 + 4 * cm; x < W / 2 - 22 * cm; x += 26 * cm) {
-        if (rnd() < 0.3) { continue; }
+        if (rnd() < 0.3 || (M.state && M.state.empty)) { continue; }
         var bh = (16 + rnd() * 14) * cm;
         if (z + bh > H - 4 * cm) { continue; }
         M.box(x, x + 22 * cm, -D / 2 + 3 * cm, D / 2 - 3 * cm, z + 2 * cm, z + 2 * cm + bh, M.mat(rnd() < 0.5 ? "plastic" : "wicker", rnd() < 0.5 ? C.frame : "#7f8a93"), 1 * cm);
@@ -2711,7 +2821,7 @@
       var z = 12 * cm + k * gap;
       [[-D / 2 + 1 * cm, -2.5 * cm], [2.5 * cm, D / 2 - 1 * cm]].forEach(function (side, si) {
         M.box(-W / 2 + 2 * cm, W / 2 - 2 * cm, side[0], side[1], z, z + 1.5 * cm, met);
-        if (k === shelves) { return; }
+        if (k === shelves || (M.state && M.state.empty)) { return; }
         for (var x = -W / 2 + 3 * cm; x < W / 2 - 10 * cm;) {
           var pw = (8 + rnd() * 9) * cm, ph = Math.min(gap - 5 * cm, (12 + rnd() * 18) * cm), col = M_GOODS[Math.floor(rnd() * M_GOODS.length)];
           var front = si ? side[1] - 1 * cm : side[0] + 1 * cm, back = si ? side[0] + 2 * cm : side[1] - 2 * cm;

@@ -484,7 +484,7 @@
     var hy = lot.h / 2, out = [];
     for (var lx = -3.5 * every + every / 2; lx < 3.5 * every; lx += every) {
       WORLD_LAMP_HEAD[kind].forEach(function (h) {
-        var p = W(lx, hy + 1.6 * P - 0.35 * P + h[0] * P);
+        var p = W(lx, hy + (typeof streetWalkPx === "function" ? streetWalkPx() : 1.6 * P) - 0.35 * P + h[0] * P);
         out.push([p[0], p[1], h[1] * P, WORLD_LAMP_REACH[kind] * P, Math.abs(lx)]);
       });
     }
@@ -522,9 +522,11 @@
     var hood = WORLD_HOOD[worldScape()], ax = worldStreetAxes(L);
     var W = Math.max(lot.w, (hood.tall ? 9 : 17) * P), D = Math.max(lot.h, 26 * P), hy = L.hy;
     var far0 = hy + L.walkW + L.roadW, reach = L.walk ? GL3_FAR * 0.8 : L.groundR;
+    // (the sidewalk over there beyond its own strip of grass, as on this side: 40-verge.js)
+    var verge0 = far0 + (typeof streetVergePx === "function" ? streetVergePx() : 0);
     // the pavement over the road
     var pave = gl3Mix([0.8, 0.79, 0.76], L.sheetC, 0.2);
-    gl3Poly(v, [L.lotWorld(-reach, far0, -1.5), L.lotWorld(reach, far0, -1.5), L.lotWorld(reach, far0 + L.walkW, -1.5), L.lotWorld(-reach, far0 + L.walkW, -1.5)],
+    gl3Poly(v, [L.lotWorld(-reach, verge0, -1.5), L.lotWorld(reach, verge0, -1.5), L.lotWorld(reach, far0 + L.walkW, -1.5), L.lotWorld(-reach, far0 + L.walkW, -1.5)],
             [0, 0, 1], pave, 1, [[-reach / P, 0], [reach / P, 0], [reach / P, 1.6], [-reach / P, 1.6]], PAT.walk);
     var many = L.walk ? 4 : 2, near = L.walk ? Infinity : L.groundR * 0.78;
     var spots = [], gapPx = (typeof hoodGap === "function" ? hoodGap() : 0) * P;
@@ -697,13 +699,15 @@
     var still = typeof STILL !== "undefined" && STILL, t = still ? 12 : performance.now() / 1000;
     var walk = V3.mode === "walk", ink = simInk();
     var span = walk ? 70 * P : Math.max(14 * P, (V3.gl && V3.gl.scenery ? V3.gl.scenery.groundR : 60 * P) * 0.62);
-    var hy = lot.h / 2, walkW = 1.6 * P, roadW = 7 * P, far = hood();
+    // (the kerb as far out as the sidewalk and its strip of grass; those walking keep to the sidewalk: 40-verge.js)
+    var hy = lot.h / 2, walkW = typeof streetWalkPx === "function" ? streetWalkPx() : 1.6 * P, roadW = 7 * P, far = hood();
+    var sideW = 1.6 * P, verge = walkW - sideW;
     function hood() { return !!houseOpt("hood"); }
     // Each pavement two ways, one each side of it; each way one pace, and
     // those going it spaced out along it.  (They went back and forth at
     // their own paces, and walked through one another, 2026-10-03.)
-    var lanes = [{ y: hy + walkW * 0.3, dir: 1 }, { y: hy + walkW * 0.74, dir: -1 }];
-    if (far) { lanes.push({ y: hy + walkW + roadW + walkW * 0.26, dir: 1 }, { y: hy + walkW + roadW + walkW * 0.7, dir: -1 }); }
+    var lanes = [{ y: hy + sideW * 0.3, dir: 1 }, { y: hy + sideW * 0.74, dir: -1 }];
+    if (far) { lanes.push({ y: hy + walkW + roadW + verge + sideW * 0.26, dir: 1 }, { y: hy + walkW + roadW + verge + sideW * 0.7, dir: -1 }); }
     var rnd = gl3Rand(Math.round(Math.abs(lot.x) + Math.abs(lot.y)) + 3), many = far ? 12 : 7;
     lanes.forEach(function (ln) { ln.pace = (1.05 + rnd() * 0.3) * P; ln.from = rnd(); ln.n = 0; });
     for (var q = 0; q < many; q++) { lanes[q % lanes.length].n++; }

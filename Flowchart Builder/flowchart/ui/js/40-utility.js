@@ -22,6 +22,7 @@
   var POWER_KINDS = ["front", "back", "under", "none"];
   var POWER_EVERY = 36, POWER_TALL = 10.2, POWER_ARM = 9.6, POWER_LOW = 7.5;      // metres
   var POWER_WOOD = [0.36, 0.28, 0.2];
+  var POWER_REACH = 2.1, POWER_PINS = [0.35, 1.15, 1.95];      // metres: the arm out from the pole, and where its three wires are on it
   function powerKind() { var k = houseOpt("power"); return POWER_KINDS.indexOf(k) >= 0 ? k : "front"; }
 
   // The lot's own numbers, x along the street and y toward it, for a lot.
@@ -55,7 +56,10 @@
       }
       if (ok) { best = o; break; }
     }
-    var y = back ? -F.hy + 0.6 * P : F.hy + 1.6 * P - 0.35 * P;
+    // (in front: at the kerb -- in the strip of grass where the sidewalk is stepped back from it,
+    // else at the sidewalk's street edge -- its arm reaching out over the road, powerStreet)
+    var walk = typeof streetWalkPx === "function" ? streetWalkPx() : 1.6 * P, verge = typeof streetVergePx === "function" ? streetVergePx() : 0;
+    var y = back ? -F.hy + 0.6 * P : F.hy + walk - (verge ? 0.45 : 0.22) * P;
     var out = [];
     for (var j = -6; j <= 6; j++) { out.push({ lx: (best + j * POWER_EVERY) * P, ly: y }); }
     return out;
@@ -92,19 +96,23 @@
       }, g);
       return;
     }
-    var poles = powerPoles(F, kind === "back"), toLot = kind === "back" ? 1 : -1;    // the way to the house, along d
+    // the way to the house along d, and the way away from it: the arm, its wires, the low wire and the
+    // transformer all out that way, over the road (or the lane behind) -- none over the sidewalk
+    // (2026-10-04: "the power lines stop running on top of the sidewalks")
+    var poles = powerPoles(F, kind === "back"), toLot = kind === "back" ? 1 : -1, out = -toLot;
     var tops = poles.map(function (p) {
       var w = F.world(p.lx, p.ly), g = powerGround(w[0], w[1]);
       lifted(function () {
         worldTube(v, [w[0], w[1], 0], [w[0], w[1], POWER_TALL * P], 0.15 * P, 0.11 * P, 7, wood, PAT.plain);
-        worldBox(v, w, F.e, F.d, 0.05 * P, 1.2 * P, POWER_ARM * P, (POWER_ARM + 0.11) * P, wood, PAT.plain);
-        [-1.05, 1.05].forEach(function (s) {
-          var at = [w[0] + F.d[0] * s * P, w[1] + F.d[1] * s * P];
+        var ac = [w[0] + F.d[0] * out * POWER_REACH / 2 * P, w[1] + F.d[1] * out * POWER_REACH / 2 * P];
+        worldBox(v, ac, F.e, F.d, 0.05 * P, (POWER_REACH / 2 + 0.15) * P, POWER_ARM * P, (POWER_ARM + 0.11) * P, wood, PAT.plain);
+        POWER_PINS.forEach(function (s) {
+          var at = [w[0] + F.d[0] * out * s * P, w[1] + F.d[1] * out * s * P];
           worldTube(v, [at[0], at[1], (POWER_ARM + 0.11) * P], [at[0], at[1], (POWER_ARM + 0.3) * P], 0.045 * P, 0.03 * P, 6, glassy, PAT.plain);
         });
         worldTube(v, [w[0], w[1], POWER_TALL * P], [w[0], w[1], (POWER_TALL + 0.2) * P], 0.045 * P, 0.03 * P, 6, glassy, PAT.plain);
-        // the low wire's rack, on the side toward the houses
-        var rk = [w[0] + F.d[0] * toLot * 0.17 * P, w[1] + F.d[1] * toLot * 0.17 * P];
+        // the low wire's rack
+        var rk = [w[0] + F.d[0] * out * 0.17 * P, w[1] + F.d[1] * out * 0.17 * P];
         worldBox(v, rk, F.e, F.d, 0.03 * P, 0.05 * P, (POWER_LOW - 0.1) * P, (POWER_LOW + 0.1) * P, grey, 22);
       }, g);
       return { w: w, g: g, lx: p.lx };
@@ -112,7 +120,7 @@
     // a transformer on the pole nearest the house
     var near = tops.slice().sort(function (a, b) { return Math.abs(a.lx) - Math.abs(b.lx); })[0];
     if (near) {
-      var tc = [near.w[0] + F.d[0] * toLot * 0.42 * P, near.w[1] + F.d[1] * toLot * 0.42 * P];
+      var tc = [near.w[0] + F.d[0] * out * 0.42 * P, near.w[1] + F.d[1] * out * 0.42 * P];
       lifted(function () {
         worldTube(v, [tc[0], tc[1], 8.0 * P], [tc[0], tc[1], 9.05 * P], 0.27 * P, 0.27 * P, 10, grey, 22);
         worldTube(v, [tc[0], tc[1], 9.05 * P], [tc[0], tc[1], 9.12 * P], 0.27 * P, 0.2 * P, 10, grey, 22);
@@ -122,7 +130,7 @@
     lifted(function () {
       for (var i = 0; i + 1 < tops.length; i++) {
         var a = tops[i], b = tops[i + 1];
-        [[-1.05, POWER_ARM + 0.3], [1.05, POWER_ARM + 0.3], [0, POWER_TALL + 0.2], [toLot * 0.2, POWER_LOW]].forEach(function (wv) {
+        POWER_PINS.map(function (s) { return [out * s, POWER_ARM + 0.3]; }).concat([[0, POWER_TALL + 0.2], [out * 0.2, POWER_LOW]]).forEach(function (wv) {
           var pa = [a.w[0] + F.d[0] * wv[0] * P, a.w[1] + F.d[1] * wv[0] * P, a.g + wv[1] * P];
           var pb = [b.w[0] + F.d[0] * wv[0] * P, b.w[1] + F.d[1] * wv[0] * P, b.g + wv[1] * P];
           var pts = powerSag(pa, pb, 0.55 * P, 9);
@@ -267,7 +275,7 @@
     // and the wire to it from the nearest pole's low rack, hanging a little
     var near = poles.slice().sort(function (a, b) { return Math.hypot(a[0] - at[0], a[1] - at[1]) - Math.hypot(b[0] - at[0], b[1] - at[1]); })[0];
     if (!near) { return; }
-    var toLot = kind === "back" ? 1 : -1, rack = [near[0] + F.d[0] * toLot * 0.2 * P, near[1] + F.d[1] * toLot * 0.2 * P];
+    var away = kind === "back" ? -1 : 1, rack = [near[0] + F.d[0] * away * 0.2 * P, near[1] + F.d[1] * away * 0.2 * P];   // (the low wire's rack, out from the pole: powerStreet)
     var from = [rack[0], rack[1], powerGround(near[0], near[1]) + POWER_LOW * P];
     var span = Math.hypot(from[0] - hood[0], from[1] - hood[1]);
     if (span > 60 * P) { return; }
