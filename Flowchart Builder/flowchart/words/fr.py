@@ -6428,7 +6428,10 @@ FR = {
     "gd_cars_head": "Garage", "gd_cars_1": "1 voiture", "gd_cars_2": "2 voitures", "gd_cars_3": "3 voitures", "gd_cars_4": "4 voitures",
     "fm_foyer": "Entrée",   # a house entered by an entry hall (40-forms.js)
     "wg_ready": "Préparation du chantier",   # the building site held at its start while it loads (40-works-gate.js)
+    "gl_wait": "Préparation de la vue 3D",   # the 3D view's programs made on the side, the first time it is drawn (38-view3d-gl.js)
     "ro_coming": "Restauration du travail…",   # over the paper while the work left on it is put back (40-reopen.js)
+    "uf_head": "Meubles",   # Start building: furnished or empty (39-starter.js)
+    "uf_tile": "Meubler les pièces",
     "o3_open_lid": "Soulever le couvercle", "o3_close_lid": "Fermer le couvercle",
     "o3_locked": "Fermé à clé",
     "o3_light_on": "Allumer la lumière", "o3_light_off": "Éteindre la lumière",

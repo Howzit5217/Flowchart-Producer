@@ -28,7 +28,12 @@
   // what is going on.
   var JC_ON = 7 * 3600, JC_LUNCH = 12 * 3600, JC_BACK = 12.5 * 3600, JC_OFF = 15.5 * 3600, JC_DAY = 86400;
   var JC_WORKED = (JC_LUNCH - JC_ON) + (JC_OFF - JC_BACK);          // 8 hours
-  var JC_NIGHT_K = 10, JC_PAUSE_K = 3, JC_STOP_K = 3;                 // off hours, pauses, days rained off: played this many times faster
+  var JC_NIGHT_K = 10, JC_PAUSE_K = 3, JC_STOP_K = 3;                 // days off, pauses, days rained off: played this many times faster
+  // (2026-10-05: "the day night cycle is good but it kind of freezes then goes back to being day rather
+  // than having night time") A night played unevenly: the evening and the dawn quickly, the dark hours
+  // themselves slowly enough to be seen -- it had all gone by ten times faster, a fifth of a second of
+  // dusk at the usual speed, never dark.
+  var JC_DUSK_K = 10, JC_DARK_K = 2.4, JC_DARK0 = 18.5 * 3600, JC_DARK1 = 5.5 * 3600;
   // working days by floor area: [k, power] -- a wood house of 200 m2 about 130 days, of 500 m2 about 190;
   // a steel office of 1,500 m2 about 220, a mall of 20,000 m2 about 450; a tower of 10,000 m2 about 470
   var JC_FRAME = { wood: [14.5, 0.414], steel: [29, 0.28], tall: [30, 0.3] };
@@ -111,6 +116,14 @@
       segs.push(Object.assign({ s0: s, s1: s + ds, w0: w, w1: w + dw, c0: c0, c1: c1, pres: pres, state: state, wx: wx, day: Math.max(1, stats.days) }, extra || {}));
       s += ds; w += dw;
     }
+    // the hours off at night: quick through the evening and the dawn, slow through the dark
+    function rest(c0, c1, state) {
+      var day0 = Math.floor(c0 / JC_DAY) * JC_DAY, cuts = [c0, Math.max(c0, Math.min(c1, day0 + JC_DARK1)), Math.max(c0, Math.min(c1, day0 + JC_DARK0)), c1];
+      for (var i = 0; i + 1 < cuts.length; i++) {
+        var a = cuts[i], b = cuts[i + 1], h = ((a + b) / 2 - day0) / 3600;
+        push(a, b, h < 5.5 || h >= 18.5 ? JC_DARK_K : JC_DUSK_K, 0, 0, state);
+      }
+    }
     // a worked stretch: as far as the work goes, an inspection where it comes to one, ended where the work is
     function work(c0, c1, rate, state) {
       var c = c0;
@@ -155,13 +168,13 @@
       var off = date.getDay() === 0 || date.getDay() === 6 ? "jc_weekend" : jcHoliday(date) ? "jc_holiday" : null;
       if (off) { push(day0 + (segs.length ? 0 : JC_ON), day0 + JC_DAY, JC_NIGHT_K, 0, 0, off); continue; }
       stats.days++;
-      if (segs.length) { push(day0, day0 + JC_ON, JC_NIGHT_K, 0, 0, "jc_night"); }
+      if (segs.length) { rest(day0, day0 + JC_ON, "jc_night"); }
       var rates = JC_WX_RATE[wx] || [1, 1], rate = w < closed ? rates[0] : rates[1];
       if (rate === 0) {
         // rained off (snowed off, a storm): the crews do not come
         stats.lost++; stats[wx] = (stats[wx] || 0) + 1;
         push(day0 + JC_ON, day0 + JC_OFF, JC_STOP_K, 0, 0, "jc_off_" + wx);
-        push(day0 + JC_OFF, day0 + JC_DAY, JC_NIGHT_K, 0, 0, "jc_home");
+        rest(day0 + JC_OFF, day0 + JC_DAY, "jc_home");
         continue;
       }
       var why = rate < 1 ? "jc_slow_" + wx : "jc_work";
@@ -184,7 +197,7 @@
       push(Math.max(at, day0 + JC_LUNCH), day0 + JC_BACK, JC_PAUSE_K, 0, 1, "jc_lunch");
       at = work(Math.max(day0 + JC_BACK, from), day0 + JC_OFF, rate, why);
       if (w >= T - 1e-9) { break; }
-      push(day0 + JC_OFF, day0 + JC_DAY, JC_NIGHT_K, 0, 0, "jc_home");
+      rest(day0 + JC_OFF, day0 + JC_DAY, "jc_home");
       worked++;
     }
     var endC = segs.length ? segs[segs.length - 1].c1 : 0;
@@ -226,8 +239,8 @@
   // How dark it is at an hour: 0 day, 1 evening, 2 night (V3.tod's own measure).
   function jcTod(h) {
     if (h >= 7 && h <= 17) { return 0; }
-    if (h > 17 && h < 19.5) { return (h - 17) / 2.5 * 2; }
-    if (h >= 5 && h < 7) { return (7 - h) / 2 * 2; }
+    if (h > 17 && h < 18.5) { return (h - 17) / 1.5 * 2; }
+    if (h >= 5.5 && h < 7) { return (7 - h) / 1.5 * 2; }
     return 2;
   }
   if (typeof gl3SkyNow === "function") {
@@ -277,10 +290,10 @@
         var a = jcAt(J, s);
         if (a) {
           var c = jcCal(a), h = (c % JC_DAY) / 3600, seg = a.seg, ended = s >= J.length - 1e-6;
-          // (a day gone by in a second or two, played fast: the nights only dusk, not a flicker of dark;
-          // watched slowly, the whole night)
+          // (the nights as dark as they are -- softened only when days go by faster than about two a
+          // second, where night and day would flash)
           var dayReal = J.end > 0 ? (J.length / (J.end / JC_DAY)) * (B.ms / 1000) / L : 9;
-          var depth = Math.max(0.35, Math.min(1, (dayReal - 0.8) / 4));
+          var depth = Math.max(0, Math.min(1, (dayReal - 0.35) / 0.4));
           jcSky = { h: ended ? 13 : h, dim: JC_WX_DIM[seg.wx] || 0 };
           V3.tod = ended ? (V3.todAim || 0) : Math.max(jcTod(h) * depth, seg.wx === "storm" ? 0.6 : 0);
           jcWeather(box, ended ? null : seg.wx);

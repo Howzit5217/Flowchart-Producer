@@ -350,6 +350,32 @@
     b.setAttribute("aria-pressed", dragView ? "true" : "false");
     b.hidden = V3.scene === "space";
   }
+  // With it on, a tap in 3D still picks what it is on -- its menu opened,
+  // as a click does with it off (40-open3d.js) -- and only a drag is the
+  // view's, as on the paper.  (2026-10-05: the view opening with it on had
+  // put every piece out of reach of a click: "issues with the activating
+  // things in the 3d area".)  Walking, a click uses things either way.
+  function dragTap(canvas) {
+    var down = null;
+    canvas.addEventListener("pointerdown", function (ev) {
+      down = null;
+      if (!dragView || ev.button !== 0 || ev.shiftKey || !V3 || V3.scene === "space" || !V3.gl || V3.mode === "walk" || V3.o3Follow) { return; }
+      if (document.pointerLockElement === canvas) { return; }
+      down = { id: ev.pointerId, x: ev.clientX, y: ev.clientY };
+    }, true);
+    canvas.addEventListener("pointercancel", function () { down = null; });
+    canvas.addEventListener("pointerup", function (ev) {
+      var d = down;
+      down = null;
+      if (!d || d.id !== ev.pointerId || !dragView || !V3 || V3.mode === "walk") { return; }
+      if (Math.hypot(ev.clientX - d.x, ev.clientY - d.y) > 6) { return; }   // a drag: the view's
+      var hit = dragPick(ev), real = hit ? nodeById(hit.box.node.id) : null;
+      if (!real) { if (V3.sel && typeof edit3dPick === "function") { edit3dPick(null); } return; }
+      if (typeof edit3dPick === "function") { edit3dPick(real.id); }
+      var x = ev.clientX, y = ev.clientY;
+      if (typeof o3Menu === "function") { setTimeout(function () { o3Menu(real.id, x, y); }, 0); }   // (after the click that would shut it)
+    });
+  }
   // (2026-10-05: "when you go into 3d mode the drag view is toggled on") --
   // the 3D view opens with every drag the view's; the paper's own choice
   // given back when it closes.
@@ -362,7 +388,7 @@
         if (V3 && V3 !== was) {
           if (dragPaperWas === null) { dragPaperWas = dragView; }
           if (!dragView) { dragViewSet(true); }
-          dragCarry(V3.canvas); dragButton(); v3Words();
+          dragCarry(V3.canvas); dragTap(V3.canvas); dragButton(); v3Words();
         }
       } catch (e) { /* the view without it */ }
       return out;

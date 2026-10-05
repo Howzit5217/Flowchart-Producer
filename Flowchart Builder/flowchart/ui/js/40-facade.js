@@ -444,9 +444,16 @@
       } catch (e) { if (window.console && console.warn) { console.warn("facade:", e && e.stack || e); } }
       return out;
     };
+    // (and after the windows, the outlets looked over: what was moved in front of one since it
+    // was wired -- the furniture arranged again, or slid clear of a window here -- 39-xray.js)
+    var fcWireWrap = function* (inner, want) {
+      var out = yield* inner(want);
+      try { if (want && want.wire && typeof wireTidy === "function") { wireTidy(); } } catch (e) { if (window.console && console.warn) { console.warn("outlets:", e && e.message); } }
+      return out;
+    };
     var fcWrapAt = typeof clWrap === "function" ? STARTER_WRAPS.indexOf(clWrap) : -1;
     if (fcWrapAt < 0) { STARTER_WRAPS.forEach(function (fn, i) { if (fcWrapAt < 0 && (String(fn).indexOf("hoodBuild") >= 0 || String(fn).indexOf("hoodAsk") >= 0)) { fcWrapAt = i; } }); }
-    if (fcWrapAt >= 0) { STARTER_WRAPS.splice(fcWrapAt, 0, fcWrap); } else { STARTER_WRAPS.push(fcWrap); }
+    if (fcWrapAt >= 0) { STARTER_WRAPS.splice(fcWrapAt, 0, fcWrap, fcWireWrap); } else { STARTER_WRAPS.push(fcWrap, fcWireWrap); }
   }
 
   // ---- where a floor has no window in a row's place: the same window seen from outside ---------------

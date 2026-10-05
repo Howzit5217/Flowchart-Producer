@@ -174,6 +174,9 @@
     // (begun from the end nearest the street, where it is come at from)
     var left = grid.slice().sort(function (p, q) { return jbLocal(J, q.w)[1] - jbLocal(J, p.w)[1]; });
     var go = nextStand(left, t), dugAt = [], heaps = [], tDone = t, heapPc = null, shellAt = Infinity;
+    // (no way round the building as wide as the machine -- a narrow side yard, the drive full: dug
+    // by hand, not driven through the house and what is parked; 2026-10-05)
+    if (go && wkVehWay(site, [go.st.x + 10 * P, site.lanes.w - 1.2 * P], [go.st.x, go.st.y], 2.3 * P).blocked) { go = null; }
     if (go) {
       var ex = wkMachine(plan, "excavator", {});
       ex.site = site; ex.stand = go.st;
@@ -315,6 +318,8 @@
     // (at the kerb level with the pool, its line run in over the lot)
     var mx = wkStand(plan, { kind: "mixer", target: [jbLocal(J, it.c)[0], S.kerb + 1.4 * P], street: true, t0: t - 10, t1: t + 80 });
     var spray0 = t + 2, spray1 = spray0 + 40;
+    // (its place at the kerb kept for it, coming to going: nothing else stood there meanwhile)
+    wkReserve(plan, mx, spray0 - 60, spray1 + 40);
     wkVisit(plan, mixer, mx, 9.4 * P, spray0, [{ t0: spray0, t1: spray1, fn: function (k, T) { return { turn: T * 1.6, chute: 0.6 }; } }], spray1 + 1);
     t = ydWork(plan, crew, it, spray1 - spray0, "hold", spray0, P);
     shellAt = t;

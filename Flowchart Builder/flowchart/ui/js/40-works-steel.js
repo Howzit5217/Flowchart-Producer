@@ -157,6 +157,7 @@
     var nLines = 0;
     for (var li = g; li < levels.length; li++) {
       var L = levels[li], walls = jbWalls(J, li), H = L.top - L.z;
+      plan.pcLevel = li;                                    // (this storey's steel and decks: hidden with it, 40-works.js)
       // the steel for this storey: a lorry of it, lifted off into the yard in bundles
       // (in once the last floor's pump and mixer have gone from the kerb)
       var tTruck = Math.max(t - 30, C.free - 20, li > g && deckEnds[li - 1] ? deckEnds[li - 1] + 30 : 0);
@@ -260,6 +261,7 @@
         var mx2 = wkMachine(plan, "mixer", { paint: "#f2f2ee" });
         mx2.site = site;
         var mst2 = wkStand(plan, { kind: "mixer", target: jbLocal(J, kerbW), street: true, t0: tP - 20, t1: tP + 400 });
+        wkReserve(plan, mst2, tP - 20, tP + 400);           // (kept for it: 2026-10-05, nothing parked in it meanwhile)
         jbCome(plan, mx2, mst2, 9.4 * P, tP - 1, { speed: 6, extra: { turn: 0 } });
         var cycles = Math.max(2, Math.min(6, Math.round(pourDur / 25))), tb = tP;
         var bucketW = jbWorld(J, [mst2.x + Math.cos(mst2.ang) * -5.5 * P, mst2.y], 0.2 * P);

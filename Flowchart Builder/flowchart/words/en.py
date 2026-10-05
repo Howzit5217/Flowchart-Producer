@@ -6424,7 +6424,10 @@ EN = {
     "gd_cars_head": "Garage", "gd_cars_1": "1 car", "gd_cars_2": "2 cars", "gd_cars_3": "3 cars", "gd_cars_4": "4 cars",
     "fm_foyer": "Entry hall",   # a house entered by an entry hall (40-forms.js)
     "wg_ready": "Getting the site ready",   # the building site held at its start while it loads (40-works-gate.js)
+    "gl_wait": "Getting the 3D view ready",   # the 3D view's programs made on the side, the first time it is drawn (38-view3d-gl.js)
     "ro_coming": "Putting your work back…",   # over the paper while the work left on it is put back (40-reopen.js)
+    "uf_head": "Furniture",   # Start building: furnished or empty (39-starter.js)
+    "uf_tile": "Furnish the rooms",
     "o3_open_lid": "Lift the lid", "o3_close_lid": "Close the lid",
     "o3_locked": "Locked",
     "o3_light_on": "Turn the light on", "o3_light_off": "Turn the light off",

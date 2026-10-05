@@ -549,6 +549,27 @@
       return t[k];
     } });
   }
+  // what is wired into a wall, at the height the code puts it, whatever stands under it
+  var V3_WALL_FIXED = { i_outlet: 1, i_lightswitch: 1, i_thermostat: 1, i_breaker: 1, i_garagebtn: 1 };
+  // How far to move a piece that hangs on a wall so its back is on the wall's inside face
+  // (the wall a room's box edge in, its thickness: 38-view3d.js v3Wall) -- or null where it
+  // is on it already, or is not near one of its room's walls.
+  function v3WallFlush(n, tc, ts) {
+    if (typeof roomsAt !== "function") { return null; }
+    var fx = -ts, fy = tc, half = n.h / 2, bx = n.x - fx * half, by = n.y - fy * half, best = null;
+    roomsAt(n.x, n.y, 6).forEach(function (r) {
+      if (r.kind !== "i_room" || (r.turn || 0) % 90) { return; }
+      var q = turned(r), T = roomWallOf(r);
+      // the wall behind it: the side of the room its back faces
+      [[0, -1, r.y - q.h / 2 + T], [0, 1, r.y + q.h / 2 - T], [-1, 0, r.x - q.w / 2 + T], [1, 0, r.x + q.w / 2 - T]].forEach(function (s) {
+        if (s[0] * -fx + s[1] * -fy < 0.99) { return; }
+        var gap = s[0] ? (s[2] - bx) * s[0] : (s[2] - by) * s[1];          // from its back out to the face
+        if (gap > -0.6 && gap < 0.3 * FLOOR_PX && (!best || Math.abs(gap) < Math.abs(best))) { best = gap; }
+      });
+    });
+    if (best === null || Math.abs(best) < 0.05) { return null; }
+    return [-fx * best, -fy * best];
+  }
   function v3ModelPut(faces, n, under, ceilAt, near) {
     var make = MODELS[n.kind];
     if (!make || !modelsOn()) { return false; }
@@ -562,10 +583,15 @@
       z0 = bottom; H = Math.max(2, body - bottom); extra.cord = hi - body; extra.hung = true;
     } else if (V3_WALL[n.kind]) {
       var hang = wallHang(n), clear = 0;
-      (near ? near(n) : hand.nodes).forEach(function (m) {
-        if (m === n || V3_HIGH[m.kind] === undefined || LIES_FLAT[m.kind] || !boxesOverlap(m, n)) { return; }
-        clear = Math.max(clear, pieceHigh(m) + 0.06);
-      });
+      // (2026-10-05, "the socket locations can be a little weird and jank") a socket, a
+      // switch, a thermostat stays at the height it is wired at, behind a sofa or a dresser
+      // as it would be -- not lifted over it, half way up the wall; a picture is hung over it
+      if (!V3_WALL_FIXED[n.kind]) {
+        (near ? near(n) : hand.nodes).forEach(function (m) {
+          if (m === n || V3_HIGH[m.kind] === undefined || LIES_FLAT[m.kind] || !boxesOverlap(m, n)) { return; }
+          clear = Math.max(clear, pieceHigh(m) + 0.06);
+        });
+      }
       if (clear > hang[0] && hang[1] - hang[0] + clear <= ceilAt(n) - 0.02) { hang = [clear, clear + hang[1] - hang[0]]; }
       z0 = hang[0] * P; H = (hang[1] - hang[0]) * P; extra.onWall = true;
     } else if (V3_HIGH[n.kind] !== undefined) {
@@ -612,6 +638,13 @@
       if (!state || !state.passing) { modelKept.set(key, made); }
     }
     var t = (n.turn || 0) * Math.PI / 180, tc = Math.cos(t), ts = Math.sin(t);
+    // (2026-10-05, "plugs in the wall that are not actually in the wall and they just float
+    // there") what hangs on a wall drawn against it: its back on the wall's inside face --
+    // put a hand's width or so off it on the paper, it stood off it in the room
+    if (extra.onWall) {
+      var flat = v3WallFlush(n, tc, ts);
+      if (flat) { n = Object.assign({}, n, { x: n.x + flat[0], y: n.y + flat[1] }); }
+    }
     if (made.waters && made.waters.length) {
       modelWaters[n.id] = made.waters.map(function (w) {
         return { p: [n.x + w.p[0] * tc - w.p[1] * ts, n.y + w.p[0] * ts + w.p[1] * tc, z0 + w.p[2]], kind: w.kind, low: z0 + w.low };

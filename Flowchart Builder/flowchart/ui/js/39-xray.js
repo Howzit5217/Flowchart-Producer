@@ -49,14 +49,18 @@
         return d.x >= rb.l - 40 && d.x <= rb.r + 40 && d.y >= rb.t - 40 && d.y <= rb.b + 40;
       }).map(function (d) { return Object.assign({}, d, { x: d.x - d0[0], y: d.y - d0[1] }); });
     }
-    function put(r, kind, near, lift) {
-      var go = starterAlong(r, kind, near, doorsBy(r));
+    function put(r, kind, near, lift, clear) {
+      // (an outlet round the walls first where nothing stands in front of it -- a sofa, a bed,
+      // a dresser -- and only behind one where there is nowhere else, 2026-10-05)
+      var go = clear ? starterAlong(r, kind, near, doorsBy(r).concat(standingIn(r))) : null;
+      if (!go) { go = starterAlong(r, kind, near, doorsBy(r)); }
       if (!go) { return null; }
       go();
       var n = nodeById(picked);
       if (n && n.kind === kind) { n.wired = true; n.own = true; if (lift !== undefined) { n.lift = lift; } made++; }
       return n;
     }
+    var standingIn = wireStanding;
     var wireRoom = function (r) {
       var kind = wireKindOf(plan, r), b = tieBox(r);
       if (WIRE_SKIP[kind] || WIRE_SKIP[r.use] || Math.min(r.w, r.h) < 1.2 * P) { return; }
@@ -81,16 +85,16 @@
       });
       // by the basin
       var basin = hand.nodes.filter(function (s) { return (s.kind === "i_sink" || s.kind === "i_vanity") && insideArea(r, s.x, s.y); })[0];
-      if (basin) { put(r, "i_outlet", { x: basin.x, y: basin.y }, 1.05); }
-      // round the walls, every 3.6 m
-      var per = 2 * ((b.r - b.l) + (b.b - b.t)), count = kind === "hall" || kind === "bath" ? 1 : Math.max(1, Math.round(per / (3.6 * P)));
+      var byBasin = basin ? put(r, "i_outlet", { x: basin.x, y: basin.y }, 1.05) : null;
+      // round the walls, every 3.6 m (a bathroom's one is the one by its basin, where it has one)
+      var per = 2 * ((b.r - b.l) + (b.b - b.t)), count = kind === "bath" && byBasin ? 0 : kind === "hall" || kind === "bath" ? 1 : Math.max(1, Math.round(per / (3.6 * P)));
       for (var i = 0; i < count; i++) {
         var t = (i + 0.5) / count * per, x, y;
         if (t < b.r - b.l) { x = b.l + t; y = b.t; }
         else if (t < (b.r - b.l) + (b.b - b.t)) { x = b.r; y = b.t + t - (b.r - b.l); }
         else if (t < 2 * (b.r - b.l) + (b.b - b.t)) { x = b.r - (t - (b.r - b.l) - (b.b - b.t)); y = b.b; }
         else { x = b.l; y = b.b - (t - 2 * (b.r - b.l) - (b.b - b.t)); }
-        put(r, "i_outlet", { x: x, y: y });
+        put(r, "i_outlet", { x: x, y: y }, undefined, true);
       }
     };
     for (var wi = 0; wi < rooms.length; wi++) { wireRoom(rooms[wi]); yield ["wire", (wi + 1) / rooms.length]; }
@@ -105,6 +109,50 @@
       if (home) { var bb = tieBox(home); put(home, "i_breaker", { x: bb.l, y: bb.t }); }
     }
     return made;
+  }
+  // What stands in a room, a hand's width round it: an outlet round the walls kept that far off
+  // it, to be seen and reached (2026-10-05, "the socket locations can be a little weird and jank")
+  function wireStanding(r) {
+    var pad = 0.2 * FLOOR_PX * 2;
+    return hand.nodes.filter(function (o) {
+      return o !== r && ICONS[o.kind] && !isArea(o.kind) && o.kind !== "i_room" && o.kind !== "i_floor" && o.kind !== "i_lot" &&
+             !ON_THE_WALL[o.kind] && !WALK_DOORS[o.kind] && o.kind !== "i_window" && !LIES_FLAT[o.kind] && !FROM_CEILING[o.kind] &&
+             o.kind !== "i_rug" && insideArea(r, o.x, o.y);
+    }).map(function (o) { return Object.assign({}, o, { w: o.w + pad, h: o.h + pad }); });
+  }
+  // The outlets round the walls looked over once a house is all made: what was put or moved in
+  // front of one after it was wired (furniture arranged again, slid clear of a window -- 40-facade.js)
+  // it is moved to the nearest stretch of the same room's walls with nothing in front of it.
+  // Called by 40-facade.js's Start building step, the last before the drawing is looked over.
+  function wireTidy() {
+    if (typeof starterAlong !== "function") { return 0; }
+    var J = typeof tieLayout === "function" ? tieLayout() : null, rooms = hand.nodes.filter(function (n) { return n.kind === "i_room"; }), moved = 0;
+    var doors = [];
+    hand.nodes.forEach(function (d) {
+      if (!WALK_DOORS[d.kind]) { return; }
+      var m = J && J.moves[d.id];
+      doors.push(m ? Object.assign({}, d, m) : d);
+    });
+    if (J && J.made) { J.made.forEach(function (one) { if (one.node && WALK_DOORS[one.node.kind]) { doors.push(one.node); } }); }
+    hand.nodes.filter(function (n) { return n.kind === "i_outlet" && n.wired && !(n.lift > 0.5); }).forEach(function (n) {
+      var r = rooms.filter(function (o) { return insideArea(o, n.x, n.y, 4); }).sort(function (a, b) { return a.w * a.h - b.w * b.h; })[0];
+      if (!r) { return; }
+      var standing = wireStanding(r);
+      if (!standing.some(function (o) { return boxesTouch(n, o, 3); })) { return; }
+      var d0 = J && J.delta[r.id] ? J.delta[r.id] : [0, 0], rb = J && J.boxes[r.id] ? J.boxes[r.id] : tieBox(r);
+      var mine = doors.filter(function (d) { return d.x >= rb.l - 40 && d.x <= rb.r + 40 && d.y >= rb.t - 40 && d.y <= rb.b + 40; })
+        .map(function (d) { return Object.assign({}, d, { x: d.x - d0[0], y: d.y - d0[1] }); });
+      // (taken down, and put up again where nothing stands -- or, nowhere, left as it was)
+      var at = hand.nodes.indexOf(n);
+      hand.nodes.splice(at, 1);
+      var go = starterAlong(r, "i_outlet", { x: n.x, y: n.y }, mine.concat(standing));
+      if (!go) { hand.nodes.splice(at, 0, n); return; }
+      go();
+      var m2 = nodeById(picked);
+      if (m2 && m2.kind === "i_outlet") { m2.wired = true; m2.own = true; moved++; }
+    });
+    picked = null;
+    return moved;
   }
   // Asked for from the 3D view's inside-the-walls panel, or by Start a house.
   function wireHouseNow() {

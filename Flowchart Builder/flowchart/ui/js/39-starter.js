@@ -1109,7 +1109,10 @@
           }
           if (kind === "i_tv") {
             var sofa = starterNear(r, 0).filter(function (n) { return (n.kind === "i_sofa" || n.kind === "i_sectional" || n.kind === "i_loveseat") && insideArea(r, n.x, n.y); })[0];
-            if (sofa) { near = { x: 2 * r.x - sofa.x, y: 2 * r.y - sofa.y }; }
+            // (2026-10-05: "weird furniture placements") straight across from it, the way it faces -- not
+            // through the middle of the room to the far corner: a sofa at one end of its wall had the
+            // television at the other end of the wall across, the seats drawn up to nothing
+            if (sofa) { var sa = (sofa.turn || 0) * Math.PI / 180, far = r.w + r.h; near = { x: sofa.x - Math.sin(sa) * far, y: sofa.y + Math.cos(sa) * far }; }
           }
           var put = starterAlong(r, kind, near);
           if (put) { put(); }
@@ -1118,7 +1121,9 @@
       });
       if (island) { starterIsland(r); mids(); }
     };
-    for (var mi = 0; mi < made.length; mi++) { furnish(made[mi]); yield ["furnish", (mi + 1) / made.length]; }
+    // (2026-10-05: "toggle furniture on or off in the generation" -- off, the rooms left empty)
+    var furnished = want.furniture !== false;
+    for (var mi = 0; mi < made.length; mi++) { if (furnished) { furnish(made[mi]); } yield ["furnish", (mi + 1) / made.length]; }
     // and now and then a little more: a bookcase, a plant, a chest at the
     // foot of the bed -- each taken back if it boxed anything in
     var extras = [];
@@ -1132,7 +1137,7 @@
         });
       });
     };
-    for (var mx = 0; mx < made.length; mx++) { extra(made[mx]); yield ["extras", (mx + 1) / made.length]; }
+    for (var mx = 0; mx < made.length; mx++) { if (furnished) { extra(made[mx]); } yield ["extras", (mx + 1) / made.length]; }
     for (var tries = 0; tries < 4 && extras.length && typeof boxedPieces === "function"; tries++) {
       var boxed = boxedPieces(walkPlan());
       if (!boxed.length) { break; }
@@ -1143,7 +1148,7 @@
     }
     starterDress(made, rnd);
     // a shop's aisles, an office's desks, a classroom's (39-types.js)
-    if (typeof typeFurnish === "function") { typeFurnish(made, rnd, want, typePlan); }
+    if (furnished && typeof typeFurnish === "function") { typeFurnish(made, rnd, want, typePlan); }
     // daylight: a window in an outside wall of every room that is lived in,
     // and the garage's door
     var lot = ground.lot || null;
@@ -1387,6 +1392,12 @@
         return e.across ? at + w / 2 > o.x0 && at - w / 2 < o.x1 : at + w / 2 > o.y0 && at - w / 2 < o.y1;
       });
     }
+    // Every place along each wall, nearest first, and the first of them
+    // that is clear is the one.  (2026-10-05) Each was tried -- every 4 px
+    // of every wall against everything near -- and only the nearest kept:
+    // most of a block of flats' making, the page frozen seconds at a time.
+    // The same place comes out (a steady sort, the same order), found sooner.
+    var aim = near || { x: r.x, y: r.y };
     [{ name: "top", across: true, line: b.t, from: b.l, to: b.r, into: 1, turn: 0 },
      { name: "foot", across: true, line: b.b, from: b.l, to: b.r, into: -1, turn: 180 },
      { name: "left", across: false, line: b.l, from: b.t, to: b.b, into: 1, turn: 270 },
@@ -1398,14 +1409,23 @@
         var off = e.line + e.into * (T + h / 2 + 1);
         var spot = { kind: kind, x: e.across ? at : off, y: e.across ? off : at, w: w, h: h, turn: e.turn,
                      put: long ? (e.turn + 90) % 360 : e.turn };
-        if (!overOpening(e, at) && !overSeam(e, at) && !overGone(e, at) && !(fit && fit.ok && !fit.ok(spot)) && !others.some(function (o) { return boxesTouch(spot, o, 3); }) &&
-            !starterFrontClash({ kind: kind, x: spot.x, y: spot.y, w: fit ? fit.w : ICONS[kind].box[0], h: fit ? fit.h : ICONS[kind].box[1], turn: spot.put }, others)) { spots.push(spot); }
+        spots.push({ e: e, at: at, spot: spot, d: Math.hypot(spot.x - aim.x, spot.y - aim.y) });
       }
     });
-    if (!spots.length) { return fit && fit.less ? starterAlong(r, fit.less, near, extra) : null; }
-    var aim = near || { x: r.x, y: r.y };
-    spots.sort(function (p, q) { return Math.hypot(p.x - aim.x, p.y - aim.y) - Math.hypot(q.x - aim.x, q.y - aim.y); });
-    var s0 = spots[0];
+    spots.sort(function (p, q) { return p.d - q.d; });
+    var boxes = others.map(function (o) { var q = turned(o); return { x: o.x, y: o.y, w: q.w, h: q.h }; }), s0 = null;
+    for (var si = 0; si < spots.length && !s0; si++) {
+      var c = spots[si], spot = c.spot;
+      if (overOpening(c.e, c.at) || overSeam(c.e, c.at) || overGone(c.e, c.at) || (fit && fit.ok && !fit.ok(spot))) { continue; }
+      var sq = turned(spot), hit = false;
+      for (var bi = 0; bi < boxes.length && !hit; bi++) {     // (boxesTouch, gap 3, each box worked out once)
+        var B = boxes[bi];
+        hit = Math.abs(spot.x - B.x) * 2 < sq.w + B.w + 6 && Math.abs(spot.y - B.y) * 2 < sq.h + B.h + 6;
+      }
+      if (hit || starterFrontClash({ kind: kind, x: spot.x, y: spot.y, w: fit ? fit.w : ICONS[kind].box[0], h: fit ? fit.h : ICONS[kind].box[1], turn: spot.put }, others)) { continue; }
+      s0 = spot;
+    }
+    if (!s0) { return fit && fit.less ? starterAlong(r, fit.less, near, extra) : null; }
     return function () {
       var node = adviceAdd(kind, Math.round(s0.x), Math.round(s0.y), s0.put);
       if (fit) { node.w = fit.w; node.h = fit.h; node.own = true; }
@@ -2019,6 +2039,10 @@
           });
         }
       }
+      // (2026-10-05) furnished, or the rooms left empty -- every kind of building
+      head(TXT.uf_head);
+      tiles();
+      tile(TXT.uf_tile, "living", function () { return want.furniture !== false; }, function () { want.furniture = want.furniture === false; });
       head(TXT.st_house_head);
       tiles();
       tile(TXT.st_roof_one, "roof", function () { return !!want.roofOne; }, function () { want.roofOne = !want.roofOne; });

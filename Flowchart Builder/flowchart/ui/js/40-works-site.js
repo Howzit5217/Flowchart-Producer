@@ -401,16 +401,24 @@
       .sort(function (a, b) { return (b.r - b.l) * (b.b - b.t) - (a.r - a.l) * (a.b - a.t); });
     // (the crew's pickups parked on the drive or the lot: moved out to the kerb before it is paved --
     // nothing stands where the paver is to go)
-    (J.pickups || []).forEach(function (m, i) {
+    // (2026-10-05, "machines clipping into one another": one after another, not all at once out of
+    // spots side by side; and the one that comes back to the kerb is the crew's pickup from then on --
+    // the one that went was sent away again at the end, out of the drive it had left)
+    var onPaving = (J.pickups || []).filter(function (m) {
       var st = m.stand;
-      if (!st || !paved.some(function (e) { return st.x > e.l - 1.5 * P && st.x < e.r + 1.5 * P && st.y > e.t - 1.5 * P && st.y < e.b + 1.5 * P; })) { return; }
+      return st && paved.some(function (e) { return st.x > e.l - 1.5 * P && st.x < e.r + 1.5 * P && st.y > e.t - 1.5 * P && st.y < e.b + 1.5 * P; });
+    });
+    (J.pickups || []).forEach(function (m, i) {
+      var k = onPaving.indexOf(m);
+      if (k < 0) { return; }
       try {
-        var leave = Math.max(m.here || 0, t0 - 14);
+        var leave = Math.max(m.here || 0, t0 - 14 - 8 * (onPaving.length - 1 - k));
         jbGo(plan, m, leave, { speed: 6 });
         var lotHw = J.site.lot ? J.site.lot.w / 2 : 20 * P, side = i % 2 ? 1 : -1;
         var again = jbVehicle(plan, "pickup", { len: 5.6 * P, wid: 2.0 * P, target: [side * (lotHw + 7 * P + Math.floor(i / 2) * 6.5 * P), S.kerb + 1.2 * P], street: true, t0: leave, t1: 1e9 }, m.opt);
         jbCome(plan, again, again.stand, 5.6 * P, leave + 12, { speed: 6 });
         wkReserve(plan, again.stand, leave + 10, 1e9);
+        J.pickups[i] = again;
       } catch (e2) { /* left where it was */ }
     });
     var t = t0;

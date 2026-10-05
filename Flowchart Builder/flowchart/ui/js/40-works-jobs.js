@@ -92,6 +92,43 @@
   // first, up to `most` of them
   function jbDriveStands(J, most) {
     var site = J.site, P = J.P, S = J.S, out = [], len = 5.7 * P, wid = 2.0 * P;
+    // (2026-10-05, "machines clipping into one another": the machines' way onto the lot kept -- a
+    // spot taken only if it costs the ground they can get to from the street little more than the
+    // pickup's own room; the drive filled, the excavator and the telehandler squeezed past the
+    // pickups in it, scraping them)
+    var G = site.G, need = Math.ceil(1.75 * P / G.c), gate = wkCell(site, 0, S.kerb + 1.0 * P);
+    function reach() {
+      if (gate < 0) { return 0; }
+      var D = wkVehClear(site), lab = wkParts(site, "veh" + need, function (i) { return D[i] >= need; });
+      var c = gate, best = lab[c];
+      // (the street in front: its own run of ground, whatever square of it the gate is)
+      if (!best) { for (var dx = -40; dx <= 40 && !best; dx++) { var i2 = wkCell(site, dx * G.c, S.kerb + 1.0 * P); if (i2 >= 0 && lab[i2]) { best = lab[i2]; } } }
+      if (!best) { return 0; }
+      var n = 0;
+      for (var i = 0; i < lab.length; i++) { if (lab[i] === best && G.t[i] !== WK_ROAD && G.t[i] !== WK_WALKWAY && G.t[i] !== WK_OFF) { n++; } }
+      return n;
+    }
+    var before = reach(), own = Math.ceil((len / G.c + 2 * need) * (wid / G.c + 2 * need) * 1.6);
+    function keepsWay(st) {
+      var c = Math.cos(st.ang), s2 = Math.sin(st.ang), hl = len / 2, hw = wid / 2, cells = [], G2 = site.G;
+      // (put there for a moment, the ground measured, then as it was)
+      var x0 = st.cx - hl - hw, x1 = st.cx + hl + hw, y0 = st.cy - hl - hw, y1 = st.cy + hl + hw;
+      for (var y = y0; y <= y1; y += G2.c * 0.5) {
+        for (var x = x0; x <= x1; x += G2.c * 0.5) {
+          var dx = x - st.cx, dy = y - st.cy, u = dx * c + dy * s2, v = -dx * s2 + dy * c;
+          if (Math.abs(u) > hl || Math.abs(v) > hw) { continue; }
+          var i = wkCell(site, x, y);
+          if (i >= 0 && cells.indexOf(i) < 0) { cells.push(i); }
+        }
+      }
+      var was = cells.map(function (i) { return G2.t[i]; });
+      cells.forEach(function (i) { G2.t[i] = WK_CAR; });
+      site.gridGen = (site.gridGen || 0) + 1;
+      var after = reach();
+      cells.forEach(function (i, k) { G2.t[i] = was[k]; });
+      site.gridGen++;
+      return before - after <= own;
+    }
     var areas = hand.nodes.filter(function (d) { return (d.kind === "i_driveway" || d.kind === "i_parking" || d.kind === "i_asphalt") && !cnOurs(J.ctx, d); })
                           .sort(function (a, b) { return (a.kind === "i_driveway" ? 0 : 1) - (b.kind === "i_driveway" ? 0 : 1); });
     areas.forEach(function (d) {
@@ -113,7 +150,12 @@
         if (!wkRectFree(site, cx, cy, len / 2, wid / 2, Math.PI / 2, drive ? [WK_LOT, WK_PAVED, WK_STACK, WK_WALKWAY] : [WK_PAVED], null)) { continue; }
         // (and in a parking lot, nothing between it and the street)
         if (!drive && !wkRectFree(site, cx, (cy + len / 2 + S.kerb) / 2, (S.kerb - cy - len / 2) / 2, wid / 2, Math.PI / 2, [WK_LOT, WK_PAVED, WK_WALKWAY, WK_ROAD], null)) { continue; }
-        out.push({ x: cx, y: cy, cx: cx, cy: cy, ang: Math.PI / 2, hl: len / 2 + 0.2 * P, hw: wid / 2 + 0.2 * P, drive: true });
+        var cand = { x: cx, y: cy, cx: cx, cy: cy, ang: Math.PI / 2, hl: len / 2 + 0.2 * P, hw: wid / 2 + 0.2 * P, drive: true };
+        // (and the machines' way onto the lot left open: those put already counted in)
+        own = Math.ceil((len / G.c + 2 * need) * (wid / G.c + 2 * need) * 1.6) * (out.length + 1);
+        if (!keepsWay(cand)) { continue; }
+        out.push(cand);
+        jbMarkCar(J, cand);
       }
     });
     return out;
@@ -155,6 +197,8 @@
     // where the timber, the blocks and the windows are stacked: the front yard if it can be
     var front = [(S.box[0] + S.box[1]) / 2, (S.box[3] + S.hy) / 2];
     J.yard = jbSpot(J, 7, 4.5, front, 1.0);
+    // (its stacks walked into, never driven over or stood on: 40-works.js WK_YARD)
+    site.mark([[-1, -1], [1, -1], [1, 1], [-1, 1]].map(function (q) { return S.W(J.yard.l[0] + q[0] * J.yard.hw, J.yard.l[1] + q[1] * J.yard.hh); }), WK_YARD, [WK_STACK]);
     J.skip = jbSpot(J, 4.2, 2.2, [J.yard.l[0] + 7 * P, J.yard.l[1]], 0.6);
     // (2026-10-05: "for the scale should have the appropriate amount of
     // outhouses") the toilets: one to every ten of the crew, and one more for
@@ -407,7 +451,7 @@
     var deck = [lb.stand.x + 9.1 * P, lb.stand.y, 1.0 * P];
     var rear = [lb.stand.x + 17.5 * P, lb.stand.y];
     rear.back = true;
-    var way = wkVehWay(site, [rear[0], site.lanes.w - 1.2 * P], [ex.stand.x, ex.stand.y], 2.3 * P);
+    var way = wkVehWay(site, [rear[0], site.lanes.w - 1.2 * P], [ex.stand.x, ex.stand.y], 2.3 * P, true);   // (nothing of the building up yet: its ground driven over too)
     var path = [deck, rear].concat(way.slice(0, -1).map(function (q) { return [q[0], q[1]]; })).concat([[ex.stand.x, ex.stand.y]]);
     path.head = Math.PI;
     var tOff = arriveLow + 3;
@@ -485,7 +529,7 @@
       left = left.filter(function (c) { return go.cells.indexOf(c) < 0; });
       go = left.length ? nextStand(left, t) : null;
       if (go) {
-        var leg = wkVehWay(site, [st.x, st.y], [go.st.x, go.st.y], 2.0 * P).map(function (q) { return [q[0], q[1]]; });
+        var leg = wkVehWay(site, [st.x, st.y], [go.st.x, go.st.y], 2.0 * P, true).map(function (q) { return [q[0], q[1]]; });
         leg.head = ex.head;
         t = jbTracked(plan, ex, leg, t, 1.0, { working: false }) + 0.5;
       }
@@ -511,7 +555,7 @@
     // back on the low loader, and away
     var last = stands.length ? stands[stands.length - 1].st : ex.stand;
     var tDone = t + 1;
-    var back = wkVehWay(site, [last.x, last.y], [rear[0], site.lanes.w - 1.2 * P], 2.3 * P).map(function (q) { return [q[0], q[1]]; });
+    var back = wkVehWay(site, [last.x, last.y], [rear[0], site.lanes.w - 1.2 * P], 2.3 * P, true).map(function (q) { return [q[0], q[1]]; });
     back = back.concat([rear, deck]);
     back.head = ex.head;
     // (the low loader went once the excavator was off it -- after it had driven clear -- and comes back now)

@@ -822,19 +822,25 @@
     "}",
     "void main() { gl_FragColor = pack(gl_FragCoord.z); }"].join("\n");
 
-  function gl3Program(gl, vs, fs) {
-    function one(type, src) {
-      var s = gl.createShader(type);
-      gl.shaderSource(s, src);
-      gl.compileShader(s);
-      if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) { throw new Error(gl.getShaderInfoLog(s)); }
-      return s;
-    }
-    var p = gl.createProgram();
-    gl.attachShader(p, one(gl.VERTEX_SHADER, vs));
-    gl.attachShader(p, one(gl.FRAGMENT_SHADER, fs));
+  function gl3Program(gl, vs, fs) { return gl3ProgramDone(gl, gl3ProgramLater(gl, vs, fs)); }
+  // (2026-10-05, "it can not freeze the site ... loading bars are your friends") A program begun:
+  // its two halves given to the browser and joined, nothing asked of it yet -- asked, the page
+  // waits there till it is made; where the browser makes them on the side
+  // (KHR_parallel_shader_compile), not asked till it says they are (gl3Finish)
+  function gl3ProgramLater(gl, vs, fs) {
+    function one(type, src) { var s = gl.createShader(type); gl.shaderSource(s, src); gl.compileShader(s); return s; }
+    var p = gl.createProgram(), a = one(gl.VERTEX_SHADER, vs), b = one(gl.FRAGMENT_SHADER, fs);
+    gl.attachShader(p, a); gl.attachShader(p, b);
     gl.linkProgram(p);
-    if (!gl.getProgramParameter(p, gl.LINK_STATUS)) { throw new Error(gl.getProgramInfoLog(p)); }
+    return { p: p, halves: [a, b] };
+  }
+  // ... and made: whether it was, and the names of what it takes
+  function gl3ProgramDone(gl, made) {
+    var p = made.p;
+    if (!gl.getProgramParameter(p, gl.LINK_STATUS)) {
+      made.halves.forEach(function (s) { if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) { throw new Error(gl.getShaderInfoLog(s)); } });
+      throw new Error(gl.getProgramInfoLog(p));
+    }
     var at = {};
     var na = gl.getProgramParameter(p, gl.ACTIVE_ATTRIBUTES), nu = gl.getProgramParameter(p, gl.ACTIVE_UNIFORMS);
     for (var i = 0; i < na; i++) { var a = gl.getActiveAttrib(p, i); at[a.name] = gl.getAttribLocation(p, a.name); }
@@ -845,6 +851,65 @@
   // The main program -- with the ridges of the patterns (RELIEF), where the
   // browser can say how a value changes from one pixel to the next; flat
   // where it cannot, as before.
+  // The ways the main program can be said, best first: with the ridges, said in WebGL 2's own
+  // language or with WebGL 1's derivatives; flat; flat with the fewest rooms
+  function gl3MainWays(gl) {
+    var most = 0;
+    try { most = +gl.getParameter(gl.MAX_FRAGMENT_UNIFORM_VECTORS) || 0; } catch (e0) { most = 0; }
+    var rooms = Math.max(4, Math.min(32, Math.floor((most - 120) / 3))), FS = GL3_FS.replace(/__NR__/g, String(rooms)), out = [];
+    var two = typeof WebGL2RenderingContext !== "undefined" && gl instanceof WebGL2RenderingContext;
+    if (two) {
+      out.push({ vs: "#version 300 es\n" + GL3_VS.replace(/\battribute\b/g, "in").replace(/\bvarying\b/g, "out"),
+                 fs: "#version 300 es\n#define RELIEF 1\n" + FS.replace(/\bvarying\b/g, "in").replace(/\btexture2D\s*\(/g, "texture(")
+                       .replace(/\bgl_FragColor\b/g, "fragOut").replace(/#endif\n/, "#endif\nout vec4 fragOut;\n"), relief: true, rooms: rooms });
+    } else if (gl.getExtension("OES_standard_derivatives")) {
+      out.push({ vs: GL3_VS, fs: "#extension GL_OES_standard_derivatives : enable\n#define RELIEF 1\n" + FS, relief: true, rooms: rooms });
+    }
+    out.push({ vs: GL3_VS, fs: FS, rooms: rooms });
+    out.push({ vs: GL3_VS, fs: GL3_FS.replace(/__NR__/g, "4"), rooms: 4 });
+    return out;
+  }
+  // the first of them begun, the page let go on (gl3Ready, where the browser makes them on the side)
+  function gl3MainBegin(gl) { var ways = gl3MainWays(gl); return { ways: ways, made: gl3ProgramLater(gl, ways[0].vs, ways[0].fs) }; }
+  // made: that one if it was, or the next way that is, there and then
+  function gl3MainEnd(gl, M) {
+    for (var i = 0; i < M.ways.length; i++) {
+      try {
+        var got = gl3ProgramDone(gl, i === 0 ? M.made : gl3ProgramLater(gl, M.ways[i].vs, M.ways[i].fs));
+        GL3_ROOMS = M.ways[i].rooms;
+        if (M.ways[i].relief) { got.relief = true; }
+        return got;
+      } catch (e) { if (i === M.ways.length - 1) { throw e; } }
+    }
+    return null;
+  }
+  // Begun on the side, are they all made yet?  Then joined up with what they take, and drawn
+  // with from then on.  (A program that will not be made: the view drawn without WebGL.)
+  function gl3Finish(G) {
+    var W = G.making;
+    if (!W) { return true; }
+    var gl = G.gl, done = W.ext.COMPLETION_STATUS_KHR;
+    if (!gl.getProgramParameter(W.main.made.p, done) || !gl.getProgramParameter(W.sky.p, done) || !gl.getProgramParameter(W.depth.p, done)) { return false; }
+    G.main = gl3MainEnd(gl, W.main);
+    G.sky = gl3ProgramDone(gl, W.sky);
+    G.depth = gl3ProgramDone(gl, W.depth);
+    G.making = null;
+    return true;
+  }
+  // while they are made: the view its own color, and a bar saying so -- a light running along
+  // it, moved by the page's compositor, not painted (it goes on whatever the page is doing)
+  function gl3Waiting(on) {
+    var box = V3 && V3.box, bar = box ? el(".gl3-wait", box) : null;
+    if (!on) { if (bar) { bar.remove(); } return; }
+    if (bar || !box) { return; }
+    bar = document.createElement("div");
+    bar.className = "gl3-wait";
+    bar.setAttribute("role", "progressbar");
+    bar.innerHTML = '<div class="bb-top"><span class="bb-said"></span></div><div class="bb-track"><div class="ro-run"></div></div>';
+    el(".bb-said", bar).textContent = TXT.gl_wait || "";
+    bar.setAttribute("aria-label", TXT.gl_wait || "");
+    box.appendChild(bar);
+  }
   function gl3MainProgram(gl) {
     // (how many rooms near you it knows the boxes of: as many as the
     // browser has room for, three numbers of four a room, up to 32)
@@ -916,10 +981,18 @@
       gl = gl || canvas.getContext("webgl2", opts) || canvas.getContext("webgl", opts) ||
            canvas.getContext("experimental-webgl", opts);
       if (!gl) { return false; }
+      // (the programs begun on the side where the browser can, drawn with once made: gl3Finish;
+      // elsewhere made here, the page waiting, as before)
+      var par = gl.getExtension("KHR_parallel_shader_compile");
       var G = { canvas: canvas, gl: gl, tex: new Map(), buf: gl.createBuffer(), skyBuf: gl.createBuffer(), scenery: null,
-                main: gl3MainProgram(gl), sky: gl3Program(gl, GL3_SKY_VS, GL3_SKY_FS),
-                depth: gl3Program(gl, GL3_DEPTH_VS, GL3_DEPTH_FS), t0: performance.now(),
+                main: null, sky: null, depth: null, t0: performance.now(),
                 deep: deep, depthMode: deep ? "rev" : "std" };
+      if (par) {
+        G.making = { ext: par, since: performance.now(), main: gl3MainBegin(gl),
+                      sky: gl3ProgramLater(gl, GL3_SKY_VS, GL3_SKY_FS), depth: gl3ProgramLater(gl, GL3_DEPTH_VS, GL3_DEPTH_FS) };
+      } else {
+        G.main = gl3MainProgram(gl); G.sky = gl3Program(gl, GL3_SKY_VS, GL3_SKY_FS); G.depth = gl3Program(gl, GL3_DEPTH_VS, GL3_DEPTH_FS);
+      }
       gl.bindBuffer(gl.ARRAY_BUFFER, G.skyBuf);
       gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 1, -1, -1, 1, -1, 1, 1, -1, 1, 1]), gl.STATIC_DRAW);
       // the shadow map: a color target the sun's view is packed into
@@ -2120,6 +2193,28 @@
     if (!G) { return false; }
     var gl = G.gl, dpr = typeof v3RenderDpr === "function" ? v3RenderDpr() : (window.devicePixelRatio || 1);
     var W = Math.max(1, Math.round(V3.w * dpr)), H = Math.max(1, Math.round(V3.h * dpr));
+    // (its programs still being made on the side: the view its own color, the bar up, asked again next picture)
+    if (G.making) {
+      var made = false;
+      try { made = gl3Finish(G); }
+      catch (eMade) {
+        if (window.console && console.warn) { console.warn("3D: no program could be made --", eMade && eMade.message); }
+        gl3Waiting(false); V3.gl = false; V3.dirty = true;
+        return false;
+      }
+      if (!made) {
+        if (G.canvas.width !== W || G.canvas.height !== H) { G.canvas.width = W; G.canvas.height = H; }
+        var bg = gl3Rgb(simSheet());
+        gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+        gl.viewport(0, 0, W, H);
+        gl.clearColor(bg[0], bg[1], bg[2], 1);
+        gl.clear(gl.COLOR_BUFFER_BIT | (gl.getContextAttributes().depth ? gl.DEPTH_BUFFER_BIT : 0));
+        gl3Waiting(true);
+        V3.dirty = true;
+        return true;
+      }
+      gl3Waiting(false);
+    }
     if (G.canvas.width !== W || G.canvas.height !== H) { G.canvas.width = W; G.canvas.height = H; }
     var ink = simInk(), sheet = simSheet(), sheetC = gl3Rgb(sheet);
     var time = (performance.now() - G.t0) / 1000;

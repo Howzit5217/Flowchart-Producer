@@ -443,6 +443,22 @@
   .work-stop:hover, .work-stop:focus-visible { border-color: var(--bad); color: var(--bad); }
   #build-bar.work-bar.full .work-stop { visibility: hidden; }
   .work-veil { position: absolute; inset: 0; z-index: 12; cursor: progress; background: transparent; }
+  /* the 3D view's programs being made on the side, the first time it is drawn (38-view3d-gl.js):
+     the build bar's look, a light running along it (.ro-run, 05-chart.css) -- the page free meanwhile */
+  .view3d .gl3-wait {
+    position: absolute; z-index: 13; top: 14px; left: 0; right: 0;
+    width: min(340px, calc(100% - 32px)); margin: 0 auto;
+    padding: 10px 14px 12px; border-radius: 12px;
+    background: var(--panel); border: 1px solid var(--line);
+    box-shadow: var(--shadow); pointer-events: none;
+  }
+  /* the building site still getting ready (40-works-video.js held): how far, along the bar's rail */
+  .view3d .v3-vid.wv-loading .wv-track { opacity: 1; }
+  .view3d .v3-vid.wv-loading .wv-knob { display: none; }
+  .view3d .v3-vid.wv-loading .wv-fill { transition: width .25s ease-out; }
+  .view3d .v3-vid.wv-loading .wv-gone { color: var(--muted); font-weight: 500; }
+  .view3d .v3-vid.wv-loading .wv-of, .view3d .v3-vid.wv-loading .wv-all { display: none; }
+  @media (prefers-reduced-motion: reduce) { .view3d .v3-vid.wv-loading .wv-fill { transition: none; } }
 
   /* ---- a lift's buttons, standing in its car (40-climb.js) ---- */
   .v3-lift {

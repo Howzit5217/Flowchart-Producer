@@ -6426,7 +6426,10 @@ DE = {
     "gd_cars_head": "Garage", "gd_cars_1": "1 Auto", "gd_cars_2": "2 Autos", "gd_cars_3": "3 Autos", "gd_cars_4": "4 Autos",
     "fm_foyer": "Diele",   # a house entered by an entry hall (40-forms.js)
     "wg_ready": "Die Baustelle wird vorbereitet",   # the building site held at its start while it loads (40-works-gate.js)
+    "gl_wait": "Die 3D-Ansicht wird vorbereitet",   # the 3D view's programs made on the side, the first time it is drawn (38-view3d-gl.js)
     "ro_coming": "Die Arbeit wird wiederhergestellt …",   # over the paper while the work left on it is put back (40-reopen.js)
+    "uf_head": "Möbel",   # Start building: furnished or empty (39-starter.js)
+    "uf_tile": "Räume einrichten",
     "o3_open_lid": "Deckel anheben", "o3_close_lid": "Deckel schließen",
     "o3_locked": "Abgeschlossen",
     "o3_light_on": "Licht einschalten", "o3_light_off": "Licht ausschalten",

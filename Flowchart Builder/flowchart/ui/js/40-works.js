@@ -32,6 +32,9 @@
   var WK_CELL = 0.5;                                    // metres: the site's squares
   // what each square of the site is
   var WK_LOT = 0, WK_ROAD = 1, WK_WALKWAY = 2, WK_HOUSE = 3, WK_THING = 4, WK_PAVED = 5, WK_CAR = 6, WK_STACK = 7, WK_PIT = 8, WK_OFF = 9;
+  // (2026-10-05: "machines clipping into one another driving over parts for the house") the materials
+  // yard, its stacks: walked into for what is in it, never driven over or stood on
+  var WK_YARD = 10;
   // what is laid flat on the ground: driven and walked over
   var WK_FLAT = { i_driveway: 1, i_path: 1, i_asphalt: 1, i_sidewalk: 1, i_patio: 1, i_lawn: 1, i_parking: 1, i_steps: 1, i_rug: 1 };
   var WK_HARD = { i_driveway: 1, i_asphalt: 1, i_parking: 1, i_sidewalk: 1, i_path: 1, i_patio: 1 };
@@ -443,19 +446,25 @@
   function wkGridWayRaw(site, a, b, houseOpen, from, to) {
     var G = site.G;
     var t = G.t, n = G.cols * G.rows;
-    function open(i) { var v = t[i]; return v === WK_LOT || v === WK_ROAD || v === WK_WALKWAY || v === WK_PAVED || v === WK_STACK || (houseOpen && v === WK_HOUSE) || i === from || i === to; }
+    function open(i) { var v = t[i]; return v === WK_LOT || v === WK_ROAD || v === WK_WALKWAY || v === WK_PAVED || v === WK_STACK || v === WK_YARD || (houseOpen && v === WK_HOUSE) || i === from || i === to; }
     // (straight there, if it can be)
     if (wkGridLine(site, a, b, open)) { return [a, b]; }
-    var cost = new Float32Array(n).fill(Infinity), back = new Int32Array(n).fill(-1), heap = [[0, from]];
-    cost[from] = 0;
+    // (none, if the two are on runs of open ground never joined: given up at once)
+    var lab = wkParts(site, houseOpen ? "walkO" : "walkC", function (i) { var v = t[i]; return v === WK_LOT || v === WK_ROAD || v === WK_WALKWAY || v === WK_PAVED || v === WK_STACK || v === WK_YARD || (houseOpen && v === WK_HOUSE); });
+    if (!wkPartsMeet(site, lab, from, to)) {
+      wkGridWayRaw.n = (wkGridWayRaw.n || 0) + 1; wkGridWayRaw.fail = (wkGridWayRaw.fail || 0) + 1; wkGridWayRaw.cut = (wkGridWayRaw.cut || 0) + 1;
+      return [a, b];
+    }
+    var A = wkAsBegin(n), run = A.run, shut = A.shut;
+    wkAsSet(A, from, 0, -1); wkAsPush(A, 0, from);
     var tc = to % G.cols, tr = Math.floor(to / G.cols), steps = [[1, 0, 1], [-1, 0, 1], [0, 1, 1], [0, -1, 1], [1, 1, 1.414], [1, -1, 1.414], [-1, 1, 1.414], [-1, -1, 1.414]];
-    var found = false, guard = 0, shut = new Uint8Array(n);
-    while (heap.length && guard < 60000) {
-      var top = wkPop(heap), i = top[1];
+    var found = false, guard = 0;
+    while (A.hn && guard < 60000) {
+      var i = wkAsPop(A);
       if (i === to) { found = true; break; }
-      if (shut[i]) { continue; }
-      shut[i] = 1; guard++;
-      var c0 = i % G.cols, r0 = Math.floor(i / G.cols), base = cost[i];
+      if (shut[i] === run) { continue; }
+      shut[i] = run; guard++;
+      var c0 = i % G.cols, r0 = Math.floor(i / G.cols), base = A.cost[i];
       for (var s = 0; s < 8; s++) {
         var c = c0 + steps[s][0], r = r0 + steps[s][1];
         if (c < 0 || r < 0 || c >= G.cols || r >= G.rows) { continue; }
@@ -463,12 +472,13 @@
         if (!open(j)) { continue; }
         if (steps[s][0] && steps[s][1] && (!open(r0 * G.cols + c) || !open(r * G.cols + c0))) { continue; }
         var to2 = base + steps[s][2];
-        if (to2 < cost[j]) { cost[j] = to2; back[j] = i; wkPush(heap, [to2 + 1.4 * Math.hypot(c - tc, r - tr), j]); }
+        if (to2 < wkAsCost(A, j)) { wkAsSet(A, j, to2, i); wkAsPush(A, to2 + 1.4 * Math.hypot(c - tc, r - tr), j); }
       }
     }
-    if (!found) { return [a, b]; }
+    wkGridWayRaw.n = (wkGridWayRaw.n || 0) + 1; wkGridWayRaw.steps = (wkGridWayRaw.steps || 0) + guard;
+    if (!found) { wkGridWayRaw.fail = (wkGridWayRaw.fail || 0) + 1; wkGridWayRaw.failSteps = (wkGridWayRaw.failSteps || 0) + guard; return [a, b]; }
     var cells = [];
-    for (var at = to; at >= 0; at = back[at]) { cells.push(at); }
+    for (var at = to; at >= 0; at = A.back[at]) { cells.push(at); }
     cells.reverse();
     // straightened: as few straight walks as stay on open squares
     var pts = [a], cur = a, k2 = 0;
@@ -492,6 +502,93 @@
       if (i < 0 || !open(i)) { return false; }
     }
     return true;
+  }
+  // ---- the searches' own memory --------------------------------------------------------------------------
+  // (2026-10-05, "it can not freeze the site": each way worked out made two arrays the size of
+  // the whole site, and a pair -- an object -- for every square it looked at, thousands of ways a
+  // timetable; the machines' search had no list of squares done, and went over them again and
+  // again.  Now one set of arrays kept and used again, a run number marking what this search has
+  // touched, its heap in typed arrays.)
+  var WK_AS = { n: 0, run: 0, cost: null, back: null, seen: null, shut: null, hk: new Float64Array(4096), hv: new Int32Array(4096), hn: 0 };
+  function wkAsBegin(n) {
+    var A = WK_AS;
+    if (A.n < n || A.run > 4e9) {
+      A.n = Math.max(n, A.n); A.cost = new Float64Array(A.n); A.back = new Int32Array(A.n); A.seen = new Uint32Array(A.n); A.shut = new Uint32Array(A.n); A.run = 0;
+    }
+    A.run++; A.hn = 0;
+    return A;
+  }
+  // Which squares can be got to from which: each run of open squares numbered, once for each
+  // change to the site.  (Two ways in three asked for went between runs never joined -- into the
+  // building before its door was open, onto what is stacked -- and each was searched for over the
+  // whole of the site before it was given up: millions of squares a timetable.)
+  function wkParts(site, key, isOpen) {
+    var store = site.parts || (site.parts = {}), gen = site.gridGen || 0, got = store[key];
+    if (got && got.gen === gen) { return got.lab; }
+    var G = site.G, cols = G.cols, n = cols * G.rows, lab = new Int32Array(n), q = new Int32Array(n), id = 0;
+    for (var s0 = 0; s0 < n; s0++) {
+      if (lab[s0] || !isOpen(s0)) { continue; }
+      id++; lab[s0] = id;
+      var h = 0, tl = 0;
+      q[tl++] = s0;
+      while (h < tl) {
+        var i = q[h++], c = i % cols;
+        // (side by side only: a corner is cut only where both squares beside it are open, so the runs are the same)
+        if (c > 0 && !lab[i - 1] && isOpen(i - 1)) { lab[i - 1] = id; q[tl++] = i - 1; }
+        if (c < cols - 1 && !lab[i + 1] && isOpen(i + 1)) { lab[i + 1] = id; q[tl++] = i + 1; }
+        if (i >= cols && !lab[i - cols] && isOpen(i - cols)) { lab[i - cols] = id; q[tl++] = i - cols; }
+        if (i + cols < n && !lab[i + cols] && isOpen(i + cols)) { lab[i + cols] = id; q[tl++] = i + cols; }
+      }
+    }
+    store[key] = { gen: gen, lab: lab };
+    return lab;
+  }
+  // whether a way from square a to square b can be: a run each is in, or -- a square not open
+  // itself, where a way may start or end all the same -- the runs round it
+  function wkPartsMeet(site, lab, a, b) {
+    var G = site.G, cols = G.cols, rows = G.rows;
+    function near(i) {
+      if (lab[i]) { return [lab[i]]; }
+      var c = i % cols, r = (i - c) / cols, out = [];
+      for (var dr = -1; dr <= 1; dr++) {
+        for (var dc = -1; dc <= 1; dc++) {
+          var rr = r + dr, cc = c + dc;
+          if (rr < 0 || cc < 0 || rr >= rows || cc >= cols) { continue; }
+          var v = lab[rr * cols + cc];
+          if (v && out.indexOf(v) < 0) { out.push(v); }
+        }
+      }
+      return out;
+    }
+    var x = near(a), y = near(b);
+    for (var k = 0; k < x.length; k++) { if (y.indexOf(x[k]) >= 0) { return true; } }
+    return false;
+  }
+  function wkAsCost(A, i) { return A.seen[i] === A.run ? A.cost[i] : Infinity; }
+  function wkAsSet(A, i, c, from) { A.seen[i] = A.run; A.cost[i] = c; A.back[i] = from; }
+  function wkAsPush(A, key, val) {
+    if (A.hn === A.hk.length) {
+      var k2 = new Float64Array(A.hn * 2), v2 = new Int32Array(A.hn * 2);
+      k2.set(A.hk); v2.set(A.hv); A.hk = k2; A.hv = v2;
+    }
+    var K = A.hk, V = A.hv, i = A.hn++;
+    while (i > 0) { var up = (i - 1) >> 1; if (K[up] <= key) { break; } K[i] = K[up]; V[i] = V[up]; i = up; }
+    K[i] = key; V[i] = val;
+  }
+  function wkAsPop(A) {
+    var K = A.hk, V = A.hv, top = V[0], n = --A.hn;
+    if (n > 0) {
+      var key = K[n], val = V[n], i = 0;
+      for (;;) {
+        var l = 2 * i + 1;
+        if (l >= n) { break; }
+        var m = l + 1 < n && K[l + 1] < K[l] ? l + 1 : l;
+        if (K[m] >= key) { break; }
+        K[i] = K[m]; V[i] = V[m]; i = m;
+      }
+      K[i] = key; V[i] = val;
+    }
+    return top;
   }
   function wkPush(h, v) {
     h.push(v);
@@ -635,16 +732,16 @@
     if (from < 0 || to < 0 || from >= n || to >= n) { return null; }
     var D = typeof moClear === "function" ? moClear(plan) : null, NEAR = typeof MO_NEAR !== "undefined" ? MO_NEAR : [0, 0, 0, 0];
     function open(i) { return cells[i] === 0 || cells[i] === 3 || i === from || i === to || (through && through(i)); }
-    var cost = new Float32Array(n).fill(Infinity), back = new Int32Array(n).fill(-1), heap = [[0, from]];
-    cost[from] = 0;
+    var A = wkAsBegin(n), run = A.run, shut = A.shut;
+    wkAsSet(A, from, 0, -1); wkAsPush(A, 0, from);
     var tc = to % cols, tr = Math.floor(to / cols), steps = [[1, 0, 1], [-1, 0, 1], [0, 1, 1], [0, -1, 1], [1, 1, 1.414], [1, -1, 1.414], [-1, 1, 1.414], [-1, -1, 1.414]];
-    var found = false, guard = 0, shut = new Uint8Array(n);
-    while (heap.length && guard < 30000) {
-      var top = wkPop(heap), i = top[1];
+    var found = false, guard = 0;
+    while (A.hn && guard < 30000) {
+      var i = wkAsPop(A);
       if (i === to) { found = true; break; }
-      if (shut[i]) { continue; }
-      shut[i] = 1; guard++;
-      var c0 = i % cols, r0 = Math.floor(i / cols), base = cost[i];
+      if (shut[i] === run) { continue; }
+      shut[i] = run; guard++;
+      var c0 = i % cols, r0 = Math.floor(i / cols), base = A.cost[i];
       for (var s = 0; s < 8; s++) {
         var c = c0 + steps[s][0], r = r0 + steps[s][1];
         if (c < 0 || r < 0 || c >= cols || r >= rows) { continue; }
@@ -652,13 +749,13 @@
         if (!open(j)) { continue; }
         if (steps[s][0] && steps[s][1] && (!open(r0 * cols + c) || !open(r * cols + c0))) { continue; }
         var to2 = base + steps[s][2] * (1 + (D ? NEAR[D[j]] || 0 : 0));
-        if (to2 < cost[j]) { cost[j] = to2; back[j] = i; wkPush(heap, [to2 + 2.2 * Math.hypot(c - tc, r - tr), j]); }   // (leaning hard toward the goal)
+        if (to2 < wkAsCost(A, j)) { wkAsSet(A, j, to2, i); wkAsPush(A, to2 + 2.2 * Math.hypot(c - tc, r - tr), j); }   // (leaning hard toward the goal)
       }
     }
     wkPlanWay.n = (wkPlanWay.n || 0) + 1; wkPlanWay.steps = (wkPlanWay.steps || 0) + guard;
     if (!found) { wkPlanWay.fail = (wkPlanWay.fail || 0) + 1; wkPlanWay.failSteps = (wkPlanWay.failSteps || 0) + guard; return null; }
     var way = [];
-    for (var at = to; at >= 0; at = back[at]) { way.push(at); }
+    for (var at = to; at >= 0; at = A.back[at]) { way.push(at); }
     return way.reverse();
   }
   // A way from a to b (world [x, y, z]) at the site's time T.
@@ -814,6 +911,7 @@
     opt = opt || {};
     faces.forEach(function (f) { f.src = f; });
     var pc = { t0: t0, t1: opt.t1 === undefined ? Infinity : opt.t1, faces: faces, move: opt.move || null, moveTo: opt.moveTo || t0, live: opt.live || null };
+    if (plan.pcLevel !== undefined) { pc.level = plan.pcLevel; }          // (the storey it is part of: hidden with it)
     plan.pieces.push(pc);
     return pc;
   }
@@ -958,7 +1056,9 @@
     var t0 = performance.now();
     while (plan.next < WK_PHASES.length) {
       var ph = WK_PHASES[plan.next++], s0 = performance.now();
+      plan.pcLevel = undefined;
       try { ph.make(plan); } catch (e) { if (window.console && console.warn) { console.warn("works, " + ph.name + ":", e && e.stack || e); } }
+      plan.pcLevel = undefined;
       plan.phaseMs[ph.name] = Math.round(performance.now() - s0);
       if (performance.now() - t0 > budget) { break; }
     }
@@ -1059,7 +1159,7 @@
     // what has been put there, and what is being put there
     for (var p = 0; p < plan.pieces.length; p++) {
       var pc = plan.pieces[p];
-      if (T < pc.t0 || T >= pc.t1) { continue; }
+      if (T < pc.t0 || T >= pc.t1 || (pc.level !== undefined && wkStoreyHidden(plan, pc.level))) { continue; }
       if (pc.live) { pc.live(faces, T); continue; }
       if (pc.move && T < pc.moveTo) { pc.move(faces, T); continue; }
       for (var q = 0; q < pc.faces.length; q++) { faces.push(pc.faces[q]); }
@@ -1073,6 +1173,14 @@
     // (the names of rooms and pieces not there yet: none, till it is all in)
     if (out.labels && T < (plan.labelsAt || plan.T - 3)) { out.labels = []; }
     return out;
+  }
+  // (2026-10-05: "the beams ... then the floor so they are in that in-between state") Looked at from
+  // above with the storeys over one taken off (38-view3d.js's V3.upTo), a storey's framing -- its deck's
+  // joists and boards, its walls' studs, the trusses over the top one -- goes with it, as its own rooms
+  // do: they stood over the floor below with nothing round them.
+  function wkStoreyHidden(plan, li) {
+    if (!V3 || V3.mode === "walk" || V3.upTo === null || V3.upTo === undefined || !plan.site) { return false; }
+    return li - plan.site.ground > V3.upTo;
   }
   // a face as it looks before it is finished: sheathing on a wall, boards on a roof
   function wkPreLook(f, how) {
@@ -1170,6 +1278,7 @@
   function wkWorkerDraw(faces, w, T, plan) {
     var st = wkWorkerAt(w, T);
     if (!st) { return; }
+    if (wkStoreyHidden(plan, wkLevelOf(plan.site, st.p))) { return; }      // (up on a storey taken off the view: with it)
     var P = plan.site.P, look = Object.assign({}, w.look), phase = 0, s = st.seg;
     var pose = st.pose;
     if (pose === "walk" || pose === "carry") { phase = st.phase; }
@@ -1468,10 +1577,15 @@
   // ---- a machine about the lot: a stand anywhere on it near a spot, and its way there ----------------
   // How far each square is from what a machine may not drive over (the
   // building, what stands about, the pit, off the lot), in squares.
-  function wkVehClear(site) {
-    if (site.vclr && site.vclrGen === site.gridGen) { return site.vclr; }
+  // (`ground`: before anything of the building is up -- its squares driven over like the rest of the
+  // lot, as the earth movers do; 2026-10-05: they had no way to a stand on its ground, and were sent
+  // there in a straight line, through the pickups parked on the drive)
+  function wkVehClear(site, ground) {
+    if (ground) {
+      if (site.vclrG && site.vclrGGen === site.gridGen) { return site.vclrG; }
+    } else if (site.vclr && site.vclrGen === site.gridGen) { return site.vclr; }
     var G = site.G, n = G.cols * G.rows, d = new Uint8Array(n).fill(30), q = [];
-    for (var i = 0; i < n; i++) { var v = G.t[i]; if (v === WK_HOUSE || v === WK_THING || v === WK_OFF || v === WK_CAR || v === WK_PIT) { d[i] = 0; q.push(i); } }
+    for (var i = 0; i < n; i++) { var v = G.t[i]; if ((v === WK_HOUSE && !ground) || v === WK_THING || v === WK_OFF || v === WK_CAR || v === WK_PIT || v === WK_YARD) { d[i] = 0; q.push(i); } }
     for (var h = 0; h < q.length; h++) {
       var at = q[h], r = Math.floor(at / G.cols), c = at % G.cols, nd = d[at] + 1;
       if (nd > 29) { continue; }
@@ -1484,49 +1598,80 @@
         }
       }
     }
-    site.vclr = d; site.vclrGen = site.gridGen;
+    if (ground) { site.vclrG = d; site.vclrGGen = site.gridGen; } else { site.vclr = d; site.vclrGen = site.gridGen; }
     return d;
   }
   // a way for a machine `half` wide (each side), lot-local, kept that clear of everything
-  function wkVehWay(site, a, b, half) {
-    var G = site.G, D = wkVehClear(site);
+  function wkVehWay(site, a, b, half, ground) {
+    // (the same squares, as wide, on the same site: the way worked out before -- as wkGridWay keeps its own)
+    var fc = wkCell(site, a[0], a[1]), tcl = wkCell(site, b[0], b[1]);
+    if (fc >= 0 && tcl >= 0) {
+      var vc = site.vehCache || (site.vehCache = new Map()), vk = fc + ">" + tcl + ":" + Math.round(half) + (ground ? "g" : "") + ":" + (site.gridGen || 0), was = vc.get(vk);
+      if (was) {
+        var cp = was.map(function (q) { return q.slice(); });
+        cp[0] = a; cp[cp.length - 1] = b;
+        if (was.blocked) { cp.blocked = true; }
+        return cp;
+      }
+      var made = wkVehWayFresh(site, a, b, half, ground);
+      if (vc.size > 20000) { vc.clear(); }
+      var keep = made.map(function (q) { return q.slice(); });
+      if (made.blocked) { keep.blocked = true; }
+      vc.set(vk, keep);
+      return made;
+    }
+    return wkVehWayFresh(site, a, b, half, ground);
+  }
+  function wkVehWayFresh(site, a, b, half, ground) {
+    var G = site.G, D = wkVehClear(site, ground);
     function clear(h) { var need = Math.ceil(h / G.c); return wkGridLine(site, a, b, function (i) { return D[i] >= need; }); }
-    var got = wkVehWayRaw(site, a, b, half);
+    var got = wkVehWayRaw(site, a, b, half, ground);
     if (got.length > 2 || clear(half)) { return got; }
     // (straight only because none was found: tried narrower, down to its own width)
-    var tries = [half * 0.8, half * 0.6, 0.9 * site.P];
+    // (2026-10-05: no narrower than three quarters of what was asked -- the machine's own width with a
+    // little to spare; narrower, it scraped through the trucks parked beside its way.  None that wide:
+    // blocked, and it stays where it is)
+    var tries = [half * 0.85, half * 0.75];
     for (var i = 0; i < tries.length; i++) {
       if (tries[i] >= half) { continue; }
-      var g2 = wkVehWayRaw(site, a, b, tries[i]);
+      var g2 = wkVehWayRaw(site, a, b, tries[i], ground);
       if (g2.length > 2 || clear(tries[i])) { return g2; }
     }
-    got.blocked = true;
-    return got;
+    // (none even so: a way only kept off what stands about -- squeezed by it, not driven straight
+    // through it, for those that drive it all the same; still blocked, for those that stay put)
+    var g3 = wkVehWayRaw(site, a, b, half * 0.6, ground);
+    g3.blocked = true;
+    return g3;
   }
-  function wkVehWayRaw(site, a, b, half) {
-    var G = site.G, D = wkVehClear(site), need = Math.ceil(half / G.c), from = wkCell(site, a[0], a[1]), to = wkCell(site, b[0], b[1]);
+  function wkVehWayRaw(site, a, b, half, ground) {
+    var G = site.G, D = wkVehClear(site, ground), need = Math.ceil(half / G.c), from = wkCell(site, a[0], a[1]), to = wkCell(site, b[0], b[1]);
     if (from < 0 || to < 0) { return [a, b]; }
     function open(i) { return D[i] >= need || i === from || i === to; }
     if (wkGridLine(site, a, b, open)) { return [a, b]; }
-    var n = G.cols * G.rows, cost = new Float32Array(n).fill(Infinity), back = new Int32Array(n).fill(-1), heap = [[0, from]];
-    cost[from] = 0;
+    // (none, between runs of ground as wide as it never joined: given up at once)
+    if (!wkPartsMeet(site, wkParts(site, "veh" + need + (ground ? "g" : ""), function (i) { return D[i] >= need; }), from, to)) { return [a, b]; }
+    var n = G.cols * G.rows, A = wkAsBegin(n), run = A.run, shut = A.shut;
+    wkAsSet(A, from, 0, -1); wkAsPush(A, 0, from);
     var tc = to % G.cols, tr = Math.floor(to / G.cols), steps = [[1, 0, 1], [-1, 0, 1], [0, 1, 1], [0, -1, 1], [1, 1, 1.414], [1, -1, 1.414], [-1, 1, 1.414], [-1, -1, 1.414]], found = false, guard = 0;
-    while (heap.length && guard++ < 300000) {
-      var top = wkPop(heap), i = top[1];
+    while (A.hn && guard < 300000) {
+      var i = wkAsPop(A);
       if (i === to) { found = true; break; }
-      var c0 = i % G.cols, r0 = Math.floor(i / G.cols);
+      // (each square looked round once: the way to it is the cheapest by then)
+      if (shut[i] === run) { continue; }
+      shut[i] = run; guard++;
+      var c0 = i % G.cols, r0 = Math.floor(i / G.cols), base = A.cost[i];
       for (var s = 0; s < 8; s++) {
         var c = c0 + steps[s][0], r = r0 + steps[s][1];
         if (c < 0 || r < 0 || c >= G.cols || r >= G.rows) { continue; }
         var j = r * G.cols + c;
         if (!open(j)) { continue; }
-        var to2 = cost[i] + steps[s][2] * (1 + (D[j] < need + 2 ? 0.6 : 0));
-        if (to2 < cost[j]) { cost[j] = to2; back[j] = i; wkPush(heap, [to2 + Math.hypot(c - tc, r - tr), j]); }
+        var to2 = base + steps[s][2] * (1 + (D[j] < need + 2 ? 0.6 : 0));
+        if (to2 < wkAsCost(A, j)) { wkAsSet(A, j, to2, i); wkAsPush(A, to2 + Math.hypot(c - tc, r - tr), j); }
       }
     }
     if (!found) { return [a, b]; }
     var cells = [];
-    for (var at = to; at >= 0; at = back[at]) { cells.push(at); }
+    for (var at = to; at >= 0; at = A.back[at]) { cells.push(at); }
     cells.reverse();
     var pts = [a], cur = a, k = 0;
     while (k < cells.length - 1) {

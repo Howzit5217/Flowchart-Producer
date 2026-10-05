@@ -491,7 +491,8 @@
       home = Math.max(home, w.free);
     });
     J.pickups.forEach(function (pk, i) {
-      var go = home + 1 + i * 2;
+      // (far enough apart that each is out into the lane and away before the next pulls out)
+      var go = home + 1 + i * 5;
       pk.here = pk.arrived;
       jbGo(plan, pk, go, { speed: 7 });
     });

@@ -144,7 +144,7 @@
     var bed = inRoom("i_bedking i_bed i_bed1 i_daybed")[0];
     if (bed) {
       var B = arrangeAxes(bed), bf = B.f, bs = B.s;
-      var stands = inRoom("i_nightstand").slice(0, 2);
+      var stands = inRoom("i_nightstand").slice(0, 2), dropped = 0;
       if (stands.length) {
         // room for one either side: the bed slid along its wall -- toward the
         // middle of the room first -- to where they both go (a bed in a
@@ -180,21 +180,35 @@
         });
         // no spot for both: each where it can go by the bed as it stands
         if (!both) {
+          var lost = [];
           stands.forEach(function (ns, i) {
-            [i ? -1 : 1, i ? 1 : -1].some(function (sgn) {
+            var placed = [i ? -1 : 1, i ? 1 : -1].some(function (sgn) {
               var off = bed.w / 2 + ns.w / 2 + 0.03 * P, back = -bed.h / 2 + ns.h / 2 + 0.02 * P;
               var ok = arrangeMove(r, ns, bed.x + bs[0] * sgn * off + bf[0] * back, bed.y + bs[1] * sgn * off + bf[1] * back, bed.turn || 0, [], ways);
               if (ok) { moved++; }
               return ok;
             });
+            // (2026-10-05: "weird furniture placements") none beside the bed's head, and not there already:
+            // left out -- not stood at the bed's foot or across the room, wherever it had first gone
+            var lat = Math.abs((ns.x - bed.x) * bs[0] + (ns.y - bed.y) * bs[1]), lon = (ns.x - bed.x) * bf[0] + (ns.y - bed.y) * bf[1];
+            var beside = Math.abs(lat - (bed.w / 2 + ns.w / 2)) < 0.3 * P && lon < -bed.h / 2 + ns.h + 0.2 * P;
+            if (!placed && !beside) { lost.push(ns); }
           });
+          if (lost.length) {
+            hand.nodes = hand.nodes.filter(function (n) { return lost.indexOf(n) < 0; });
+            stands = stands.filter(function (n) { return lost.indexOf(n) < 0; });
+            dropped = lost.length;
+            moved++;
+          }
         }
       }
-      // a lamp on each nightstand (it stands on what is under it, 38-view3d.js)
+      // a lamp on each nightstand (it stands on what is under it, 38-view3d.js) -- one with none left to stand on, gone with it
+      var lampsLeft = [];
       inRoom("i_tablelamp").forEach(function (lp, i) {
-        var ns = stands[i];
-        if (ns) { lp.x = ns.x; lp.y = ns.y; moved++; }
+        var ns = stands && stands[i];
+        if (ns) { lp.x = ns.x; lp.y = ns.y; moved++; } else if (dropped && i >= stands.length && i < stands.length + dropped) { lampsLeft.push(lp); }
       });
+      if (lampsLeft.length) { hand.nodes = hand.nodes.filter(function (n) { return lampsLeft.indexOf(n) < 0; }); }
       var rugB = inRoom("i_rug")[0];
       if (rugB && !sofa) {
         if (arrangeMove(r, rugB, bed.x + bf[0] * bed.h * 0.18, bed.y + bf[1] * bed.h * 0.18, bed.turn || 0, [], ways)) { moved++; }

@@ -254,6 +254,7 @@
     var deckTop = {};
     for (var li = first; li < levels.length; li++) {
       var L = levels[li];
+      plan.pcLevel = li;                                    // (what is put up now: this storey's, 40-works.js)
       // the deck under this storey: on the foundation walls (over a basement), or on the walls below
       if (li > first || J.base >= 0) {
         t = jbDeck(plan, J, li, t);
@@ -379,14 +380,44 @@
       t = Math.max(t, placed);
       end = t;
     }
+    // (2026-10-05: "showing the beams in the house when there should be a ceiling") The joists between the
+    // ceiling under them and the boards over them: a floor's over the ceilings of the rooms below it (they
+    // hung 27 cm under the floor, through a ceiling any lower than that), a flat roof's over the top
+    // storey's own ceiling (they hung under it, its boards just below it, in the rooms)
+    var roofLo = Infinity;
+    Object.keys(plan.groups).forEach(function (k) { if (k.indexOf("roof:") === 0) { roofLo = Math.min(roofLo, plan.groups[k].lo); } });
+    var below = [];
+    J.levels.forEach(function (L2, li2) {
+      if (li2 >= li) { return; }
+      L2.rooms.forEach(function (o2) { var r2 = o2.r, t2 = (r2.turn || 0) * Math.PI / 180; below.push({ x: r2.x + o2.dx, y: r2.y + o2.dy, hw: r2.w / 2, hh: r2.h / 2, c: Math.cos(t2), s: Math.sin(t2), z: o2.z + o2.ceil }); });
+    });
+    function ceilUnder(p2, zMax) {
+      var best = -Infinity;
+      below.forEach(function (R) {
+        var dx = p2[0] - R.x, dy = p2[1] - R.y, lx = dx * R.c + dy * R.s, ly = -dx * R.s + dy * R.c;
+        if (Math.abs(lx) <= R.hw + 0.05 * P && Math.abs(ly) <= R.hh + 0.05 * P && R.z < zMax && R.z > best) { best = R.z; }
+      });
+      return best;
+    }
     L.rooms.forEach(function (o) {
       var r = o.r, along = r.w >= r.h, span = along ? r.h : r.w, run = along ? r.w : r.h, n = Math.max(2, Math.round(run / (0.6 * P)) + 1);
       var tt = (r.turn || 0) * Math.PI / 180, c = Math.cos(tt), s = Math.sin(tt), cx = r.x + o.dx, cy = r.y + o.dy, z = top ? o.z + o.ceil : o.z;
       function at(lx, ly, h) { return [cx + lx * c - ly * s, cy + lx * s + ly * c, h]; }
+      var jBot, jTop;
+      if (top) {
+        jBot = z + 0.01 * P; jTop = Math.min(z + 0.25 * P, roofLo - 0.04 * P);
+        if (jTop - jBot < 0.06 * P) { jTop = jBot + 0.06 * P; }
+      } else {
+        jTop = z - 0.035 * P;
+        var cu = Math.max(ceilUnder(at(0, 0, 0), z), ceilUnder(at(-r.w * 0.4, -r.h * 0.4, 0), z), ceilUnder(at(r.w * 0.4, r.h * 0.4, 0), z));
+        jBot = Math.max(z - 0.27 * P, cu + 0.01 * P);
+        if (jTop - jBot < 0.04 * P) { jBot = jTop - 0.04 * P; }
+      }
+      var jMid = (jBot + jTop) / 2, jH = jTop - jBot, boardZ = top ? jTop + 0.035 * P : z;      // (a flat roof's boards on its joists)
       var joists = [];
       for (var k = 0; k < n; k++) {
         var u = -run / 2 + run * k / (n - 1);
-        joists.push(along ? [at(u, -span / 2, z - 0.15 * P), at(u, span / 2, z - 0.15 * P)] : [at(-span / 2, u, z - 0.15 * P), at(span / 2, u, z - 0.15 * P)]);
+        joists.push(along ? [at(u, -span / 2, jMid), at(u, span / 2, jMid)] : [at(-span / 2, u, jMid), at(span / 2, u, jMid)]);
       }
       joists.forEach(function (j) {
         var w = wkPick(plan, 1, j[0])[0], mid = wkLerp(j[0], j[1], 0.5);
@@ -394,7 +425,7 @@
         wkDo(w, 0.9, "hold");
         wkGo(plan, w, [mid[0], mid[1], z], { carry: { kind: "board", n: 1, len: Math.min(4, span / P), how: WK_JOIST } });
         wkDo(w, 2.2, "hammer");
-        wkPiece(plan, w.free, wkFacesOf(function (f) { cnBeam(f, j[0], j[1], 0.05 * P, WK_JOIST, 0.24 * P); }), { t1: 1e9 });
+        wkPiece(plan, w.free, wkFacesOf(function (f) { cnBeam(f, j[0], j[1], 0.05 * P, WK_JOIST, jH); }), { t1: 1e9 });
         end = Math.max(end, w.free);
       });
       // the boards: 1.2 by 2.4 m, rows across
@@ -409,7 +440,7 @@
             wkGo(plan, w, mid, { carry: { kind: "sheet", w: 1.2, h: 2.4, how: WK_SHEET } });
             wkDo(w, 2.0, "kneel");
             wkPiece(plan, w.free, wkFacesOf(function (f) {
-              v3Prism(f, [at(x0, y0), at(x1, y0), at(x1, y1), at(x0, y1)].map(function (p) { return [p[0], p[1]]; }), z - 0.035 * P, z - 0.015 * P, WK_SHEET);
+              v3Prism(f, [at(x0, y0), at(x1, y0), at(x1, y1), at(x0, y1)].map(function (p) { return [p[0], p[1]]; }), boardZ - 0.035 * P, boardZ - 0.015 * P, WK_SHEET);
             }), { t1: 1e9 });
             end = Math.max(end, w.free);
           })(xx, yy);
@@ -426,6 +457,7 @@
     var J = jbJ(plan), P = J.P, S = J.S, site = J.site, ctx = J.ctx, crew = J.crew;
     var top = J.levels[J.levels.length - 1], t = (plan.wallsAt[J.levels.length - 1] || J.frameDone || plan.T) + 2;
     var roofKeys = Object.keys(plan.groups).filter(function (k) { return k.indexOf("roof:") === 0; });
+    plan.pcLevel = J.levels.length - 1;                     // (the trusses and the boards: the top storey's, gone with it)
     var rLo = Infinity, rHi = -Infinity;
     roofKeys.forEach(function (k) { rLo = Math.min(rLo, plan.groups[k].lo); rHi = Math.max(rHi, plan.groups[k].hi); });
     var pitched = roofKeys.some(function (k) { return k.split(":")[1] !== "flat"; }) && rHi > rLo + 0.5 * P;
@@ -470,41 +502,54 @@
         return z;
       }
       var TS = 12, trussShape = {};
+      // (2026-10-05: "showing the beams in the house when there should be a ceiling") Each truss bears on
+      // the walls, its bottom chord just over the ceiling of the room under it -- not at the roof's lowest
+      // edge, which with the eaves' overhang is lower than the top floor's ceiling: the chords and webs were
+      // through the rooms under it.  None where no room is under it (the overhang: the top chord's tail).
+      var ceilRooms = [];
+      J.levels.forEach(function (L) {
+        L.rooms.forEach(function (o) { var r = o.r, tt = (r.turn || 0) * Math.PI / 180; ceilRooms.push({ x: r.x + o.dx, y: r.y + o.dy, hw: r.w / 2, hh: r.h / 2, c: Math.cos(tt), s: Math.sin(tt), z: o.z + o.ceil }); });
+      });
+      function ceilAt(x, y) {
+        var best = null;
+        for (var i = 0; i < ceilRooms.length; i++) {
+          var R = ceilRooms[i], dx = x - R.x, dy = y - R.y, lx = dx * R.c + dy * R.s, ly = -dx * R.s + dy * R.c;
+          if (Math.abs(lx) <= R.hw + 0.05 * P && Math.abs(ly) <= R.hh + 0.05 * P && (best === null || R.z > best)) { best = R.z; }
+        }
+        return best;
+      }
       function trussOf(at, k) {
         if (trussShape[k]) { return trussShape[k]; }
         var pts = [];
         for (var i = 0; i <= TS; i++) {
-          var u = i / TS, x = alongX ? at : ctx.x0 + span * u, y = alongX ? ctx.y0 + span * u : at, rz = roofZ(x, y);
-          var gable = zl + (zr - zl) * (1 - Math.abs(2 * u - 1));
-          pts.push({ u: u, top: rz === null ? null : Math.min(gable, rz - 0.12 * P) });
+          var u = i / TS, x = alongX ? at : ctx.x0 + span * u, y = alongX ? ctx.y0 + span * u : at, rz = roofZ(x, y), cz = ceilAt(x, y);
+          var gable = zl + (zr - zl) * (1 - Math.abs(2 * u - 1)), top = rz === null ? null : Math.min(gable, rz - 0.12 * P);
+          var low = cz === null ? null : cz + 0.045 * P;
+          pts.push({ u: u, top: top, low: low, ok: top !== null && low !== null && top - low > 0.1 * P });
         }
-        // the runs with a roof over them, each with its own bottom chord at its lowest (its eaves)
+        // the runs with a roof over them and a room under them, the bottom chord on that room's ceiling
         var runs = [], run = null;
         pts.forEach(function (q) {
-          if (q.top === null) { run = null; return; }
+          if (!q.ok) { run = null; return; }
           if (!run) { run = []; runs.push(run); }
           run.push(q);
         });
-        runs = runs.filter(function (r) { return r.length >= 2; }).map(function (r) {
-          var low = Math.max(zl, Math.min.apply(null, r.map(function (q) { return q.top; })));
-          return { pts: r, low: Math.min(low, Math.max.apply(null, r.map(function (q) { return q.top; }))) };
-        });
+        runs = runs.filter(function (r) { return r.length >= 2; }).map(function (r) { return { pts: r }; });
         trussShape[k] = runs;
         return runs;
       }
       function truss(f, at, lift, k) {
         function p(u, z) { return alongX ? [at, ctx.y0 + span * u, z + lift] : [ctx.x0 + span * u, at, z + lift]; }
         trussOf(at, k).forEach(function (r) {
-          var a = r.pts[0], b = r.pts[r.pts.length - 1];
-          cnBeam(f, p(a.u, r.low), p(b.u, r.low), 0.07 * P, WK_STUD);               // the bottom chord
           for (var i = 1; i < r.pts.length; i++) {
             var q0 = r.pts[i - 1], q1 = r.pts[i];
-            cnBeam(f, p(q0.u, Math.max(r.low, q0.top)), p(q1.u, Math.max(r.low, q1.top)), 0.07 * P, WK_STUD);   // the top chord
+            cnBeam(f, p(q0.u, q0.low), p(q1.u, q1.low), 0.07 * P, WK_STUD);       // the bottom chord
+            cnBeam(f, p(q0.u, q0.top), p(q1.u, q1.top), 0.07 * P, WK_STUD);       // the top chord
           }
           r.pts.forEach(function (q, i) {
             // the webs: every third, and the king post at the middle -- where there is height for them
             var mid = Math.abs(q.u - 0.5) < 0.5 / TS + 1e-6;
-            if ((i % 3 === 0 || mid) && q.top - r.low > 0.15 * P) { cnBeam(f, p(q.u, r.low), p(q.u, q.top), mid ? 0.05 * P : 0.04 * P, WK_STUD); }
+            if ((i % 3 === 0 || mid || i === 0 || i === r.pts.length - 1) && q.top - q.low > 0.15 * P) { cnBeam(f, p(q.u, q.low), p(q.u, q.top), mid ? 0.05 * P : 0.04 * P, WK_STUD); }
           });
         });
       }
