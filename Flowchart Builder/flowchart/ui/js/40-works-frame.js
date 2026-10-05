@@ -119,7 +119,9 @@
   }
   // drive it from where it is to `to` (lot-local [x, y]), facing `face` (local radians) at the end
   function jbTeleDrive(plan, m, to, t, face, extra) {
-    var site = plan.site, P = site.P, from = m.at, way = wkVehWay(site, from, to, 1.2 * P);
+    var site = plan.site, P = site.P, from = m.at, way = wkVehWay(site, from, to, 1.75 * P);
+    // (nowhere it can drive to there: it works from where it is, its boom reaching further)
+    if (way.blocked) { to = from.slice(); way = [from, from]; }
     var pts = way.length > 1 ? way : [from, to];
     var L = wkPolyline(pts.map(function (q) { return [q[0], q[1], 0]; })), dur = Math.max(1.5, L.len / (2.2 * P));
     var x0 = Object.assign({}, extra || {});

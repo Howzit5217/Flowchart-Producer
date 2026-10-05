@@ -54,7 +54,7 @@
   }
   // the reach: from the boom's foot (in the house's numbers) to the bucket's
   // pin, worked out for the boom and the stick to get there (two links)
-  var WK_BOOM = 5.4, WK_STICK = 2.8, WK_BUCKET = 1.1, WK_FOOT = [1.0, -0.15, 1.95];
+  var WK_BOOM = 5.4, WK_STICK = 2.8, WK_BUCKET = 1.1, WK_BOOMFOOT = [1.0, -0.15, 1.95];
   function wkDiggerArm(r, z) {
     var a = WK_BOOM, b = WK_STICK, d = Math.max(0.5, Math.min(a + b - 0.05, Math.hypot(r, z)));
     var cosB = (a * a + d * d - b * b) / (2 * a * d), base = Math.atan2(z, r), boom = base + Math.acos(Math.max(-1, Math.min(1, cosB)));
@@ -72,7 +72,7 @@
     wkPutM(faces, wkDiggerHouse(), H, z0, st.moving || st.working);
     // the boom, the stick, the bucket
     var arm = wkDiggerArm(st.reach === undefined ? 4.5 : st.reach, st.lift === undefined ? -1.0 : st.lift);
-    function at(fx, z) { return H.at((WK_FOOT[0] + fx) * P, WK_FOOT[1] * P, z0 + (WK_FOOT[2] + z) * P); }
+    function at(fx, z) { return H.at((WK_BOOMFOOT[0] + fx) * P, WK_BOOMFOOT[1] * P, z0 + (WK_BOOMFOOT[2] + z) * P); }
     var foot = at(0, 0), elbow = at(arm.elbow[0], arm.elbow[1]), pin = at(arm.pin[0], arm.pin[1]);
     var yel = wkHow(WK_YELLOW), dark = wkHow(WK_DARKM, 22);
     cnBeam(faces, foot, elbow, 0.42 * P, yel, 0.62 * P);
@@ -109,7 +109,7 @@
   // where the bucket's teeth are (world), for the earth it digs and drops
   function wkBucketTip(st, plan) {
     var P = plan.site.P, H = wkFrame(st, st.swing || 0), arm = wkDiggerArm(st.reach, st.lift);
-    return H.at((WK_FOOT[0] + arm.pin[0]) * P, WK_FOOT[1] * P, (st.z || 0) + (WK_FOOT[2] + arm.pin[1]) * P);
+    return H.at((WK_BOOMFOOT[0] + arm.pin[0]) * P, WK_BOOMFOOT[1] * P, (st.z || 0) + (WK_BOOMFOOT[2] + arm.pin[1]) * P);
   }
 
   // ---- the dump lorry: a cab, its bed tipping back --------------------------------------------------
@@ -163,13 +163,13 @@
   WK_DRAW.lowboy = function (faces, st, m, T, plan) {
     var P = plan.site.P, F = wkFrame(st);
     wkPutM(faces, moTractor("#b83a2c"), F, 0, st.moving);
-    var Tr = wkFrame(st);
-    var kp = Tr.at(MO_FIFTH * P, 0, 0);
-    moPut(faces, wkLowboy(), kp[0], kp[1], Tr.yaw, 0.02 * P, st.moving);
+    var kp = F.at(MO_FIFTH * P, 0, 0), ty = plan.site.S.a + (st.tang === undefined ? st.ang : st.tang);
+    var Tr = { x: kp[0], y: kp[1], yaw: ty, c: Math.cos(ty), s: Math.sin(ty), at: function (fx, fy, z) { return [kp[0] + fx * Math.cos(ty) - fy * Math.sin(ty), kp[1] + fx * Math.sin(ty) + fy * Math.cos(ty), z]; } };
+    moPut(faces, wkLowboy(), kp[0], kp[1], ty, 0.02 * P, st.moving);
     if (st.carrying) {
-      var on = Tr.at((MO_FIFTH - 7.0) * P, 0, 0);
+      var on = Tr.at(-7.0 * P, 0, 0);
       var S = plan.site.S, l = S.L(on[0], on[1]);
-      WK_DRAW.excavator(faces, { x: l[0], y: l[1], ang: st.ang, site: st.site, swing: Math.PI, reach: 3.2, lift: -0.4, curl: 0.9, z: 0, onTrailer: true, moving: st.moving }, m, T, plan);
+      WK_DRAW.excavator(faces, { x: l[0], y: l[1], ang: st.tang === undefined ? st.ang : st.tang, site: st.site, swing: Math.PI, reach: 3.2, lift: -0.4, curl: 0.9, z: 0, onTrailer: true, moving: st.moving }, m, T, plan);
     }
   };
 
@@ -309,12 +309,13 @@
   // ---- a flatbed (or a box trailer) behind a tractor, as delivered -----------------------------------
   // st: load (0..1 left), cargo ("lumber" | "truss" | "steel" | ...), box (a box trailer), open (its back open)
   WK_DRAW.semi = function (faces, st, m, T, plan) {
-    var P = plan.site.P, F = wkFrame(st), kp = F.at(MO_FIFTH * P, 0, 0);
+    var P = plan.site.P, F = wkFrame(st), kp = F.at(MO_FIFTH * P, 0, 0), ty = plan.site.S.a + (st.tang === undefined ? st.ang : st.tang);
     wkPutM(faces, moTractor(m.opt.paint || "#2f5d8a"), F, 0, st.moving);
     var tr = st.box ? moTrailer(st.open ? "open" : "box", 1, m.opt.stripe || "#2f5d8a", "") : moTrailer("flat", st.load === undefined ? 1 : st.load, m.opt.stripe || "#3b4350", m.opt.cargo || "");
-    moPut(faces, tr, kp[0], kp[1], F.yaw, 0.02 * P, st.moving);
+    moPut(faces, tr, kp[0], kp[1], ty, 0.02 * P, st.moving);
+    function tat(fx) { return [kp[0] + fx * Math.cos(ty), kp[1] + fx * Math.sin(ty), 0]; }
     if (st.ramp > 0) {
-      var back = F.at((MO_FIFTH - 14.7) * P, 0, 0), out = F.at((MO_FIFTH - 14.7 - 2.7 * st.ramp) * P, 0, 0), alu = { piece: true, color: "#b9bdc2", edge: "#7d8186", pat: 23 };
+      var back = tat(-14.7 * P), out = tat((-14.7 - 2.7 * st.ramp) * P), alu = { piece: true, color: "#b9bdc2", edge: "#7d8186", pat: 23 };
       cnBeam(faces, [back[0], back[1], 1.25 * P], [out[0], out[1], 1.25 * P * (1 - st.ramp) + 0.04 * P], 1.1 * P, alu, 0.05 * P);
     }
   };

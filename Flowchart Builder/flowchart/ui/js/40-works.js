@@ -219,7 +219,7 @@
     });
     site.cellPx = WK_CELL * P;
     // the lanes the site's traffic keeps to: out past anything parked at the kerb
-    site.lanes = { w: S.kerb + 4.2 * P, e: S.kerb + 5.8 * P };
+    site.lanes = { w: S.kerb + 4.3 * P, e: S.kerb + 5.4 * P };
     wkGrid(site);
     return site;
   }
@@ -228,7 +228,7 @@
   function wkGrid(site) {
     var P = site.P, S = site.S, lot = site.lot, c = site.cellPx;
     var hw = lot ? lot.w / 2 : Math.max(Math.abs(S.box[0]), Math.abs(S.box[1])) + 15 * P;
-    var back = lot ? -lot.h / 2 : S.box[2] - 15 * P, front = S.kerb + 7 * P;
+    var back = lot ? -lot.h / 2 : S.box[2] - 15 * P, front = S.kerb + 9 * P;
     var reach = Math.max(hw + 30 * P, S.far || 0);
     var G = { x0: -reach, y0: back - 1 * P, c: c };
     G.cols = Math.ceil((2 * reach) / c); G.rows = Math.ceil((front - G.y0) / c);
@@ -236,7 +236,8 @@
     for (var r = 0; r < G.rows; r++) {
       for (var k = 0; k < G.cols; k++) {
         var lx = G.x0 + (k + 0.5) * c, ly = G.y0 + (r + 0.5) * c, v;
-        if (ly > S.kerb) { v = WK_ROAD; }
+        if (ly > S.kerb + 7 * P) { v = WK_OFF; }                  // (the far pavement and what is past it)
+        else if (ly > S.kerb) { v = WK_ROAD; }
         else if (ly > S.hy) { v = WK_WALKWAY; }
         else if (Math.abs(lx) <= hw && ly >= back) { v = WK_LOT; }
         else { v = WK_OFF; }
@@ -286,13 +287,15 @@
         });
       } catch (e) { /* none parked */ }
     }
+    // (on the pavement and the grass beside it -- not out into the road: a lamp's square reaching the
+    // road's first row left no stretch of kerb long enough for a lorry)
     wkKerbThings(site).forEach(function (q) {
-      wkMarkLocal(site, [[q.x - q.r, q.y - q.r], [q.x + q.r, q.y - q.r], [q.x + q.r, q.y + q.r], [q.x - q.r, q.y + q.r]], WK_THING);
+      wkMarkLocal(site, [[q.x - q.r, q.y - q.r], [q.x + q.r, q.y - q.r], [q.x + q.r, q.y + q.r], [q.x - q.r, q.y + q.r]], WK_THING, [WK_WALKWAY, WK_LOT, WK_PAVED]);
     });
   }
-  function wkMarkLocal(site, loc, v) {
+  function wkMarkLocal(site, loc, v, only) {
     var S = site.S;
-    site.mark(loc.map(function (q) { return S.W(q[0], q[1]); }), v);
+    site.mark(loc.map(function (q) { return S.W(q[0], q[1]); }), v, only);
   }
   function wkInPoly(poly, x, y) {
     var inside = false;
@@ -342,7 +345,9 @@
     var G = site.G, c = Math.cos(ang), s = Math.sin(ang), r = Math.hypot(hl, hw);
     var k0 = Math.max(0, Math.floor((cx - r - G.x0) / G.c)), k1 = Math.min(G.cols - 1, Math.floor((cx + r - G.x0) / G.c));
     var r0 = Math.max(0, Math.floor((cy - r - G.y0) / G.c)), r1 = Math.min(G.rows - 1, Math.floor((cy + r - G.y0) / G.c));
-    if (cx - r < G.x0 || cx + r > G.x0 + G.cols * G.c || cy - r < G.y0 || cy + r > G.y0 + G.rows * G.c) { return false; }
+    // (within the site's squares: its own corners, not the circle round it -- a lorry along the kerb is long and thin)
+    var ex = Math.abs(c) * hl + Math.abs(s) * hw, ey = Math.abs(s) * hl + Math.abs(c) * hw;
+    if (cx - ex < G.x0 || cx + ex > G.x0 + G.cols * G.c || cy - ey < G.y0 || cy + ey > G.y0 + G.rows * G.c) { return false; }
     for (var rr = r0; rr <= r1; rr++) {
       for (var kk = k0; kk <= k1; kk++) {
         var px = G.x0 + (kk + 0.5) * G.c - cx, py = G.y0 + (rr + 0.5) * G.c - cy;
@@ -926,6 +931,13 @@
     plan.workers.forEach(function (w) { plan.T = Math.max(plan.T, w.free); });
     plan.machines.forEach(function (m) { m.segs.forEach(function (s) { if (s.t1 < 1e8) { plan.T = Math.max(plan.T, s.t1); } }); });
     plan.T += 2;
+    // (a timetable gone wrong -- a time not a number -- is not played: the building goes up the old way)
+    if (!isFinite(plan.T)) {
+      plan.ok = false;
+      if (window.console && console.warn) { console.warn("works: the timetable came out " + plan.T + "; built the plain way"); }
+      plan.bp.ms = typeof CN_MS === "object" ? CN_MS.fast.wood : 10000;
+      return;
+    }
     wkClock(plan);
   }
   function wkPlanFor(model) {
@@ -1231,7 +1243,11 @@
   function wkPoseOn(L, s, back) {
     var A = wkAlong(L, s), e = 0.6 * FLOOR_PX, B = wkAlong(L, Math.min(L.len, s + e)), C = wkAlong(L, Math.max(0, s - e));
     var dx = B.p[0] - C.p[0], dy = B.p[1] - C.p[1], ang = Math.atan2(dy, dx);
-    return { x: A.p[0], y: A.p[1], ang: back ? ang + Math.PI : ang };
+    // a trailer's heading: from its back axles to its kingpin, both on the way the cab has come
+    // (or, backing, the way it is going) -- following round a bend, not swung out across it
+    var P = FLOOR_PX, dir = back ? 1 : -1, K = wkAlong(L, Math.max(0, Math.min(L.len, s + dir * 2.1 * P))), Ax = wkAlong(L, Math.max(0, Math.min(L.len, s + dir * 12.6 * P)));
+    var tang = Math.hypot(K.p[0] - Ax.p[0], K.p[1] - Ax.p[1]) > 0.5 * P ? Math.atan2(K.p[1] - Ax.p[1], K.p[0] - Ax.p[0]) : (back ? ang + Math.PI : ang);
+    return { x: A.p[0], y: A.p[1], ang: back ? ang + Math.PI : ang, tang: tang };
   }
   // A vehicle's arrival: along the near lane from far away (heading -x),
   // and then -- `stand` a pose in the lot, nose to the street -- backed in
@@ -1240,9 +1256,13 @@
     var S = site.S, P = site.P, lane = site.lanes.w, R = Math.max(7 * P, len * 0.75), far = S.far || 60 * P;
     if (stand.street && Math.cos(stand.ang) > 0) {
       // (heading +x: come along the far lane, pulled over to this kerb)
-      var fl = site.lanes.e;
-      var road2 = [[-far, fl], [stand.x - R * 1.2, fl]].concat(wkCurve([stand.x - R * 1.2, fl], [stand.x - R * 0.6, fl], [stand.x - R * 0.5, stand.y], [stand.x, stand.y], 12).slice(1));
-      return { fwd: wkDrivePath(site, road2), back: null };
+      // (driven past along the far lane, pulled in to the kerb beyond it, and backed up to it -- what it
+      // backs up to, a pump, stands at the kerb behind it)
+      // (in the far lane, out past what is parked at the kerb, then backed round into it)
+      var fl = site.lanes.e, past = stand.x + len * 1.25 + 3 * P;
+      var road2 = [[-far, fl], [past, fl]];
+      var bk2 = wkCurve([past, fl], [stand.x + len * 0.55, fl], [stand.x + len * 0.55, stand.y], [stand.x, stand.y], 18);
+      return { fwd: wkDrivePath(site, road2), back: wkDrivePath(site, bk2) };
     }
     if (stand.street) {
       var road = [[far, lane], [stand.x + R * 0.9, lane]].concat(wkCurve([stand.x + R * 0.9, lane], [stand.x + R * 0.5, lane], [stand.x + R * 0.4, stand.y], [stand.x, stand.y], 10).slice(1));
@@ -1260,8 +1280,8 @@
   function wkLeave(site, stand, len) {
     var S = site.S, P = site.P, lane = site.lanes.w, R = Math.max(7 * P, len * 0.75), far = S.far || 60 * P;
     if (stand.street && Math.cos(stand.ang) > 0) {
-      var fl = site.lanes.e;
-      return wkDrivePath(site, wkCurve([stand.x, stand.y], [stand.x + R * 0.5, stand.y], [stand.x + R * 0.6, fl], [stand.x + R * 1.2, fl], 12).concat([[far, fl]]));
+      var fl = site.lanes.e, R3 = R * 1.7;
+      return wkDrivePath(site, wkCurve([stand.x, stand.y], [stand.x + R3 * 0.5, stand.y], [stand.x + R3 * 0.6, fl], [stand.x + R3 * 1.2, fl], 16).concat([[far, fl]]));
     }
     if (stand.street) {
       return wkDrivePath(site, wkCurve([stand.x, stand.y], [stand.x - R * 0.4, stand.y], [stand.x - R * 0.5, lane], [stand.x - R * 0.9, lane], 10).concat([[-far, lane]]));
@@ -1322,7 +1342,10 @@
         if (found !== null) { best = { x: found, y: yk, ang: Math.PI, street: true }; break; }
       }
     }
-    if (!best) { best = { x: tgt[0], y: S.kerb + spec.wid / 2 + 0.25 * P, ang: Math.PI, street: true }; }
+    if (!best) {
+      best = { x: tgt[0], y: S.kerb + spec.wid / 2 + 0.25 * P, ang: Math.PI, street: true };
+      plan.noStand = (plan.noStand || 0) + 1;
+    }
     best.hl = hl; best.hw = hw;
     return best;
   }
@@ -1350,6 +1373,21 @@
   }
   // a way for a machine `half` wide (each side), lot-local, kept that clear of everything
   function wkVehWay(site, a, b, half) {
+    var G = site.G, D = wkVehClear(site);
+    function clear(h) { var need = Math.ceil(h / G.c); return wkGridLine(site, a, b, function (i) { return D[i] >= need; }); }
+    var got = wkVehWayRaw(site, a, b, half);
+    if (got.length > 2 || clear(half)) { return got; }
+    // (straight only because none was found: tried narrower, down to its own width)
+    var tries = [half * 0.8, half * 0.6, 0.9 * site.P];
+    for (var i = 0; i < tries.length; i++) {
+      if (tries[i] >= half) { continue; }
+      var g2 = wkVehWayRaw(site, a, b, tries[i]);
+      if (g2.length > 2 || clear(tries[i])) { return g2; }
+    }
+    got.blocked = true;
+    return got;
+  }
+  function wkVehWayRaw(site, a, b, half) {
     var G = site.G, D = wkVehClear(site), need = Math.ceil(half / G.c), from = wkCell(site, a[0], a[1]), to = wkCell(site, b[0], b[1]);
     if (from < 0 || to < 0) { return [a, b]; }
     function open(i) { return D[i] >= need || i === from || i === to; }
@@ -1418,7 +1456,7 @@
     var tf = way.fwd.len / speed + 2, tb = way.back ? way.back.len / slow + 2 : 0;
     var arriveAt = tReady - tb - tf;
     var pose0 = { x: stand.x, y: stand.y, ang: stand.ang };
-    function put(pose, extra) { return Object.assign({ x: pose.x, y: pose.y, ang: pose.ang, site: site }, extra || {}); }
+    function put(pose, extra) { return Object.assign({ x: pose.x, y: pose.y, ang: pose.ang, tang: pose.tang, site: site }, extra || {}); }
     wkMSeg(m, arriveAt, arriveAt + tf, function (k) { return put(wkPoseOn(way.fwd, way.fwd.len * wkEaseDrive(k), false), { moving: true }); });
     if (way.back) { wkMSeg(m, arriveAt + tf, tReady, function (k) { return put(wkPoseOn(way.back, way.back.len * wkSmooth(k), true), { moving: true, reversing: true }); }); }
     var at = tReady;

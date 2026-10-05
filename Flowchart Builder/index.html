@@ -100040,14 +100040,14 @@ window.addEventListener("load", function () {
       site.stairs.push({ lo: Math.min(ia, ib), hi: Math.max(ia, ib), foot: [lo[0].x + lo[1].dx, lo[0].y + lo[1].dy, lo[1].z], top: [hi[0].x + hi[1].dx, hi[0].y + hi[1].dy, hi[1].z] });
     });
     site.cellPx = WK_CELL * P;
-    site.lanes = { w: S.kerb + 4.2 * P, e: S.kerb + 5.8 * P };
+    site.lanes = { w: S.kerb + 4.3 * P, e: S.kerb + 5.4 * P };
     wkGrid(site);
     return site;
   }
   function wkGrid(site) {
     var P = site.P, S = site.S, lot = site.lot, c = site.cellPx;
     var hw = lot ? lot.w / 2 : Math.max(Math.abs(S.box[0]), Math.abs(S.box[1])) + 15 * P;
-    var back = lot ? -lot.h / 2 : S.box[2] - 15 * P, front = S.kerb + 7 * P;
+    var back = lot ? -lot.h / 2 : S.box[2] - 15 * P, front = S.kerb + 9 * P;
     var reach = Math.max(hw + 30 * P, S.far || 0);
     var G = { x0: -reach, y0: back - 1 * P, c: c };
     G.cols = Math.ceil((2 * reach) / c); G.rows = Math.ceil((front - G.y0) / c);
@@ -100055,7 +100055,8 @@ window.addEventListener("load", function () {
     for (var r = 0; r < G.rows; r++) {
       for (var k = 0; k < G.cols; k++) {
         var lx = G.x0 + (k + 0.5) * c, ly = G.y0 + (r + 0.5) * c, v;
-        if (ly > S.kerb) { v = WK_ROAD; }
+        if (ly > S.kerb + 7 * P) { v = WK_OFF; }                  // (the far pavement and what is past it)
+        else if (ly > S.kerb) { v = WK_ROAD; }
         else if (ly > S.hy) { v = WK_WALKWAY; }
         else if (Math.abs(lx) <= hw && ly >= back) { v = WK_LOT; }
         else { v = WK_OFF; }
@@ -100101,12 +100102,12 @@ window.addEventListener("load", function () {
       } catch (e) { /* none parked */ }
     }
     wkKerbThings(site).forEach(function (q) {
-      wkMarkLocal(site, [[q.x - q.r, q.y - q.r], [q.x + q.r, q.y - q.r], [q.x + q.r, q.y + q.r], [q.x - q.r, q.y + q.r]], WK_THING);
+      wkMarkLocal(site, [[q.x - q.r, q.y - q.r], [q.x + q.r, q.y - q.r], [q.x + q.r, q.y + q.r], [q.x - q.r, q.y + q.r]], WK_THING, [WK_WALKWAY, WK_LOT, WK_PAVED]);
     });
   }
-  function wkMarkLocal(site, loc, v) {
+  function wkMarkLocal(site, loc, v, only) {
     var S = site.S;
-    site.mark(loc.map(function (q) { return S.W(q[0], q[1]); }), v);
+    site.mark(loc.map(function (q) { return S.W(q[0], q[1]); }), v, only);
   }
   function wkInPoly(poly, x, y) {
     var inside = false;
@@ -100152,7 +100153,8 @@ window.addEventListener("load", function () {
     var G = site.G, c = Math.cos(ang), s = Math.sin(ang), r = Math.hypot(hl, hw);
     var k0 = Math.max(0, Math.floor((cx - r - G.x0) / G.c)), k1 = Math.min(G.cols - 1, Math.floor((cx + r - G.x0) / G.c));
     var r0 = Math.max(0, Math.floor((cy - r - G.y0) / G.c)), r1 = Math.min(G.rows - 1, Math.floor((cy + r - G.y0) / G.c));
-    if (cx - r < G.x0 || cx + r > G.x0 + G.cols * G.c || cy - r < G.y0 || cy + r > G.y0 + G.rows * G.c) { return false; }
+    var ex = Math.abs(c) * hl + Math.abs(s) * hw, ey = Math.abs(s) * hl + Math.abs(c) * hw;
+    if (cx - ex < G.x0 || cx + ex > G.x0 + G.cols * G.c || cy - ey < G.y0 || cy + ey > G.y0 + G.rows * G.c) { return false; }
     for (var rr = r0; rr <= r1; rr++) {
       for (var kk = k0; kk <= k1; kk++) {
         var px = G.x0 + (kk + 0.5) * G.c - cx, py = G.y0 + (rr + 0.5) * G.c - cy;
@@ -100681,6 +100683,12 @@ window.addEventListener("load", function () {
     plan.workers.forEach(function (w) { plan.T = Math.max(plan.T, w.free); });
     plan.machines.forEach(function (m) { m.segs.forEach(function (s) { if (s.t1 < 1e8) { plan.T = Math.max(plan.T, s.t1); } }); });
     plan.T += 2;
+    if (!isFinite(plan.T)) {
+      plan.ok = false;
+      if (window.console && console.warn) { console.warn("works: the timetable came out " + plan.T + "; built the plain way"); }
+      plan.bp.ms = typeof CN_MS === "object" ? CN_MS.fast.wood : 10000;
+      return;
+    }
     wkClock(plan);
   }
   function wkPlanFor(model) {
@@ -100957,14 +100965,17 @@ window.addEventListener("load", function () {
   function wkPoseOn(L, s, back) {
     var A = wkAlong(L, s), e = 0.6 * FLOOR_PX, B = wkAlong(L, Math.min(L.len, s + e)), C = wkAlong(L, Math.max(0, s - e));
     var dx = B.p[0] - C.p[0], dy = B.p[1] - C.p[1], ang = Math.atan2(dy, dx);
-    return { x: A.p[0], y: A.p[1], ang: back ? ang + Math.PI : ang };
+    var P = FLOOR_PX, dir = back ? 1 : -1, K = wkAlong(L, Math.max(0, Math.min(L.len, s + dir * 2.1 * P))), Ax = wkAlong(L, Math.max(0, Math.min(L.len, s + dir * 12.6 * P)));
+    var tang = Math.hypot(K.p[0] - Ax.p[0], K.p[1] - Ax.p[1]) > 0.5 * P ? Math.atan2(K.p[1] - Ax.p[1], K.p[0] - Ax.p[0]) : (back ? ang + Math.PI : ang);
+    return { x: A.p[0], y: A.p[1], ang: back ? ang + Math.PI : ang, tang: tang };
   }
   function wkArrive(site, stand, len) {
     var S = site.S, P = site.P, lane = site.lanes.w, R = Math.max(7 * P, len * 0.75), far = S.far || 60 * P;
     if (stand.street && Math.cos(stand.ang) > 0) {
-      var fl = site.lanes.e;
-      var road2 = [[-far, fl], [stand.x - R * 1.2, fl]].concat(wkCurve([stand.x - R * 1.2, fl], [stand.x - R * 0.6, fl], [stand.x - R * 0.5, stand.y], [stand.x, stand.y], 12).slice(1));
-      return { fwd: wkDrivePath(site, road2), back: null };
+      var fl = site.lanes.e, past = stand.x + len * 1.25 + 3 * P;
+      var road2 = [[-far, fl], [past, fl]];
+      var bk2 = wkCurve([past, fl], [stand.x + len * 0.55, fl], [stand.x + len * 0.55, stand.y], [stand.x, stand.y], 18);
+      return { fwd: wkDrivePath(site, road2), back: wkDrivePath(site, bk2) };
     }
     if (stand.street) {
       var road = [[far, lane], [stand.x + R * 0.9, lane]].concat(wkCurve([stand.x + R * 0.9, lane], [stand.x + R * 0.5, lane], [stand.x + R * 0.4, stand.y], [stand.x, stand.y], 10).slice(1));
@@ -100981,8 +100992,8 @@ window.addEventListener("load", function () {
   function wkLeave(site, stand, len) {
     var S = site.S, P = site.P, lane = site.lanes.w, R = Math.max(7 * P, len * 0.75), far = S.far || 60 * P;
     if (stand.street && Math.cos(stand.ang) > 0) {
-      var fl = site.lanes.e;
-      return wkDrivePath(site, wkCurve([stand.x, stand.y], [stand.x + R * 0.5, stand.y], [stand.x + R * 0.6, fl], [stand.x + R * 1.2, fl], 12).concat([[far, fl]]));
+      var fl = site.lanes.e, R3 = R * 1.7;
+      return wkDrivePath(site, wkCurve([stand.x, stand.y], [stand.x + R3 * 0.5, stand.y], [stand.x + R3 * 0.6, fl], [stand.x + R3 * 1.2, fl], 16).concat([[far, fl]]));
     }
     if (stand.street) {
       return wkDrivePath(site, wkCurve([stand.x, stand.y], [stand.x - R * 0.4, stand.y], [stand.x - R * 0.5, lane], [stand.x - R * 0.9, lane], 10).concat([[-far, lane]]));
@@ -101034,7 +101045,10 @@ window.addEventListener("load", function () {
         if (found !== null) { best = { x: found, y: yk, ang: Math.PI, street: true }; break; }
       }
     }
-    if (!best) { best = { x: tgt[0], y: S.kerb + spec.wid / 2 + 0.25 * P, ang: Math.PI, street: true }; }
+    if (!best) {
+      best = { x: tgt[0], y: S.kerb + spec.wid / 2 + 0.25 * P, ang: Math.PI, street: true };
+      plan.noStand = (plan.noStand || 0) + 1;
+    }
     best.hl = hl; best.hw = hw;
     return best;
   }
@@ -101058,6 +101072,20 @@ window.addEventListener("load", function () {
     return d;
   }
   function wkVehWay(site, a, b, half) {
+    var G = site.G, D = wkVehClear(site);
+    function clear(h) { var need = Math.ceil(h / G.c); return wkGridLine(site, a, b, function (i) { return D[i] >= need; }); }
+    var got = wkVehWayRaw(site, a, b, half);
+    if (got.length > 2 || clear(half)) { return got; }
+    var tries = [half * 0.8, half * 0.6, 0.9 * site.P];
+    for (var i = 0; i < tries.length; i++) {
+      if (tries[i] >= half) { continue; }
+      var g2 = wkVehWayRaw(site, a, b, tries[i]);
+      if (g2.length > 2 || clear(tries[i])) { return g2; }
+    }
+    got.blocked = true;
+    return got;
+  }
+  function wkVehWayRaw(site, a, b, half) {
     var G = site.G, D = wkVehClear(site), need = Math.ceil(half / G.c), from = wkCell(site, a[0], a[1]), to = wkCell(site, b[0], b[1]);
     if (from < 0 || to < 0) { return [a, b]; }
     function open(i) { return D[i] >= need || i === from || i === to; }
@@ -101121,7 +101149,7 @@ window.addEventListener("load", function () {
     var tf = way.fwd.len / speed + 2, tb = way.back ? way.back.len / slow + 2 : 0;
     var arriveAt = tReady - tb - tf;
     var pose0 = { x: stand.x, y: stand.y, ang: stand.ang };
-    function put(pose, extra) { return Object.assign({ x: pose.x, y: pose.y, ang: pose.ang, site: site }, extra || {}); }
+    function put(pose, extra) { return Object.assign({ x: pose.x, y: pose.y, ang: pose.ang, tang: pose.tang, site: site }, extra || {}); }
     wkMSeg(m, arriveAt, arriveAt + tf, function (k) { return put(wkPoseOn(way.fwd, way.fwd.len * wkEaseDrive(k), false), { moving: true }); });
     if (way.back) { wkMSeg(m, arriveAt + tf, tReady, function (k) { return put(wkPoseOn(way.back, way.back.len * wkSmooth(k), true), { moving: true, reversing: true }); }); }
     var at = tReady;
@@ -101240,7 +101268,7 @@ window.addEventListener("load", function () {
       M.box(-0.1 * m, 0.25 * m, 0.55 * m, 1.0 * m, 2.95 * m, 3.05 * m, M.mat("glow", "#ffb020"), 0.04 * m);             // its beacon
     });
   }
-  var WK_BOOM = 5.4, WK_STICK = 2.8, WK_BUCKET = 1.1, WK_FOOT = [1.0, -0.15, 1.95];
+  var WK_BOOM = 5.4, WK_STICK = 2.8, WK_BUCKET = 1.1, WK_BOOMFOOT = [1.0, -0.15, 1.95];
   function wkDiggerArm(r, z) {
     var a = WK_BOOM, b = WK_STICK, d = Math.max(0.5, Math.min(a + b - 0.05, Math.hypot(r, z)));
     var cosB = (a * a + d * d - b * b) / (2 * a * d), base = Math.atan2(z, r), boom = base + Math.acos(Math.max(-1, Math.min(1, cosB)));
@@ -101255,7 +101283,7 @@ window.addEventListener("load", function () {
     var H = wkFrame(st, st.swing || 0);
     wkPutM(faces, wkDiggerHouse(), H, z0, st.moving || st.working);
     var arm = wkDiggerArm(st.reach === undefined ? 4.5 : st.reach, st.lift === undefined ? -1.0 : st.lift);
-    function at(fx, z) { return H.at((WK_FOOT[0] + fx) * P, WK_FOOT[1] * P, z0 + (WK_FOOT[2] + z) * P); }
+    function at(fx, z) { return H.at((WK_BOOMFOOT[0] + fx) * P, WK_BOOMFOOT[1] * P, z0 + (WK_BOOMFOOT[2] + z) * P); }
     var foot = at(0, 0), elbow = at(arm.elbow[0], arm.elbow[1]), pin = at(arm.pin[0], arm.pin[1]);
     var yel = wkHow(WK_YELLOW), dark = wkHow(WK_DARKM, 22);
     cnBeam(faces, foot, elbow, 0.42 * P, yel, 0.62 * P);
@@ -101287,7 +101315,7 @@ window.addEventListener("load", function () {
   var WK_EARTH = { piece: true, color: "#7d6849", edge: "#5d4c34", bare: true, pat: 30 };
   function wkBucketTip(st, plan) {
     var P = plan.site.P, H = wkFrame(st, st.swing || 0), arm = wkDiggerArm(st.reach, st.lift);
-    return H.at((WK_FOOT[0] + arm.pin[0]) * P, WK_FOOT[1] * P, (st.z || 0) + (WK_FOOT[2] + arm.pin[1]) * P);
+    return H.at((WK_BOOMFOOT[0] + arm.pin[0]) * P, WK_BOOMFOOT[1] * P, (st.z || 0) + (WK_BOOMFOOT[2] + arm.pin[1]) * P);
   }
 
   function wkDumper(tilt, fill, paint) {
@@ -101336,13 +101364,13 @@ window.addEventListener("load", function () {
   WK_DRAW.lowboy = function (faces, st, m, T, plan) {
     var P = plan.site.P, F = wkFrame(st);
     wkPutM(faces, moTractor("#b83a2c"), F, 0, st.moving);
-    var Tr = wkFrame(st);
-    var kp = Tr.at(MO_FIFTH * P, 0, 0);
-    moPut(faces, wkLowboy(), kp[0], kp[1], Tr.yaw, 0.02 * P, st.moving);
+    var kp = F.at(MO_FIFTH * P, 0, 0), ty = plan.site.S.a + (st.tang === undefined ? st.ang : st.tang);
+    var Tr = { x: kp[0], y: kp[1], yaw: ty, c: Math.cos(ty), s: Math.sin(ty), at: function (fx, fy, z) { return [kp[0] + fx * Math.cos(ty) - fy * Math.sin(ty), kp[1] + fx * Math.sin(ty) + fy * Math.cos(ty), z]; } };
+    moPut(faces, wkLowboy(), kp[0], kp[1], ty, 0.02 * P, st.moving);
     if (st.carrying) {
-      var on = Tr.at((MO_FIFTH - 7.0) * P, 0, 0);
+      var on = Tr.at(-7.0 * P, 0, 0);
       var S = plan.site.S, l = S.L(on[0], on[1]);
-      WK_DRAW.excavator(faces, { x: l[0], y: l[1], ang: st.ang, site: st.site, swing: Math.PI, reach: 3.2, lift: -0.4, curl: 0.9, z: 0, onTrailer: true, moving: st.moving }, m, T, plan);
+      WK_DRAW.excavator(faces, { x: l[0], y: l[1], ang: st.tang === undefined ? st.ang : st.tang, site: st.site, swing: Math.PI, reach: 3.2, lift: -0.4, curl: 0.9, z: 0, onTrailer: true, moving: st.moving }, m, T, plan);
     }
   };
 
@@ -101466,12 +101494,13 @@ window.addEventListener("load", function () {
     }
   };
   WK_DRAW.semi = function (faces, st, m, T, plan) {
-    var P = plan.site.P, F = wkFrame(st), kp = F.at(MO_FIFTH * P, 0, 0);
+    var P = plan.site.P, F = wkFrame(st), kp = F.at(MO_FIFTH * P, 0, 0), ty = plan.site.S.a + (st.tang === undefined ? st.ang : st.tang);
     wkPutM(faces, moTractor(m.opt.paint || "#2f5d8a"), F, 0, st.moving);
     var tr = st.box ? moTrailer(st.open ? "open" : "box", 1, m.opt.stripe || "#2f5d8a", "") : moTrailer("flat", st.load === undefined ? 1 : st.load, m.opt.stripe || "#3b4350", m.opt.cargo || "");
-    moPut(faces, tr, kp[0], kp[1], F.yaw, 0.02 * P, st.moving);
+    moPut(faces, tr, kp[0], kp[1], ty, 0.02 * P, st.moving);
+    function tat(fx) { return [kp[0] + fx * Math.cos(ty), kp[1] + fx * Math.sin(ty), 0]; }
     if (st.ramp > 0) {
-      var back = F.at((MO_FIFTH - 14.7) * P, 0, 0), out = F.at((MO_FIFTH - 14.7 - 2.7 * st.ramp) * P, 0, 0), alu = { piece: true, color: "#b9bdc2", edge: "#7d8186", pat: 23 };
+      var back = tat(-14.7 * P), out = tat((-14.7 - 2.7 * st.ramp) * P), alu = { piece: true, color: "#b9bdc2", edge: "#7d8186", pat: 23 };
       cnBeam(faces, [back[0], back[1], 1.25 * P], [out[0], out[1], 1.25 * P * (1 - st.ramp) + 0.04 * P], 1.1 * P, alu, 0.05 * P);
     }
   };
@@ -101633,7 +101662,7 @@ window.addEventListener("load", function () {
     opt = opt || {};
     var site = plan.site, P = site.P, way = wkArrive(site, stand, len), speed = (opt.speed || 6) * P, slow = 2.0 * P;
     var tf = way.fwd.len / speed + 2, tb = way.back ? way.back.len / slow + 2 : 0, t0 = tReady - tb - tf;
-    function put(pose, extra) { return Object.assign({ x: pose.x, y: pose.y, ang: pose.ang, site: site }, extra || {}); }
+    function put(pose, extra) { return Object.assign({ x: pose.x, y: pose.y, ang: pose.ang, tang: pose.tang, site: site }, extra || {}); }
     var x0 = opt.extra || {};
     wkMSeg(m, t0, t0 + tf, function (k) { return put(wkPoseOn(way.fwd, way.fwd.len * wkEaseDrive(k), false), Object.assign({ moving: true }, x0)); });
     if (way.back) { wkMSeg(m, t0 + tf, tReady, function (k) { return put(wkPoseOn(way.back, way.back.len * wkSmooth(k), true), Object.assign({ moving: true, reversing: true }, x0)); }); }
@@ -101658,6 +101687,7 @@ window.addEventListener("load", function () {
     m.site = plan.site;
     var stand = wkStand(plan, Object.assign({ kind: kind }, spec));
     m.stand = stand;
+    if (spec.t0 !== undefined && spec.t1 !== undefined) { wkReserve(plan, stand, spec.t0, spec.t1); }
     return m;
   }
 
@@ -101686,6 +101716,9 @@ window.addEventListener("load", function () {
     J.yard = jbSpot(J, 7, 4.5, front, 1.0);
     J.skip = jbSpot(J, 4.2, 2.2, [J.yard.l[0] + 7 * P, J.yard.l[1]], 0.6);
     J.loo = jbSpot(J, 1.5, 1.5, [J.yard.l[0] - 5 * P, J.yard.l[1]], 0.4);
+    [J.skip, J.loo].forEach(function (q) {
+      site.mark([[q.l[0] - q.hw, q.l[1] - q.hh], [q.l[0] + q.hw, q.l[1] - q.hh], [q.l[0] + q.hw, q.l[1] + q.hh], [q.l[0] - q.hw, q.l[1] + q.hh]].map(function (c) { return S.W(c[0], c[1]); }), WK_THING);
+    });
     [["skip", J.skip], ["loo", J.loo]].forEach(function (a) {
       var m = wkMachine(plan, a[0], {});
       m.site = site;
@@ -101699,8 +101732,13 @@ window.addEventListener("load", function () {
       var lotHw = site.lot ? site.lot.w / 2 : (S.box[1] - S.box[0]) / 2 + 8 * P, side = p % 2 ? 1 : -1, nth = Math.floor(p / 2);
       var m2 = jbVehicle(plan, "pickup", { len: 5.6 * P, wid: 2.0 * P, target: [side * (lotHw + 4 * P + nth * 6.5 * P), S.kerb + 1.2 * P], street: true, t0: 0, t1: 1e9 },
                          { paint: WK_PAINT[p % WK_PAINT.length] });
-      var ready = 3 + p * 5;
-      jbCome(plan, m2, m2.stand, 5.6 * P, ready, { speed: 8 });
+      var way0 = wkArrive(site, m2.stand, 5.6 * P), tf0 = way0.fwd.len / (8 * P) + 2 + (way0.back ? way0.back.len / (2 * P) + 2 : 0);
+      var ready = Math.max(3 + p * 5, (J.lastPickStart === undefined ? -Infinity : J.lastPickStart + 3.5) + tf0);
+      J.lastPickStart = jbCome(plan, m2, m2.stand, 5.6 * P, ready, { speed: 8 });
+      (function (st) {
+        var c = Math.cos(st.ang), s2 = Math.sin(st.ang), cx = st.cx === undefined ? st.x : st.cx, cy = st.cy === undefined ? st.y : st.cy, hl = 2.9 * P, hw = 1.0 * P;
+        site.mark([[-hl, -hw], [hl, -hw], [hl, hw], [-hl, hw]].map(function (q) { return S.W(cx + q[0] * c - q[1] * s2, cy + q[0] * s2 + q[1] * c); }), WK_CAR);
+      })(m2.stand);
       wkReserve(plan, m2.stand, ready - 2, 1e9);
       J.pickups.push(m2);
     }
@@ -101838,12 +101876,13 @@ window.addEventListener("load", function () {
     var deck = [lb.stand.x + 9.1 * P, lb.stand.y, 1.0 * P];
     var rear = [lb.stand.x + 17.5 * P, lb.stand.y];
     rear.back = true;
-    var way = wkVehWay(site, [rear[0], site.lanes.w - 1.2 * P], [ex.stand.x, ex.stand.y], 1.6 * P);
+    var way = wkVehWay(site, [rear[0], site.lanes.w - 1.2 * P], [ex.stand.x, ex.stand.y], 2.3 * P);
     var path = [deck, rear].concat(way.slice(0, -1).map(function (q) { return [q[0], q[1]]; })).concat([[ex.stand.x, ex.stand.y]]);
     path.head = Math.PI;
     var tOff = arriveLow + 3;
     jbStay(lb, arriveLow, tOff, function () { return { carrying: true }; });
     lb.here = tOff;
+    var lbBack = lb;
     var tAt = jbTracked(plan, ex, path, tOff, 1.0, { working: false });
     wkReserve(plan, Object.assign({}, ex.stand), tAt - 5, 1e9);
     var exW = jbWorld(J, [ex.stand.x, ex.stand.y]);
@@ -101868,7 +101907,7 @@ window.addEventListener("load", function () {
       if (toTruck && !cur) {
         cur = jbVehicle(plan, "dumper", { len: 8.6 * P, wid: 2.6 * P, target: [ex.stand.x, ex.stand.y], reach: 7 * P, t0: t - 5, t1: t + 80 }, { paint: "#c9ced3" });
         cur.stand = trk;
-        var ready = Math.max(t, (trucks.length ? trucks[trucks.length - 1].goneAt + 1 : t));
+        var ready = Math.max(t, (trucks.length ? trucks[trucks.length - 1].goneAt + 4 : t));
         jbCome(plan, cur, trk, 8.6 * P, ready, { speed: 6 });
         cur.loads = [];
         trucks.push(cur);
@@ -101888,8 +101927,8 @@ window.addEventListener("load", function () {
         var me = cur, loads = me.loads.slice();
         jbStay(me, me.here, t + 0.5, function (k, T) { var n = 0; loads.forEach(function (tt) { if (T >= tt) { n++; } }); return { fill: n / 6 }; });
         me.here = t + 0.5;
-        jbGo(plan, me, t + 0.5, { extra: { fill: loads.length / 6 } });
-        me.goneAt = t + 6;
+        var gone = jbGo(plan, me, t + 0.5, { extra: { fill: loads.length / 6 } });
+        me.goneAt = t + 0.5 + Math.min(16, (gone - t) * 0.45);
         cur = null;
       }
     }
@@ -101898,11 +101937,18 @@ window.addEventListener("load", function () {
     back[0] = [ex.stand.x, ex.stand.y];
     back = back.concat([rear, deck]);
     back.head = ex.head;
+    var offClear = tAt;
+    lb.here = offClear;
+    jbGo(plan, lb, offClear, { speed: 5, extra: { carrying: false } });
+    lbBack = wkMachine(plan, "lowboy", {});
+    lbBack.site = site;
+    lbBack.stand = lb.stand;
+    jbCome(plan, lbBack, lb.stand, 19 * P, tDone - 2, { speed: 5, extra: { carrying: false } });
     var tOn = jbTracked(plan, ex, back, tDone, 1.0, {});
     ex.segs[ex.segs.length - 1].gone = true;
-    jbStay(lb, tOff, tOn, function () { return { carrying: false }; });
-    lb.here = tOn;
-    jbGo(plan, lb, tOn + 1, { speed: 5, extra: { carrying: true } });
+    jbStay(lbBack, tDone - 2, tOn, function () { return { carrying: false }; });
+    lbBack.here = tOn;
+    jbGo(plan, lbBack, tOn + 1, { speed: 5, extra: { carrying: true } });
     var digT0 = dugAt[0], digT1 = dugAt[dugAt.length - 1];
     function dugNow(T) { var n = 0; for (var i = 0; i < dugAt.length; i++) { if (T >= dugAt[i]) { n++; } } return n / dugAt.length; }
     J.dugAt = tDone;
@@ -102062,12 +102108,12 @@ window.addEventListener("load", function () {
     jbStay(pump, tPour + pourDur, tPour + pourDur + 12, function (k) { return { legs: 1 - wkSmooth((k - 0.5) * 2), fold: wkSmooth(k * 2), tip: tipAt(1), pour: 0 }; });
     pump.here = tPour + pourDur + 12;
     jbGo(plan, pump, pump.here, { speed: 5 });
-    var mstand = { x: pump.stand.x + 11.2 * P, y: pump.stand.y, ang: 0, street: true, hl: 5 * P, hw: 1.5 * P, cx: pump.stand.x + 11.2 * P, cy: pump.stand.y };
-    var each = pourDur / mixers;
+    var mstand = { x: pump.stand.x + 11.8 * P, y: pump.stand.y, ang: 0, street: true, hl: 5 * P, hw: 1.5 * P, cx: pump.stand.x + 11.8 * P, cy: pump.stand.y };
+    var gap = 24, each = Math.max(12, (pourDur - gap * (mixers - 1)) / mixers);
     for (var mi = 0; mi < mixers; mi++) {
       var mx = wkMachine(plan, "mixer", { paint: mi % 2 ? "#f2f2ee" : "#2f5d8a" });
       mx.site = site;
-      var r0 = tPour + mi * each, r1 = r0 + each;
+      var r0 = tPour + mi * (each + gap), r1 = r0 + each;
       jbCome(plan, mx, mstand, 9.4 * P, r0 - 1, { speed: 6, extra: { turn: 0 } });
       (function (mx, r0, r1) {
         jbStay(mx, r0 - 1, r1, function (k, T) { return { turn: T * 2.2, pour: k > 0.02 && k < 0.98 ? 1 : 0, chute: 0, pourZ: 1.6 * P }; });
@@ -102244,7 +102290,8 @@ window.addEventListener("load", function () {
     return m;
   }
   function jbTeleDrive(plan, m, to, t, face, extra) {
-    var site = plan.site, P = site.P, from = m.at, way = wkVehWay(site, from, to, 1.2 * P);
+    var site = plan.site, P = site.P, from = m.at, way = wkVehWay(site, from, to, 1.75 * P);
+    if (way.blocked) { to = from.slice(); way = [from, from]; }
     var pts = way.length > 1 ? way : [from, to];
     var L = wkPolyline(pts.map(function (q) { return [q[0], q[1], 0]; })), dur = Math.max(1.5, L.len / (2.2 * P));
     var x0 = Object.assign({}, extra || {});
@@ -103219,7 +103266,7 @@ window.addEventListener("load", function () {
     var nLines = 0;
     for (var li = g; li < levels.length; li++) {
       var L = levels[li], walls = jbWalls(J, li), H = L.top - L.z;
-      var tTruck = Math.max(t - 30, C.free - 20);
+      var tTruck = Math.max(t - 30, C.free - 20, li > g && deckEnds[li - 1] ? deckEnds[li - 1] + 30 : 0);
       var semi = jbVehicle(plan, "semi", { len: 19 * P, wid: 2.6 * P, target: [J.yard.l[0] + 9 * P, S.kerb + 1.4 * P], street: true, t0: tTruck - 20, t1: tTruck + 300 }, { paint: "#b83a2c", stripe: "#3b4350", cargo: "steel" });
       jbCome(plan, semi, semi.stand, 19 * P, tTruck, { speed: 5, extra: { load: 1 } });
       var bundles = 3, offAt = [];
@@ -103305,7 +103352,7 @@ window.addEventListener("load", function () {
         jbGo(plan, pump, pump.here, { speed: 5 });
         var mx = wkMachine(plan, "mixer", { paint: li % 2 ? "#f2f2ee" : "#2f5d8a" });
         mx.site = site;
-        var mst = { x: pump.stand.x + 11.2 * P, y: pump.stand.y, ang: 0, street: true, hl: 5 * P, hw: 1.5 * P, cx: pump.stand.x + 11.2 * P, cy: pump.stand.y };
+        var mst = { x: pump.stand.x + 11.8 * P, y: pump.stand.y, ang: 0, street: true, hl: 5 * P, hw: 1.5 * P, cx: pump.stand.x + 11.8 * P, cy: pump.stand.y };
         jbCome(plan, mx, mst, 9.4 * P, tP - 1, { speed: 6, extra: { turn: 0 } });
         jbStay(mx, tP - 1, tP + pourDur, function (k, T) { return { turn: T * 2.2, pour: 1, pourZ: 1.6 * P }; });
         mx.here = tP + pourDur;

@@ -158,7 +158,8 @@
     for (var li = g; li < levels.length; li++) {
       var L = levels[li], walls = jbWalls(J, li), H = L.top - L.z;
       // the steel for this storey: a lorry of it, lifted off into the yard in bundles
-      var tTruck = Math.max(t - 30, C.free - 20);
+      // (in once the last floor's pump and mixer have gone from the kerb)
+      var tTruck = Math.max(t - 30, C.free - 20, li > g && deckEnds[li - 1] ? deckEnds[li - 1] + 30 : 0);
       var semi = jbVehicle(plan, "semi", { len: 19 * P, wid: 2.6 * P, target: [J.yard.l[0] + 9 * P, S.kerb + 1.4 * P], street: true, t0: tTruck - 20, t1: tTruck + 300 }, { paint: "#b83a2c", stripe: "#3b4350", cargo: "steel" });
       jbCome(plan, semi, semi.stand, 19 * P, tTruck, { speed: 5, extra: { load: 1 } });
       var bundles = 3, offAt = [];
@@ -249,7 +250,7 @@
         jbGo(plan, pump, pump.here, { speed: 5 });
         var mx = wkMachine(plan, "mixer", { paint: li % 2 ? "#f2f2ee" : "#2f5d8a" });
         mx.site = site;
-        var mst = { x: pump.stand.x + 11.2 * P, y: pump.stand.y, ang: 0, street: true, hl: 5 * P, hw: 1.5 * P, cx: pump.stand.x + 11.2 * P, cy: pump.stand.y };
+        var mst = { x: pump.stand.x + 11.8 * P, y: pump.stand.y, ang: 0, street: true, hl: 5 * P, hw: 1.5 * P, cx: pump.stand.x + 11.8 * P, cy: pump.stand.y };
         jbCome(plan, mx, mst, 9.4 * P, tP - 1, { speed: 6, extra: { turn: 0 } });
         jbStay(mx, tP - 1, tP + pourDur, function (k, T) { return { turn: T * 2.2, pour: 1, pourZ: 1.6 * P }; });
         mx.here = tP + pourDur;

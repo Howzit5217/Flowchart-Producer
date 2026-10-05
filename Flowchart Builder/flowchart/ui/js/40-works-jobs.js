@@ -56,7 +56,7 @@
     opt = opt || {};
     var site = plan.site, P = site.P, way = wkArrive(site, stand, len), speed = (opt.speed || 6) * P, slow = 2.0 * P;
     var tf = way.fwd.len / speed + 2, tb = way.back ? way.back.len / slow + 2 : 0, t0 = tReady - tb - tf;
-    function put(pose, extra) { return Object.assign({ x: pose.x, y: pose.y, ang: pose.ang, site: site }, extra || {}); }
+    function put(pose, extra) { return Object.assign({ x: pose.x, y: pose.y, ang: pose.ang, tang: pose.tang, site: site }, extra || {}); }
     var x0 = opt.extra || {};
     wkMSeg(m, t0, t0 + tf, function (k) { return put(wkPoseOn(way.fwd, way.fwd.len * wkEaseDrive(k), false), Object.assign({ moving: true }, x0)); });
     if (way.back) { wkMSeg(m, t0 + tf, tReady, function (k) { return put(wkPoseOn(way.back, way.back.len * wkSmooth(k), true), Object.assign({ moving: true, reversing: true }, x0)); }); }
@@ -83,6 +83,7 @@
     m.site = plan.site;
     var stand = wkStand(plan, Object.assign({ kind: kind }, spec));
     m.stand = stand;
+    if (spec.t0 !== undefined && spec.t1 !== undefined) { wkReserve(plan, stand, spec.t0, spec.t1); }
     return m;
   }
 
@@ -115,6 +116,9 @@
     J.yard = jbSpot(J, 7, 4.5, front, 1.0);
     J.skip = jbSpot(J, 4.2, 2.2, [J.yard.l[0] + 7 * P, J.yard.l[1]], 0.6);
     J.loo = jbSpot(J, 1.5, 1.5, [J.yard.l[0] - 5 * P, J.yard.l[1]], 0.4);
+    [J.skip, J.loo].forEach(function (q) {
+      site.mark([[q.l[0] - q.hw, q.l[1] - q.hh], [q.l[0] + q.hw, q.l[1] - q.hh], [q.l[0] + q.hw, q.l[1] + q.hh], [q.l[0] - q.hw, q.l[1] + q.hh]].map(function (c) { return S.W(c[0], c[1]); }), WK_THING);
+    });
     // the skip and the toilet, there from the start
     [["skip", J.skip], ["loo", J.loo]].forEach(function (a) {
       var m = wkMachine(plan, a[0], {});
@@ -131,8 +135,13 @@
       var lotHw = site.lot ? site.lot.w / 2 : (S.box[1] - S.box[0]) / 2 + 8 * P, side = p % 2 ? 1 : -1, nth = Math.floor(p / 2);
       var m2 = jbVehicle(plan, "pickup", { len: 5.6 * P, wid: 2.0 * P, target: [side * (lotHw + 4 * P + nth * 6.5 * P), S.kerb + 1.2 * P], street: true, t0: 0, t1: 1e9 },
                          { paint: WK_PAINT[p % WK_PAINT.length] });
-      var ready = 3 + p * 5;
-      jbCome(plan, m2, m2.stand, 5.6 * P, ready, { speed: 8 });
+      var way0 = wkArrive(site, m2.stand, 5.6 * P), tf0 = way0.fwd.len / (8 * P) + 2 + (way0.back ? way0.back.len / (2 * P) + 2 : 0);
+      var ready = Math.max(3 + p * 5, (J.lastPickStart === undefined ? -Infinity : J.lastPickStart + 3.5) + tf0);
+      J.lastPickStart = jbCome(plan, m2, m2.stand, 5.6 * P, ready, { speed: 8 });
+      (function (st) {
+        var c = Math.cos(st.ang), s2 = Math.sin(st.ang), cx = st.cx === undefined ? st.x : st.cx, cy = st.cy === undefined ? st.y : st.cy, hl = 2.9 * P, hw = 1.0 * P;
+        site.mark([[-hl, -hw], [hl, -hw], [hl, hw], [-hl, hw]].map(function (q) { return S.W(cx + q[0] * c - q[1] * s2, cy + q[0] * s2 + q[1] * c); }), WK_CAR);
+      })(m2.stand);
       wkReserve(plan, m2.stand, ready - 2, 1e9);
       J.pickups.push(m2);
     }
@@ -284,12 +293,13 @@
     var deck = [lb.stand.x + 9.1 * P, lb.stand.y, 1.0 * P];
     var rear = [lb.stand.x + 17.5 * P, lb.stand.y];
     rear.back = true;
-    var way = wkVehWay(site, [rear[0], site.lanes.w - 1.2 * P], [ex.stand.x, ex.stand.y], 1.6 * P);
+    var way = wkVehWay(site, [rear[0], site.lanes.w - 1.2 * P], [ex.stand.x, ex.stand.y], 2.3 * P);
     var path = [deck, rear].concat(way.slice(0, -1).map(function (q) { return [q[0], q[1]]; })).concat([[ex.stand.x, ex.stand.y]]);
     path.head = Math.PI;
     var tOff = arriveLow + 3;
     jbStay(lb, arriveLow, tOff, function () { return { carrying: true }; });
     lb.here = tOff;
+    var lbBack = lb;
     var tAt = jbTracked(plan, ex, path, tOff, 1.0, { working: false });
     wkReserve(plan, Object.assign({}, ex.stand), tAt - 5, 1e9);
     // the lorry's stand: by the excavator, within its reach
@@ -317,7 +327,7 @@
         // a lorry backed in for these
         cur = jbVehicle(plan, "dumper", { len: 8.6 * P, wid: 2.6 * P, target: [ex.stand.x, ex.stand.y], reach: 7 * P, t0: t - 5, t1: t + 80 }, { paint: "#c9ced3" });
         cur.stand = trk;
-        var ready = Math.max(t, (trucks.length ? trucks[trucks.length - 1].goneAt + 1 : t));
+        var ready = Math.max(t, (trucks.length ? trucks[trucks.length - 1].goneAt + 4 : t));
         jbCome(plan, cur, trk, 8.6 * P, ready, { speed: 6 });
         cur.loads = [];
         trucks.push(cur);
@@ -338,8 +348,8 @@
         var me = cur, loads = me.loads.slice();
         jbStay(me, me.here, t + 0.5, function (k, T) { var n = 0; loads.forEach(function (tt) { if (T >= tt) { n++; } }); return { fill: n / 6 }; });
         me.here = t + 0.5;
-        jbGo(plan, me, t + 0.5, { extra: { fill: loads.length / 6 } });
-        me.goneAt = t + 6;
+        var gone = jbGo(plan, me, t + 0.5, { extra: { fill: loads.length / 6 } });
+        me.goneAt = t + 0.5 + Math.min(16, (gone - t) * 0.45);
         cur = null;
       }
     }
@@ -349,11 +359,19 @@
     back[0] = [ex.stand.x, ex.stand.y];
     back = back.concat([rear, deck]);
     back.head = ex.head;
+    // (the low loader went once the excavator was off it -- after it had driven clear -- and comes back now)
+    var offClear = tAt;
+    lb.here = offClear;
+    jbGo(plan, lb, offClear, { speed: 5, extra: { carrying: false } });
+    lbBack = wkMachine(plan, "lowboy", {});
+    lbBack.site = site;
+    lbBack.stand = lb.stand;
+    jbCome(plan, lbBack, lb.stand, 19 * P, tDone - 2, { speed: 5, extra: { carrying: false } });
     var tOn = jbTracked(plan, ex, back, tDone, 1.0, {});
     ex.segs[ex.segs.length - 1].gone = true;
-    jbStay(lb, tOff, tOn, function () { return { carrying: false }; });
-    lb.here = tOn;
-    jbGo(plan, lb, tOn + 1, { speed: 5, extra: { carrying: true } });
+    jbStay(lbBack, tDone - 2, tOn, function () { return { carrying: false }; });
+    lbBack.here = tOn;
+    jbGo(plan, lbBack, tOn + 1, { speed: 5, extra: { carrying: true } });
     // the ground as dug: the pit going down, its earth sides; the heap growing
     var digT0 = dugAt[0], digT1 = dugAt[dugAt.length - 1];
     function dugNow(T) { var n = 0; for (var i = 0; i < dugAt.length; i++) { if (T >= dugAt[i]) { n++; } } return n / dugAt.length; }
@@ -533,12 +551,12 @@
     pump.here = tPour + pourDur + 12;
     jbGo(plan, pump, pump.here, { speed: 5 });
     // the mixers, each in turn backed up behind the pump
-    var mstand = { x: pump.stand.x + 11.2 * P, y: pump.stand.y, ang: 0, street: true, hl: 5 * P, hw: 1.5 * P, cx: pump.stand.x + 11.2 * P, cy: pump.stand.y };
-    var each = pourDur / mixers;
+    var mstand = { x: pump.stand.x + 11.8 * P, y: pump.stand.y, ang: 0, street: true, hl: 5 * P, hw: 1.5 * P, cx: pump.stand.x + 11.8 * P, cy: pump.stand.y };
+    var gap = 24, each = Math.max(12, (pourDur - gap * (mixers - 1)) / mixers);
     for (var mi = 0; mi < mixers; mi++) {
       var mx = wkMachine(plan, "mixer", { paint: mi % 2 ? "#f2f2ee" : "#2f5d8a" });
       mx.site = site;
-      var r0 = tPour + mi * each, r1 = r0 + each;
+      var r0 = tPour + mi * (each + gap), r1 = r0 + each;
       jbCome(plan, mx, mstand, 9.4 * P, r0 - 1, { speed: 6, extra: { turn: 0 } });
       (function (mx, r0, r1) {
         jbStay(mx, r0 - 1, r1, function (k, T) { return { turn: T * 2.2, pour: k > 0.02 && k < 0.98 ? 1 : 0, chute: 0, pourZ: 1.6 * P }; });
