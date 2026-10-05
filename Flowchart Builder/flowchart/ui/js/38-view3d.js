@@ -1061,6 +1061,11 @@
       }
     }
     // the roof, settling on or lifting off
+    // (a tall building's windows in rows: where a floor has none in a row's place, the same
+    // window seen from outside, the wall whole inside -- 40-facade.js)
+    if (!low && typeof fcPanels === "function" && hand.nodes.some(function (w) { return w.facade; })) {
+      v3Added("facade", faces, String(show), function () { fcPanels(faces, floors, shown); });
+    }
     if (roofed && roofV > 0.01) {
       v3Added("roof", faces, roofV + "|" + (V3.tw.roofV ? 1 : 0), function () {
         roofPlan(floors, show, wallTop).forEach(function (R) {

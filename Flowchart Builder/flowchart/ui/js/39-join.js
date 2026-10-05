@@ -276,6 +276,7 @@
     // walls with nothing against them, where that can be done.
     var looks = [];
     hand.nodes.forEach(function (d) {
+      if (d.facade) { return; }            // (a building's windows in rows follow where it is put together: below)
       if (!tieOpening(d) || owner[d.id] === undefined || (WALK_DOORS[d.kind] && spoken[d.id])) { return; }
       var r = isRoom[owner[d.id]];
       if (!r || !doorIn(d, r)) { return; }
@@ -286,6 +287,20 @@
       });
       var px = best.across ? d.x : best.line - best.into * 12, py = best.across ? best.line - best.into * 12 : d.y;
       looks.push({ g: groupOf(r), x: px, y: py });
+    });
+    // (2026-10-05) A tall building's windows laid out again in rows (40-facade.js) follow where
+    // the building is put together; what leads it is still where each room's first windows
+    // were, kept on the room (fcLooks: from its middle) -- else the rows moved the rooms about.
+    rooms.forEach(function (r) {
+      (r.fcLooks || []).forEach(function (q) {
+        var b = J.boxes[r.id], best = null, near = Infinity, x = r.x + q[0], y = r.y + q[1];
+        tieSides(b).forEach(function (s) {
+          var off = Math.abs((s.across ? y : x) - s.line);
+          if (off < near) { near = off; best = s; }
+        });
+        if (!best) { return; }
+        looks.push({ g: groupOf(r), x: best.across ? x : best.line - best.into * 12, y: best.across ? best.line - best.into * 12 : y });
+      });
     });
 
     // Placed: the biggest lot where it is, then each joined to it, the one

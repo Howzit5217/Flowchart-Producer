@@ -227,6 +227,12 @@
     color: var(--muted); font-size: 12.5px; margin-bottom: 10px;
     overflow-wrap: anywhere;
   }
+  #sel-card .said:empty { margin-bottom: 4px; }
+  /* A card brought into view comes to rest under the Chart/Style strip,
+     which stays put over the top of the side as it scrolls, not behind it. */
+  #panel section.card { scroll-margin-top: var(--top-keep, 0px); }
+  /* A piece's colors on the plan, under its design and finish (pieceLooks) */
+  #sel-body .dz-plan-colors { margin-bottom: 2px; }
   .switch { display: flex; align-items: center; gap: 8px; font-size: 13px; }
   /* Every on-or-off on the page is a switch that slides, not a box that is
      ticked: which way it is set is read from across the panel, it is the

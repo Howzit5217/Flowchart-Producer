@@ -144,7 +144,8 @@
     }).filter(Boolean).sort(function (a, b) { return a.score - b.score; }).slice(0, MR_MOST);
     if (!picks.length) { return; }
     var D = X.D, normalK = [Math.pow(2, -19), -1, 0], mainK = X.depthK;
-    var made = [];
+    var made = [], self = null;
+    try { self = mrSelf(X); } catch (eSelf) { self = null; }
     try {
       if (D) { D.cc.clipControlEXT(D.cc.LOWER_LEFT_EXT, D.cc.NEGATIVE_ONE_TO_ONE_EXT); }
       gl.clearDepth(1);
@@ -172,6 +173,7 @@
         if (U.uDepthK) { gl.uniform3fv(U.uEyeV, Er); }
         if (!X.under) { X.draw(X.scenery.verts, { alpha: 1 }, gl.TRIANGLES); }
         X.batches.forEach(function (x) { if (!x.how.lines && !x.how.blend && !x.how.caster && !x.mirror) { X.draw(x.data, x.how, gl.TRIANGLES, x.key); } });
+        if (self) { self.forEach(function (x) { X.draw(x.data, x.how, gl.TRIANGLES, "mr-me|" + x.key); }); }
         X.batches.forEach(function (x) { if (x.how.blend && !x.how.decal && !x.mirror) { X.draw(x.data, { blend: true, noDepthWrite: true }, gl.TRIANGLES, x.key); } });
         gl.depthMask(true);
         made.push({ m: m, T: T });
@@ -192,6 +194,22 @@
     if (typeof V3 !== "undefined" && V3) { V3.mirrorsDrawn = made.length; V3.mirrorsSeen = picks.length; }
     G.mrLast = { model: X.model, at: G.frameN || 0, made: made };
     mrPut(X, made);
+  }
+  // (2026-10-05: "when in the walk around mode you as a character have a full body so you appear
+  // properly in a mirror") Walking, through your own eyes, your own view has your legs alone
+  // (40-tour.js: the head and the body would be round the eye); the mirrors, all of you -- the
+  // same body as from behind, where you stand, in the same step (40-bodies.js keeps where).
+  function mrSelf(X) {
+    var mb = typeof V3 !== "undefined" && V3 ? V3.meBody : null;
+    if (!X.inside || !mb || V3.mode !== "walk" || typeof bdDraw !== "function" || typeof gl3Faces !== "function") { return null; }
+    if (typeof tourBehind === "function" && tourBehind()) { return null; }
+    var faces = [];
+    bdDraw(faces, mb.x, mb.y, mb.z, mb.head, mb.phase, mb.look, true, mb.k, false);
+    var B = gl3Batches();
+    gl3Faces(X.G, { faces: faces, apart: true }, B, simInk(), simSheet(), X.dress);
+    // (joined here, not kept with the picture's own: those are the view's)
+    return B.all.filter(function (x) { return x.v.length || (x.chunks && x.chunks.length); })
+      .map(function (x) { return { key: x.key, how: x.how, data: gl3Join(x) }; });
   }
   // each glass, its picture on it -- just in front of the model's own
   function mrPut(X, made) {

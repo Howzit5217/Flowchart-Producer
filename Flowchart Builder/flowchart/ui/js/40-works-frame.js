@@ -435,15 +435,78 @@
       var alongX = ctx.x1 - ctx.x0 >= ctx.y1 - ctx.y0, len = alongX ? ctx.x1 - ctx.x0 : ctx.y1 - ctx.y0, span = alongX ? ctx.y1 - ctx.y0 : ctx.x1 - ctx.x0;
       var nt = Math.max(3, Math.round(len / (0.6 * P))), zl = ctx.roofLow, zr = ctx.roofTop;
       var lifts = nt > 16 ? Math.ceil(nt / 2) : nt, per = Math.ceil(nt / lifts);
+      // (2026-10-05: "why can I see the framing above the roof that is on") Each truss under the roof
+      // as it is: its top chord a little under the roof planes over it -- smaller toward a hip's ends,
+      // lower over a garage's roof, none where there is no roof over it.  (All of them were one gable
+      // triangle as wide and high as the whole roof, through a hip's ends and a lower garage roof.)
+      var roofPl = [];
+      roofKeys.forEach(function (k) {
+        (plan.groups[k].faces || []).forEach(function (f) {
+          if (!f.pts || f.pts.length < 3) { return; }
+          var a = f.pts[0], b = f.pts[1], c = f.pts[2];
+          var ux = b[0] - a[0], uy = b[1] - a[1], uz = (b[2] || 0) - (a[2] || 0), vx = c[0] - a[0], vy = c[1] - a[1], vz = (c[2] || 0) - (a[2] || 0);
+          var nx = uy * vz - uz * vy, ny = uz * vx - ux * vz, nz = ux * vy - uy * vx, nl = Math.hypot(nx, ny, nz) || 1;
+          nx /= nl; ny /= nl; nz /= nl;
+          if (Math.abs(nz) < 0.08) { return; }                     // (a gable's end, a fascia: not a plane over the house)
+          roofPl.push({ poly: f.pts.map(function (q) { return [q[0], q[1]]; }), nx: nx, ny: ny, nz: nz, d: nx * a[0] + ny * a[1] + nz * (a[2] || 0) });
+        });
+      });
+      function inPoly(poly, x, y) {
+        var inside = false;
+        for (var i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+          var A = poly[i], B = poly[j];
+          if ((A[1] > y) !== (B[1] > y) && x < (B[0] - A[0]) * (y - A[1]) / ((B[1] - A[1]) || 1e-9) + A[0]) { inside = !inside; }
+        }
+        return inside;
+      }
+      function roofZ(x, y) {
+        var z = null;
+        for (var i = 0; i < roofPl.length; i++) {
+          var R = roofPl[i];
+          if (!inPoly(R.poly, x, y)) { continue; }
+          var zz = (R.d - R.nx * x - R.ny * y) / R.nz;
+          if (z === null || zz > z) { z = zz; }
+        }
+        return z;
+      }
+      var TS = 12, trussShape = {};
+      function trussOf(at, k) {
+        if (trussShape[k]) { return trussShape[k]; }
+        var pts = [];
+        for (var i = 0; i <= TS; i++) {
+          var u = i / TS, x = alongX ? at : ctx.x0 + span * u, y = alongX ? ctx.y0 + span * u : at, rz = roofZ(x, y);
+          var gable = zl + (zr - zl) * (1 - Math.abs(2 * u - 1));
+          pts.push({ u: u, top: rz === null ? null : Math.min(gable, rz - 0.12 * P) });
+        }
+        // the runs with a roof over them, each with its own bottom chord at its lowest (its eaves)
+        var runs = [], run = null;
+        pts.forEach(function (q) {
+          if (q.top === null) { run = null; return; }
+          if (!run) { run = []; runs.push(run); }
+          run.push(q);
+        });
+        runs = runs.filter(function (r) { return r.length >= 2; }).map(function (r) {
+          var low = Math.max(zl, Math.min.apply(null, r.map(function (q) { return q.top; })));
+          return { pts: r, low: Math.min(low, Math.max.apply(null, r.map(function (q) { return q.top; }))) };
+        });
+        trussShape[k] = runs;
+        return runs;
+      }
       function truss(f, at, lift, k) {
         function p(u, z) { return alongX ? [at, ctx.y0 + span * u, z + lift] : [ctx.x0 + span * u, at, z + lift]; }
-        cnBeam(f, p(0, zl), p(1, zl), 0.07 * P, WK_STUD);
-        cnBeam(f, p(0, zl), p(0.5, zr), 0.07 * P, WK_STUD);
-        cnBeam(f, p(1, zl), p(0.5, zr), 0.07 * P, WK_STUD);
-        cnBeam(f, p(0.5, zl), p(0.5, zr), 0.05 * P, WK_STUD);
-        cnBeam(f, p(0.25, zl), p(0.5, zl + (zr - zl) * 0.5), 0.04 * P, WK_STUD);
-        cnBeam(f, p(0.75, zl), p(0.5, zl + (zr - zl) * 0.5), 0.04 * P, WK_STUD);
-        void k;
+        trussOf(at, k).forEach(function (r) {
+          var a = r.pts[0], b = r.pts[r.pts.length - 1];
+          cnBeam(f, p(a.u, r.low), p(b.u, r.low), 0.07 * P, WK_STUD);               // the bottom chord
+          for (var i = 1; i < r.pts.length; i++) {
+            var q0 = r.pts[i - 1], q1 = r.pts[i];
+            cnBeam(f, p(q0.u, Math.max(r.low, q0.top)), p(q1.u, Math.max(r.low, q1.top)), 0.07 * P, WK_STUD);   // the top chord
+          }
+          r.pts.forEach(function (q, i) {
+            // the webs: every third, and the king post at the middle -- where there is height for them
+            var mid = Math.abs(q.u - 0.5) < 0.5 / TS + 1e-6;
+            if ((i % 3 === 0 || mid) && q.top - r.low > 0.15 * P) { cnBeam(f, p(q.u, r.low), p(q.u, q.top), mid ? 0.05 * P : 0.04 * P, WK_STUD); }
+          });
+        });
       }
       // the truss lorry at the kerb; the crane where its hook can reach the lorry and the whole roof
       var tTruck = t - 25;

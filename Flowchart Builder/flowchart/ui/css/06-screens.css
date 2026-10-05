@@ -145,24 +145,13 @@
     .menu.word .mi-name u { text-decoration: none; }
     .menu.mini-bar button { min-width: 36px; height: 36px; }
     .menu.mini-bar .tb-size { height: 34px; }
-    .slider { display: none; }              /* a finger scrolls by dragging */
-    /* Ours go, so the machine's come back -- and they have to be given back
-       in both spellings.  Only the Firefox one was said here, so on a touch
-       screen in Chrome, Edge or Safari the stage was left with our bars
-       hidden and the browser's still squashed to nothing: a chart wider
-       than the screen with no bar anywhere to say so.  It is said of every
-       box that has ours now, not of the stage alone. */
-    .own-sliders { scrollbar-width: auto; }
-    .own-sliders::-webkit-scrollbar { width: 11px; height: 11px; }
-    .slide-frame.has-x.has-y::after { display: none; }
-    /* and the strip ours stood in goes back to what it was scrolling.  The
-       little that the two fields keep -- the tape, the box the pseudocode
-       is written in -- is left where it is: the machine's bar is drawn
-       inside those rather than beside them, and wants the room. */
-    .slide-frame.room.has-y { padding-right: 0; }
-    .slide-frame.room.has-x { padding-bottom: 0; }
-    #panel.has-y > .slide-in { padding-right: 0; }   /* made inside, for the panel */
-    #panel.has-y .panel-top { margin-right: 0; }
+    /* (2026-10-05: "on mobile and desktop all the scrollbars match") Ours
+       stay on a touch screen too, rather than going and leaving the
+       machine's -- a phone's own bar is a thin line that comes and goes as
+       it pleases, looking like nothing else here.  A finger still scrolls
+       the box itself by dragging it; on the bar it takes hold of the grip
+       (or presses an end's button) without the page being dragged too. */
+    .slider { touch-action: none; }
     /* The dots a line is drawn from and aimed at are sized by 10-hand.js
        rather than here.  `r` is a CSS property in some browsers and not in
        others, so said here it grew them on a touch screen in Chrome and

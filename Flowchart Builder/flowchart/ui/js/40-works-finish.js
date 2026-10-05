@@ -217,8 +217,10 @@
       wkReveal(plan, k, s0, s1, "fade");
       end = Math.max(end, s1);
     });
-    var tR = end - 20;
-    wkSay(plan, "jb_mep", t, end);
+    // (the plasterboard after the wiring -- in the last rooms as it finishes -- and never before
+    // the inside is begun: with nothing wired it started twenty seconds before the roof was on)
+    var tR = Math.max(t, end - 20);
+    if (end > t + 0.5) { wkSay(plan, "jb_mep", t, end); }
     // plasterboard: each room's walls a sheet at a time, round the room
     var dEnd = tR;
     keys.filter(function (k) { return k.indexOf("wi:") === 0; }).forEach(function (k) {
@@ -266,16 +268,30 @@
       fEnd = Math.max(fEnd, w.free);
     });
     wkSay(plan, "jb_floors", cEnd - 30, fEnd);
-    // the kitchen, the bathrooms, the closets: fitted, each carried in by two
-    var kEnd = fEnd;
-    keys.filter(function (k) { return k.indexOf("fit:") === 0; }).forEach(function (k) {
-      var G = groups[k], c = room(G), pair = wkPick(plan, 2, c);
-      pair.forEach(function (w, i) { wkGo(plan, w, [yd[0] + i * 0.6 * P, yd[1], 0], { after: fEnd - 60 }); wkDo(w, 0.6, "hold"); wkGo(plan, w, [c[0] + (i ? 0.6 : -0.6) * P, c[1] + 0.5 * P, c[2]], { carry: { kind: "box", size: 0.6, how: WK_CARD } }); });
+    // the kitchen, the bathrooms, the closets: fitted -- (2026-10-05: "dollies, forklifts, the works")
+    // delivered first on pallets, the flatbed's own forklift taking them off its back into the yard
+    // (40-works-haul.js), then wheeled in from there on a hand truck, a carton carried beside it
+    var kEnd = fEnd, fits = keys.filter(function (k) { return k.indexOf("fit:") === 0; });
+    var del = null;
+    if (fits.length && typeof whDeliver === "function") {
+      try { del = whDeliver(plan, { at: fEnd - 200, n: Math.min(3, Math.max(1, Math.ceil(fits.length / 2))), kind: "cab" }); } catch (eDel) { del = null; }
+    }
+    fits.forEach(function (k, fi) {
+      var G = groups[k], c = room(G), pair = wkPick(plan, 2, c), pl = del && del.pallets.length ? del.pallets[fi % del.pallets.length] : null;
+      var from = pl ? pl.w : [yd[0], yd[1], 0], after = Math.max(fEnd - 60, pl ? pl.at + 2 : 0);
+      pair.forEach(function (w, i) {
+        wkGo(plan, w, [from[0] + (i ? 0.9 : -0.9) * P, from[1] + 0.9 * P, 0], { after: after });
+        wkDo(w, i ? 0.6 : 1.4, "hold");
+        if (pl) { pl.taken.push(w.free - 0.2); }
+        wkGo(plan, w, [c[0] + (i ? 0.6 : -0.6) * P, c[1] + 0.5 * P, c[2]], { carry: i === 0 && pl ? { kind: "truck", n: 2, size: 0.5 } : { kind: "box", size: 0.6, how: WK_CARD } });
+      });
       var s0 = wkTogether(pair);
       pair.forEach(function (w) { wkDo(w, 3, "hammer"); });
       wkReveal(plan, k, s0, s0 + 1.5, "drop", { drop: 0.3 * P });
       kEnd = Math.max(kEnd, s0 + 3);
     });
+    // (the empty pallets stacked and taken off with the rest)
+    if (del) { del.pallets.forEach(function (pl) { pl.taken.sort(function (a, b) { return a - b; }); pl.end = kEnd + 20; }); wkSay(plan, "jb_deliver", del.pallets.length ? del.pallets[0].up - 20 : fEnd - 200, del.doneAt); }
     wkSay(plan, "jb_fittings", fEnd - 50, kEnd);
     // lights, switches, sockets, alarms: the electrician round them all
     var xEnd = kEnd, fx = keys.filter(function (k) { return k.indexOf("fix:") === 0; });
@@ -299,7 +315,8 @@
   WK_PHASES.push({ name: "movein", make: function (plan) {
     var J = jbJ(plan), P = J.P, S = J.S, site = J.site, ctx = J.ctx, groups = plan.groups;
     if (typeof moPlan !== "function") { return; }
-    var M = moPlan(ctx), t = (J.insideDone || plan.T) + 5;
+    // (once the site is paved and planted, 40-works-site.js: its lorry was in the drive as it was being laid)
+    var M = moPlan(ctx), t = Math.max((J.insideDone || plan.T) + 5, plan.jwAt ? plan.jwAt[1] : 0);
     if (!M.items.length && !M.residents.length) { return; }
     // the lorry's stand: at the kerb by the path to the door, clear of the parked cars
     var tractorX = M.vanRear - 16.8 * P, stand = { x: tractorX, y: S.kerb + 1.55 * P, ang: Math.PI, street: true, hl: 9.5 * P, hw: 1.4 * P };
@@ -462,7 +479,7 @@
     // the yard's stacks, cleared
     plan.pieces.forEach(function (pc) { if (pc.t1 === 1e9) { pc.t1 = end; } });
     if (J.skipM) { J.skipM.segs[0].t1 = end + 6; }
-    if (J.looM) { J.looM.segs[0].t1 = end + 6; }
+    (J.looMs || (J.looM ? [J.looM] : [])).forEach(function (m) { m.segs[0].t1 = end + 6; });
     wkSay(plan, "jb_clean", t, end + 6);
     // each to their pickup, and away
     var home = end + 4;

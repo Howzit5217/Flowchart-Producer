@@ -506,6 +506,17 @@
     // GFCI where the code wants it, and every hall alarm outside the bedrooms a CO alarm too
     return done;
   }
+  // (one check, the storeys counted once: asked again for every stove in
+  // every bedroom, the floors stacked afresh each time, they were most of a
+  // block of flats' first check -- a second, as it was opened: 2026-10-05)
+  var mpStoreysOnce = null;
+  var mpStoreysEach = mpStoreys;
+  mpStoreys = function () { return mpStoreysOnce !== null ? mpStoreysOnce : mpStoreysEach(); };
+  var mpIssuesEach = mpIssues;
+  mpIssues = function () {
+    mpStoreysOnce = mpStoreysEach();
+    try { return mpIssuesEach.apply(this, arguments); } finally { mpStoreysOnce = null; }
+  };
   if (typeof homeAdvice === "function") {
     var homeAdviceMp = homeAdvice;
     homeAdvice = function () {

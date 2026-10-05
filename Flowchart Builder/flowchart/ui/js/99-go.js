@@ -32,37 +32,44 @@
       if (howFast) { el("#r-pace").value = howFast; }
     } catch (e) { /* storage turned off: it starts on Step slowly */ }
   }
-  // A link carrying a program is asked about first, and wins: somebody who
-  // has just followed one is here to see what is in it, not what was in
-  // the box before they clicked -- nor on the paper by hand, which used to
-  // be looked at first and kept the link from being opened at all.
-  if (el("#code") && openLink()) { return; }    // it brought its own program
-  // Then a reload, which is this page coming back to what it was doing.
-  if (backFromReload()) { return; }
-  if (el("#tab-hand")) {
-    var lastMode = "code";
-    try { lastMode = localStorage.getItem("flowchart-mode") || "code"; }
-    catch (e) { /* fine */ }
-    if (handRecall() && lastMode === "hand") {
-      setMode(true);
-      return;                            // by hand: nothing to draw from code
-    }
-    // Code: its box opens empty like the pseudocode's, on the tab it was
-    // left on (32-code-side.js).
-    if (lastMode === "lang" && el("#tab-lang")) { setMode(false, true); }
-  }
-  // Whatever is in the box on arrival is drawn.  Nothing is, ordinarily --
-  // the box opens empty and stays empty until somebody writes in it -- but
-  // a program handed to --serve on the command line arrives already in it,
-  // and that was asked for, so it is drawn without being asked for twice.
-  if (el("#code")) {
-    if (el("#code").value.trim()) {
-      opening = true;                    // drawn on opening, not asked for
-      el("#build").click();
-    }
-    else if (MODE === "web") { warmAside(); }    // warm it up while they type
-  }
-  // (got this far: the page came whole -- the guard in studio.html's head)
+  // (got this far: the page came whole -- the guard in studio.html's head.
+  // Said before the work is put back, not after: putting it back returned
+  // before this was reached, and the guard, taking the page for one read
+  // half-written, loaded it all over again -- every reload, every tab
+  // opened again on a drawing, twice over: 2026-10-05.)
   window.FLOWCHART_UP = true;
   try { sessionStorage.removeItem("flowchart-reread"); } catch (e) { /* fine */ }
+  // The work put back once the page is up and painted (40-reopen.js).
+  roComeBack(function () {
+    // A link carrying a program is asked about first, and wins: somebody who
+    // has just followed one is here to see what is in it, not what was in
+    // the box before they clicked -- nor on the paper by hand, which used to
+    // be looked at first and kept the link from being opened at all.
+    if (el("#code") && openLink()) { return; }    // it brought its own program
+    // Then a reload, which is this page coming back to what it was doing.
+    if (backFromReload()) { return; }
+    if (el("#tab-hand")) {
+      var lastMode = "code";
+      try { lastMode = localStorage.getItem("flowchart-mode") || "code"; }
+      catch (e) { /* fine */ }
+      if (handRecall() && lastMode === "hand") {
+        setMode(true);
+        return;                            // by hand: nothing to draw from code
+      }
+      // Code: its box opens empty like the pseudocode's, on the tab it was
+      // left on (32-code-side.js).
+      if (lastMode === "lang" && el("#tab-lang")) { setMode(false, true); }
+    }
+    // Whatever is in the box on arrival is drawn.  Nothing is, ordinarily --
+    // the box opens empty and stays empty until somebody writes in it -- but
+    // a program handed to --serve on the command line arrives already in it,
+    // and that was asked for, so it is drawn without being asked for twice.
+    if (el("#code")) {
+      if (el("#code").value.trim()) {
+        opening = true;                    // drawn on opening, not asked for
+        el("#build").click();
+      }
+      else if (MODE === "web") { warmAside(); }    // warm it up while they type
+    }
+  });
 })();

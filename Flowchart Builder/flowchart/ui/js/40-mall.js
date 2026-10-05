@@ -216,10 +216,16 @@
   // The escalators: a pair at one end of each floor's concourse, its top in
   // the concourse over it (where the next pair up is at the other end).
   function mallEscalators(made) {
-    var halls = made.filter(function (r) { return r.starter === "hall"; });
-    if (halls.length < 2 || !ICONS.i_escalator) { return; }
+    var all = made.filter(function (r) { return r.starter === "hall" && !r.starterCross; });
+    if (all.length < 2 || !ICONS.i_escalator) { return; }
     var fl = typeof floorsOf === "function" ? floorsOf() : [];
-    function level(r) { var f = fl.length ? floorAt(fl, r.x, r.y) : null; return f ? f.level : halls.indexOf(r); }
+    function level(r) { var f = fl.length ? floorAt(fl, r.x, r.y) : null; return f ? f.level : all.indexOf(r); }
+    // (one concourse a floor -- the first of a floor folded round more than one, 40-forms.js --
+    // or a pair was put from a concourse to the one beside it on the same floor)
+    var byLevel = {}, halls = [];
+    all.forEach(function (r) { var lv = level(r); if (!byLevel[lv] || r.y < byLevel[lv].y) { byLevel[lv] = r; } });
+    Object.keys(byLevel).forEach(function (lv) { halls.push(byLevel[lv]); });
+    if (halls.length < 2) { return; }
     halls.sort(function (a, c) { return level(a) - level(c); });
     for (var k = 0; k + 1 < halls.length; k++) {
       var lo = halls[k], hi = halls[k + 1], off = (k % 2 ? 1 : -1) * Math.min(lo.w * 0.22, 26 * FLOOR_PX);

@@ -290,7 +290,7 @@
     "    bump = edge; deep = 0.0015; per = 0.16;",
     "  } else if (k > 2.5 && k < 3.5) {",              // grass, in patches
     "    vec2 q = mat2(0.8, -0.6, 0.6, 0.8) * m;",
-    "    base *= 0.93 + 0.05 * noise(q * 0.23) + 0.05 * noise(q * 1.1) + 0.04 * fa(noise(q * 4.7), 0.5, 4.7);",
+    "    base *= 0.96 + 0.04 * noise(q * 0.23) + 0.02 * noise(q * 1.1);",              // (smooth: no fine grain, 2026-10-05)
     "  } else if (k > 3.5 && k < 4.5) {",              // the road, and its middle line
     "    base *= 0.92 + 0.12 * fa(noise(m * 9.0), 0.5, 9.0);",
     "    if (abs(vUv.y) < 0.09 && fract(vUv.x / 4.0) < 0.5) { base = mix(base, vec3(0.93, 0.86, 0.55), 0.85); }",
@@ -300,7 +300,7 @@
     "    bump = smoothstep(0.0, 0.03, min(slab.x, slab.y)); deep = 0.006; per = 1.5;",
     "  } else if (k > 5.5 && k < 6.5) {",              // the lawn, mown in stripes
     "    float stripe = mod(floor(vUv.x / 1.6), 2.0);",
-    "    base *= (0.94 + 0.06 * fa(stripe, 0.5, 2.0)) * (0.96 + 0.06 * noise(mat2(0.8, -0.6, 0.6, 0.8) * m * 1.3));",
+    "    base *= (0.975 + 0.025 * fa(stripe, 0.5, 2.0)) * (0.99 + 0.02 * noise(mat2(0.8, -0.6, 0.6, 0.8) * m * 0.6));",
     "  } else if (k > 6.5 && k < 7.5) {",              // tiles, a kitchen's or a bathroom's
     "    vec2 tile = fract(m / 0.3);",
     "    base *= 0.93 + 0.07 * fa(smoothstep(0.0, 0.04, min(tile.x, tile.y)), 0.93, 83.0);",
@@ -314,7 +314,7 @@
     "    bump = lf; deep = 0.05; per = 0.14;",
     "  } else if (k > 8.5 && k < 9.5) {",              // water, moving a little
     "    float w = noise(m * 3.0 + vec2(uTime * 0.4, uTime * 0.27)) + noise(m * 7.0 - vec2(uTime * 0.3, 0.0));",
-    "    base = mix(base, vec3(0.86, 0.95, 1.0), smoothstep(1.15, 1.6, w) * 0.6 * aa(7.0));",
+    "    base = mix(base, vec3(0.86, 0.95, 1.0), smoothstep(1.3, 1.7, w) * 0.1 * aa(7.0));",       // (calm: hardly a crest, 2026-10-05)
     "  } else if (k > 9.5 && k < 10.5) {",             // concrete
     "    base *= 0.94 + 0.08 * noise(m * 5.0);",
     "    bump = noise(m * 5.0); deep = 0.002; per = 0.2;",
@@ -568,7 +568,7 @@
     "    float w0 = noise(wq + wt) + 0.5 * noise(wq * 2.3 - wu);",
     "    float wx = noise(wq + vec2(0.12, 0.0) + wt) + 0.5 * noise((wq + vec2(0.12, 0.0)) * 2.3 - wu);",
     "    float wy = noise(wq + vec2(0.0, 0.12) + wt) + 0.5 * noise((wq + vec2(0.0, 0.12)) * 2.3 - wu);",
-    "    n = normalize(n + vec3(w0 - wx, w0 - wy, 0.0) * 1.1 * aa(2.4));",
+    "    n = normalize(n + vec3(w0 - wx, w0 - wy, 0.0) * 0.04 * aa(2.4));",          // (calm, clear water: "remove the high texturing", 2026-10-05)
     // a pool's tiles: small and square, its grout; under the water the light
     // through the waves in a moving net of bright threads (caustics)
     // lattice: thin slats crossing on the diagonal, the shade of the crawl space behind them
@@ -584,7 +584,7 @@
     "    vec2 cq = (m + vec2(h * 0.3, 0.0)) * 1.7;",
     "    float c1 = 1.0 - abs(noise(cq + vec2(uTime * 0.12, uTime * 0.08)) * 2.0 - 1.0);",
     "    float c2 = 1.0 - abs(noise(cq * 1.6 + vec2(3.1, 1.3) - vec2(uTime * 0.1, -uTime * 0.05)) * 2.0 - 1.0);",
-    "    emit += vec3(0.7, 0.9, 1.0) * pow(c1 * c2, 5.0) * 0.45 * (1.0 - uNight) * aa(1.7);",
+    "    emit += vec3(0.7, 0.9, 1.0) * pow(c1 * c2, 5.0) * 0.0 * (1.0 - uNight) * aa(1.7);",
     "    emit += base * vec3(0.55, 0.95, 1.1) * uNight * (0.75 + 0.6 * pow(c1 * c2, 5.0));",
     "    bump = grout; deep = 0.002; per = 0.15;",
     "  }",
@@ -1565,7 +1565,7 @@
       return [lot.x + lx * Math.cos(a) - ly * Math.sin(a), lot.y + lx * Math.sin(a) + ly * Math.cos(a), z];
     }
     // (the lot's edge to the kerb: the sidewalk, and the strip of grass beside it where there is one, 40-verge.js)
-    var walkW = typeof streetWalkPx === "function" ? streetWalkPx() : 1.6 * FLOOR_PX, roadW = 7 * FLOOR_PX;
+    var walkW = typeof streetWalkPx === "function" ? streetWalkPx() : 1.6 * FLOOR_PX, roadW = typeof streetRoadPx === "function" ? streetRoadPx() : 7 * FLOOR_PX;
     var sideW = walkW - (typeof streetVergePx === "function" ? streetVergePx() : 0);
     // what the land is like round about -- grass, sand, snow, the sea --
     // picked in the view's Settings (39-world.js); or a wide disc of grass
@@ -1590,7 +1590,9 @@
       var road = [lotWorld(-reach, hy + walkW, -2), lotWorld(reach, hy + walkW, -2),
                   lotWorld(reach, hy + walkW + roadW, -2), lotWorld(-reach, hy + walkW + roadW, -2)];
       gl3Poly(v, road, [0, 0, 1], gl3Mix([0.3, 0.31, 0.33], sheetC, 0.08), 1,
-              [[-reach / FLOOR_PX, -3.5], [reach / FLOOR_PX, -3.5], [reach / FLOOR_PX, 3.5], [-reach / FLOOR_PX, 3.5]], PAT.road);
+              // (its v across it from its middle, in metres: the dashed line down the middle where it is 0 --
+              // moved out of reach on a wider street, which has its own lines, 40-verge.js)
+              (function (hv, off) { return [[-reach / FLOOR_PX, off - hv], [reach / FLOOR_PX, off - hv], [reach / FLOOR_PX, off + hv], [-reach / FLOOR_PX, off + hv]]; })(roadW / 2 / FLOOR_PX, roadW > 7.5 * FLOOR_PX ? 1000 : 0), PAT.road);
       keepOff.push(function (p) {
         var q = lotLocal(p);
         // the street and its pavement all the way along, not only in front
@@ -1621,18 +1623,41 @@
     // the houses next door and across the street, if wanted (39-world.js)
     if (typeof worldHood === "function") { worldHood(v, land); }
     // trees, round about, and a few bushes nearer
-    var inner = Math.max(x1 - x0, y1 - y0) / 2 + 200, outer = walk ? radius + 4400 : Math.max(inner + 200, groundR - 160);
-    var count = walk ? 70 : Math.round(Math.min(46, 14 + (outer - inner) / 60));
-    if (typeof houseOpt === "function" && !houseOpt("trees")) { count = 0; }
-    if (!(typeof worldGrow === "function" && worldGrow(v, land, inner, outer, count))) {
-      for (var i = 0, tries = 0; i < count && tries < count * 12; tries++) {
-        var ang = rnd() * Math.PI * 2, far = inner + Math.pow(rnd(), 0.8) * (outer - inner);
-        var at = [mid[0] + Math.cos(ang) * far, mid[1] + Math.sin(ang) * far];
-        if (keepOff.some(function (off) { return off(at); })) { continue; }
-        gl3Tree(v, at, rnd, sheetC, rnd() < 0.3);
-        i++;
-      }
+    // (2026-10-05: "when moving around the world the trees stop changing in the scenery because they
+    // should be the same") The same trees from above and walking: the near ones over the ring the view
+    // from above has, from a seed of their own -- not the scenery's, which the rest uses differently
+    // walking -- and, walking, more past them from a second seed.  (The ring, the count and the seed
+    // all changed with walking: every tree moved.)
+    var inner = Math.max(x1 - x0, y1 - y0) / 2 + 200, aboveR = radius * 2.3 + 600;
+    if (lot) {
+      var lotFar2 = 0, lt2 = (lot.turn || 0) * Math.PI / 180;
+      [[-1, -1], [1, -1], [1, 1], [-1, 1]].forEach(function (s) {
+        var lx = s[0] * lot.w / 2, ly = s[1] * lot.h / 2;
+        lotFar2 = Math.max(lotFar2, Math.hypot(lot.x + lx * Math.cos(lt2) - ly * Math.sin(lt2) - mid[0], lot.y + lx * Math.sin(lt2) + ly * Math.cos(lt2) - mid[1]));
+      });
+      var wet2 = typeof worldLook === "function" && worldLook() && worldLook().water;
+      aboveR = Math.max(aboveR, (lotFar2 + (wet2 ? 34 : 14) * FLOOR_PX) / 0.72 * 0.85);
     }
+    var outer = Math.max(inner + 200, aboveR - 160);
+    var count = Math.round(Math.min(46, 14 + (outer - inner) / 60)), farCount = walk ? 70 : 0;
+    if (typeof houseOpt === "function" && !houseOpt("trees")) { count = 0; farCount = 0; }
+    var treeSeed = Math.round(mid[0] * 7 + mid[1] * 13 + radius) + 4049, sceneRnd = land.rnd;
+    function treesIn(from, to, many, seed, far) {
+      var trnd = gl3Rand(seed);
+      land.rnd = trnd; land.growFar = far;
+      try {
+        if (typeof worldGrow === "function" && worldGrow(v, land, from, to, many)) { return; }
+        for (var i = 0, tries = 0; i < many && tries < many * 12; tries++) {
+          var ang = trnd() * Math.PI * 2, dist = from + Math.pow(trnd(), 0.8) * (to - from);
+          var at = [mid[0] + Math.cos(ang) * dist, mid[1] + Math.sin(ang) * dist];
+          if (keepOff.some(function (off) { return off(at); })) { continue; }
+          gl3Tree(v, at, trnd, sheetC, trnd() < 0.3);
+          i++;
+        }
+      } finally { land.rnd = sceneRnd; land.growFar = false; }
+    }
+    treesIn(inner, outer, count, treeSeed, false);
+    if (farCount) { treesIn(outer, radius + 4400, farCount, treeSeed + 1, true); }
     if (walk && typeof worldHorizon === "function" && worldHorizon(v, land)) {
       // the skyline the land picked has (39-world.js)
     } else if (walk) {
@@ -1796,6 +1821,9 @@
       var sp = Math.ceil(Math.max(1, hi[k] - lo[k]) / 256) * 256, tx = sp / GL3_SHADOW, mid = (lo[k] + hi[k]) / 2;
       lo[k] = Math.floor((mid - sp / 2) / tx) * tx; hi[k] = lo[k] + sp;
     }
+    // (and along it, toward the sun, its near and far on steps too: the depths
+    // the shadows are measured by stay put as the house changes -- 2026-10-05)
+    lo[2] = Math.floor(lo[2] / 256) * 256; hi[2] = Math.ceil(hi[2] / 256) * 256;
     function row(axis, i) {
       var span = Math.max(1, hi[i] - lo[i]);
       return [2 * axis[0] / span, 2 * axis[1] / span, 2 * axis[2] / span, -1 - 2 * lo[i] / span];
@@ -1934,6 +1962,35 @@
       if (o[2] < b.y0) { b.y0 = o[2]; } if (o[3] > b.y1) { b.y1 = o[3]; }
       if (o[4] < b.z0) { b.z0 = o[4]; } if (o[5] > b.z1) { b.z1 = o[5]; }
     }
+    return b;
+  }
+  // The box the sun's shadows are fitted to while a building goes up
+  // (2026-10-05: "when things were happening the shadows on the stuff were
+  // flickering"): fitted to what was up so far, the shadow map grew with
+  // each piece put in and each lorry driven up the street, and every
+  // shadow's edge crawled.  Now: the building as it will stand
+  // (model.whole, 40-blueprint.js), and what stands near it on the way -- a
+  // crane, the scaffold, a heap of dirt -- by whole steps, the box only
+  // ever growing while that build lasts.
+  function gl3BuildBox(G, whole, model) {
+    var key = typeof bpSite === "object" && bpSite ? bpSite : whole, W = G.buildBox;
+    if (!W || W.key !== key) {
+      var at = gl3FacesBox(whole.faces);
+      W = G.buildBox = { key: key, base: at, box: Object.assign({}, at) };
+    }
+    var base = W.base, b = W.box, now = gl3FacesBox(model.faces);
+    if (base.x0 === Infinity) { return now; }
+    if (now.x0 === Infinity) { return b; }
+    var M = FLOOR_PX, step = 10 * M;
+    // (beyond the building's own edge by whole steps, and no further than near it: a
+    // lorry far up the street throws its shadow only once it has come close)
+    function out(edge, v, dir, near) {
+      var d = Math.min(near, (v - edge) * dir);
+      return d > 0 ? edge + dir * Math.ceil(d / step) * step : edge;
+    }
+    b.x0 = Math.min(b.x0, out(base.x0, now.x0, -1, 20 * M)); b.x1 = Math.max(b.x1, out(base.x1, now.x1, 1, 20 * M));
+    b.y0 = Math.min(b.y0, out(base.y0, now.y0, -1, 20 * M)); b.y1 = Math.max(b.y1, out(base.y1, now.y1, 1, 20 * M));
+    b.z0 = Math.min(b.z0, out(base.z0, now.z0, -1, 10 * M)); b.z1 = Math.max(b.z1, out(base.z1, now.z1, 1, 60 * M));
     return b;
   }
   // ---- the rooms near you, each lit by its own light ----------------------------------
@@ -2162,7 +2219,11 @@
       }
       G.mvp = mvp;                       // (for a press on the view, turned into a ray: 40-drag.js)
       // where the sun can throw a shadow from: the house and what is near it
-      var fb = reuse && G.lastBox ? G.lastBox : gl3FacesBox(model.faces);
+      // (while it is being built, the house as it will be -- 40-blueprint.js's
+      // model.whole: fitted to what was up so far, the shadow map grew with
+      // every piece put in, and every shadow's edge crawled, 2026-10-05)
+      var whole = model.whole && model.whole !== model && model.whole.faces ? model.whole : null;
+      var fb = reuse && G.lastBox ? G.lastBox : whole ? gl3BuildBox(G, whole, model) : gl3FacesBox(model.faces);
       G.lastBox = fb;
       var b = { x0: fb.x0, x1: fb.x1, y0: fb.y0, y1: fb.y1, z0: Math.min(0, fb.z0), z1: Math.max(0, fb.z1) };
       var flatish = !inside && (V3.rise === undefined ? 1 : V3.rise) < 0.98;

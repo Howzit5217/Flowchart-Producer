@@ -254,7 +254,8 @@
       worldPlant(v, worldPick(look.grow, rnd), at, rnd, L.sheetC);
       i++;
     }
-    // over the lake, a line of trees along the far shore
+    // over the lake, a line of trees along the far shore (once: with the near trees, 38-view3d-gl.js)
+    if (L.growFar) { return true; }
     if (L.water && L.water.to && houseOpt("trees")) {
       var dl = Math.hypot(L.water.d[0], L.water.d[1]) || 1, dx = L.water.d[0] / dl, dy = L.water.d[1] / dl;
       for (var s2 = 0; s2 < 80; s2++) {
@@ -700,7 +701,9 @@
     var walk = V3.mode === "walk", ink = simInk();
     var span = walk ? 70 * P : Math.max(14 * P, (V3.gl && V3.gl.scenery ? V3.gl.scenery.groundR : 60 * P) * 0.62);
     // (the kerb as far out as the sidewalk and its strip of grass; those walking keep to the sidewalk: 40-verge.js)
-    var hy = lot.h / 2, walkW = typeof streetWalkPx === "function" ? streetWalkPx() : 1.6 * P, roadW = 7 * P, far = hood();
+    var hy = lot.h / 2, walkW = typeof streetWalkPx === "function" ? streetWalkPx() : 1.6 * P, far = hood();
+    // (the street's width, and its lanes each way: 40-verge.js)
+    var roadW = typeof streetRoadPx === "function" ? streetRoadPx() : 7 * P, half = Math.max(1, Math.round(roadW / (7 * P)));
     var sideW = 1.6 * P, verge = walkW - sideW;
     function hood() { return !!houseOpt("hood"); }
     // Each pavement two ways, one each side of it; each way one pace, and
@@ -730,14 +733,16 @@
       }
     }
     // the cars, each way, in their lanes
-    var roadSpan = walk ? 160 * P : span, cars = walk ? 6 : 3;
+    var roadSpan = walk ? 160 * P : span, cars = (walk ? 6 : 3) * half;
     var e = [c, sn], d = [-sn, c];
     // each way one pace, and the cars along it spaced out -- each its own
     // pace, a faster one drove through the one ahead (2026-10-03); a little
     // give in the spacing, never closer than a car and a half
     var ways = [{ n: Math.ceil(cars / 2), pace: (8 + rnd() * 4) * P, from: rnd() }, { n: Math.floor(cars / 2), pace: (8 + rnd() * 4) * P, from: rnd() }];
     for (var k = 0; k < cars; k++) {
-      var way = ways[k % 2], dir = k % 2 ? -1 : 1, laneY = hy + walkW + roadW * (dir > 0 ? 0.72 : worldNearLane()), speed = way.pace;
+      // (each way's lanes from its own kerb: as far out as on a two-lane street, then a lane further for each)
+      var way = ways[k % 2], dir = k % 2 ? -1 : 1, lane = Math.floor(k / 2) % half, speed = way.pace;
+      var laneY = dir > 0 ? hy + walkW + roadW - 7 * P * 0.28 - lane * 3.5 * P : hy + walkW + 7 * P * worldNearLane() + lane * 3.5 * P;
       var apart = 2 * roadSpan / Math.max(1, way.n), give = (rnd() - 0.5) * Math.max(0, apart - 9 * P) * 0.6;
       var pos = ((way.from * 2 * roadSpan + Math.floor(k / 2) * apart + give + t * speed) % (2 * roadSpan) + 2 * roadSpan) % (2 * roadSpan) - roadSpan, cx = dir * pos;
       var fade = Math.max(0, Math.min(1, (roadSpan - Math.abs(cx)) / (12 * P)));

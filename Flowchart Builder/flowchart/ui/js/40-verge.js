@@ -27,6 +27,16 @@
   function streetVerge() { var k = typeof houseOpt === "function" ? houseOpt("verge") : null; return VG_WIDE[k] !== undefined ? k : "none"; }
   function streetVergePx() { return VG_WIDE[streetVerge()] * FLOOR_PX; }
   function streetWalkPx() { return VG_WALK * FLOOR_PX + streetVergePx(); }   // the lot's edge to the kerb
+  // (2026-10-05: "can you also add options for more lanes") The street two,
+  // four or six lanes wide, 3.5 m each -- half of them each way, the near
+  // half by the lot.  streetRoadPx() is the kerb to the far kerb everywhere:
+  // the road drawn, the land graded for it, the cars on it, the far side, the
+  // building site's lanes (38-view3d-gl.js, 40-land.js, 39-world.js, 40-works.js).
+  var LN_KINDS = ["two", "four", "six"], LN_COUNT = { two: 2, four: 4, six: 6 }, LN_WIDE = 3.5;
+  if (typeof HOUSE_PLAIN === "object") { HOUSE_PLAIN.lanes = "two"; }
+  function streetLaneKind() { var k = typeof houseOpt === "function" ? houseOpt("lanes") : null; return LN_COUNT[k] ? k : "two"; }
+  function streetLanes() { return LN_COUNT[streetLaneKind()]; }
+  function streetRoadPx() { return streetLanes() * LN_WIDE * FLOOR_PX; }
 
   // ---- drawn: the strip, its kerb, its trees -----------------------------------------------
   // (how far the street reaches either way: as far as the ground it is drawn on, 38-view3d-gl.js)
@@ -40,8 +50,33 @@
     houseStreetBits = function (v, lot, lotWorld, lotLocal, hy, walkW, sheetC) {
       var out = houseStreetBitsVerge.apply(this, arguments);
       try { vgDraw(v, lot, lotWorld, hy, walkW, sheetC); } catch (e) { /* the street as it was */ }
+      try { lnDraw(v, lot, lotWorld, hy, walkW, sheetC); } catch (e) { /* the street as it was */ }
       return out;
     };
+  }
+  // A wider street's lines: a double yellow line down its middle (the road's own
+  // dashed one left off, 38-view3d-gl.js and 40-land.js: its v moved out of reach),
+  // dashed white lines between the lanes each way -- in short pieces, each laid
+  // on the ground where it rises and falls.
+  function lnDraw(v, lot, lotWorld, hy, walkW, sheetC) {
+    var n = streetLanes();
+    if (n <= 2) { return; }
+    var P = FLOOR_PX, L = vgLand && vgLand.lot === lot ? vgLand : null;
+    var reach = L ? (L.walk ? GL3_FAR * 0.8 : L.groundR) : 300 * P, mid = hy + walkW + streetRoadPx() / 2;
+    var white = gl3Mix([0.93, 0.93, 0.9], sheetC, 0.1), yellow = gl3Mix([0.95, 0.78, 0.25], sheetC, 0.1);
+    // (just over the road, flat; on land that rises and falls, laid over it by 40-land.js's gl3Poly)
+    function line(y, wide, c, dash, gap) {
+      for (var x = -reach; x < reach; x += dash + gap) {
+        var x1 = Math.min(reach, x + dash), y0 = y - wide / 2, y1 = y + wide / 2;
+        gl3Poly(v, [lotWorld(x, y0, -1.6), lotWorld(x1, y0, -1.6), lotWorld(x1, y1, -1.6), lotWorld(x, y1, -1.6)], [0, 0, 1], c, 1, null, PAT.plain);
+      }
+    }
+    line(mid - 0.11 * P, 0.1 * P, yellow, 6 * P, 0);
+    line(mid + 0.11 * P, 0.1 * P, yellow, 6 * P, 0);
+    for (var k = 1; k < n / 2; k++) {
+      line(mid - k * LN_WIDE * P, 0.12 * P, white, 3 * P, 9 * P);
+      line(mid + k * LN_WIDE * P, 0.12 * P, white, 3 * P, 9 * P);
+    }
   }
   // the land's own mesh paints the street and its strips where the ground rises and falls (40-land.js)
   function vgOnMesh() { return typeof TERR !== "undefined" && TERR && !TERR.off && TERR.mesh && TERR.street && typeof TERR_ON !== "undefined" && TERR_ON; }
@@ -72,7 +107,7 @@
               [[-reach / P, 0], [reach / P, 0], [reach / P, uvY], [-reach / P, uvY]], pat);
     }
     if (!vgOnMesh()) {
-      var g = vgGrass(sheetC), road1 = hy + walkW + 7 * P;
+      var g = vgGrass(sheetC), road1 = hy + walkW + streetRoadPx();
       // (2026-10-04: "the grass beyond the sidewalk to the street is also your land") in front of the
       // lot, the strip is the lot's own lawn -- its color, its mown stripes carried on; beyond, grass
       var own = vgLotLawn(lot, sheetC), hw = lot.w / 2, s0 = hy + side, s1 = hy + walkW - 0.15 * P;
@@ -170,11 +205,11 @@
   // ---- what the land and the scenery are made for ---------------------------------------------
   if (typeof houseSceneKey === "function") {
     var houseSceneKeyVerge = houseSceneKey;
-    houseSceneKey = function () { return houseSceneKeyVerge.apply(this, arguments) + "|vg" + streetVerge(); };
+    houseSceneKey = function () { return houseSceneKeyVerge.apply(this, arguments) + "|vg" + streetVerge() + "|ln" + streetLanes(); };
   }
   if (typeof terrKey === "function") {
     var terrKeyVerge = terrKey;
-    terrKey = function () { var k = terrKeyVerge.apply(this, arguments); return k ? k + "|vg" + streetVerge() : k; };
+    terrKey = function () { var k = terrKeyVerge.apply(this, arguments); return k ? k + "|vg" + streetVerge() + "|ln" + streetLanes() : k; };
   }
 
   // ---- asked: on the view's Street tab, and when it is started -------------------------------
@@ -182,7 +217,11 @@
     Object.assign(HOUSE_ICONS, {
       vg_none: '<rect x="4.5" y="2.4" width="11" height="6.6" rx="1"/><path d="M1.4 11.6h17.2M1.4 14.2h17.2"/><path d="M1.4 17.6h17.2" stroke-dasharray="2.4 1.6"/>',
       vg_strip: '<rect x="4.5" y="1.6" width="11" height="5.6" rx="1"/><path d="M1.4 9.4h17.2M1.4 11.6h17.2"/><path d="M2.4 13.6l.8-1M5.4 13.6l.8-1M8.4 13.6l.8-1M11.4 13.6l.8-1M14.4 13.6l.8-1"/><path d="M1.4 15.2h17.2M1.4 18.4h17.2" stroke-dasharray="2.4 1.6"/>',
-      vg_trees: '<rect x="4.5" y="1.4" width="11" height="4.8" rx="1"/><path d="M1.4 8h17.2M1.4 10h17.2"/><circle cx="5" cy="12.6" r="1.8"/><circle cx="10" cy="12.6" r="1.8"/><circle cx="15" cy="12.6" r="1.8"/><path d="M1.4 15.6h17.2M1.4 18.6h17.2" stroke-dasharray="2.4 1.6"/>'
+      vg_trees: '<rect x="4.5" y="1.4" width="11" height="4.8" rx="1"/><path d="M1.4 8h17.2M1.4 10h17.2"/><circle cx="5" cy="12.6" r="1.8"/><circle cx="10" cy="12.6" r="1.8"/><circle cx="15" cy="12.6" r="1.8"/><path d="M1.4 15.6h17.2M1.4 18.6h17.2" stroke-dasharray="2.4 1.6"/>',
+      // (the street from above: its kerbs, the line down its middle, the lines between its lanes)
+      ln_two: '<path d="M1.4 5h17.2M1.4 15h17.2"/><path d="M1.4 10h17.2" stroke-dasharray="2.4 1.6"/>',
+      ln_four: '<path d="M1.4 3h17.2M1.4 17h17.2M1.4 9.4h17.2M1.4 10.6h17.2"/><path d="M1.4 6.2h17.2M1.4 13.8h17.2" stroke-dasharray="2 2"/>',
+      ln_six: '<path d="M1.4 1.8h17.2M1.4 18.2h17.2M1.4 9.4h17.2M1.4 10.6h17.2"/><path d="M1.4 4.3h17.2M1.4 6.9h17.2M1.4 13.1h17.2M1.4 15.7h17.2" stroke-dasharray="2 2"/>'
     });
   }
   if (typeof streetSection === "function") {
@@ -193,11 +232,14 @@
         head(TXT.vg_head);
         var g = worldPicker(sheet, VG_KINDS, streetVerge(), "vg_", function (k) { houseSetOpt("verge", k); draw(); });
         if (noStreet) { all("button", g).forEach(function (b) { b.disabled = true; b.title = noStreet; }); }
+        head(TXT.ln_head);
+        var gl = worldPicker(sheet, LN_KINDS, streetLaneKind(), "ln_", function (k) { houseSetOpt("lanes", k); draw(); });
+        if (noStreet) { all("button", gl).forEach(function (b) { b.disabled = true; b.title = noStreet; }); }
       } catch (e) { /* the tab as it was */ }
       return out;
     };
   }
-  if (typeof RD_SITE === "object" && RD_SITE.indexOf("verge") < 0) { RD_SITE.push("verge"); }
+  if (typeof RD_SITE === "object") { ["verge", "lanes"].forEach(function (k) { if (RD_SITE.indexOf(k) < 0) { RD_SITE.push(k); } }); }
   if (typeof siteAsk === "function") {
     var siteAskVerge = siteAsk;
     siteAsk = function (ui, want) {
@@ -208,6 +250,11 @@
         ui.tiles();
         VG_KINDS.forEach(function (k) {
           ui.tile(TXT["vg_" + k], "vg_" + k, function () { return (S.verge !== undefined ? S.verge : streetVerge()) === k; }, function () { S.verge = k; }, true);
+        });
+        ui.head(TXT.ln_head);
+        ui.tiles();
+        LN_KINDS.forEach(function (k) {
+          ui.tile(TXT["ln_" + k], "ln_" + k, function () { return (S.lanes !== undefined ? S.lanes : streetLaneKind()) === k; }, function () { S.lanes = k; }, true);
         });
       } catch (e) { /* asked as it was */ }
       return out;

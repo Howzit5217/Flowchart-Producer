@@ -270,32 +270,8 @@
       drawHand(); drawHandPanel();
     };
     put(back);
-
-    // and its colors, right here rather than on the other side of the panel
-    var paints = document.createElement("div");
-    paints.className = "trio";
-    var mine = style.nodes["h" + node.id] = style.nodes["h" + node.id] || {};
-    var k = kindColors(node.kind);
-    [[TXT.fill, "fill", k.fill || "#ffffff"],
-     [TXT.outline, "line", k.line || style.ink || "#000000"],
-     [TXT.text, "text", k.text || style.words || style.ink || "#000000"]]
-      .forEach(function (item) {
-        var cell = document.createElement("label");
-        cell.innerHTML = "<span>" + item[0] + "</span>";
-        var firstTouch = true;
-        cell.appendChild(swatch(mine[item[1]], item[2], function (v) {
-          if (firstTouch) { firstTouch = false; keepUndo(); }
-          mine[item[1]] = v;
-          paint();
-        }));
-        paints.appendChild(cell);
-      });
-    var title = document.createElement("div");
-    title.className = "small-head";
-    title.textContent = TXT.colors_here;
-    put(title);
-    put(paints);
-
+    // Its colors, and everything else about how it looks, are on the Style
+    // side, which a click on the shape brings out (styleThePicked, 07-sides.js).
 
     var outs = outOf(node.id);
     var list = document.createElement("div");
@@ -516,5 +492,6 @@
     drawHandPanel();
     var g = el('.node[data-i="h' + id + '"]', chart);  // the color side of
     if (g) { select(g); }                              //   the panel follows
+    if (nodeById(id) && many.length <= 1) { styleThePicked(); }   // and comes out
   }
 

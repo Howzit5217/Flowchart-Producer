@@ -72,8 +72,8 @@
      and the browser's would fight the dragging for the same pixels. */
   body.chart-loose #stage { overflow: hidden; touch-action: none; cursor: grab; }
   body.chart-loose #stage.grabbing { cursor: grabbing; }
-  body.chart-loose .slider,
-  body.chart-loose .stage-frame::after { display: none; }
+  body.chart-loose .stage-frame > .slider,
+  body.chart-loose .stage-frame::after { display: none; }   /* (the stage's: the panel's stay) */
   body.chart-loose .wrap {
     transform: translate(var(--hold-x, 0px), var(--hold-y, 0px));
     will-change: transform;
@@ -140,6 +140,24 @@
   }
   #build-bar.full .bb-fill { background: var(--good); }
   @media print { #build-bar { display: none !important; } }
+  /* The work left on the page being put back as it opens (40-reopen.js):
+     the same bar, with a light running along it rather than a number --
+     moved, not painted, so it goes on while the page is busy. */
+  #ro-back {
+    position: absolute; z-index: 13; top: 14px; left: 0; right: 0;
+    width: min(340px, calc(100% - 32px)); margin: 0 auto;
+    padding: 10px 14px 12px; border-radius: 12px;
+    background: var(--panel); border: 1px solid var(--line);
+    box-shadow: var(--shadow); pointer-events: none;
+  }
+  .ro-run {
+    position: absolute; top: 0; bottom: 0; left: 0; width: 35%;
+    border-radius: inherit; background: var(--accent);
+    animation: ro-run 1.2s ease-in-out infinite;
+  }
+  @keyframes ro-run { from { transform: translateX(-100%); } to { transform: translateX(290%); } }
+  @media (prefers-reduced-motion: reduce) { .ro-run { animation: none; width: 100%; opacity: .5; } }
+  @media print { #ro-back { display: none !important; } }
 
   /* ------------------------------------- the pseudocode, filling the screen -- */
   /* Filling the screen does not mean filling the width: a line of pseudocode

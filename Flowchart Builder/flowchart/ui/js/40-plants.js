@@ -429,6 +429,8 @@
             var t = -len / 2 + (i + 0.5) * len / count, lxR = e[0] ? e[0] * (R.hw + off) : t, lyR = e[0] ? t : e[1] * (R.hh + off);
             var at = terrPt(R, lxR, lyR);
             if (inHouse(at[0], at[1]) || fromHouse(at[0], at[1]) < reach + 0.1 * P || !inLot(at[0], at[1], 0.6 * P) || onWay(at[0], at[1], 0.4 * P) || !free(at[0], at[1], 0.5 * P)) { continue; }
+            // (not on a ramp along the house's face, 40-access.js)
+            if (typeof acOnRamp === "function" && acOnRamp(at[0], at[1], reach)) { continue; }
             if (rnd() < 0.25) { continue; }
             worldPlant(v, lowKind, at, rnd, L.sheetC);
             taken.push([at[0], at[1], 0.6 * P]);
@@ -460,6 +462,8 @@
     var worldGrowFew = worldGrow;
     worldGrow = function (v, L) {
       var out = worldGrowFew.apply(this, arguments);
+      // (the far ring, walking, is more trees round about: the lot planted once, with the near ones)
+      if (L.growFar) { return out; }
       plantSolids = [];
       try { if (L.lot && houseOpt("trees") && houseOpt("lotTrees")) { plantLot(v, L); } } catch (e) { /* the lot bare */ }
       return out;

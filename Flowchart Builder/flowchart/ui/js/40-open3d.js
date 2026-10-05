@@ -2032,15 +2032,15 @@
     edit3dPick(copy.id);
     v3Say(say("o3_made", { what: useName(copy) }));
   }
-  // Its finish and design, in the panel beside the view (39-design.js, 40-designs.js).
+  // Its finish and design, on the Style side of the panel beside the view
+  // (pieceLooks, 39-design.js; 40-designs.js).
   function o3Format(id) {
     if (!nodeById(id)) { return; }
     picked = id; chosen = null;
     if (typeof many !== "undefined") { many = []; }
     try { drawHand(); drawHandPanel(); } catch (e) { /* the panel later */ }
-    if (typeof showSide === "function") { try { showSide("chart"); } catch (e) { /* as it is */ } }
-    if (typeof shut !== "undefined" && shut && typeof showPanel === "function") { showPanel(true); }
-    var fin = el(".dz-fin") || el(".dz-top");
+    if (typeof formatPicked === "function") { try { formatPicked(); } catch (e) { /* as it is */ } }
+    var fin = el("#sel-body .dz-fin") || el("#sel-card");
     if (fin && fin.scrollIntoView) { fin.scrollIntoView({ block: "nearest" }); }
   }
   // Move: it goes with the pointer, over its floor, on the grid; a click puts it down, Esc leaves it.

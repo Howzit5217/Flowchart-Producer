@@ -25,7 +25,8 @@
   // just be there doing something but nothing ... so you actually see the
   // workers building your house with all the tools and machinery")
   var WK = { plan: null, rate: null, groupOf: new WeakMap(), pre: new WeakMap() };
-  var WK_RATES = [1, 2, 4, 8, 16, 32, 64, 128, 256];
+  // (2026-10-05: "have a 512x and 1024x speed to the construction")
+  var WK_RATES = [1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024];
   var WK_RATE_FRESH = 8, WK_RATE_OPEN = 32;            // how fast it plays: watched / opened in 3D
   var WK_WALK = 1.4, WK_CARRY = 1.15, WK_CLIMB = 0.55;  // metres a second
   var WK_CELL = 0.5;                                    // metres: the site's squares
@@ -51,14 +52,39 @@
     var B = plan.bp, rate = wkRateDefault(B);
     B.rate = rate; B.T = WK_LONG; B.ms = WK_LONG * 1000 / rate; B.moK = 1; B.moMs = B.ms;
   }
+  // (2026-10-05) A site's calendar, where a part of its own sets one (WK.calendar):
+  //   length(plan) -> the seconds the site's clock runs for, the evenings, nights,
+  //                   weekends and days rained off with the work (however they are shown)
+  //   work(s, plan) -> the work done by then, in the timetable's own seconds (0 .. plan.T)
+  //   present(s, plan) -> 0..1, whether the crews are on the site then (optional)
+  // Without one the clock is the work itself.
+  function wkCalLength(plan) {
+    var C = WK.calendar, L = plan.T;
+    if (C && typeof C.length === "function" && plan.done) {
+      try { var l = C.length(plan); if (isFinite(l) && l > 0) { L = Math.max(plan.T, l); } } catch (e) { L = plan.T; }
+    }
+    return L;
+  }
+  function wkCalWork(s, plan) {
+    var C = WK.calendar;
+    if (!C || typeof C.work !== "function" || !plan.done) { return s; }
+    var w;
+    try { w = C.work(s, plan); } catch (e) { w = s; }
+    return isFinite(w) ? Math.max(0, Math.min(plan.T, w)) : Math.min(s, plan.T);
+  }
+  function wkCalPresent(s, plan) {
+    var C = WK.calendar;
+    if (!C || typeof C.present !== "function" || !plan.done) { return 1; }
+    try { var p = C.present(s, plan); return isFinite(p) ? Math.max(0, Math.min(1, p)) : 1; } catch (e) { return 1; }
+  }
   function wkClock(plan) {
-    var B = plan.bp, now = performance.now(), rate = B.rate || wkRateDefault(B);
+    var B = plan.bp, now = performance.now(), rate = B.rate || wkRateDefault(B), L = wkCalLength(plan);
     // (seconds gone on the site, kept: then the length it really is)
-    var gone = B.start > now ? 0 : (now - B.start) / B.ms * (B.T || plan.T);
-    if (!WK.rate) { rate = wkRateFor(plan.T, B.fast); }
-    var ms = plan.T * 1000 / rate;
-    if (B.start <= now) { B.start = now - Math.min(gone, plan.T * 0.999) / plan.T * ms; }
-    B.ms = ms; B.T = plan.T; B.rate = rate;
+    var gone = B.start > now ? 0 : (now - B.start) / B.ms * (B.T || L);
+    if (!WK.rate) { rate = wkRateFor(L, B.fast); }
+    var ms = L * 1000 / rate;
+    if (B.start <= now) { B.start = now - Math.min(gone, L * 0.999) / L * ms; }
+    B.ms = ms; B.T = L; B.rate = rate;
     B.moK = 1; B.moMs = ms;                              // (40-movein.js's own stretching, not wanted)
     wkSpeedShow();
   }
@@ -142,7 +168,8 @@
             var plan = WK.plan && WK.plan.bp === me ? WK.plan : null;
             if (plan && plan.ok && me.T) {
               var now = performance.now(), T = Math.max(0, Math.min(1, (now - me.start) / me.ms)) * me.T;
-              wkPhaseShow(wkPhaseAt(plan, T));
+              // (the site's clock is its calendar's once that is made -- nights, weekends, rain: the work's own time from it)
+              wkPhaseShow(wkPhaseAt(plan, plan.done ? wkCalWork(T, plan) : T));
             }
             requestAnimationFrame(tick);
           })();
@@ -236,7 +263,7 @@
     for (var r = 0; r < G.rows; r++) {
       for (var k = 0; k < G.cols; k++) {
         var lx = G.x0 + (k + 0.5) * c, ly = G.y0 + (r + 0.5) * c, v;
-        if (ly > S.kerb + 7 * P) { v = WK_OFF; }                  // (the far pavement and what is past it)
+        if (ly > S.kerb + (typeof streetRoadPx === "function" ? streetRoadPx() : 7 * P)) { v = WK_OFF; }   // (the far pavement and what is past it: 40-verge.js)
         else if (ly > S.kerb) { v = WK_ROAD; }
         else if (ly > S.hy) { v = WK_WALKWAY; }
         else if (Math.abs(lx) <= hw && ly >= back) { v = WK_LOT; }
@@ -814,7 +841,13 @@
   function wkDirKey(n) { return ((Math.round(Math.atan2(n[1], n[0]) / (Math.PI / 4)) % 8) + 8) % 8; }
   function wkClassify(site, f) {
     var ctx = site.ctx, P = site.P;
-    if (!f.pts || f.person || f.me || !cnOurs(ctx, f.node)) { return null; }
+    if (!f.pts || f.person || f.me) { return null; }
+    if (f.outdoors || !cnOurs(ctx, f.node)) {
+      // (the lot's own -- a path, a bed, a tree, a car parked: put in by a later job if a part says so, WK.classifyMore;
+      // f.outdoors: a face of no drawn thing that is not the building's, a ramp's rails -- 40-access.js)
+      if (typeof WK.classifyMore === "function") { try { return WK.classifyMore(site, f) || null; } catch (e) { return null; } }
+      return null;
+    }
     var h = f.how || {}, lo = Infinity, hi = -Infinity, cx = 0, cy = 0, n = f.pts.length;
     for (var i = 0; i < n; i++) { var p = f.pts[i], z = p[2] || 0; if (z < lo) { lo = z; } if (z > hi) { hi = z; } cx += p[0] / n; cy += p[1] / n; }
     var lvl = cnLevel(ctx, lo + 0.5 * P), node = f.node, roomy = node && node.kind === "i_room", nrm = f.n || [0, 0, 1];
@@ -989,8 +1022,10 @@
       return Object.assign({}, model, { faces: model.faces.filter(function (f) { return !f.pts || f.person || !cnOurs(ctx0, f.node); }),
                                         labels: [] });
     }
-    var T = Math.max(0, Math.min(1, t)) * plan.T, site = plan.site, faces = [], P = site.P;
-    plan.now = T; WK.lastIn = model;
+    // (the site's clock, and the work done by then: the same, unless the site keeps a calendar)
+    var siteS = Math.max(0, Math.min(1, t)) * (plan.done ? wkCalLength(plan) : plan.T);
+    var T = plan.done ? wkCalWork(siteS, plan) : siteS, site = plan.site, faces = [], P = site.P;
+    plan.now = T; plan.siteNow = siteS; WK.lastIn = model;
     var fly = plan.fly = {};
     for (var i = 0; i < model.faces.length; i++) {
       var f = model.faces[i], g = wkGroupOf(site, f);
@@ -1031,7 +1066,10 @@
     }
     // the machines, and those at work
     plan.machines.forEach(function (m) { try { wkMachineDraw(passing.faces, m, T, plan); } catch (e) { /* not this one */ } });
-    plan.workers.forEach(function (w) { try { wkWorkerDraw(passing.faces, w, T, plan); } catch (e) { /* not this one */ } });
+    // (those at work -- not while the crews are off the site: nights, a day rained off)
+    if (wkCalPresent(siteS, plan) > 0.01) {
+      plan.workers.forEach(function (w) { try { wkWorkerDraw(passing.faces, w, T, plan); } catch (e) { /* not this one */ } });
+    }
     // (the names of rooms and pieces not there yet: none, till it is all in)
     if (out.labels && T < (plan.labelsAt || plan.T - 3)) { out.labels = []; }
     return out;
@@ -1136,6 +1174,7 @@
     var pose = st.pose;
     if (pose === "walk" || pose === "carry") { phase = st.phase; }
     if (pose === "carry" && s.carry && (s.carry.kind === "studs" || s.carry.kind === "board" || s.carry.kind === "sheet" || s.carry.kind === "rebar")) { look.arms = "shoulder"; }
+    else if (pose === "carry" && s.carry && s.carry.kind === "barrow") { look.arms = "push"; }
     else if (pose === "carry") { look.arms = "carry"; }
     else if (pose === "hammer") { look.arms = "hammer"; look.armK = Math.abs(Math.sin((T + w.id) * 7.5)); }
     else if (pose === "up") { look.arms = "up"; }
@@ -1148,10 +1187,70 @@
     var last = w.segs[w.segs.length - 1];
     if (w.gone && last && T > last.t1 - 1.5) { fade = Math.min(fade, wkClamp((last.t1 - T) / 1.5)); }
     if (fade <= 0.02) { return; }
+    // (2026-10-05, safety gear) Above 1.8 m a harness; on a roof (or its trusses), its lanyard clipped to the ridge
+    var g0 = plan.site.levels[plan.site.ground], anchor = null;
+    if (look.ppe && (st.p[2] || 0) - (g0 ? g0.z : 0) > 1.8 * P) {
+      look.harness = true;
+      anchor = wkAnchor(plan, st.p, T);
+      look.tied = !!anchor;
+    }
     peopleBody(faces, { kind: "i_builder", id: 600 + w.id }, st.p[0], st.p[1], st.p[2] || 0, st.head, phase, look, fade < 0.999 ? fade : undefined);
+    if (anchor) { wkLanyard(faces, st, look, w, anchor, fade); }
     var carry = s && s.carry;
     if (carry && (pose === "carry" || pose === "walk" || pose === "climb")) { wkCarryDraw(faces, carry, st.p, st.head, P, look); }
     if (s && s.hold && (pose !== "walk")) { wkCarryDraw(faces, s.hold, st.p, st.head, P, look); }
+  }
+  // The roof's planes (from the roof groups, as the trusses are cut to them, 40-works-frame.js), each
+  // with its ridge: the top edge a lifeline runs along.
+  function wkRoofPlanes(plan) {
+    if (plan.wkRoofPl) { return plan.wkRoofPl; }
+    var out = [], P = plan.site.P;
+    Object.keys(plan.groups || {}).forEach(function (key) {
+      if (key.indexOf("roof:") !== 0) { return; }
+      (plan.groups[key].faces || []).forEach(function (f) {
+        if (!f.pts || f.pts.length < 3) { return; }
+        var a = f.pts[0], b = f.pts[1], c = f.pts[2];
+        var ux = b[0] - a[0], uy = b[1] - a[1], uz = (b[2] || 0) - (a[2] || 0), vx = c[0] - a[0], vy = c[1] - a[1], vz = (c[2] || 0) - (a[2] || 0);
+        var nx = uy * vz - uz * vy, ny = uz * vx - ux * vz, nz = ux * vy - uy * vx, nl = Math.hypot(nx, ny, nz) || 1;
+        nx /= nl; ny /= nl; nz /= nl;
+        if (Math.abs(nz) < 0.08) { return; }
+        var top = Math.max.apply(null, f.pts.map(function (q) { return q[2] || 0; }));
+        var ridge = f.pts.filter(function (q) { return (q[2] || 0) > top - 0.05 * P; }), r0 = ridge[0], r1 = ridge[0], far = -1;
+        ridge.forEach(function (p) { ridge.forEach(function (q) { var d = Math.hypot(p[0] - q[0], p[1] - q[1]); if (d > far) { far = d; r0 = p; r1 = q; } }); });
+        out.push({ key: key, poly: f.pts.map(function (q) { return [q[0], q[1]]; }), nx: nx, ny: ny, nz: nz, d: nx * a[0] + ny * a[1] + nz * (a[2] || 0),
+                   r0: [r0[0], r0[1], r0[2] || 0], r1: [r1[0], r1[1], r1[2] || 0] });
+      });
+    });
+    return (plan.wkRoofPl = out);
+  }
+  // Where one up on a roof clips on: the ridge over the plane they are on (a rope grab on a line along
+  // it) -- on the roof once it is sheathed, on the trusses' tops before.  None off a roof.
+  function wkAnchor(plan, p, T) {
+    var P = plan.site.P, z = p[2] || 0, best = null, bz = Infinity;
+    wkRoofPlanes(plan).forEach(function (R) {
+      if (!wkInPoly(R.poly, p[0], p[1])) { return; }
+      var dz = (R.d - R.nx * p[0] - R.ny * p[1]) / R.nz - z;
+      if (dz < -0.6 * P || dz > 2.6 * P || Math.abs(dz) >= bz) { return; }
+      bz = Math.abs(dz); best = R;
+    });
+    if (!best) { return null; }
+    var a = best.r0, b = best.r1, ex = b[0] - a[0], ey = b[1] - a[1], l2 = ex * ex + ey * ey;
+    var t = l2 > 1e-6 ? Math.max(0.04, Math.min(0.96, ((p[0] - a[0]) * ex + (p[1] - a[1]) * ey) / l2)) : 0;
+    var rv = plan.rv && plan.rv[best.key], on = !rv || T >= rv.t1;
+    var q = [a[0] + ex * t, a[1] + ey * t, a[2] + (b[2] - a[2]) * t + (on ? 0.05 : -0.1) * P];
+    return Math.hypot(q[0] - p[0], q[1] - p[1]) > 9 * P ? null : q;
+  }
+  // The lanyard from the D-ring on their back to the anchor, a little slack in it, and its hook.
+  var WK_LANYARD = { piece: true, color: "#e8b923", edge: "#a57f12", pat: 27 };
+  function wkLanyard(faces, st, look, w, q, fade) {
+    var k = Math.round(FLOOR_PX * (0.97 + (((600 + w.id) * 37) % 7) / 100) * 10) / 10, c = Math.cos(st.head), s = Math.sin(st.head);
+    var up = (look.legs === "kneel" ? 0.91 : 1.34) * k, x0 = st.p[0] - 0.145 * k * c, y0 = st.p[1] - 0.145 * k * s, z0 = (st.p[2] || 0) + up;
+    var a = [x0, y0, z0], len = Math.hypot(q[0] - x0, q[1] - y0, q[2] - z0), sag = Math.min(0.35 * k, len * 0.12);
+    var m = [(x0 + q[0]) / 2, (y0 + q[1]) / 2, (z0 + q[2]) / 2 - sag], how = cnFade(WK_LANYARD, fade), f0 = faces.length;
+    cnBeam(faces, a, m, 0.022 * k, how);
+    cnBeam(faces, m, q, 0.022 * k, how);
+    cnBeam(faces, [q[0], q[1], q[2] - 0.03 * k], [q[0], q[1], q[2] + 0.05 * k], 0.05 * k, cnFade(WK_STEEL, fade));
+    for (var i = f0; i < faces.length; i++) { faces[i].moves = true; faces[i].person = true; }
   }
   // what is carried: studs on the shoulder, a sheet at the side, a box in front ...
   var WK_TIMBER = { piece: true, color: "#d9b77e", edge: "#a88857", pat: 21 };

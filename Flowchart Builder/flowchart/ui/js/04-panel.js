@@ -417,6 +417,7 @@
       }));
       box.appendChild(row);
     });
+    fitStyleSide();                      // a card with no kinds in it is not shown
   }
 
   function buildGlobals() {
@@ -891,6 +892,12 @@
         return;
       }
       var kind = now.kind, i = now.i, name = now.name;
+      // A piece of a design has what it is made of and its finish here too
+      // (pieceLooks, 39-design.js), and only a shape that has words, or a
+      // piece showing some on the plan -- a name, its sizes -- has the
+      // words' color, a highlighter, and B, I, U, S and a size for them.
+      var piece = byHand && ICONS[kind] ? nodeById(+String(i).slice(1)) : null;
+      var wordy = !piece || showsWords(el('.node[data-i="' + i + '"]', chart));
       var head = document.createElement("div");
       var what = document.createElement("div");
       what.className = "what";
@@ -904,12 +911,16 @@
       head.appendChild(what);
       head.appendChild(saidIt);
       body.appendChild(head);
+      if (piece && typeof pieceLooks === "function") {
+        try { pieceLooks(body, piece); } catch (e) { /* its colors, below */ }
+      }
       var mine = style.nodes[i] = style.nodes[i] || {};
       var k = kindColors(kind);
       [[TXT.fill, "fill", k.fill || "#ffffff"],
        [TXT.outline, "line", k.line || style.ink || "#000000"],
        [TXT.text, "text", k.text || style.words || style.ink || "#000000"]]
         .forEach(function (item) {
+          if (item[1] === "text" && !wordy) { return; }
           var row = document.createElement("div");
           row.className = "row";
           row.innerHTML = '<span class="name">' + item[0] + "</span>";
@@ -921,25 +932,27 @@
       // A pen picked is one thing done, so it can be stepped back from; a
       // color being dragged about in the picker is only a preview, and the
       // picker takes its own copy to step back to (see swatch above).
-      body.appendChild(markerRow(mine.mark, function (color, live) {
-        if (!live) { keepUndo(); }
-        if (color) { mine.mark = color; } else { delete mine.mark; }
-        paintSoon();
-        if (!live) { drawSelection(); }
-      }));
-      var tools = document.createElement("div");
-      tools.className = "type-row";
-      lookButtons(function (what) { return lookOn(i, what); }, function (what) {
-        flipLook(i, what);
-        drawSelection();
-      }).forEach(function (b) { tools.appendChild(b); });
-      if (CAN_REFLOW) {
-        tools.appendChild(sizeBox("own-size", shapePt(i), function (to) {
-          ownSize(i, to);
+      if (wordy) {
+        body.appendChild(markerRow(mine.mark, function (color, live) {
+          if (!live) { keepUndo(); }
+          if (color) { mine.mark = color; } else { delete mine.mark; }
+          paintSoon();
+          if (!live) { drawSelection(); }
+        }));
+        var tools = document.createElement("div");
+        tools.className = "type-row";
+        lookButtons(function (what) { return lookOn(i, what); }, function (what) {
+          flipLook(i, what);
           drawSelection();
-        }, ["Ctrl+Shift+<", "Ctrl+Shift+>"]));
+        }).forEach(function (b) { tools.appendChild(b); });
+        if (CAN_REFLOW) {
+          tools.appendChild(sizeBox("own-size", shapePt(i), function (to) {
+            ownSize(i, to);
+            drawSelection();
+          }, ["Ctrl+Shift+<", "Ctrl+Shift+>"]));
+        }
+        body.appendChild(tools);
       }
-      body.appendChild(tools);
       body.appendChild(borderRow(i));
 
       // The look of one shape, onto another: copy it here, pick the other,
@@ -1011,6 +1024,8 @@
       body.appendChild(go);
     });
     dressResets();                       // the card's own reset, for this shape (22-reset.js)
+    fitStyleSide();                      // the Style side, only what applies (07-sides.js)
+    sideAfterPick(!!now);                // and let go of, the side it came from
   }
 
   function found(kind) {

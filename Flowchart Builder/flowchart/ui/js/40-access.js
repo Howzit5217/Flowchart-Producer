@@ -165,7 +165,7 @@
     var P = FLOOR_PX, faces = [];
     hand.nodes.forEach(function (lot) {
       if (lot.kind !== "i_parking" || !(lot.access || lot.aisle || lot.ev)) { return; }
-      var top = acTop(lot);
+      var top = acTop(lot), from = faces.length;
       acStalls(lot).forEach(function (st) {
         var kind = (lot.access || []).indexOf(st.i) >= 0 ? "access" : (lot.aisle || []).indexOf(st.i) >= 0 ? "aisle" : (lot.ev || []).indexOf(st.i) >= 0 ? "ev" : null;
         if (!kind) { return; }
@@ -201,6 +201,8 @@
                   hz + 1.0 * P, hz + 1.25 * P, AC_GLOW);
         }
       });
+      // (the lot's own: painted once it is paved, the signs and chargers set with the rest -- 40-works-site.js)
+      for (var k = from; k < faces.length; k++) { if (!faces[k].node) { faces[k].node = lot; } }
     });
     return faces;
   }
@@ -222,14 +224,23 @@
             if (o.garage) { return; }
             var steps = T.pads.filter(function (p) { return p.step && Math.abs((p.x - o.x) * o.ox + (p.y - o.y) * o.oy) < 12 * P && Math.abs((p.x - o.x) * -o.oy + (p.y - o.y) * o.ox) < o.w; });
             if (!steps.length) { return; }
-            var fall = -0.03 * P - steps[steps.length - 1].top + 0.18 * P, run = fall * 12, ax = -o.oy, ay = o.ox, n = Math.max(2, Math.ceil(run / (0.3 * P)));
-            steps.forEach(function (p) { p.gone = true; });
-            var from = 1.2 * P, top = -0.03 * P, ramp = { o: o, from: from, run: run, top: top, fall: fall, ax: ax, ay: ay, hw: o.w / 2 + 0.1 * P };
-            for (var i = 0; i < n; i++) {
-              var a = from + (i + 0.5) * run / n, z = top - fall * (i + 1) / n;
-              keep.push({ x: o.x + o.ox * a, y: o.y + o.oy * a, ax: ax, ay: ay, hw: ramp.hw, hd: run / n / 2 + 0.01 * P, top: z, step: true, ramp: true });
-            }
-            acRamps.push(ramp);
+            var fall = -0.03 * P - steps[steps.length - 1].top + 0.18 * P, run = fall * 12;
+            // (2026-10-04: a ramp a metre and more down ran twelve metres
+            // straight out, over the pavement and across the street) straight
+            // out where it fits on the lot; else back and forth along the
+            // building's face, the steps kept in front of the door
+            var R = acRampWay(T, o, run, fall, P);
+            if (!R) { return; }
+            if (R.straight) { steps.forEach(function (p) { p.gone = true; }); }
+            R.flights.forEach(function (F) {
+              var n = Math.max(2, Math.ceil(F.len / (0.3 * P)));
+              for (var i = 0; i < n; i++) {
+                var a = (i + 0.5) * F.len / n, z = F.z0 - (F.z0 - F.z1) * (i + 1) / n;
+                keep.push({ x: F.x + F.ux * a, y: F.y + F.uy * a, ax: -F.uy, ay: F.ux, hw: F.hw, hd: F.len / n / 2 + 0.01 * P, top: z, step: true, ramp: true });
+              }
+            });
+            R.landings.forEach(function (L) { keep.push(Object.assign({ step: true, ramp: true }, L)); });
+            acRamps.push(R);
           });
           if (keep.length) {
             T.pads = T.pads.filter(function (p) { return !p.gone; }).concat(keep);
@@ -246,37 +257,113 @@
       return T;
     };
   }
-  // its rails: posts along both sides, a rail along their tops
+  // The way a ramp goes from a door's landing: { straight, flights: [{ x, y
+  // (its top end), ux, uy (downhill), len, z0, z1, hw }], landings: [pads] }
+  // -- or null, no room for one (the steps stay).  Straight out, where all
+  // of it is on the lot; else a flight along the building's face from the
+  // landing's side, a landing to turn on, the next flight back further out,
+  // and so on -- no flight longer than nine metres, all on the lot, clear of
+  // the other doors along the wall.
+  var AC_FLIGHT = 9;                     // metres, the longest run between landings
+  function acRampWay(T, o, run, fall, P) {
+    var top = -0.03 * P, from = 1.2 * P, hw = o.w / 2 + 0.1 * P, edge = 0.3 * P;
+    var hx = T.F.w / 2, hy = T.F.h / 2;
+    function onLot(x, y) { var q = terrLocal(T, x, y); return Math.abs(q[0]) <= hx - edge && Math.abs(q[1]) <= hy - edge; }
+    function clear(x0, y0, ux, uy, len, wide) {
+      for (var s = 0; s <= len + 0.01; s += 0.5 * P) {
+        for (var k = -1; k <= 1; k++) {
+          var x = x0 + ux * s - uy * wide * k, y = y0 + uy * s + ux * wide * k;
+          if (!onLot(x, y)) { return false; }
+        }
+      }
+      return true;
+    }
+    if (run <= AC_FLIGHT * P && clear(o.x + o.ox * from, o.y + o.oy * from, o.ox, o.oy, run, hw)) {
+      return { o: o, straight: true, landings: [],
+               flights: [{ x: o.x + o.ox * from, y: o.y + o.oy * from, ux: o.ox, uy: o.oy, len: run, z0: top, z1: top - fall, hw: hw }] };
+    }
+    var ax = -o.oy, ay = o.ox, start = o.w / 2 + 0.3 * P, turn = 1.5 * P, gap = 0.15 * P, best = null;
+    // how far along the wall each way it can go: the lot, and the next door along (its landing and a way to it)
+    [1, -1].forEach(function (sd) {
+      var room = Infinity;
+      T.doors.forEach(function (d) {
+        if (d === o) { return; }
+        var along = ((d.x - o.x) * ax + (d.y - o.y) * ay) * sd, out = (d.x - o.x) * o.ox + (d.y - o.y) * o.oy;
+        if (along > 0 && Math.abs(out) < 3 * P) { room = Math.min(room, along - d.w / 2 - (d.garage ? 1.0 : 0.6) * P - start); }
+      });
+      for (var m = 1; m <= 6; m++) {
+        var len = run / m;
+        if (len > AC_FLIGHT * P || len + turn > room) { continue; }
+        // each flight's band out from the wall, and its landings, on the lot
+        var ok = true, flights = [], landings = [], z = top;
+        for (var k = 0; k < m && ok; k++) {
+          var off = 0.1 * P + hw + k * (2 * hw + gap), dir = k % 2 ? -sd : sd, a0 = k % 2 ? start + len : start;
+          var x = o.x + ax * sd * a0 + o.ox * off, y = o.y + ay * sd * a0 + o.oy * off;
+          ok = clear(x, y, ax * dir, ay * dir, len, hw);
+          flights.push({ x: x, y: y, ux: ax * dir, uy: ay * dir, len: len, z0: z, z1: z - fall / m, hw: hw });
+          z -= fall / m;
+          if (k < m - 1) {
+            // a landing across this band and the next, at the flight's end
+            var ta = (k % 2 ? start - turn / 2 : start + len + turn / 2), toff = off + hw + gap / 2;
+            var lx = o.x + ax * sd * ta + o.ox * toff, ly = o.y + ay * sd * ta + o.oy * toff;
+            ok = ok && onLot(lx, ly) && (k % 2 === 0 || start - turn > -start);
+            landings.push({ x: lx, y: ly, ax: o.ox, ay: o.oy, hw: hw * 2 + gap / 2, hd: turn / 2, top: z });
+          }
+        }
+        if (ok && (!best || m < best.flights.length)) { best = { o: o, straight: false, flights: flights, landings: landings }; }
+        if (ok) { break; }
+      }
+    });
+    return best;
+  }
+  // its rails: posts along both sides of each flight, a rail along their tops
   function acRails() {
     var P = FLOOR_PX, faces = [];
-    acRamps.forEach(function (R) {
-      var o = R.o;
-      [-1, 1].forEach(function (sd) {
-        var off = sd * R.hw, n = Math.max(2, Math.round(R.run / (1.5 * P)) + 1), prev = null;
-        for (var i = 0; i < n; i++) {
-          var a = R.from + R.run * i / (n - 1), z = R.top - R.fall * i / (n - 1);
-          var x = o.x + o.ox * a + R.ax * off, y = o.y + o.oy * a + R.ay * off;
-          v3Prism(faces, acRing([x, y], 0.025 * P, 6), z, z + 0.9 * P, AC_POST);
-          if (prev) { xrayBeam(faces, [prev[0], prev[1], prev[2] + 0.9 * P], [x, y, z + 0.9 * P], [R.ax, R.ay, 0], [0, 0, 1], 0.05 * P, 0.05 * P, AC_POST); }
-          prev = [x, y, z];
-        }
+    acRamps.forEach(function (R, ri) {
+      var from = faces.length;
+      R.flights.forEach(function (F) {
+        var wx = -F.uy, wy = F.ux;
+        [-1, 1].forEach(function (sd) {
+          var off = sd * F.hw, n = Math.max(2, Math.round(F.len / (1.5 * P)) + 1), prev = null;
+          for (var i = 0; i < n; i++) {
+            var a = F.len * i / (n - 1), z = F.z0 - (F.z0 - F.z1) * i / (n - 1);
+            var x = F.x + F.ux * a + wx * off, y = F.y + F.uy * a + wy * off;
+            v3Prism(faces, acRing([x, y], 0.025 * P, 6), z, z + 0.9 * P, AC_POST);
+            if (prev) { xrayBeam(faces, [prev[0], prev[1], prev[2] + 0.9 * P], [x, y, z + 0.9 * P], [wx, wy, 0], [0, 0, 1], 0.05 * P, 0.05 * P, AC_POST); }
+            prev = [x, y, z];
+          }
+        });
       });
+      // (which ramp: put up by the crew with the yard, 40-works-yard.js)
+      for (var k = from; k < faces.length; k++) { faces[k].acRamp = ri; faces[k].outdoors = true; }
     });
     return faces;
+  }
+  // Whether a spot is on a ramp (for what is planted along the house, 40-plants.js).
+  function acOnRamp(x, y, reach) {
+    var P = FLOOR_PX;
+    return acRamps.some(function (R) {
+      return R.flights.some(function (F) {
+        var dx = x - F.x, dy = y - F.y, along = dx * F.ux + dy * F.uy, across = Math.abs(-dx * F.uy + dy * F.ux);
+        return along > -reach - 1.5 * P && along < F.len + reach + 1.5 * P && across < F.hw + reach;
+      });
+    });
   }
   if (typeof v3Build === "function") {
     var v3BuildAccess = v3Build;
     v3Build = function () {
       var model = v3BuildAccess.apply(this, arguments);
-      try {
-        if (model && model.faces && V3 && V3.scene !== "space" && !(V3.flat && V3.flatDone)) {
-          // (kept while the drawing and the house's settings are as they were: 38-view3d.js v3Added)
-          v3Added("access", model.faces, "", function () {
-            var add = acFaces().concat(acRails());
-            for (var i = 0; i < add.length; i++) { model.faces.push(add[i]); }
-          });
-        }
-      } catch (e) { /* the lot as it is */ }
+      // (while a building goes up, put in before the works made its picture, and timed by it: 40-works-yard.js)
+      try { if (model && !model.ydBefore) { acPutInto(model); } } catch (e) { /* the lot as it is */ }
       return model;
     };
+  }
+  // the stalls' paint, signs and chargers, and the ramps' rails, into a picture
+  function acPutInto(model) {
+    if (!(model && model.faces && V3 && V3.scene !== "space" && !(V3.flat && V3.flatDone))) { return; }
+    // (kept while the drawing and the house's settings are as they were: 38-view3d.js v3Added)
+    v3Added("access", model.faces, "", function () {
+      var add = acFaces().concat(acRails());
+      for (var i = 0; i < add.length; i++) { model.faces.push(add[i]); }
+    });
   }

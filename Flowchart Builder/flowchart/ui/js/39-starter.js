@@ -754,6 +754,17 @@
         var y0 = Db + Hh + j * (Dm + Hh), band = [];
         at = 0;
         row.forEach(function (r, i) {
+          // (a column of two in a row inside, 40-forms.js -- a lift behind its lobby: the second
+          // part against the hall over it, the way in, the first behind it)
+          if (r.kind === "suite") {
+            var cut = r.parts.length > 1 ? y0 + Math.min(2.0, Dm / 2) : y0 + Dm;
+            r.parts.forEach(function (p, k) {
+              var top = r.parts.length > 1 && k === 1;
+              band.push(room(f, p.kind, p.label, X(at), top ? X(y0) : X(r.parts.length > 1 ? cut : y0), X(at + r.w), top ? X(cut) : X(y0 + Dm), i * G, G * (2 * j + 1), p));
+            });
+            at += r.w;
+            return;
+          }
           var made1 = room(f, r.kind, r.label, X(at), X(y0), X(at + r.w), X(y0 + Dm), i * G, G * (2 * j + 1), r);
           if (r.cross) { made1.starterCross = true; }
           band.push(made1);
@@ -1639,7 +1650,7 @@
       // on the ceiling: over the table where there is one, else the middle
       var hang = STARTER_CEILING[kind];
       // (a small room of another building -- a restroom, a stockroom -- a light all the same, 39-types.js)
-      if (hang && ICONS[hang] && Math.min(r.w, r.h) >= ((r.use || kind === "laundry" || kind === "utility" || kind === "pantry" || kind === "mudroom" || (typeof ODD_SMALL === "object" && ODD_SMALL[kind])) && hang === "i_pendant" ? 1.4 : 2.6) * P) {
+      if (hang && ICONS[hang] && Math.min(r.w, r.h) >= ((r.use || kind === "laundry" || kind === "utility" || kind === "pantry" || kind === "mudroom" || kind === "foyer" || kind === "storage" || (typeof ODD_SMALL === "object" && ODD_SMALL[kind])) && hang === "i_pendant" ? 1.4 : 2.6) * P) {
         var over = (hang === "i_chandelier" && inRoom("i_dining|i_roundtable")) || null;
         if (!(hang === "i_pendant" && inRoom("i_island"))) { adviceAdd(hang, Math.round(over ? over.x : r.x), Math.round(over ? over.y : r.y)); }
       }
@@ -1752,7 +1763,14 @@
       mids.forEach(function (row, j) {
         var y0 = Db + Hh + j * (Dm + Hh);
         at = 0;
-        row.forEach(function (r) { put(r.kind, r.cross ? "" : r.label, at, y0, at + r.w, y0 + Dm); at += r.w; });
+        row.forEach(function (r) {
+          if (r.kind === "suite" && r.parts.length > 1) {
+            var cut = y0 + Math.min(2.0, Dm / 2);
+            put(r.parts[1].kind, r.parts[1].label, at, y0, at + r.w, cut);
+            put(r.parts[0].kind, r.parts[0].label, at, cut, at + r.w, y0 + Dm);
+          } else { put(r.kind === "suite" ? r.parts[0].kind : r.kind, r.cross ? "" : r.label, at, y0, at + r.w, y0 + Dm); }
+          at += r.w;
+        });
         if (Hh > 0) { put("hall", "", 0, y0 + Dm, wide, y0 + Dm + Hh); }
       });
       at = 0;

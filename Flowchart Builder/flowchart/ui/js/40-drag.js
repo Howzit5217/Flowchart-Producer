@@ -20,7 +20,9 @@
   try { dragView = localStorage.getItem("flowchart-drag-view") === "on"; } catch (e) { /* off */ }
   function dragViewSet(on, told) {
     dragView = !!on;
-    try { localStorage.setItem("flowchart-drag-view", dragView ? "on" : "off"); } catch (e) { /* this visit */ }
+    // (kept for the paper: in 3D it is the view's own, on as it opens -- below)
+    var paper = dragPaperWas === null || dragPaperWas === undefined;
+    if (paper) { try { localStorage.setItem("flowchart-drag-view", dragView ? "on" : "off"); } catch (e) { /* this visit */ } }
     dragViewShow();
     if (told) {
       var words = dragView ? TXT.dv_on : TXT.dv_off;
@@ -348,11 +350,29 @@
     b.setAttribute("aria-pressed", dragView ? "true" : "false");
     b.hidden = V3.scene === "space";
   }
+  // (2026-10-05: "when you go into 3d mode the drag view is toggled on") --
+  // the 3D view opens with every drag the view's; the paper's own choice
+  // given back when it closes.
+  var dragPaperWas = null;
   if (typeof v3Open === "function") {
     var v3OpenDrag = v3Open;
     v3Open = function () {
       var was = V3, out = v3OpenDrag.apply(this, arguments);
-      try { if (V3 && V3 !== was) { dragCarry(V3.canvas); dragButton(); v3Words(); } } catch (e) { /* the view without it */ }
+      try {
+        if (V3 && V3 !== was) {
+          if (dragPaperWas === null) { dragPaperWas = dragView; }
+          if (!dragView) { dragViewSet(true); }
+          dragCarry(V3.canvas); dragButton(); v3Words();
+        }
+      } catch (e) { /* the view without it */ }
+      return out;
+    };
+  }
+  if (typeof v3Close === "function") {
+    var v3CloseDrag = v3Close;
+    v3Close = function () {
+      var out = v3CloseDrag.apply(this, arguments);
+      try { if (!V3 && dragPaperWas !== null) { var back = dragPaperWas; dragPaperWas = null; if (back !== dragView) { dragViewSet(back); } } } catch (e) { /* as it is */ }
       return out;
     };
   }

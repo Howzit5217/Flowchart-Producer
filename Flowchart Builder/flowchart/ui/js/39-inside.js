@@ -793,14 +793,8 @@
     });
     box.appendChild(sec);
   }
-  if (typeof matSection === "function") {
-    var matSectionWalls = matSection;
-    matSection = function (box, room) {
-      var out = matSectionWalls.apply(this, arguments);
-      try { wallSection(box, room); } catch (e) { /* the panel without it */ }
-      return out;
-    };
-  }
+  // (Put in the room's card on the Chart side by designPanel, 39-design.js,
+  // where its size is: what the room is made of is on the Style side.)
   // Check: an opening in a wall that carried something, with nothing under
   // the beam's ends -- its posts taken away.
   if (typeof homeAdvice === "function") {

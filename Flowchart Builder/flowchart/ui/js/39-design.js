@@ -1335,10 +1335,11 @@
     setTimeout(fit, 0);
 
     if (ICONS[n.kind]) { sizeSection(box, n); }
-    // what it is made of: a room's floor and walls, and the house's
-    // outside and roof; a piece's finish (38-models.js)
-    if (n.kind === "i_room") { matSection(box, n); }
-    else if (typeof MODELS === "object" && MODELS[n.kind]) { finishSection(box, n); }
+    // which of a room's walls are open to the room beside it (39-inside.js);
+    // what it is made of and its finish are on the Style side (pieceLooks)
+    if (n.kind === "i_room" && typeof wallSection === "function") {
+      try { wallSection(box, n); } catch (e) { /* the panel without it */ }
+    }
 
     // which way round
     var turnRow = document.createElement("div");
@@ -1391,30 +1392,6 @@
     turnRow.appendChild(spin);
     box.appendChild(turnRow);
 
-    // its colors, as everywhere (02-paint.js)
-    var paints = document.createElement("div");
-    paints.className = "trio";
-    var mine = style.nodes["h" + n.id] = style.nodes["h" + n.id] || {};
-    var k = kindColors(n.kind);
-    [[TXT.fill, "fill", k.fill || "#ffffff"],
-     [TXT.outline, "line", k.line || style.ink || "#000000"],
-     [TXT.text, "text", k.text || style.words || style.ink || "#000000"]].forEach(function (item) {
-      var cell = document.createElement("label");
-      cell.innerHTML = "<span>" + item[0] + "</span>";
-      var firstTouch = true;
-      cell.appendChild(swatch(mine[item[1]], item[2], function (v) {
-        if (firstTouch) { firstTouch = false; keepUndo(); }
-        mine[item[1]] = v;
-        paint();
-      }));
-      paints.appendChild(cell);
-    });
-    var colors = document.createElement("div");
-    colors.className = "dz-small dz-sub-head";
-    colors.textContent = TXT.colors_here;
-    box.appendChild(colors);
-    box.appendChild(paints);
-
     // another, or away with it
     var acts = document.createElement("div");
     acts.className = "dz-acts";
@@ -1446,6 +1423,23 @@
       acts.insertBefore(join, acts.firstChild);
     }
     box.appendChild(acts);
+  }
+
+  // How a piece looks, on the Style side over its colors (drawSelection,
+  // 04-panel.js), where a click on it takes the panel: what a room and the
+  // house are made of, a piece's design and its finish (38-models.js,
+  // 40-designs.js).  Its colors on the plan come under a heading of their
+  // own, so they are not taken for the colors of the thing itself.
+  function pieceLooks(box, n) {
+    if (!designMode()) { return; }
+    var had = box.childNodes.length;
+    if (n.kind === "i_room") { matSection(box, n); }
+    else if (typeof MODELS === "object" && MODELS[n.kind]) { finishSection(box, n); }
+    if (box.childNodes.length === had) { return; }
+    var colors = document.createElement("div");
+    colors.className = "dz-small dz-sub-head dz-plan-colors";
+    colors.textContent = TXT.colors_here;
+    box.appendChild(colors);
   }
 
   // ============================================================ materials ==

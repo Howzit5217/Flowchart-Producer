@@ -26,6 +26,10 @@
   var MO_DOOR_W = 0.95;                  // metres: wider than this, it goes through a door on its side
   var MO_MOVER = { own: true, fill: "#2f5d8a", line: "#3b4350", outfit: "polo" };
   var MO_HOLDING = { own: true, fill: "#2f5d8a", line: "#3b4350", outfit: "polo", arms: "carry" };     // (hands out in front: 40-bodies.js)
+  // (2026-10-05, safety gear) On a site still being built (bpSite): a hi-vis vest over the firm's blue,
+  // a hard hat, gloves and glasses (40-bodies.js's ppe) -- the polos only on a plain move in
+  var MO_SITE = { own: true, fill: "#d9e84a", line: "#3b4350", outfit: "vest", ppe: true, top2: "#2f5d8a", hardhatColor: "#2f6fb0" };
+  var MO_SITE_HOLDING = Object.assign({}, MO_SITE, { arms: "carry" });
   var MO_RESIDENT_AT = [0.935, 0.99];    // when those who live there walk in
   var MO_FIXTURE = { i_outlet: 1, i_lightswitch: 1, i_garagebtn: 1, i_breaker: 1, i_thermostat: 1, i_sconce: 1, i_smoke: 1, i_vent: 1, i_exhaustfan: 1,
                      i_wifi: 1, i_camera: 1, i_porchlight: 1, i_floodlight: 1, i_hood: 1, i_ac: 1, i_radiator: 1, i_towelrail: 1, i_hooks: 1,
@@ -819,7 +823,9 @@
   function moBody(faces, id, x, y, z, head, phase, fade, look) {
     if (moMoverBudget <= 0 || typeof peopleBody !== "function") { return; }
     moMoverBudget--;
-    peopleBody(faces, { kind: "i_person", id: id }, x, y, z, head, phase, look || MO_MOVER, fade);
+    var L = look || MO_MOVER;
+    if (typeof bpSite !== "undefined" && bpSite) { L = L === MO_HOLDING ? MO_SITE_HOLDING : L === MO_MOVER ? MO_SITE : L; }
+    peopleBody(faces, { kind: "i_person", id: id }, x, y, z, head, phase, L, fade);
   }
   function moStep(d, speed) {                         // how far through a step: by the way gone, not faster than a brisk pace
     return d / (0.36 * FLOOR_PX) * Math.min(1, 5.5 * FLOOR_PX / Math.max(1, speed));

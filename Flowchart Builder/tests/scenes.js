@@ -550,6 +550,35 @@ var tests = function () {
   });
   check(!bodyBad.length, "people made wrong: " + bodyBad.slice(0, 4).join("; "));
   said.push(bodies + " people made whole (" + Object.keys(BD_OUTFITS).length + " outfits, up to " + most + " corners)");
+  // on a building site (2026-10-05): in the safety gear, in a harness, clipped on -- near, a way
+  // off and far off, the far ones still few corners
+  var gearBad = [], geared = 0, farMost = 0;
+  [{}, { harness: true }, { harness: true, tied: true }].forEach(function (more) {
+    ["m", "f"].forEach(function (sex) {
+      var sp = bdSpec(Object.assign({ sex: sex, outfit: "vest", hardhat: true, ppe: true }, more)), plain = bdSpec({ sex: sex, outfit: "vest", hardhat: true });
+      [[0, ""], [1.3, ""], [2.9, "carry"], [0, "hammer"], [0, "up"]].forEach(function (pose) {
+        [0, 1, 2].forEach(function (lod) {
+          var was = bdMake(plain, pose[0], pose[1], 0.7, true, 50, "", lod), wasN = 0;
+          was.order.forEach(function (slot) { wasN += was.slots[slot].p.length / 3; });
+          var made = bdMake(sp, pose[0], pose[1], 0.7, true, 50, "", lod), verts = 0, lo = Infinity, hi2 = -Infinity, ok = true;
+          made.order.forEach(function (slot) {
+            var g = made.slots[slot];
+            if (g.p.length % 9 || g.n.length !== g.p.length) { ok = false; }
+            for (var i = 0; i < g.p.length; i++) { if (!isFinite(g.p[i]) || !isFinite(g.n[i])) { ok = false; break; } }
+            verts += g.p.length / 3; lo = Math.min(lo, g.lo[2]); hi2 = Math.max(hi2, g.hi[2]);
+          });
+          geared++;
+          if (lod === 2) { farMost = Math.max(farMost, verts); }
+          var tall = hi2 / 50, gear = ["gloves", "harness"].filter(function (s) { return (s !== "harness" || more.harness) && made.order.indexOf(s) < 0; });
+          if (!ok || verts > (lod === 2 ? wasN + 120 : 9000) || lo < -0.02 * 50 || lo > 0.02 * 50 || tall < 1.68 || tall > (pose[1] === "up" ? 2.2 : 1.98) || gear.length) {
+            gearBad.push(sex + " " + JSON.stringify(more) + " " + pose.join("/") + " lod " + lod + ": " + verts + " corners, " + tall.toFixed(2) + " m" + (ok ? "" : ", bad numbers") + (gear.length ? ", no " + gear.join("+") : ""));
+          }
+        });
+      });
+    });
+  });
+  check(!gearBad.length, "site workers made wrong: " + gearBad.slice(0, 4).join("; "));
+  said.push(geared + " site workers in their gear (far off up to " + farMost + " corners)");
 
   return { bad: bad, said: said };
 };

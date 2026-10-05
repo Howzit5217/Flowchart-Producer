@@ -270,9 +270,9 @@
     T.street = null;
     if (typeof houseStreetLot === "function" && houseStreetLot()) {
       // (the kerb as far out as the sidewalk and the grass beside it, 40-verge.js)
-      var walkW = typeof streetWalkPx === "function" ? streetWalkPx() : 1.6 * P, roadW = 7 * P, hy = T.F.h / 2, mid = hy + walkW + roadW / 2;
+      var walkW = typeof streetWalkPx === "function" ? streetWalkPx() : 1.6 * P, roadW = typeof streetRoadPx === "function" ? streetRoadPx() : 7 * P, hy = T.F.h / 2, mid = hy + walkW + roadW / 2;
       var St = { hy: hy, far: hy + walkW + roadW + (houseOpt("hood") ? walkW : 0), mid: mid, x0: -520 * P, step: 4 * P, prof: [],
-                 side: 1.6 * P, verge: walkW - 1.6 * P, road0: hy + walkW, road1: hy + walkW + roadW };
+                 side: 1.6 * P, verge: walkW - 1.6 * P, road0: hy + walkW, road1: hy + walkW + roadW, wide: roadW > 7.5 * P };
       for (var si = 0; si <= 260; si++) {
         var lx = St.x0 + si * St.step, sum = 0;
         for (var sj = -4; sj <= 4; sj++) { sum += terrRaw(T, lx + sj * 4 * P, mid); }
@@ -669,6 +669,8 @@
       if (typeof houseWet === "function" && houseWet()) { lawnC = gl3Mix(lawnC, [0.12, 0.2, 0.1], 0.22); }
       if (gl3SnowNow) { lawnC = gl3Mix(lawnC, [0.94, 0.95, 0.98], 0.86); }
     }
+    // (bare earth while the building goes up -- the lawn laid in strips last, 40-works-site.js)
+    if (lawnC && typeof jwLawnBare === "function" && jwLawnBare()) { lawnC = gl3Mix([0.63, 0.41, 0.23], sheetC, 0.1); lawnPat = 30; }
     var pave = gl3Mix([0.8, 0.79, 0.76], sheetC, 0.2), road = gl3Mix([0.3, 0.31, 0.33], sheetC, 0.08);
     var vergeG = typeof vgGrass === "function" ? vgGrass(sheetC) : { c: land, pat: landPat };
     var W = T.water, damp = null;
@@ -751,7 +753,8 @@
           // (the grass between the sidewalk and the kerb, each side, 40-verge.js)
           var inVerge = !inRoad && St.verge > 0 && (cy < St.road0 ? cy > St.hy + St.side : cy < St.road1 + St.verge);
           col = inRoad ? road : inVerge ? vergeG.c : pave; pat = inRoad ? PAT.road : inVerge ? vergeG.pat : PAT.walk;
-          uv = inRoad ? function (x, y) { return [x / P, (y - St.mid) / P]; } : function (x, y) { return [x / P, (y - (y > St.road1 ? St.road1 + St.verge : St.hy)) / P]; };
+          // (a wider street's middle line its own, 40-verge.js: the road's dashed one moved out of reach)
+          uv = inRoad ? function (x, y) { return [x / P, (y - St.mid) / P + (St.wide ? 1000 : 0)]; } : function (x, y) { return [x / P, (y - (y > St.road1 ? St.road1 + St.verge : St.hy)) / P]; };
           // (in front of the lot, the strip is the lot's own lawn, its stripes carried on)
           if (inVerge && lawnC && cy < St.road0 && Math.abs(cx) < lotHw) { col = lawnC; pat = lawnPat; uv = function (x, y) { return [x / P, y / P]; }; }
         } else if (lawnC && Math.abs(cx) < lotHw && cy > lotTop && cy < lotFoot) {

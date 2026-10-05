@@ -25,7 +25,7 @@
   // (40-crew.js draws its hammer from the right hand and its hard hat round
   // the head), only the body round them is new.
   var BD_STEPS = 24;                     // poses to a stride
-  var BD_ARMS = { carry: 1, hammer: 1, shoulder: 1, up: 1, climb: 1 };    // what the hands can be doing
+  var BD_ARMS = { carry: 1, hammer: 1, shoulder: 1, up: 1, climb: 1, push: 1 };    // what the hands can be doing
   var BD_ARMQ = 32;                      // heights of a hammer's swing
   var BD_KEPT = new Map(), BD_KEPT_MAX = 1500;
   var BD_ZERO = new Float32Array(2 * 24000);
@@ -86,7 +86,14 @@
   var BD_TIES = ["#8c2f3a", "#2f4f8f", "#3d5c43", "#6a4c93", "#b5653a", "#1f2a33"];
   var BD_SKIRTS = ["#2e3846", "#5a3b4a", "#8c3b2f", "#3d5c43", "#c9a24a", "#25303d", "#7a4b30"];
   var BD_MAT = { skin: "plain", lips: "plain", hair: "fabric", eyes: "plastic", top: "fabric", top2: "fabric", bottom: "fabric", skirt: "fabric",
-                 shoes: "leather", belt: "leather", white: "fabric", tie: "fabric", hat: "fabric" };
+                 shoes: "leather", belt: "leather", white: "fabric", tie: "fabric", hat: "fabric",
+                 band: "plastic", gloves: "leather", harness: "fabric", ring: "metal", glasses: "plastic", muffs: "plastic", lanyard: "fabric" };
+  // (2026-10-05: "make the workers wear proper safety gear") On a building site (a look's `ppe`,
+  // 40-works.js): the hard hat, a hi-vis vest with its silver bands, long sleeves under it, work
+  // gloves, safety glasses, ear defenders while hammering, and above 1.8 m a full-body harness
+  // (`harness`), its lanyard clipped to an anchor (`tied`, drawn by 40-works.js) or stowed on it.
+  var BD_PPE_SHIRT = ["#c8d63a", "#d8d8d0", "#8f959b", "#3d4a5c", "#c8d63a"];
+  var BD_GLOVES = ["#d4b04c", "#c9a24a", "#e2d6b8", "#5b6470"];
 
   // ---- shapes, in metres, the body's own way round (x forward, y to the side, z up) ---------------
   function bdMaker(lod) {
@@ -258,6 +265,92 @@
     };
   }
 
+  // ---- what is worn on a site: bands, straps -------------------------------------------------------------
+  // A ring of the body at a height (between two of its rings), grown by `by`.
+  function bdRingAt(rings, z, by) {
+    var a = rings[0], b = rings[0], last = rings[rings.length - 1];
+    if (z >= last.z) { a = b = last; }
+    for (var i = 0; i + 1 < rings.length; i++) { if (z >= rings[i].z && z <= rings[i + 1].z) { a = rings[i]; b = rings[i + 1]; break; } }
+    var k = b.z === a.z ? 0 : (z - a.z) / (b.z - a.z), g = by || 0;
+    return { z: z, w: a.w + (b.w - a.w) * k + g, d: a.d + (b.d - a.d) * k + g, x: a.x + (b.x - a.x) * k };
+  }
+  // A point on the body (`by` out from it) at a height, that far to the side, in front (side 1) or
+  // behind (-1), with the way out from it there.
+  function bdSurf(T, z, y, side, by) {
+    var q = bdRingAt(z >= 0.99 ? T.chest : T.hips, z, by), u = Math.max(-0.97, Math.min(0.97, y / q.w)), c = Math.sqrt(1 - u * u);
+    return { p: [q.x + side * q.d * c, y, z], n: bdUnit([side * c / q.d, u / q.w, 0]) };
+  }
+  // Where the top of the shoulder is, that far to the side (the chest's rings, top down).
+  function bdTopAt(T, y) {
+    var R = T.chest, a = Math.abs(y);
+    for (var i = R.length - 1; i > 0; i--) {
+      var hi = R[i], lo = R[i - 1];
+      if (lo.w >= a && hi.w < a) { return { z: lo.z + (hi.z - lo.z) * (lo.w - a) / ((lo.w - hi.w) || 1), x: lo.x }; }
+    }
+    return { z: R[R.length - 1].z, x: 0 };
+  }
+  // A flat strip through points, each with the way out from it: a band, a strap.
+  function bdRibbon(G, slot, pts, ns, hw) {
+    var S = G.slot(slot), xf = G.xf, Lp = [], Rp = [];
+    function put(p, n) { var q = xf ? xf(p) : p; S.p.push(q[0], q[1], q[2]); S.n.push(n[0], n[1], n[2]); }
+    for (var i = 0; i < pts.length; i++) {
+      var a = pts[Math.max(0, i - 1)], b = pts[Math.min(pts.length - 1, i + 1)];
+      var s = bdUnit(bdCross(ns[i], bdUnit([b[0] - a[0], b[1] - a[1], b[2] - a[2]])));
+      Lp.push([pts[i][0] - s[0] * hw, pts[i][1] - s[1] * hw, pts[i][2] - s[2] * hw]);
+      Rp.push([pts[i][0] + s[0] * hw, pts[i][1] + s[1] * hw, pts[i][2] + s[2] * hw]);
+    }
+    for (var j = 0; j + 1 < pts.length; j++) {
+      put(Lp[j], ns[j]); put(Rp[j], ns[j]); put(Rp[j + 1], ns[j + 1]);
+      put(Lp[j], ns[j]); put(Rp[j + 1], ns[j + 1]); put(Lp[j + 1], ns[j + 1]);
+    }
+  }
+  // A strip laid along the body: each stop [z, y, side] (side 0: over the top of the shoulder there).
+  function bdPath(G, slot, T, stops, by, hw) {
+    var pts = [], ns = [];
+    stops.forEach(function (q) {
+      if (!q[2]) { var t = bdTopAt(T, q[1]); pts.push([t.x, q[1], t.z + by]); ns.push([0, 0, 1]); return; }
+      var s = bdSurf(T, q[0], q[1], q[2], by); pts.push(s.p); ns.push(s.n);
+    });
+    bdRibbon(G, slot, pts, ns, hw);
+  }
+  // The vest's silver: two bands round the body low down, and (near enough to see) two up over the
+  // shoulders, front to back -- as a site vest is made.
+  function bdHiVis(G, sp, T) {
+    [[1.07, 1.1], [1.155, 1.185]].forEach(function (b) {
+      bdLoft(G, "band", bdTuck([bdRingAt(T.chest, b[0], 0.011), bdRingAt(T.chest, b[1], 0.011)], true, true), 12, false, false);
+    });
+    if (G.lod) { return; }
+    var y = sp.sex === "f" ? 0.066 : 0.074;
+    [-1, 1].forEach(function (s) {
+      bdPath(G, "band", T, [[1.185, s * y, 1], [1.3, s * y, 1], [1.4, s * y, 1], [1.44, s * y, 1], [0, s * y, 0],
+                            [1.44, s * y, -1], [1.4, s * y, -1], [1.3, s * y, -1], [1.185, s * y, -1]], 0.013, 0.013);
+    });
+  }
+  // A full-body harness over the vest: straps up the front and over the shoulders, crossed behind
+  // through the D-ring between the shoulder blades, a chest strap, a loop round each thigh; the
+  // lanyard's pack under the D-ring and, not clipped on, the lanyard to the side of the belt.
+  function bdHarness(G, sp, T, J, O) {
+    var y = sp.sex === "f" ? 0.07 : 0.079, by = 0.019, hw = 0.012, far = G.lod > 1, dz = 1.33;
+    [-1, 1].forEach(function (s, i) {
+      var b2 = by + i * 0.002;
+      bdPath(G, "harness", T, far ? [[0.88, s * 0.09, 1], [1.12, s * y, 1], [1.42, s * y, 1], [0, s * y, 0], [1.42, s * y * 0.8, -1], [dz, s * 0.02, -1], [0.88, -s * 0.09, -1]]
+                                  : [[0.88, s * 0.09, 1], [0.98, s * 0.088, 1], [1.12, s * y, 1], [1.3, s * y, 1], [1.4, s * y, 1], [1.44, s * y, 1],
+                                     [0, s * y, 0], [1.44, s * y, -1], [1.4, s * y * 0.75, -1], [dz, s * 0.02, -1], [1.15, -s * 0.06, -1],
+                                     [0.98, -s * 0.088, -1], [0.88, -s * 0.09, -1]], b2, hw);
+    });
+    bdPath(G, "harness", T, far ? [[1.27, -y - 0.01, 1], [1.27, y + 0.01, 1]] : [[1.27, -y - 0.01, 1], [1.27, 0, 1], [1.27, y + 0.01, 1]], by + 0.004, hw * 0.8);
+    if (far) { return; }
+    J.legs.forEach(function (L) { bdCapsule(G, "harness", bdLerp(L.hip, L.knee, 0.26), bdLerp(L.hip, L.knee, 0.29), 0.081, 0.08, 8); });
+    var bk = bdSurf(T, dz, 0, -1, by + 0.006).p;
+    if (!G.lod) { bdBall(G, "ring", [bk[0] - 0.004, 0, dz + 0.01], 0.007, 0.024, 0.026, 2, 8); }
+    bdCapsule(G, "harness", [bk[0] - 0.02, 0, dz - 0.035], [bk[0] - 0.024, 0, dz - 0.12], 0.024, 0.022, 6);       // the pack
+    if (O.tied) { return; }
+    var side = bdSurf(T, 1.0, 0.13, 1, by).p;
+    bdCapsule(G, "lanyard", [bk[0] - 0.026, 0, dz - 0.13], bdSurf(T, 1.08, -0.11, -1, by + 0.012).p, 0.009, 0.009, 5);
+    bdCapsule(G, "lanyard", bdSurf(T, 1.08, -0.11, -1, by + 0.012).p, [side[0] - 0.09, -0.17, 1.0], 0.009, 0.009, 5);
+    bdBall(G, "ring", [side[0] - 0.09, -0.172, 1.0], 0.016, 0.006, 0.022, 2, 6);
+  }
+
   // ---- a body, in a pose ------------------------------------------------------------------------------
   // The joints as 40-tour.js had them: hips at 0.93, the step swinging the
   // legs; shoulders at 1.42, the arms swinging the other way -- or out in
@@ -280,6 +373,9 @@
       } else if (arms === "shoulder" && side > 0) {
         // (40-works.js: timber on the right shoulder, steadied by that hand)
         elbow = [0.12, side * 0.3, 1.3]; wrist = [0.06, side * 0.24, 1.56];
+      } else if (arms === "push") {
+        // (2026-10-05) low out in front: a wheelbarrow's grips (40-works-haul.js)
+        elbow = [0.1, side * 0.27, 1.07]; wrist = [0.36, side * 0.27, 0.8];
       } else if (arms === "up") {
         // both up over the head: a sheet held to the ceiling, a truss guided in
         elbow = [0.1, side * 0.25, 1.68]; wrist = [0.2, side * 0.2, 1.96];
@@ -332,6 +428,8 @@
     bdLoft(G, O.legs === "dress" ? "top" : O.legs === "skirt" ? "skirt" : "bottom", T.hips, 12, true, false);
     bdLoft(G, topSlot, T.chest, 12, false, true);
     if (O.vest) { bdLoft(G, "top", bdTuck(bdGrow(T.chest, 0.007, 1.0, 1.42), true, true), 12, false, false); }
+    if (O.vest && O.ppe && G.lod < 2) { bdHiVis(G, sp, T); }
+    if (O.harness) { bdHarness(G, sp, T, J, O); }
     if (O.jacket) {
       var low = O.jacket === "knee"
         ? [{ z: 0.5, w: 0.205, d: 0.165, x: 0.0 }, { z: 0.7, w: 0.193, d: 0.142, x: 0 }, { z: 0.9, w: 0.18, d: 0.124, x: 0 }, { z: 1.03, w: 0.172, d: 0.116, x: 0 }]
@@ -374,7 +472,8 @@
         bdCapsule(G, "skin", A.elbow, A.wrist, rF[0], rF[1], 6);
       }
       var d = bdUnit([A.wrist[0] - A.elbow[0], A.wrist[1] - A.elbow[1], A.wrist[2] - A.elbow[2]]);
-      bdCapsule(G, "skin", A.wrist, [A.wrist[0] + d[0] * 0.075, A.wrist[1] + d[1] * 0.075, A.wrist[2] + d[2] * 0.075], 0.031, 0.026, 6);
+      bdCapsule(G, O.ppe ? "gloves" : "skin", A.wrist, [A.wrist[0] + d[0] * 0.075, A.wrist[1] + d[1] * 0.075, A.wrist[2] + d[2] * 0.075], 0.031, 0.026, 6);
+      if (O.ppe && !G.lod) { bdCapsule(G, "gloves", [A.wrist[0] - d[0] * 0.035, A.wrist[1] - d[1] * 0.035, A.wrist[2] - d[2] * 0.035], A.wrist, 0.041, 0.038, 7); }   // the cuff
     });
     // the neck, and the head -- a child's bigger for its body
     bdCapsule(G, "skin", [0, 0, 1.43], [0.008, 0, 1.56], 0.05, 0.047, 7);
@@ -382,15 +481,15 @@
     if (hk !== 1) { G.xf = function (p) { return [N[0] + (p[0] - N[0]) * hk, N[1] + (p[1] - N[1]) * hk, N[2] + (p[2] - N[2]) * hk]; }; }
     var H = [0.012, 0, 1.635];
     bdBall(G, "skin", H, 0.098, 0.082, 0.112, 7, 12);
-    // (a face's own bits, from near enough to see them: further off, the eyes alone; far off, none)
-    if (!mid) { bdBall(G, "skin", [H[0] + 0.092, 0, H[2] - 0.012], 0.02, 0.013, 0.025, 3, 6); }                       // the nose
+    // (2026-10-05: "update this so the people do not have faces to them") No face: no eyes,
+    // nose, brows or mouth -- the head's own smooth shape, the ears at its sides, the hair
+    // (no moustache below: a beard round the jaw only)
     [-1, 1].forEach(function (s) {
-      if (!far) { bdBall(G, "eyes", [H[0] + 0.083, s * 0.031, H[2] + 0.017], 0.011, 0.013, 0.011, 3, 6); }
       if (mid) { return; }
-      bdBall(G, "hair", [H[0] + 0.088, s * 0.032, H[2] + 0.039], 0.008, 0.022, 0.006, 2, 6);           // a brow
       if (sp.hair !== "long" && sp.hair !== "bob") { bdBall(G, "skin", [H[0] - 0.004, s * 0.08, H[2]], 0.016, 0.012, 0.027, 3, 6); }
     });
-    if (!mid) { bdBall(G, "lips", [H[0] + 0.087, 0, H[2] - 0.05], 0.007, 0.021, 0.006, 2, 6); }
+    // safety glasses: a wrap-round lens over the eyes, on the bridge of the nose
+    if (O.ppe && !far) { bdBall(G, "glasses", H, 0.106, 0.09, 0.118, 2, 16, function (lat, lon) { return Math.abs(lon) < 1.3; }, -3, 12); }
     // the hair, to its hairline, and what is done with it
     if (sp.hair !== "bald") {
       var thick = sp.hair === "buzz" ? 0.004 : sp.hair === "long" || sp.hair === "bob" || sp.hair === "bun" || sp.hair === "pony" ? 0.013 : 0.009;
@@ -408,11 +507,14 @@
         var a = Math.abs(lon);
         return (lat < -14 && a < 1.72) || (lat < 14 && a > 1.28 && a < 1.72);
       });
-      if (!mid) { bdBall(G, "hair", [H[0] + 0.092, 0, H[2] - 0.035], 0.012, 0.03, 0.008, 2, 6); }        // the moustache
     }
     if (O.hat === "hard") {
       bdBall(G, "hat", [H[0] - 0.002, 0, H[2] + 0.028], 0.116, 0.104, 0.1, 4, 14, null, 0, 90);
       bdBall(G, "hat", [H[0] + 0.012, 0, H[2] + 0.03], 0.152, 0.136, 0.011, 2, 14);
+      if (O.ppe && arms === "hammer" && !far) {
+        // ear defenders on the hat, down over the ears
+        [-1, 1].forEach(function (s) { bdBall(G, "muffs", [H[0] - 0.006, s * 0.094, H[2] - 0.002], 0.036, 0.022, 0.042, 3, 8); });
+      }
     } else if (O.hat === "cap") {
       bdBall(G, "hat", [H[0] - 0.004, 0, H[2] + 0.03], 0.11, 0.095, 0.092, 4, 14, null, 0, 90);
       bdBall(G, "hat", [H[0] + 0.106, 0, H[2] + 0.034], 0.066, 0.08, 0.01, 3, 10);
@@ -452,8 +554,10 @@
     var hair = L && L.hairStyle ? L.hairStyle : sex === "f" ? "long" : "short";
     var O = BD_OUTFITS[outfit];
     if (L && L.hardhat) { O = Object.assign({}, O, { hat: "hard" }); }        // (on a building site, 40-works.js)
+    var ppe = !!(L && L.ppe), hn = ppe && !!L.harness, tied = hn && !!L.tied;
+    if (ppe) { O = Object.assign({}, O, { hat: "hard", ppe: true, sleeves: O.vest ? "long" : O.sleeves, harness: hn, tied: tied }); }
     return { sex: sex, outfit: outfit, O: O, hair: hair, beard: !!(L && L.beard), child: !!(L && L.child),
-             key: [sex, outfit, hair, L && L.beard ? 1 : 0, L && L.child ? 1 : 0, L && L.hardhat ? "hh" : ""].join(",") };
+             key: [sex, outfit, hair, L && L.beard ? 1 : 0, L && L.child ? 1 : 0, L && L.hardhat ? "hh" : "", ppe ? "ppe" + (hn ? (tied ? "ht" : "h") : "") : ""].join(",") };
   }
   function bdColor(L, slot) {
     switch (slot) {
@@ -468,7 +572,14 @@
       case "shoes": return L.shoes || "#2b2623";
       case "belt": return "#2b2623";
       case "tie": return L.tie || "#8c2f3a";
-      case "hat": return L.hardhat ? L.hardhatColor || "#f2c230" : L.hat || L.pants || "#2e3846";
+      case "hat": return L.hardhat || L.ppe ? L.hardhatColor || "#f2c230" : L.hat || L.pants || "#2e3846";
+      case "band": return "#e3e8ea";
+      case "gloves": return L.gloves || "#d4b04c";
+      case "harness": return L.harnessColor || "#b8322a";
+      case "ring": return "#aab2b9";
+      case "glasses": return "#5d8fbf";
+      case "muffs": return "#d23a2c";
+      case "lanyard": return "#e8b923";
       default: return "#f2f0ea";
     }
   }
@@ -579,6 +690,12 @@
       if (look && look.arms) { out.arms = look.arms; out.armK = look.armK || 0; }
       if (look && look.legs) { out.legs = look.legs; }
       if (look && look.hardhat) { out.hardhat = true; out.hardhatColor = look.hardhatColor; }
+      if (look && look.ppe) {
+        out.ppe = true; out.harness = !!look.harness; out.tied = !!look.tied;
+        out.top2 = look.top2 || pick2(BD_PPE_SHIRT); out.gloves = look.gloves || pick2(BD_GLOVES);
+        if (look.harnessColor) { out.harnessColor = look.harnessColor; }
+        if (look.hardhatColor) { out.hardhatColor = look.hardhatColor; }
+      }
       return out;
     };
   }
@@ -601,6 +718,11 @@
   if (typeof tourBody === "function") {
     tourBody = function (faces, x, y, z, head, phase, look, withHead, k, others) {
       bdDraw(faces, x, y, z, head, phase, look, withHead, k || 1, others);
+      // (2026-10-05: "you as a character have a full body so you appear properly in a mirror")
+      // Through your own eyes, your legs alone -- and, for the mirrors, all of you there (40-mirrors.js)
+      if (!others && typeof V3 !== "undefined" && V3) {
+        V3.meBody = withHead ? null : { x: x, y: y, z: z, head: head, phase: phase, look: look, k: k || 1 };
+      }
     };
   }
   if (typeof peopleBody === "function") {
