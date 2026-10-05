@@ -89,8 +89,8 @@
                  shoes: "leather", belt: "leather", white: "fabric", tie: "fabric", hat: "fabric" };
 
   // ---- shapes, in metres, the body's own way round (x forward, y to the side, z up) ---------------
-  function bdMaker() {
-    var G = { slots: {}, order: [], xf: null };
+  function bdMaker(lod) {
+    var G = { slots: {}, order: [], xf: null, lod: lod || 0 };
     G.slot = function (name) {
       var s = G.slots[name];
       if (!s) { s = G.slots[name] = { p: [], n: [] }; G.order.push(name); }
@@ -120,11 +120,13 @@
   // A capsule from A to B, its ends rounded: an arm, a leg, a hand, a shoe.
   function bdCapsule(G, slot, A, B, rA, rB, seg) {
     seg = seg || 6;
+    if (G.lod) { seg = G.lod > 1 ? Math.min(seg, 4) : Math.max(4, seg - 2); }
     var d = [B[0] - A[0], B[1] - A[1], B[2] - A[2]], L = Math.hypot(d[0], d[1], d[2]);
     if (L < 1e-6) { return; }
     var w = [d[0] / L, d[1] / L, d[2] / L];
     var u = bdUnit(Math.abs(w[2]) < 0.9 ? bdCross(w, [0, 0, 1]) : bdCross(w, [1, 0, 0])), v = bdCross(w, u);
-    var spec = [[A, rA, -1], [A, rA, -0.62], [A, rA, 0], [B, rB, 0], [B, rB, 0.62], [B, rB, 1]];
+    var spec = G.lod > 1 ? [[A, rA, -1], [A, rA, -0.35], [B, rB, 0.35], [B, rB, 1]]
+                         : [[A, rA, -1], [A, rA, -0.62], [A, rA, 0], [B, rB, 0], [B, rB, 0.62], [B, rB, 1]];
     bdRings(G, slot, spec.map(function (q) {
       var C = q[0], r = q[1], s = q[2], c = Math.sqrt(Math.max(0, 1 - s * s)), ring = [];
       for (var i = 0; i < seg; i++) {
@@ -139,6 +141,10 @@
   // (lat, lon in degrees and radians, lon 0 straight ahead): hair to a hairline.
   function bdBall(G, slot, C, rx, ry, rz, rows, cols, keep, lat0, lat1) {
     var R = [], la0 = lat0 === undefined ? -90 : lat0, la1 = lat1 === undefined ? 90 : lat1;
+    if (G.lod) {
+      var by = G.lod > 1 ? 0.5 : 0.68;
+      rows = Math.max(2, Math.round(rows * by)); cols = Math.max(G.lod > 1 ? 5 : 6, Math.round(cols * by));
+    }
     for (var i = 0; i <= rows; i++) {
       var la = (la0 + (la1 - la0) * i / rows) * Math.PI / 180, ring = [];
       for (var j = 0; j < cols; j++) {
@@ -166,6 +172,7 @@
   // (forward of the middle)}, bottom to top; closed at either end if asked.
   function bdLoft(G, slot, rings, seg, closeBottom, closeTop) {
     seg = seg || 12;
+    if (G.lod) { seg = G.lod > 1 ? 6 : Math.max(8, Math.round(seg * 0.7)); }
     function at(k, t) { var q = rings[k]; return [q.x + q.d * Math.cos(t), q.w * Math.sin(t), q.z]; }
     function reach(k, t) { var q = rings[k]; return q.x * Math.cos(t) + Math.hypot(q.d * Math.cos(t), q.w * Math.sin(t)); }
     var R = [];
@@ -299,8 +306,8 @@
     }
     return J;
   }
-  function bdMake(sp, phase, arms, armK, withHead, scale, legs) {
-    var G = bdMaker(), O = sp.O, T = BD_TORSO[sp.sex], J = bdJoints(sp, phase, arms, armK, legs);
+  function bdMake(sp, phase, arms, armK, withHead, scale, legs, lod) {
+    var G = bdMaker(lod), O = sp.O, T = BD_TORSO[sp.sex], J = bdJoints(sp, phase, arms, armK, legs);
     G.dz = -J.drop;
     var bare = O.legs === "skirt" || O.legs === "dress";
     var topSlot = O.vest ? "top2" : "top", legSlot = bare ? "skin" : "bottom";
@@ -337,9 +344,10 @@
                 { z: 0.76, w: 0.205, d: 0.148, x: 0 }, { z: 0.57, w: 0.222, d: 0.166, x: 0.004 }];
       bdLoft(G, O.legs === "dress" ? "top" : "skirt", bdTuck(sk, false, true), 14, false, false);
     }
-    if (O.belt && !O.jacket) { bdBall(G, "belt", [0, 0, 1.0], (sp.sex === "f" ? 0.106 : 0.11), (sp.sex === "f" ? 0.169 : 0.166), 0.019, 2, 14); }
+    var far = G.lod > 1, mid = G.lod > 0;
+    if (O.belt && !O.jacket && !far) { bdBall(G, "belt", [0, 0, 1.0], (sp.sex === "f" ? 0.106 : 0.11), (sp.sex === "f" ? 0.169 : 0.166), 0.019, 2, 14); }
     if (O.hood) { bdBall(G, topSlot, [-0.083, 0, 1.47], 0.055, 0.11, 0.052, 4, 10); }
-    if (O.collar) { bdBall(G, "top", [0.003, 0, 1.458], 0.074, 0.08, 0.027, 3, 12); }
+    if (O.collar && !far) { bdBall(G, "top", [0.003, 0, 1.458], 0.074, 0.08, 0.027, 3, 12); }
     if (O.shirtFront) {
       // the shirt in the V of the jacket, and its collar
       var vTop = sp.sex === "f" ? 1.432 : 1.44, vLow = sp.sex === "f" ? 1.31 : 1.29, vW = sp.sex === "f" ? 0.042 : 0.048;
@@ -347,7 +355,7 @@
       bdFlat(G, "top2", [[fT, -vW, vTop], [fL, 0, vLow], [fT, vW, vTop]]);
       bdBall(G, "top2", [0.003, 0, 1.458], 0.07, 0.076, 0.024, 3, 12);
     }
-    if (O.tie) {
+    if (O.tie && !far) {
       var tz0 = 1.415, tz1 = 1.18;
       bdCapsule(G, "tie", [bdFront(T.chest, tz0) + 0.01, 0, tz0], [bdFront(T.chest, tz1) + 0.012, 0, tz1], 0.013, 0.018, 5);
     }
@@ -374,13 +382,15 @@
     if (hk !== 1) { G.xf = function (p) { return [N[0] + (p[0] - N[0]) * hk, N[1] + (p[1] - N[1]) * hk, N[2] + (p[2] - N[2]) * hk]; }; }
     var H = [0.012, 0, 1.635];
     bdBall(G, "skin", H, 0.098, 0.082, 0.112, 7, 12);
-    bdBall(G, "skin", [H[0] + 0.092, 0, H[2] - 0.012], 0.02, 0.013, 0.025, 3, 6);                       // the nose
+    // (a face's own bits, from near enough to see them: further off, the eyes alone; far off, none)
+    if (!mid) { bdBall(G, "skin", [H[0] + 0.092, 0, H[2] - 0.012], 0.02, 0.013, 0.025, 3, 6); }                       // the nose
     [-1, 1].forEach(function (s) {
-      bdBall(G, "eyes", [H[0] + 0.083, s * 0.031, H[2] + 0.017], 0.011, 0.013, 0.011, 3, 6);
+      if (!far) { bdBall(G, "eyes", [H[0] + 0.083, s * 0.031, H[2] + 0.017], 0.011, 0.013, 0.011, 3, 6); }
+      if (mid) { return; }
       bdBall(G, "hair", [H[0] + 0.088, s * 0.032, H[2] + 0.039], 0.008, 0.022, 0.006, 2, 6);           // a brow
       if (sp.hair !== "long" && sp.hair !== "bob") { bdBall(G, "skin", [H[0] - 0.004, s * 0.08, H[2]], 0.016, 0.012, 0.027, 3, 6); }
     });
-    bdBall(G, "lips", [H[0] + 0.087, 0, H[2] - 0.05], 0.007, 0.021, 0.006, 2, 6);
+    if (!mid) { bdBall(G, "lips", [H[0] + 0.087, 0, H[2] - 0.05], 0.007, 0.021, 0.006, 2, 6); }
     // the hair, to its hairline, and what is done with it
     if (sp.hair !== "bald") {
       var thick = sp.hair === "buzz" ? 0.004 : sp.hair === "long" || sp.hair === "bob" || sp.hair === "bun" || sp.hair === "pony" ? 0.013 : 0.009;
@@ -398,7 +408,7 @@
         var a = Math.abs(lon);
         return (lat < -14 && a < 1.72) || (lat < 14 && a > 1.28 && a < 1.72);
       });
-      bdBall(G, "hair", [H[0] + 0.092, 0, H[2] - 0.035], 0.012, 0.03, 0.008, 2, 6);                     // the moustache
+      if (!mid) { bdBall(G, "hair", [H[0] + 0.092, 0, H[2] - 0.035], 0.012, 0.03, 0.008, 2, 6); }        // the moustache
     }
     if (O.hat === "hard") {
       bdBall(G, "hat", [H[0] - 0.002, 0, H[2] + 0.028], 0.116, 0.104, 0.1, 4, 14, null, 0, 90);
@@ -468,14 +478,32 @@
   // spot passed.  (Its first point where its feet are, the same for every
   // slot: what is laid on the land or bent along the street moves the body
   // as one -- 40-land.js, 40-street.js.)
+  // (2026-10-04, "a stable 60fps"): a body is some five thousand corners, and one
+  // on the move is put where it is afresh each picture -- forty at work on a
+  // site were most of what the picture sent each time.  As fine as it shows:
+  // full near to, the face's small bits and some roundness gone a little
+  // way off, plainer still far off -- further in where the device is slow (40-perf.js).
+  function bdLodFor(x, y, z, P, others, withHead) {
+    if (!others || !withHead) { return 0; }            // (your own body, through your own eyes)
+    var G = typeof V3 !== "undefined" && V3 ? V3.gl : null, m = G && G.mvp, cv = G && G.canvas;
+    if (!m || !cv) { return 0; }
+    var h = cv.clientHeight || V3.h || 600, top = z + 1.75 * P;
+    var w0 = Math.max(Math.abs(m[3] * x + m[7] * y + m[11] * z + m[15]), 1e-3), w1 = Math.max(Math.abs(m[3] * x + m[7] * y + m[11] * top + m[15]), 1e-3);
+    var y0 = (m[1] * x + m[5] * y + m[9] * z + m[13]) / w0, y1 = (m[1] * x + m[5] * y + m[9] * top + m[13]) / w1;
+    var x0 = (m[0] * x + m[4] * y + m[8] * z + m[12]) / w0, x1 = (m[0] * x + m[4] * y + m[8] * top + m[12]) / w1;
+    var px = Math.hypot(x1 - x0, y1 - y0) * h / 2;
+    var q = typeof v3qBodyScale === "function" ? v3qBodyScale() : 1;
+    return px >= 150 * q ? 0 : px >= 48 * q ? 1 : 2;
+  }
   function bdDraw(faces, x, y, z, head, phase, look, withHead, k, others, fade) {
     var L = look || {}, sp = bdSpec(L), P = FLOOR_PX * (k || 1);
+    var lod = bdLodFor(x, y, z, P, others, withHead);
     var b = phase ? (((Math.round(phase / (Math.PI * 2) * BD_STEPS)) % BD_STEPS) + BD_STEPS) % BD_STEPS : 0;
     var arms = withHead && BD_ARMS[L.arms] ? L.arms : "", legs = L.legs === "kneel" ? "kneel" : "";
     var aq = arms === "hammer" ? Math.round(Math.max(0, Math.min(1, L.armK || 0)) * BD_ARMQ) : 0, kq = Math.round(P * 10) / 10;
     if (legs) { b = 0; }
-    var key = [sp.key, withHead ? 1 : 0, b, arms, aq, kq, legs].join("|");
-    var made = bdKept(key, function () { return bdMake(sp, b / BD_STEPS * Math.PI * 2, arms, aq / BD_ARMQ, withHead, kq, legs); });
+    var key = [sp.key, withHead ? 1 : 0, b, arms, aq, kq, legs, lod].join("|");
+    var made = bdKept(key, function () { return bdMake(sp, b / BD_STEPS * Math.PI * 2, arms, aq / BD_ARMQ, withHead, kq, legs, lod); });
     var moving = !!phase || arms === "hammer", c = Math.cos(head), s = Math.sin(head), fa = fade !== undefined && fade < 0.999 ? Math.max(0, fade) : -1;
     made.order.forEach(function (slot) {
       var g = made.slots[slot], color = bdColor(L, slot);
@@ -495,6 +523,7 @@
         p = g.views[vk] || (g.views[vk] = new Float32Array(g.p.buffer, g.p.byteOffset, g.p.length));
       }
       var f = { pts: pts, n: [0, 0, 1], how: how, mesh: { p: p, n: g.n, uv: BD_ZERO, a: null, base: [x, y, z], xf: [x, y, c, s, z] } };
+      if (moving) { f.moves = true; }            // (walking, at work: drawn apart from what stands still, gl3Faces)
       if (!others) { f.me = true; }
       faces.push(f);
     });

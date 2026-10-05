@@ -265,7 +265,12 @@
       var model = v3BuildBuilt.apply(this, arguments);
       var t = bpSiteNow();
       if (t === null || !model || !model.faces) { return model; }
-      try { return bpBuilding(model, Math.max(0, t)); } catch (e) { return model; }
+      var got;
+      try { got = bpBuilding(model, Math.max(0, t)); } catch (e) { return model; }
+      // (the building as it will stand, with it: what is round it -- the trees, the ground --
+      // measured by that, not moved about, and made again, as each floor goes in: 38-view3d-gl.js)
+      if (got && got !== model && got.faces) { got.whole = model.whole || model; }
+      return got;
     };
   }
   function bpEase(t) { return t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2; }

@@ -270,8 +270,11 @@
       var model = v3BuildAccess.apply(this, arguments);
       try {
         if (model && model.faces && V3 && V3.scene !== "space" && !(V3.flat && V3.flatDone)) {
-          var add = acFaces().concat(acRails());
-          for (var i = 0; i < add.length; i++) { model.faces.push(add[i]); }
+          // (kept while the drawing and the house's settings are as they were: 38-view3d.js v3Added)
+          v3Added("access", model.faces, "", function () {
+            var add = acFaces().concat(acRails());
+            for (var i = 0; i < add.length; i++) { model.faces.push(add[i]); }
+          });
         }
       } catch (e) { /* the lot as it is */ }
       return model;

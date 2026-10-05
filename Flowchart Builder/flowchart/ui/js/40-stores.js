@@ -35,6 +35,7 @@
   if (typeof STARTER_CEILING === "object") { STARTER_CEILING.gardenctr = "i_pendant"; }
   if (typeof STARTER_VENTED === "object") { STARTER_VENTED.gardenctr = 1; }
   if (typeof TYPE_USE === "object") { TYPE_USE.gardenctr = 1; }
+  if (typeof ROOM_USE === "object") { ROOM_USE.gardenctr = "work"; }
   if (typeof FRONT_GLASS === "object" && FRONT_GLASS.sales) { FRONT_GLASS.gardenctr = FRONT_GLASS.sales; }
 
   // ---- the sizes asked for, and the plan --------------------------------------------------------------

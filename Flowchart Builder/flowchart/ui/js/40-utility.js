@@ -326,7 +326,7 @@
       var model = v3BuildUtility.apply(this, arguments);
       try {
         var whole = V3 && (V3.mode === "walk" ? !V3.inRoom : (V3.upTo === null || V3.upTo === undefined)) && !(V3.flat && V3.flatDone) && !V3.low;
-        if (model && model.faces && whole) { powerHouse(model); ventHouse(model); }
+        if (model && model.faces && whole) { v3Added("power", model.faces, "", function () { powerHouse(model); ventHouse(model); }); }
       } catch (e) { /* the house without them */ }
       return model;
     };

@@ -1311,6 +1311,15 @@
   // nearest to `near` (or the middle of the room) -- alongWall
   // (38-advice.js), looked along in finer steps, which a crowded small room
   // needs: in tens there was no room for a washer between two doors.
+  // A door's box is its swing, on one side of its wall; this is the same on the other side -- the
+  // floor a body steps onto coming through it.  Nothing stands there either: a furnace stood
+  // against the stockroom's side of the office door, and nobody could get into the office
+  // (2026-10-04).  (Not a garage door's: its other side is the drive.)
+  function starterDoorFlip(d) {
+    if (!d || !WALK_DOORS[d.kind] || d.kind === "i_garagedoor") { return null; }
+    var t = (d.turn || 0) * Math.PI / 180, sx = Math.sin(t), sy = -Math.cos(t);
+    return { kind: d.kind, x: d.x - sx * d.h, y: d.y - sy * d.h, w: d.w, h: d.h, turn: ((d.turn || 0) + 180) % 360 };
+  }
   function starterAlong(r, kind, near, extra) {     // (extra: more to keep clear of -- the doors as 3D joins them, 39-xray.js)
     // (a bed, a sofa, a desk the size the room suits -- furnFit, 40-sized.js;
     // false: the room has enough in it already)
@@ -1334,6 +1343,7 @@
       return n.kind !== "i_window" && !ON_THE_WALL[n.kind] && !FROM_CEILING[n.kind];
     });
     if (extra && extra.length) { others = others.concat(extra); }
+    if (!hanging) { others = others.concat(others.map(starterDoorFlip).filter(Boolean)); }
     // What hangs on a wall keeps off the whole width of a door or a window
     // in that wall, and its frame: a door's box is mostly its swing, on one
     // side, and a breaker panel hung on the other side of the wall, beside

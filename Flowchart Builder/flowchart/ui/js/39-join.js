@@ -563,9 +563,16 @@
     if (!J.any || t <= 0.001) { return null; }
     var key = tieSeen.key + "|" + Math.round(t * 1000);
     if (tieMade.H === hand && tieMade.key === key) {
-      tieMade.pairs.forEach(tieFresh);
-      // and what is the drawing's as a whole (the house's settings, 39-house.js)
-      for (var top in hand) { if (top !== "nodes" && top !== "links") { tieMade.hand[top] = hand[top]; } }
+      // (once a picture -- asked dozens of times making one, 2026-10-04: "a stable 60fps")
+      // (and then only after an edit -- a step kept to undo -- or a fifth of a second on)
+      var stamp = typeof V3 !== "undefined" && V3 && V3.last ? V3.last : -1;
+      var mark = typeof v3qEditMark === "function" ? v3qEditMark() : stamp;
+      if (stamp < 0 || (tieMade.freshAt !== stamp && (tieMade.mark !== mark || stamp - (tieMade.freshT || 0) > 200))) {
+        tieMade.freshAt = stamp; tieMade.mark = mark; tieMade.freshT = stamp;
+        tieMade.pairs.forEach(tieFresh);
+        // and what is the drawing's as a whole (the house's settings, 39-house.js)
+        for (var top in hand) { if (top !== "nodes" && top !== "links") { tieMade.hand[top] = hand[top]; } }
+      }
       return tieMade.hand;
     }
     var H = hand, k = Math.min(1, t), pairs = [];

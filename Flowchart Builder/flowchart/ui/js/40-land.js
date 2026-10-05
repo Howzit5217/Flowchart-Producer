@@ -465,23 +465,44 @@
     T.lifts.set(key, out);
     return out;
   }
+  var terrLiftKept = typeof WeakMap === "function" ? new WeakMap() : null;
+  function terrLiftPts(pts, T, key, lift) {
+    if (!terrLiftKept) { return pts.map(lift); }
+    var k = terrLiftKept.get(pts);
+    if (k && k.T === T && k.key === key) { return k.out; }
+    var out = pts.map(lift);
+    terrLiftKept.set(pts, { T: T, key: key, out: out });
+    return out;
+  }
   function terrDress(model) {
     var T = terrBegin();
     if (!T) { return; }
     var P = T.P;
-    model.faces = model.faces.filter(function (f) { return !f.ground; });       // the lawn is the land's own now
+    var anyGround = false;
+    for (var gi = 0; gi < model.faces.length; gi++) { if (model.faces[gi].ground) { anyGround = true; break; } }
+    if (anyGround) { model.faces = model.faces.filter(function (f) { return !f.ground; }); }       // the lawn is the land's own now
+    // (2026-10-04, "run smoothly ... at a stable 60fps": each piece's lift worked out once a
+    // picture, not once a face; and a face's lifted corners kept from the last picture while
+    // its own corners and the land are as they were -- the picture then keeps what it worked
+    // out for it (gl3Faces), instead of every face out of doors made afresh each picture)
+    var byNode = new Map();
     model.faces.forEach(function (f) {
       var n = f.node;
       if (!n || f.found) { return; }
-      var L = terrNodeLift(T, n);
-      if (!L) { return; }
+      // (its corners as they were last time, on the same land: as they were lifted then -- or not at all)
+      var k0 = terrLiftKept && !f.mesh ? terrLiftKept.get(f.pts) : null;
+      if (k0 && k0.T === T) { f.pts = k0.out; return; }
+      var L = byNode.get(n);
+      if (L === undefined) { L = terrNodeLift(T, n); byNode.set(n, L); }
+      if (!L || (!L.drape && !L.z)) { if (terrLiftKept && !f.mesh) { terrLiftKept.set(f.pts, { T: T, key: 0, out: f.pts }); } return; }
       if (L.drape) {
         if (f.mesh) { f.terrDrape = true; return; }                          // laid over it as it is drawn (gl3Mesh)
-        f.pts = f.pts.map(function (p) { return [p[0], p[1], p[2] + terrAt(p[0], p[1]) + 0.6]; });
+        f.pts = terrLiftPts(f.pts, T, "d", function (p) { return [p[0], p[1], p[2] + terrAt(p[0], p[1]) + 0.6]; });
         return;
       }
       if (!L.z) { return; }
-      f.pts = f.pts.map(function (p) { return [p[0], p[1], p[2] + L.z]; });
+      var z = L.z;
+      f.pts = terrLiftPts(f.pts, T, z, function (p) { return [p[0], p[1], p[2] + z]; });
     });
     // those standing out of doors, and the names of what is out there
     model.stand.forEach(function (s) {
@@ -525,8 +546,8 @@
     gl3Mesh = function (B, f) {
       var out = gl3MeshLevel.apply(this, arguments);
       if (!f.terrDrape || !TERR_ON || !TERR) { return out; }
-      var how = f.how, batch = how.glass ? B.get("glass", { blend: true, late: true })
-                : how.shade ? B.get("shade", { blend: true, late: true, noDepthWrite: true }) : B.get("models", {});
+      var how = f.how, batch = B.meshInto || (how.glass ? B.get("glass", { blend: true, late: true })
+                : how.shade ? B.get("shade", { blend: true, late: true, noDepthWrite: true }) : B.get("models", {}));
       var list = batch.chunks, data = list && list[list.length - 1];
       if (!data) { return out; }
       var got = terrDraped.get(data);

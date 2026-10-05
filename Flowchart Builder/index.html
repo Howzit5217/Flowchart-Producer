@@ -60206,17 +60206,28 @@ window.addEventListener("load", function () {
     return best || "program";
   }
 
-  var boardSeen = { key: null, name: "program" };
+  var boardSeen = { key: null, name: "program" }, boardKnown = new Map();
+  var boardQuick = typeof WeakMap === "function" ? new WeakMap() : null;
   function boardName() {
     if (!byHand || !hand.nodes.length) { return "program"; }
     var made = typeof makingNow === "function" ? makingNow() : "";
+    var now = typeof V3 !== "undefined" && V3 && V3.last ? V3.last : -1;
+    var Q = boardQuick && now >= 0 ? boardQuick.get(hand.nodes) : null;
+    if (Q && Q.at === now && Q.n === hand.nodes.length && Q.links === hand.links.length && Q.made === made && Q.choice === boardChoice) { return Q.name; }
     var key = made + "|" + boardChoice + "|" + hand.links.length + "|" +
               hand.nodes.map(function (n) { return n.kind; }).join(",");
     if (boardSeen.key !== key) {
-      var name = made === "flowchart" ? "program" : boardChoice !== "auto" ? boardChoice : boardGuess();
-      if (made === "design" && (name === "program" || !SCENES[name])) { name = "flow"; }
-      boardSeen = { key: key, name: SCENES[name] || name === "program" ? name : "program" };
+      var known = boardKnown.get(key);
+      if (known === undefined) {
+        var name = made === "flowchart" ? "program" : boardChoice !== "auto" ? boardChoice : boardGuess();
+        if (made === "design" && (name === "program" || !SCENES[name])) { name = "flow"; }
+        known = SCENES[name] || name === "program" ? name : "program";
+        if (boardKnown.size > 8) { boardKnown.clear(); }
+        boardKnown.set(key, known);
+      }
+      boardSeen = { key: key, name: known };
     }
+    if (boardQuick && now >= 0) { boardQuick.set(hand.nodes, { at: now, n: hand.nodes.length, links: hand.links.length, made: made, choice: boardChoice, name: boardSeen.name }); }
     return boardSeen.name;
   }
 
@@ -61512,6 +61523,18 @@ window.addEventListener("load", function () {
     plan.links.forEach(function (pair) {
       pair.forEach(function (end) { var r = roomAt(plan, end.x, end.y); if (r) { joined[r.id] = true; } });
     });
+    for (var pass = 0; pass < 4; pass++) {
+      var more = false;
+      plan.rooms.forEach(function (room) {
+        if (joined[room.id]) { return; }
+        if (room.courtOver) { joined[room.id] = true; return; }
+        var main = typeof oddMainOf === "function" ? oddMainOf(room) : room;
+        var group = main && main !== room ? [main].concat(oddPartsOf(main)) : typeof oddPartsOf === "function" ? oddPartsOf(room) : [];
+        var open = typeof wallOpenTo === "function" && wallAnyOpen() ? wallOpenTo(room) : [];
+        if (group.concat(open).some(function (o) { return o && o !== room && joined[o.id]; })) { joined[room.id] = true; more = true; }
+      });
+      if (!more) { break; }
+    }
     plan.rooms.forEach(function (room) {
       if (!joined[room.id] && plan.rooms.length + plan.doors.length > 1) {
         found.push({ text: say("wk_no_door", { room: roomName(plan, room) }), id: room.id });
@@ -62535,6 +62558,19 @@ window.addEventListener("load", function () {
     list.unshift(made);
     if (list.length > 3) { list.length = 3; }
   }
+  var V3_ADDED = {};
+  function v3Added(name, faces, extra, add) {
+    var kept = V3.kept && V3.kept[0], key = kept ? kept.key : null, house = typeof hand !== "undefined" && hand ? hand.house : null;
+    var land = typeof TERR !== "undefined" && TERR && !TERR.off ? TERR.key || "" : "", K = V3_ADDED[name], i;
+    if (key !== null && K && K.key === key && K.house === house && K.land === land && K.extra === extra) {
+      for (i = 0; i < K.faces.length; i++) { faces.push(v3FaceCopy(K.faces[i])); }
+      return;
+    }
+    var f0 = faces.length;
+    add();
+    V3_ADDED[name] = { key: key, house: house, land: land, extra: extra, faces: faces.slice(f0) };
+    for (i = f0; i < faces.length; i++) { faces[i] = v3FaceCopy(faces[i]); }
+  }
   function v3FaceCopy(f) {
     var c = Object.assign({}, f);
     if (f.mesh) { c.mesh = Object.assign({}, f.mesh); }
@@ -62969,11 +63005,13 @@ window.addEventListener("load", function () {
       }
     }
     if (roofed && roofV > 0.01) {
-      roofPlan(floors, show, wallTop).forEach(function (R) {
-        var look = simLook(R.room);
-        roofFaces(faces, R, (1 - roofV) * 2.5 * FLOOR_PX,
-                  { roof: true, color: v3Mix(look.line, simSheet(), 0.55), edge: look.line, room: R.room,
-                    alpha: roofV, late: roofV < 0.999 || !!V3.tw.roofV });
+      v3Added("roof", faces, roofV + "|" + (V3.tw.roofV ? 1 : 0), function () {
+        roofPlan(floors, show, wallTop).forEach(function (R) {
+          var look = simLook(R.room);
+          roofFaces(faces, R, (1 - roofV) * 2.5 * FLOOR_PX,
+                    { roof: true, color: v3Mix(look.line, simSheet(), 0.55), edge: look.line, room: R.room,
+                      alpha: roofV, late: roofV < 0.999 || !!V3.tw.roofV });
+        });
       });
     }
     function* v3Names() {
@@ -63275,8 +63313,13 @@ window.addEventListener("load", function () {
       eye = [V3.eye.x, V3.eye.y, V3.eye.z];
       V3.inRoom = roomAt(plan, V3.me.x, V3.me.y) || null;   // under a ceiling, or out under the sky
     }
-    var model = v3Build();
-    if (inside) { V3.solids = v3Solids(model); }   // what walking bumps into (v3Bumps)
+    var model = typeof v3BuildPaced === "function" ? v3BuildPaced() : v3Build();
+    if (inside && V3.solidsFor !== model) {
+      var kept0 = V3.kept && V3.kept[0], building = typeof bpSite !== "undefined" && bpSite;
+      var sk = kept0 && !building ? kept0.key + "|" + JSON.stringify(V3.doorAt || {}) + "|" + (typeof TERR !== "undefined" && TERR ? TERR.key || "" : "") + "|" + model.faces.length : null;
+      if (sk === null || V3.solidsKey !== sk) { V3.solids = v3Solids(model); V3.solidsKey = sk; }
+      V3.solidsFor = model;
+    }   // what walking bumps into (v3Bumps)
     if (!inside && (V3.fitNext || V3.cx === undefined)) { V3.fitNext = false; v3Fit(model); }
     var toward = inside ? null : v3Toward();
     if (!sky && typeof v3GlDraw === "function" && v3GlDraw(model, inside)) {
@@ -67924,13 +67967,19 @@ window.addEventListener("load", function () {
                   concrete: 10, plain: 0,
                   velvet: 34, brass: 35, lacquer: 36 };
   var gl3MeshKept = new WeakMap();
+  var gl3Round = 0, GL3_STILL = 20;
+  function gl3StillRun(k) {
+    if (k.seen === gl3Round) { return k.run || 0; }
+    k.run = k.seen === gl3Round - 1 ? (k.run || 0) + 1 : 0;
+    k.seen = gl3Round;
+    return k.run;
+  }
   function gl3Mesh(B, f) {
     var how = f.how, m = f.mesh, xf = m.xf || [0, 0, 1, 0, 0];
     var ox = f.pts[0][0] - m.base[0], oy = f.pts[0][1] - m.base[1], oz = f.pts[0][2] - m.base[2];
     var fadeA = !how.glass && !how.shade && how.alpha !== undefined && how.alpha < 0.999 ? Math.max(0, how.alpha) : -1;
-    var batch = how.glass ? B.get("glass", { blend: true, late: true })
-              : how.shade ? B.get("shade", { blend: true, late: true, noDepthWrite: true })
-              : fadeA >= 0 ? B.get("fading", { blend: true, late: true }) : B.get("models", {});
+    var bName = how.glass ? "glass" : how.shade ? "shade" : fadeA >= 0 ? "fading" : "models";
+    var bHow = how.glass || fadeA >= 0 ? { blend: true, late: true } : how.shade ? { blend: true, late: true, noDepthWrite: true } : {};
     var lightOff = how.mat === "glow" && f.node && typeof useLightOff === "function" && useLightOff(f.node);
     var screenOn = how.mat === "screen" && f.node && typeof useOn === "function" && useOn(f.node);
     var always = typeof flat3dNow === "function" && flat3dNow();
@@ -67939,6 +67988,11 @@ window.addEventListener("load", function () {
     if (!byWhere) { byWhere = new Map(); gl3MeshKept.set(m.p, byWhere); }
     var kept = byWhere.get(key);
     if (kept) { m.made = kept; }
+    B.volNow = !kept;
+    B.stillNow = !!kept && gl3StillRun(kept) >= GL3_STILL;
+
+
+    var batch = B.get(bName, bHow);
     if (!m.made || m.made.key !== key) {
       var col = gl3Rgb(how.color), pat = how.glass ? 0 : (GL3_MAT[how.mat] || 0), alpha = how.glass ? 0.3 : fadeA >= 0 ? fadeA : 1;
       if (lightOff) { pat = 0; col = gl3Mix(col, [0.42, 0.42, 0.4], 0.55); }
@@ -67952,7 +68006,7 @@ window.addEventListener("load", function () {
         out[o + 6] = col[0]; out[o + 7] = col[1]; out[o + 8] = col[2]; out[o + 9] = A ? A[i] : alpha;
         out[o + 10] = U[i * 2]; out[o + 11] = U[i * 2 + 1]; out[o + 12] = always ? pat + 200 : pat;
       }
-      m.made = { key: key, data: out };
+      m.made = { key: key, data: out, seen: gl3Round, run: 0 };
       if (byWhere.size > 6000) {
         var drop = 0;
         byWhere.forEach(function (v, k) { if (drop++ < 600) { byWhere.delete(k); } });
@@ -67960,6 +68014,54 @@ window.addEventListener("load", function () {
       byWhere.set(key, m.made);
     }
     (batch.chunks || (batch.chunks = [])).push(m.made.data);
+    B.meshInto = batch;                  // (the batch it went in: 40-land.js lays it on the land there)
+  }
+  function gl3Snap(B, faces, key) {
+    return { key: key, faces: faces, list: B.all.map(function (b) {
+      return { key: b.key, how: b.how, base: b.base, b: b, n: b.chunks ? b.chunks.length : 0, vlen: b.v.length };
+    }) };
+  }
+  function gl3FromSnap(B, snap) {
+    for (var i = 0; i < snap.list.length; i++) {
+      var e = snap.list[i], b = B.get(e.key, e.how);
+      b.base = e.base;
+      if (e.vlen) { b.v = e.b.v.slice(0, e.vlen); }
+      if (e.n) { b.chunks = e.b.chunks.slice(0, e.n); }
+    }
+  }
+  function gl3SnapKey(ink, sheet, dress) {
+    var snowy = typeof houseSnow === "function" ? houseSnow() * dress : 0, wet = typeof houseWet === "function" ? houseWet() * dress : 0;
+    var lawn = typeof worldLawn === "function" ? worldLawn() : null, U = typeof V3 !== "undefined" && V3 ? V3.use : null;
+    return [ink, sheet, dress, snowy, wet, lawn ? lawn.pat + "," + lawn.color : "", typeof flat3dNow === "function" && flat3dNow() ? 1 : 0,
+            U ? JSON.stringify([U.on, U.dark, U.all]) : ""].join("|");
+  }
+  function gl3SameFaces(a, b) {
+    if (a === b) { return true; }
+    if (!a || !b || a.length !== b.length) { return false; }
+    for (var i = 0; i < b.length; i++) {
+      var x = a[i], y = b[i];
+      if (x === y) { continue; }
+      if (y.src === undefined && !y.mesh) {
+        if (x.src !== undefined || x.mesh) { return false; }
+        var kx = x.ck0 || (x.ck0 = gl3WhatKey(x)), ky = y.ck0 || (y.ck0 = gl3WhatKey(y));
+        if (!kx || !ky || kx.h !== ky.h || kx.sig !== ky.sig || !gl3PtsSame(x.pts, y.pts)) { return false; }
+        continue;
+      }
+      if (y.mesh && x.mesh !== y.mesh) {
+        var mx = x.mesh, my = y.mesh;
+        if (!mx || mx.p !== my.p || x.node !== y.node || !gl3NumsSame(mx.xf, my.xf) || !gl3NumsSame(mx.base, my.base) || !gl3NumsSame(x.pts[0], y.pts[0])) { return false; }
+        if (x.how !== y.how && gl3HowKey(x.how || {}) !== gl3HowKey(y.how || {})) { return false; }
+        continue;
+      }
+      if (x.src !== y.src || x.pts !== y.pts || x.how !== y.how) { return false; }
+    }
+    return true;
+  }
+  function gl3NumsSame(a, b) {
+    if (a === b) { return true; }
+    if (!a || !b || a.length !== b.length) { return false; }
+    for (var i = 0; i < a.length; i++) { if (a[i] !== b[i]) { return false; } }
+    return true;
   }
   function gl3Join(x) {
     if (!x.chunks || !x.chunks.length) { return new Float32Array(x.v); }
@@ -67973,62 +68075,115 @@ window.addEventListener("load", function () {
 
   function gl3Faces(G, model, B, ink, sheet, dress) {
     var inkC = gl3Rgb(ink), sheetC = gl3Rgb(sheet), floorPats = new Map();
-    var floors = typeof floorsOf === "function" ? floorsOf() : [];
-    var rooms = hand.nodes.filter(function (r) { return r.kind === "i_room"; }).map(function (r) {
-      var fl = floors.length ? floorAt(floors, r.x, r.y) : null;
-      return { n: r, dx: fl ? fl.dx : 0, dy: fl ? fl.dy : 0 };
-    });
-    if (typeof listNear === "function") {
-      rooms.near = listNear(rooms.map(function (r) {
-        return { x: r.n.x + r.dx, y: r.n.y + r.dy, w: r.n.w, h: r.n.h, turn: r.n.turn, r: r };
-      }));
+    var rooms = null;
+    function roomsNow() {
+      if (rooms) { return rooms; }
+      var floors = typeof floorsOf === "function" ? floorsOf() : [];
+      rooms = hand.nodes.filter(function (r) { return r.kind === "i_room"; }).map(function (r) {
+        var fl = floors.length ? floorAt(floors, r.x, r.y) : null;
+        return { n: r, dx: fl ? fl.dx : 0, dy: fl ? fl.dy : 0 };
+      });
+      if (typeof listNear === "function") {
+        rooms.near = listNear(rooms.map(function (r) {
+          return { x: r.n.x + r.dx, y: r.n.y + r.dy, w: r.n.w, h: r.n.h, turn: r.n.turn, r: r };
+        }));
+      }
+      return rooms;
     }
     var made = typeof houseMat === "function";
     var snowy = typeof houseSnow === "function" ? houseSnow() * dress : 0, wet = typeof houseWet === "function" ? houseWet() * dress : 0;
     var SNOW = [0.94, 0.95, 0.98];
     var lawnNow = typeof worldLawn === "function" ? worldLawn() : null;
     var same = [inkC.join(), sheetC.join(), dress, snowy, wet, lawnNow ? lawnNow.pat + "," + lawnNow.color : ""].join("|");
-    var getB = B.get, rec = null, keepIt = true, apart = !!model.apart, sfx = "";
+    var getB = B.get, rec = null, keepIt = true, apart = !!model.apart, sfx = "", bucket = "";
     B.get = function (key, how) {
-      var b = getB(sfx && key.slice(-2) !== "~m" ? key + sfx : key, how);
+      var vol = B.volNow, still = B.stillNow; B.volNow = undefined; B.stillNow = undefined;
+      if (vol) { FN.vol = (FN.vol || 0) + 1; }
+      var suf = sfx === "~r" ? "~r" : ((sfx === "~m" && !still) || vol) ? "~m" : bucket;
+      if (suf.charCodeAt(0) === 35 && !GL3_BUCKETED[key]) { suf = ""; }        // ("#": in buckets, or not)
+      var b = getB(key.slice(-2) === "~m" ? key : key + suf, how);
+      b.base = key.slice(-2) === "~m" ? key.slice(0, -2) : key;
       if (rec && rec.indexOf(b) < 0) { rec.push(b); b.mark = b.v.length; }
       return b;
     };
-    model.faces.forEach(function (f) {
+    function putParts(parts, suf) {
+      for (var w = 0; w < parts.length; w++) {
+        var pt = parts[w], into;
+        if (pt.bOf === B && pt.bSuf === suf) { into = pt.b; }
+        else {
+          var s = suf.charCodeAt(0) === 35 && !GL3_BUCKETED[pt.base] ? "" : suf;
+          into = getB(pt.base + s, pt.how); into.base = pt.base; pt.b = into; pt.bOf = B; pt.bSuf = suf;
+        }
+        (into.chunks || (into.chunks = [])).push(pt.data);
+      }
+    }
+    var faces = model.faces, FN = G.faceN || (G.faceN = { all: 0, kept: 0, what: 0, fresh: 0, mesh: 0, ghost: 0 });
+    FN.all += faces.length;
+    for (var fi = 0; fi < faces.length; fi++) { oneFace(faces[fi]); }
+    function oneFace(f) {
+      var src0 = f.src;
+      if (src0 !== undefined && !apart && gl3FaceKept) {
+        var was0 = gl3FaceKept.get(src0);
+        if (was0 !== undefined && was0.pts === f.pts && was0.how === f.how && was0.same === same && was0.bucket !== undefined && !f.moves && !f.rests) {
+          putParts(was0.parts, was0.bucket); FN.kept++;
+          return;
+        }
+      }
       var how = f.how || {};
       sfx = f.rests ? "~r" : apart || f.moves ? "~m" : "";
+      bucket = GL3_BUCKET_SUF[gl3Bucket(f)];
       if (how.ghost) {                    // what walking bumps into, unseen
         if (how.caster) { gl3Poly(B.get("caster", { caster: true }).v, f.pts, f.n, [1, 1, 1], 1, null, PAT.plain); }
+        FN.ghost++;
         return;
       }
-      if (f.mesh) { gl3Mesh(B, f); return; }
+      if (f.mesh) { FN.mesh++; gl3Mesh(B, f); return; }
       var src = f.src, was = src && gl3FaceKept ? gl3FaceKept.get(src) : null;
-      if (was && was.same === same && was.pts === f.pts && was.how === f.how) {
-        for (var w = 0; w < was.parts.length; w++) {
-          var into = getB(was.parts[w].key, was.parts[w].how);
-          (into.chunks || (into.chunks = [])).push(was.parts[w].data);
+      var ck = null;
+      if (!src && gl3ByWhat) {
+        ck = gl3WhatKey(f);
+        if (ck !== null) {
+          var hit = gl3ByWhat.get(ck.h);
+          if (hit && hit.same === same && hit.sig === ck.sig && gl3PtsSame(hit.c, f.pts)) {
+            hit.used = G.frameN || 0; FN.what++;
+            var bW = GL3_BUCKET_SUF[ck.h & 15];
+            putParts(hit.parts, sfx === "~m" && gl3StillRun(hit) >= GL3_STILL ? bW : sfx || bW);
+            return;
+          }
         }
+      }
+      if (was && was.same === same && was.pts === f.pts && was.how === f.how) {
+        putParts(was.parts, sfx === "~m" && gl3StillRun(was) >= GL3_STILL ? bucket : sfx || bucket);
+        FN.kept++;
         return;
       }
-      rec = src && gl3FaceKept ? [] : null;
-      keepIt = true;
+      rec = (src && gl3FaceKept) || ck ? [] : null;
+      keepIt = true; FN.fresh++;
+      var sfxWas = sfx;
+      if (!sfx) { sfx = "~m"; }
       gl3FaceInto(f, how);
+      sfx = sfxWas;
       if (rec && keepIt) {
-        gl3FaceKept.set(src, { same: same, pts: f.pts, how: f.how, parts: rec.map(function (b) {
+        var partsK = rec.map(function (b) {
           var data = new Float32Array(b.v.slice(b.mark));
           b.v.length = b.mark;                       // (and in as kept, like the rest)
           (b.chunks || (b.chunks = [])).push(data);
-          return { key: b.key, how: b.how, data: data };
-        }) });
+          return { key: b.key, base: b.base, how: b.how, data: data };
+        });
+        if (src) { gl3FaceKept.set(src, { same: same, pts: f.pts, how: f.how, parts: partsK, bucket: bucket }); }
+        else if (ck) {
+          gl3ByWhat.set(ck.h, { same: same, sig: ck.sig, c: f.pts.map(function (q) { return [q[0], q[1], q[2] || 0]; }), parts: partsK, used: G.frameN || 0 });
+          if (gl3ByWhat.size > 60000) { gl3ByWhatPrune(G.frameN || 0, 0); }
+        }
       }
       rec = null;
-    });
-    B.get = getB; sfx = "";
+    }
+    B.get = getB; sfx = ""; bucket = "";
     function gl3FaceInto(f, how) {
       var base = gl3Rgb(how.color || sheet), edge = how.edge ? gl3Rgb(how.edge) : inkC, a = 1, pat = PAT.plain;
       if (how.wall && f.top) { base = edge; }
       else if (how.wall && f.side && f.node && f.node.kind === "i_room") {
-        var out = gl3Outside(f, rooms), wm = made ? houseMat(f.node, out ? "out" : "wall") : null;
+        var out = gl3Outside(f, roomsNow()), wm = made ? houseMat(f.node, out ? "out" : "wall") : null;
         if (wm) { pat = wm.pat; base = gl3Mix(base, gl3Rgb(wm.color), dress); }
         else {
           base = gl3Mix(base, [0.97, 0.95, 0.91], 0.55 * dress);
@@ -68096,6 +68251,55 @@ window.addEventListener("load", function () {
     }
   }
   var gl3FaceKept = typeof WeakMap === "function" ? new WeakMap() : null;
+  var gl3ByWhat = typeof Map === "function" ? new Map() : null, gl3HowSig = typeof WeakMap === "function" ? new WeakMap() : null;
+  function gl3HowKey(how) {
+    var s = gl3HowSig ? gl3HowSig.get(how) : undefined;
+    if (s !== undefined) { return s; }
+    var keys = Object.keys(how).sort(), out = [];
+    for (var i = 0; i < keys.length; i++) {
+      var v = how[keys[i]];
+      if (v === undefined || typeof v === "function") { continue; }
+      out.push(keys[i] + ":" + (v && typeof v === "object" ? (v.key || v.id || JSON.stringify(v).slice(0, 60)) : v));
+    }
+    s = out.join(",");
+    if (gl3HowSig) { gl3HowSig.set(how, s); }
+    return s;
+  }
+  function gl3WhatKey(f) {
+    var pts = f.pts, h = 2166136261 | 0;
+    if (!pts || pts.length > 64 || (f.tex && (!f.tex.key || typeof f.tex.key !== "string"))) { return null; }
+    for (var i = 0; i < pts.length; i++) {
+      var p = pts[i];
+      h = Math.imul(h ^ Math.round(p[0] * 8), 16777619); h = Math.imul(h ^ Math.round(p[1] * 8), 16777619); h = Math.imul(h ^ Math.round((p[2] || 0) * 8), 16777619);
+    }
+    var sig = gl3HowKey(f.how || {}) + "|" + (f.n ? Math.round(f.n[0] * 100) + "," + Math.round(f.n[1] * 100) + "," + Math.round(f.n[2] * 100) : "") + (f.ground ? "|g" : "") + (f.top ? "|t" : "") + (f.side ? "|s" : "") + (f.node ? "|" + f.node.id : "") +
+              (f.tex ? "|x" + f.tex.key + "|" + (f.texAt || "") + (f.clipRound ? "|r" + f.clipRound.map(function (q) { return Math.round(q[0] * 8) + "," + Math.round(q[1] * 8); }).join(";") : "") : "");
+    for (var j = 0; j < sig.length; j++) { h = Math.imul(h ^ sig.charCodeAt(j), 16777619); }
+    return { h: h >>> 0, sig: sig };
+  }
+  function gl3PtsSame(a, b) {
+    if (a.length !== b.length) { return false; }
+    for (var i = 0; i < a.length; i++) {
+      var p = a[i], q = b[i];
+      if (Math.abs(p[0] - q[0]) > 1e-6 || Math.abs(p[1] - q[1]) > 1e-6 || Math.abs(p[2] - (q[2] || 0)) > 1e-6) { return false; }
+    }
+    return true;
+  }
+  function gl3ByWhatPrune(now, keep) {
+    gl3ByWhat.forEach(function (v, k) { if (now - v.used > keep) { gl3ByWhat.delete(k); } });
+  }
+  var gl3BucketIds = typeof WeakMap === "function" ? new WeakMap() : null, gl3BucketNext = 0, GL3_BUCKETS = 16;
+  var GL3_BUCKETED = { plain: 1, lines: 1, models: 1 };
+  var GL3_BUCKET_SUF = [];
+  for (var gl3Bi = 0; gl3Bi < GL3_BUCKETS; gl3Bi++) { GL3_BUCKET_SUF.push("#" + gl3Bi); }
+  function gl3Bucket(f) {
+    if (f.node && f.node.id !== undefined) { return Math.abs(f.node.id | 0) % GL3_BUCKETS; }
+    var o = f.src || (f.mesh ? f.mesh.p : null) || f;
+    if (!gl3BucketIds || typeof o !== "object") { return 0; }
+    var id = gl3BucketIds.get(o);
+    if (id === undefined) { id = gl3BucketNext++ % GL3_BUCKETS; gl3BucketIds.set(o, id); }
+    return id;
+  }
 
   function gl3Stand(G, model, B, right) {
     model.stand.forEach(function (s) {
@@ -68124,14 +68328,15 @@ window.addEventListener("load", function () {
 
   function gl3Scenery(G, model, walk, sheet) {
     var x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity;
-    model.faces.forEach(function (f) {
+    var measured = model.whole && model.whole.faces ? model.whole : model;
+    measured.faces.forEach(function (f) {
       if (!f.node || f.node.kind !== "i_room" || !f.pts.every(function (p) { return Math.abs(p[2] || 0) < 6; })) { return; }
       f.pts.forEach(function (p) {
         x0 = Math.min(x0, p[0]); x1 = Math.max(x1, p[0]); y0 = Math.min(y0, p[1]); y1 = Math.max(y1, p[1]);
       });
     });
     if (x0 === Infinity) {
-      model.faces.forEach(function (f) {
+      measured.faces.forEach(function (f) {
         f.pts.forEach(function (p) {
           x0 = Math.min(x0, p[0]); x1 = Math.max(x1, p[0]); y0 = Math.min(y0, p[1]); y1 = Math.max(y1, p[1]);
         });
@@ -68412,6 +68617,18 @@ window.addEventListener("load", function () {
     return D.ok;
   }
 
+  var GL3_NOFADE = [0, 0];
+  function gl3Point(gl, prog, stride) {
+    var at = prog.at, L = prog.ptrs;
+    if (!L) {
+      L = prog.ptrs = [];
+      [["aPos", 3, 0], ["aNorm", 3, 3], ["aColor", 4, 6], ["aUv", 2, 10], ["aPat", 1, 12]].forEach(function (a) {
+        var loc = at[a[0]];
+        if (loc !== undefined && loc >= 0) { L.push([loc, a[1], a[2] * 4]); }
+      });
+    }
+    for (var i = 0; i < L.length; i++) { gl.vertexAttribPointer(L[i][0], L[i][1], gl.FLOAT, false, stride * 4, L[i][2]); }
+  }
   function gl3Bind(gl, prog, stride) {
     var at = prog.at, F = 4;
     [["aPos", 3, 0], ["aNorm", 3, 3], ["aColor", 4, 6], ["aUv", 2, 10], ["aPat", 1, 12]].forEach(function (a) {
@@ -68448,8 +68665,10 @@ window.addEventListener("load", function () {
   function gl3JoinKept(G, x) {
     var K = G.kept || (G.kept = {}), k = K[x.key], chunks = x.chunks || [];
     if (k && gl3Same(k.chunks, chunks) && gl3Same(k.v, x.v)) { return k.data; }
-    G.same = false;
+    if (x.key.slice(-2) === "~m") { G.dynSame = false; } else { G.same = false; }
     var data = gl3Join(x);
+    var J = G.joined || (G.joined = { n: 0, floats: 0, dyn: 0 });
+    J.n++; J.floats += data.length; if (x.key.slice(-2) === "~m") { J.dyn += data.length; }
     K[x.key] = { v: x.v, chunks: chunks.slice(), data: data };
     return data;
   }
@@ -68571,7 +68790,7 @@ window.addEventListener("load", function () {
   function v3GlDraw(model, inside) {
     var G = gl3Ready();
     if (!G) { return false; }
-    var gl = G.gl, dpr = window.devicePixelRatio || 1;
+    var gl = G.gl, dpr = typeof v3RenderDpr === "function" ? v3RenderDpr() : (window.devicePixelRatio || 1);
     var W = Math.max(1, Math.round(V3.w * dpr)), H = Math.max(1, Math.round(V3.h * dpr));
     if (G.canvas.width !== W || G.canvas.height !== H) { G.canvas.width = W; G.canvas.height = H; }
     var ink = simInk(), sheet = simSheet(), sheetC = gl3Rgb(sheet);
@@ -68580,14 +68799,47 @@ window.addEventListener("load", function () {
     if (typeof flat3dNow === "function" && flat3dNow()) { dress = 0; }
     var sky = gl3SkyNow(), sun = sky.sun;
     try {
-      var scenery = gl3Scenery(G, model, inside, sheet);
-      var B = gl3Batches();
-      gl3Faces(G, model, B, ink, sheet, dress);
+      var lookNow = ink + "|" + sheet + "|" + dress + "|" + (inside ? 1 : 0);
+      var scenery = G.sceneryFor === model && G.sceneryLook === lookNow && G.scenery ? G.scenery : gl3Scenery(G, model, inside, sheet);
+      G.sceneryFor = model; G.sceneryLook = lookNow;
       var right = inside ? [-Math.sin(V3.me.head), Math.cos(V3.me.head)] : [Math.cos(V3.yaw), -Math.sin(V3.yaw)];
-      gl3Stand(G, model, B, right);
-      if (model.passing) {
-        gl3Faces(G, { faces: model.passing.faces, apart: true }, B, ink, sheet, dress);
-        gl3Stand(G, { stand: model.passing.stand }, { get: function (key, how) { return B.get(key + "~m", how); } }, right);
+      var reuse = !!(G.lastModel === model && G.lastB && G.lastLook === ink + "|" + sheet + "|" + dress);
+      var waits = !reuse && !!G.lastB && G.lastLook === ink + "|" + sheet + "|" + dress && typeof V3Q === "object" && V3Q.split &&
+                  !!model.pacedSame && G.pending !== model;
+      if (waits) { G.pending = model; reuse = true; }
+      else if (G.pending === model) { G.pending = null; }
+      var B = reuse ? G.lastB : gl3Batches();
+      var tBatch = performance.now();
+      if (!reuse) {
+        gl3Round++;
+        var houseOnly = model, mine = null, goes = null;
+        var own = model.faces, rest = null;
+        for (var oi = 0; oi < own.length; oi++) {
+          var of = own[oi], me = of.me && inside;
+          if (me || of.moves) {
+            if (!rest) { rest = own.slice(0, oi); }
+            if (me) { (mine || (mine = [])).push(of); } else { (goes || (goes = [])).push(of); }
+          } else if (rest) { rest.push(of); }
+        }
+        if (rest) { houseOnly = { faces: rest }; }
+        var snap = G.staticSnap, snapKey = gl3SnapKey(ink, sheet, dress);
+        if (snap && snap.key === snapKey && gl3SameFaces(snap.faces, houseOnly.faces)) {
+          gl3FromSnap(B, snap);
+          snap.faces = houseOnly.faces;
+          G.snapUsed = (G.snapUsed || 0) + 1;
+        } else {
+          var FN0 = G.faceN ? (G.faceN.fresh || 0) + (G.faceN.vol || 0) : 0;
+          gl3Faces(G, houseOnly, B, ink, sheet, dress);
+          var FN1 = (G.faceN.fresh || 0) + (G.faceN.vol || 0);
+          G.staticSnap = FN1 === FN0 ? gl3Snap(B, houseOnly.faces, snapKey) : null;
+        }
+        if (goes) { gl3Faces(G, { faces: goes }, B, ink, sheet, dress); }
+        if (mine) { gl3Faces(G, { faces: mine, apart: true }, B, ink, sheet, dress); }
+        gl3Stand(G, model, B, right);
+        if (model.passing) {
+          gl3Faces(G, { faces: model.passing.faces, apart: true }, B, ink, sheet, dress);
+          gl3Stand(G, { stand: model.passing.stand }, { get: function (key, how) { return B.get(key + "~m", how); } }, right);
+        }
       }
       var mvp, eye = null, toward = [0, 0, 1], cam = null;
       if (inside) {
@@ -68601,7 +68853,7 @@ window.addEventListener("load", function () {
         [[m[0] - R, m[1] - R], [m[0] + R, m[1] - R], [m[0] + R, m[1] + R], [m[0] - R, m[1] + R]].forEach(function (c) {
           [-10 + Math.min(0, land.lo), 1600 + Math.max(0, land.hi)].forEach(function (z) { var d = gl3Depth([c[0], c[1], z]); lo = Math.min(lo, d); hi = Math.max(hi, d); });
         });
-        var all = gl3FacesBox(model.faces);
+        var all = reuse && G.lastBox ? G.lastBox : gl3FacesBox(model.faces);
         if (all.x0 !== Infinity) {
           [all.x0, all.x1].forEach(function (x) { [all.y0, all.y1].forEach(function (y) { [all.z0, all.z1].forEach(function (z) {
             var d = gl3Depth([x, y, z]); lo = Math.min(lo, d); hi = Math.max(hi, d);
@@ -68612,10 +68864,11 @@ window.addEventListener("load", function () {
         void sb;
       }
       G.mvp = mvp;                       // (for a press on the view, turned into a ray: 40-drag.js)
-      var fb = gl3FacesBox(model.faces);
+      var fb = reuse && G.lastBox ? G.lastBox : gl3FacesBox(model.faces);
+      G.lastBox = fb;
       var b = { x0: fb.x0, x1: fb.x1, y0: fb.y0, y1: fb.y1, z0: Math.min(0, fb.z0), z1: Math.max(0, fb.z1) };
       var flatish = !inside && (V3.rise === undefined ? 1 : V3.rise) < 0.98;
-      var shadows = G.shadowOk && b.x0 !== Infinity && !flatish;
+      var shadows = G.shadowOk && b.x0 !== Infinity && !flatish && !(typeof V3Q === "object" && V3Q.noShadow);
       var under = typeof houseUnder === "function" && houseUnder();
       var sunMvp = gl3Mat([1, 0, 0, 0], [0, 1, 0, 0], [0, 0, 1, 0], [0, 0, 0, 1]), nudge = 0;
       if (shadows) {
@@ -68627,14 +68880,25 @@ window.addEventListener("load", function () {
         nudge = 1.5 * (sunMvp.span || Math.max(sunBox.x1 - sunBox.x0, sunBox.y1 - sunBox.y0)) / GL3_SHADOW;
       }
 
-      var batches = B.all.filter(function (x) { return x.v.length || (x.chunks && x.chunks.length); });
-      G.same = true;
-      batches.forEach(function (x) { x.data = gl3JoinKept(G, x); });
-      var keys = batches.map(function (x) { return x.key; }).join("|");
+      var batches = reuse ? G.lastBatches : B.all.filter(function (x) { return x.v.length || (x.chunks && x.chunks.length); });
+      G.same = true; G.dynSame = true;
+      if (!reuse) { batches.forEach(function (x) { x.data = gl3JoinKept(G, x); }); }
+      G.batchMs = reuse ? 0 : performance.now() - tBatch;     // (how long the batching took: for measuring)
+      if (!reuse) { G.batchCost = G.batchCost ? G.batchCost * 0.7 + G.batchMs * 0.3 : G.batchMs; }    // (and the pace of making the scene, 40-perf.js)
+      if (!waits) { G.lastModel = model; G.lastB = B; G.lastBatches = batches; G.lastLook = ink + "|" + sheet + "|" + dress; }
+      var keys = batches.filter(function (x) { return x.key.slice(-2) !== "~m"; }).map(function (x) { return x.key; }).join("|");
       if (keys !== G.lastKeys) { G.same = false; G.lastKeys = keys; }
+      if (G.kept) {
+        var live = {};
+        batches.forEach(function (x) { live[x.key] = true; });
+        Object.keys(G.kept).forEach(function (k) { if (!live[k] && k.slice(-2) === "~m") { delete G.kept[k]; } });
+      }
+      G.frameN = (G.frameN || 0) + 1;
+      if (gl3ByWhat && G.frameN % 240 === 0) { gl3ByWhatPrune(G.frameN, 240); }
 
       var sunKey = shadows ? Array.prototype.join.call(sunMvp, ",") + "|" + (under ? 1 : 0) : "";
-      var sunAgain = shadows && !(G.same && G.sunKey === sunKey && G.sunScene === scenery.verts);
+      var dynEvery = typeof V3Q === "object" && V3Q.shadowEvery ? V3Q.shadowEvery : 1;
+      var sunAgain = shadows && (!(G.same && G.sunKey === sunKey && G.sunScene === scenery.verts) || (!G.dynSame && G.frameN % dynEvery === 0));
       G.sunKey = shadows ? sunKey : null; G.sunScene = scenery.verts;
       if (sunAgain) {
         gl.bindFramebuffer(gl.FRAMEBUFFER, G.shadowFb);
@@ -68759,29 +69023,35 @@ window.addEventListener("load", function () {
       gl.activeTexture(gl.TEXTURE0); gl.uniform1i(U.uTex, 0);
       gl.enable(gl.DEPTH_TEST); gl.depthFunc(D ? gl.GEQUAL : gl.LEQUAL);
       gl.enable(gl.POLYGON_OFFSET_FILL); gl.polygonOffset(D ? -1 : 1, D ? -2 : 2);
+      var DS = null;
       function draw(data, how, mode, key) {
         gl3Upload(G, data, key);
-        gl3Bind(gl, P, GL3_STRIDE);
-        gl.bindTexture(gl.TEXTURE_2D, how.tex || G.white);
-        gl.uniform1f(U.uUseTex, how.tex ? 1 : 0);
-        gl.uniform1f(U.uDecal, how.decal ? 1 : 0);
-        gl.uniform1f(U.uRound, how.round ? 1 : 0);
-        gl.uniform1f(U.uBill, how.bill ? 1 : 0);
-        gl.uniform1f(U.uAlpha, how.alpha === undefined ? 1 : how.alpha);
-        gl.uniform2fv(U.uFade, how.fade || [0, 0]);
-        gl.uniform1f(U.uGlow, how.glow || 0);
-        if (U.uDepthK) { gl.uniform4f(U.uDepthK, depthK[0], depthK[1], mode === gl.LINES ? 2 : how.decal ? 1 : 0, depthK[2]); }
-        if (how.blend) { gl.enable(gl.BLEND); gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA); } else { gl.disable(gl.BLEND); }
-        gl.depthMask(!how.noDepthWrite);
+        if (!DS) { gl3Bind(gl, P, GL3_STRIDE); DS = {}; } else { gl3Point(gl, P, GL3_STRIDE); }
+        var tex = how.tex || G.white, v;
+        if (DS.tex !== tex) { gl.bindTexture(gl.TEXTURE_2D, tex); DS.tex = tex; }
+        v = how.tex ? 1 : 0; if (DS.useTex !== v) { gl.uniform1f(U.uUseTex, v); DS.useTex = v; }
+        v = how.decal ? 1 : 0; if (DS.decal !== v) { gl.uniform1f(U.uDecal, v); DS.decal = v; }
+        v = how.round ? 1 : 0; if (DS.round !== v) { gl.uniform1f(U.uRound, v); DS.round = v; }
+        v = how.bill ? 1 : 0; if (DS.bill !== v) { gl.uniform1f(U.uBill, v); DS.bill = v; }
+        v = how.alpha === undefined ? 1 : how.alpha; if (DS.alpha !== v) { gl.uniform1f(U.uAlpha, v); DS.alpha = v; }
+        var fd = how.fade || GL3_NOFADE; if (DS.f0 !== fd[0] || DS.f1 !== fd[1]) { gl.uniform2fv(U.uFade, fd); DS.f0 = fd[0]; DS.f1 = fd[1]; }
+        v = how.glow || 0; if (DS.glow !== v) { gl.uniform1f(U.uGlow, v); DS.glow = v; }
+        if (U.uDepthK) {
+          v = mode === gl.LINES ? 2 : how.decal ? 1 : 0;
+          if (DS.dk !== depthK || DS.dz !== v) { gl.uniform4f(U.uDepthK, depthK[0], depthK[1], v, depthK[2]); DS.dk = depthK; DS.dz = v; }
+        }
+        v = !!how.blend; if (DS.blend !== v) { if (v) { gl.enable(gl.BLEND); gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA); } else { gl.disable(gl.BLEND); } DS.blend = v; }
+        v = !how.noDepthWrite; if (DS.dm !== v) { gl.depthMask(v); DS.dm = v; }
         gl.drawArrays(mode, 0, data.length / GL3_STRIDE);
       }
       if (typeof mirrorPass === "function") {
         try {
-          mirrorPass({ gl: gl, G: G, U: U, draw: draw, batches: batches, scenery: scenery, model: model, inside: inside, eye: eye,
+          mirrorPass({ gl: gl, G: G, U: U, draw: function (a, b, c, d) { DS = null; draw(a, b, c, d); }, batches: batches, scenery: scenery, model: model, inside: inside, eye: eye,
                        toward: toward, ahead: cam ? cam.ahead : null, D: D, W: W, H: H, dress: dress, under: under, horizon: horizon,
                        depthK: depthK, setDepthK: function (k) { depthK = k; },
                        mainMvp: D ? gl3Reversed(mvp, !!inside, GL3_NEAR) : mvp });
         } catch (eMirror) { if (V3) { V3.mirrorErr = String(eMirror && eMirror.message); } }
+        DS = null;
       }
       if (dress > 0.01 && !under) {
         draw(scenery.verts, { blend: !inside, alpha: dress,
@@ -72228,8 +72498,13 @@ window.addEventListener("load", function () {
     if (!J.any || t <= 0.001) { return null; }
     var key = tieSeen.key + "|" + Math.round(t * 1000);
     if (tieMade.H === hand && tieMade.key === key) {
-      tieMade.pairs.forEach(tieFresh);
-      for (var top in hand) { if (top !== "nodes" && top !== "links") { tieMade.hand[top] = hand[top]; } }
+      var stamp = typeof V3 !== "undefined" && V3 && V3.last ? V3.last : -1;
+      var mark = typeof v3qEditMark === "function" ? v3qEditMark() : stamp;
+      if (stamp < 0 || (tieMade.freshAt !== stamp && (tieMade.mark !== mark || stamp - (tieMade.freshT || 0) > 200))) {
+        tieMade.freshAt = stamp; tieMade.mark = mark; tieMade.freshT = stamp;
+        tieMade.pairs.forEach(tieFresh);
+        for (var top in hand) { if (top !== "nodes" && top !== "links") { tieMade.hand[top] = hand[top]; } }
+      }
       return tieMade.hand;
     }
     var H = hand, k = Math.min(1, t), pairs = [];
@@ -73539,6 +73814,11 @@ window.addEventListener("load", function () {
     return null;
   }
 
+  function starterDoorFlip(d) {
+    if (!d || !WALK_DOORS[d.kind] || d.kind === "i_garagedoor") { return null; }
+    var t = (d.turn || 0) * Math.PI / 180, sx = Math.sin(t), sy = -Math.cos(t);
+    return { kind: d.kind, x: d.x - sx * d.h, y: d.y - sy * d.h, w: d.w, h: d.h, turn: ((d.turn || 0) + 180) % 360 };
+  }
   function starterAlong(r, kind, near, extra) {     // (extra: more to keep clear of -- the doors as 3D joins them, 39-xray.js)
     var fit = typeof furnFit === "function" ? furnFit(r, kind, true) : null;
     if (fit === false) { return null; }
@@ -73556,6 +73836,7 @@ window.addEventListener("load", function () {
       return n.kind !== "i_window" && !ON_THE_WALL[n.kind] && !FROM_CEILING[n.kind];
     });
     if (extra && extra.length) { others = others.concat(extra); }
+    if (!hanging) { others = others.concat(others.map(starterDoorFlip).filter(Boolean)); }
     var FRAME = 0.12 * FLOOR_PX;
     var openings = hanging ? others.filter(function (o) { return WALK_DOORS[o.kind] || o.kind === "i_window"; }).map(function (o) {
       var q = turned(o);
@@ -76932,6 +77213,7 @@ window.addEventListener("load", function () {
       return o !== spot && !isArea(o.kind) && !ON_THE_WALL[o.kind] && !FROM_CEILING[o.kind] && o.kind !== "i_window" && !LIES_FLAT[o.kind];
     });
     if (others.some(function (o) { return boxesTouch(spot, o, WALK_DOORS[o.kind] ? 8 : gap); })) { return false; }
+    if (others.some(function (o) { var f = WALK_DOORS[o.kind] && starterDoorFlip(o); return f && boxesTouch(spot, f, 8); })) { return false; }
     return !(typeof starterFrontClash === "function" && starterFrontClash(spot, others));
   }
   var typeRoom = null;                   // the room being furnished: nothing put through its walls
@@ -77158,6 +77440,9 @@ window.addEventListener("load", function () {
       .sort(function (p, q) { return Math.hypot(p.x - r.x, p.y - r.y) - Math.hypot(q.x - r.x, q.y - r.y); })[0];
     if (!door || r.turn) { return [r.x, r.y]; }
     var hw = r.w / 2, hh = r.h / 2, lx = door.x - r.x, ly = door.y - r.y, b = 1.15 * FLOOR_PX;
+    var half = ICONS.i_elevator ? ICONS.i_elevator.box[1] / 2 : 25, past = (door.h || 50) + half + 0.1 * FLOOR_PX;
+    var deep = Math.abs(ly) / hh >= Math.abs(lx) / hw ? 2 * hh : 2 * hw;
+    if (deep >= past + half + roomWallOf(r) + 0.1 * FLOOR_PX) { b = Math.max(b, past); }
     if (Math.abs(ly) / hh >= Math.abs(lx) / hw) { return [r.x, ly < 0 ? r.y - hh + Math.min(b, hh) : r.y + hh - Math.min(b, hh)]; }
     return [lx < 0 ? r.x - hw + Math.min(b, hw) : r.x + hw - Math.min(b, hw), r.y];
   }
@@ -79606,7 +79891,7 @@ window.addEventListener("load", function () {
       var model = v3BuildUtility.apply(this, arguments);
       try {
         var whole = V3 && (V3.mode === "walk" ? !V3.inRoom : (V3.upTo === null || V3.upTo === undefined)) && !(V3.flat && V3.flatDone) && !V3.low;
-        if (model && model.faces && whole) { powerHouse(model); ventHouse(model); }
+        if (model && model.faces && whole) { v3Added("power", model.faces, "", function () { powerHouse(model); ventHouse(model); }); }
       } catch (e) { /* the house without them */ }
       return model;
     };
@@ -82162,23 +82447,39 @@ window.addEventListener("load", function () {
     T.lifts.set(key, out);
     return out;
   }
+  var terrLiftKept = typeof WeakMap === "function" ? new WeakMap() : null;
+  function terrLiftPts(pts, T, key, lift) {
+    if (!terrLiftKept) { return pts.map(lift); }
+    var k = terrLiftKept.get(pts);
+    if (k && k.T === T && k.key === key) { return k.out; }
+    var out = pts.map(lift);
+    terrLiftKept.set(pts, { T: T, key: key, out: out });
+    return out;
+  }
   function terrDress(model) {
     var T = terrBegin();
     if (!T) { return; }
     var P = T.P;
-    model.faces = model.faces.filter(function (f) { return !f.ground; });       // the lawn is the land's own now
+    var anyGround = false;
+    for (var gi = 0; gi < model.faces.length; gi++) { if (model.faces[gi].ground) { anyGround = true; break; } }
+    if (anyGround) { model.faces = model.faces.filter(function (f) { return !f.ground; }); }       // the lawn is the land's own now
+    var byNode = new Map();
     model.faces.forEach(function (f) {
       var n = f.node;
       if (!n || f.found) { return; }
-      var L = terrNodeLift(T, n);
-      if (!L) { return; }
+      var k0 = terrLiftKept && !f.mesh ? terrLiftKept.get(f.pts) : null;
+      if (k0 && k0.T === T) { f.pts = k0.out; return; }
+      var L = byNode.get(n);
+      if (L === undefined) { L = terrNodeLift(T, n); byNode.set(n, L); }
+      if (!L || (!L.drape && !L.z)) { if (terrLiftKept && !f.mesh) { terrLiftKept.set(f.pts, { T: T, key: 0, out: f.pts }); } return; }
       if (L.drape) {
         if (f.mesh) { f.terrDrape = true; return; }                          // laid over it as it is drawn (gl3Mesh)
-        f.pts = f.pts.map(function (p) { return [p[0], p[1], p[2] + terrAt(p[0], p[1]) + 0.6]; });
+        f.pts = terrLiftPts(f.pts, T, "d", function (p) { return [p[0], p[1], p[2] + terrAt(p[0], p[1]) + 0.6]; });
         return;
       }
       if (!L.z) { return; }
-      f.pts = f.pts.map(function (p) { return [p[0], p[1], p[2] + L.z]; });
+      var z = L.z;
+      f.pts = terrLiftPts(f.pts, T, z, function (p) { return [p[0], p[1], p[2] + z]; });
     });
     model.stand.forEach(function (s) {
       if (s.z < 0.5 * P && terrOut(T, s.x, s.y) > 2) { s.z += terrWalkZ(T, s.x, s.y); }
@@ -82219,8 +82520,8 @@ window.addEventListener("load", function () {
     gl3Mesh = function (B, f) {
       var out = gl3MeshLevel.apply(this, arguments);
       if (!f.terrDrape || !TERR_ON || !TERR) { return out; }
-      var how = f.how, batch = how.glass ? B.get("glass", { blend: true, late: true })
-                : how.shade ? B.get("shade", { blend: true, late: true, noDepthWrite: true }) : B.get("models", {});
+      var how = f.how, batch = B.meshInto || (how.glass ? B.get("glass", { blend: true, late: true })
+                : how.shade ? B.get("shade", { blend: true, late: true, noDepthWrite: true }) : B.get("models", {}));
       var list = batch.chunks, data = list && list[list.length - 1];
       if (!data) { return out; }
       var got = terrDraped.get(data);
@@ -86565,6 +86866,7 @@ window.addEventListener("load", function () {
     }
     return t0;
   }
+  var o3Boxes = typeof WeakMap === "function" ? new WeakMap() : null;
   function o3Look(R, far) {
     var model = V3 && V3.dragModel;
     if (!model || !model.faces || !R) { return null; }
@@ -86575,13 +86877,18 @@ window.addEventListener("load", function () {
       var n = f.node, how = f.how || {};
       var fixed = n ? !!(O3_FIXED[n.kind] || (typeof BETWEEN_FLOORS === "object" && BETWEEN_FLOORS[n.kind])) : !!(how.wall || how.roof);
       if (!n && !fixed) { return; }                // water running, a plug's cord, the grid carried over: not in the way
-      var x0 = Infinity, y0 = Infinity, z0 = Infinity, x1 = -Infinity, y1 = -Infinity, z1 = -Infinity;
-      for (var i = 0; i < P.length; i++) {
-        var p = P[i];
-        if (p[0] < x0) { x0 = p[0]; } if (p[0] > x1) { x1 = p[0]; }
-        if (p[1] < y0) { y0 = p[1]; } if (p[1] > y1) { y1 = p[1]; }
-        if (p[2] < z0) { z0 = p[2]; } if (p[2] > z1) { z1 = p[2]; }
+      var bx = o3Boxes ? o3Boxes.get(P) : null;
+      if (!bx) {
+        bx = [Infinity, -Infinity, Infinity, -Infinity, Infinity, -Infinity];
+        for (var i = 0; i < P.length; i++) {
+          var p = P[i];
+          if (p[0] < bx[0]) { bx[0] = p[0]; } if (p[0] > bx[1]) { bx[1] = p[0]; }
+          if (p[1] < bx[2]) { bx[2] = p[1]; } if (p[1] > bx[3]) { bx[3] = p[1]; }
+          if (p[2] < bx[4]) { bx[4] = p[2]; } if (p[2] > bx[5]) { bx[5] = p[2]; }
+        }
+        if (o3Boxes) { o3Boxes.set(P, bx); }
       }
+      var x0 = bx[0], x1 = bx[1], y0 = bx[2], y1 = bx[3], z0 = bx[4], z1 = bx[5];
       var ex = Math.max(x0 - o[0], 0, o[0] - x1), ey = Math.max(y0 - o[1], 0, o[1] - y1), ez = Math.max(z0 - o[2], 0, o[2] - z1);
       if (ex * ex + ey * ey + ez * ez > reach * reach) { return; }
       if (fixed) {
@@ -88267,12 +88574,13 @@ window.addEventListener("load", function () {
       hand.links.push({ from: low.id, to: top.id, label: "" });
       return [low, top];
     }
-    function spotIn(r, len, wide, within, anyway) {
+    function inWalls(rect) { var Tw = 0.18 * P; return { l: rect.l + Tw, r: rect.r - Tw, t: rect.t + Tw, b: rect.b - Tw }; }
+    function spotIn(r, len, wide, within, anyway, avoid) {
       var B = box(r), long = B.r - B.l >= B.b - B.t, doors = hand.nodes.filter(function (d) { return WALK_DOORS[d.kind]; }).map(pieceAt);
       var things = hand.nodes.filter(function (m) {
         return m.kind !== "i_room" && m.kind !== "i_floor" && m.kind !== "i_lot" && !WALK_DOORS[m.kind] && m.kind !== "i_window" &&
                !ON_THE_WALL[m.kind] && !FROM_CEILING[m.kind] && !LIES_FLAT[m.kind] && insideArea(r, m.x, m.y);
-      }).map(function (m) { var at = pieceAt(m), t = turned(m); return { x: at[0], y: at[1], w: t.w, h: t.h }; });
+      }).map(function (m) { var at = pieceAt(m), t = turned(m); return { x: at[0], y: at[1], w: t.w, h: t.h }; }).concat(avoid || []);
       var tries = [];
       for (var k = 0; k <= 8; k++) { tries.push(k / 8); }
       var best = null;
@@ -88290,6 +88598,20 @@ window.addEventListener("load", function () {
         });
       });
       return best;
+    }
+    function carZones(gr) {
+      var B = box(gr), D = 4.7 * P, out = [];
+      hand.nodes.forEach(function (d) {
+        if (d.kind !== "i_garagedoor") { return; }
+        var p = pieceAt(d);
+        if (p[2] !== B.f || p[0] < B.l - 30 || p[0] > B.r + 30 || p[1] < B.t - 30 || p[1] > B.b + 30) { return; }
+        var dl = Math.abs(p[0] - B.l), dr = Math.abs(p[0] - B.r), dt = Math.abs(p[1] - B.t), db = Math.abs(p[1] - B.b), m = Math.min(dl, dr, dt, db);
+        if (m === dt) { out.push({ x: (B.l + B.r) / 2, y: B.t + D / 2, w: B.r - B.l, h: D }); }
+        else if (m === db) { out.push({ x: (B.l + B.r) / 2, y: B.b - D / 2, w: B.r - B.l, h: D }); }
+        else if (m === dl) { out.push({ x: B.l + D / 2, y: (B.t + B.b) / 2, w: D, h: B.b - B.t }); }
+        else { out.push({ x: B.r - D / 2, y: (B.t + B.b) / 2, w: D, h: B.b - B.t }); }
+      });
+      return out;
     }
     function atticWindowsClear(rect, level) {
       var gap = 0.3 * P;
@@ -88413,8 +88735,8 @@ window.addEventListener("load", function () {
           hand.links.forEach(function (l) { var a = byId[l.from], b = byId[l.to]; if (a && b && BETWEEN_FLOORS[a.kind] && BETWEEN_FLOORS[b.kind]) { linked[a.id] = linked[b.id] = true; } });
           var spare = hand.nodes.filter(function (s) {
             if (s.kind !== "i_stairs" || linked[s.id] || s.attic) { return false; }
-            var p = pieceAt(s);
-            return p[2] === Tf && p[0] > rect.l && p[0] < rect.r && p[1] > rect.t && p[1] < rect.b;
+            var p = pieceAt(s), q = inWalls(rect), t = turned(s);
+            return p[2] === Tf && p[0] - t.w / 2 > q.l && p[0] + t.w / 2 < q.r && p[1] - t.h / 2 > q.t && p[1] + t.h / 2 < q.b;
           })[0];
           if (spare) {
             var sp = pieceAt(spare);
@@ -88427,21 +88749,36 @@ window.addEventListener("load", function () {
             var host = halls.concat(roomsAll.filter(function (r) { var f = floorAt(floors, r.x, r.y); return f === Tf && garages.indexOf(r) < 0; })
               .sort(function (p, q) { return q.w * q.h - p.w * p.h; }));
             var len = 2.9 * P, wide = 0.95 * P;
-            host.some(function (r) {
-              var s = spotIn(r, len, wide, rect);
+            var up = host.some(function (r) {
+              var s = spotIn(r, len, wide, inWalls(rect));
               if (!s) { return false; }
               var low = toPaper(r, [s.x, s.y]), pair = flight(low, F, [s.x, s.y], false, s.long ? 90 : 0, Math.round(wide), Math.round(len));
               busy.push({ x: pair[1].x, y: pair[1].y, w: (s.long ? len : wide) + 1.2 * P, h: (s.long ? wide : len) + 1.2 * P });
               return true;
             });
+            if (!up) {
+              var lw2 = Math.round(ATTIC_LADDER[0] * P), ll2 = Math.round(ATTIC_LADDER[1] * P);
+              up = host.some(function (r) {
+                var s = spotIn(r, ll2 + 0.5 * P, lw2, inWalls(rect));
+                if (!s) { return false; }
+                var pair = flight(toPaper(r, [s.x, s.y]), F, [s.x, s.y], true, s.long ? 90 : 0, lw2, ll2);
+                busy.push({ x: pair[1].x, y: pair[1].y, w: turned(pair[1]).w + 1.0 * P, h: turned(pair[1]).h + 1.0 * P });
+                return true;
+              });
+            }
+            if (!up) {
+              hand.nodes = hand.nodes.filter(function (n) { return n !== houseRoom && !(n.attic && n.kind === "i_window" && insideArea(houseRoom, n.x, n.y, -14)); });
+              made--;
+              houseRoom = null;
+            }
           }
-          gableWindows(houseRoom, rect, F);
+          if (houseRoom) { gableWindows(houseRoom, rect, F); }
         } else {
           var hosts = roomsAll.filter(function (r) { var f = floorAt(floors, r.x, r.y); return f === Tf && kindOf(r) === "hall"; })
             .concat(roomsAll.filter(function (r) { var f = floorAt(floors, r.x, r.y); return f === Tf && garages.indexOf(r) < 0 && kindOf(r) !== "bath"; })
               .sort(function (p, q) { return q.w * q.h - p.w * p.h; }));
           var lw = Math.round(ATTIC_LADDER[0] * P), ll = Math.round(ATTIC_LADDER[1] * P);
-          hosts.some(function (r) {
+          var upS = hosts.some(function (r) {
             var B = box(r), long = B.r - B.l >= B.b - B.t, s = spotIn(r, ll + 0.5 * P, lw, rect);
             if (!s) { return false; }
             if (kindOf(r) === "hall") { if (long) { s.y = (B.t + B.b) / 2; } else { s.x = (B.l + B.r) / 2; } }
@@ -88449,8 +88786,9 @@ window.addEventListener("load", function () {
             busy.push({ x: pair[1].x, y: pair[1].y, w: turned(pair[1]).w + 1.0 * P, h: turned(pair[1]).h + 1.0 * P });
             return true;
           });
+          if (!upS) { hand.nodes = hand.nodes.filter(function (n) { return n !== houseRoom; }); made--; houseRoom = null; }
         }
-        furnish(houseRoom, kind, busy);
+        if (houseRoom) { furnish(houseRoom, kind, busy); }
       }
     }
     if (gkind !== "none") {
@@ -88476,11 +88814,17 @@ window.addEventListener("load", function () {
         if (gk === "room") { gableWindows(over, rect2, F2b); }
         var busy2 = [];
         var ladder = gk === "storage", fw = ladder ? Math.round(ATTIC_LADDER[0] * P) : Math.round(0.95 * P), fl = ladder ? Math.round(ATTIC_LADDER[1] * P) : Math.round(2.9 * P);
-        var s = spotIn(gr, fl + (ladder ? 0.5 * P : 0), fw, rect2) || spotIn(gr, fl + (ladder ? 0.5 * P : 0), fw, rect2, true);
+        var zones = carZones(gr), s = spotIn(gr, fl + (ladder ? 0.5 * P : 0), fw, ladder ? rect2 : inWalls(rect2), false, zones);
+        if (!s && !ladder) {
+          ladder = true; fw = Math.round(ATTIC_LADDER[0] * P); fl = Math.round(ATTIC_LADDER[1] * P);
+          s = spotIn(gr, fl + 0.5 * P, fw, rect2, false, zones);
+        }
+        if (!s && ladder) { s = spotIn(gr, fl + 0.5 * P, fw, rect2, true); }
         if (s) {
           var pair = flight(toPaper(gr, [s.x, s.y]), F2b, [s.x, s.y], ladder, s.long ? 90 : 0, fw, fl);
           busy2.push({ x: pair[1].x, y: pair[1].y, w: turned(pair[1]).w + 1.0 * P, h: turned(pair[1]).h + 1.0 * P });
         }
+        if (!s) { hand.nodes = hand.nodes.filter(function (n) { return n !== over && !(n.attic && n.kind === "i_window" && insideArea(over, n.x, n.y, -14)); }); made--; return; }
         furnish(over, gk, busy2);
       });
     }
@@ -90058,8 +90402,10 @@ window.addEventListener("load", function () {
       var model = v3BuildTowers.apply(this, arguments);
       try {
         if (model && V3 && V3.scene !== "space" && !(V3.flat && V3.flatDone)) {
-          var add = towerFaces();
-          if (add.length) { Array.prototype.push.apply(model.faces, add); }
+          v3Added("towers", model.faces, "", function () {
+            var add = towerFaces();
+            if (add.length) { Array.prototype.push.apply(model.faces, add); }
+          });
         }
       } catch (e) { if (window.console && console.warn) { console.warn("tower:", e && e.message); } }
       return model;
@@ -91194,7 +91540,7 @@ window.addEventListener("load", function () {
     electronics: function (r) {
       var P = FLOOR_PX, b = tieBox(r), T = roomWallOf(r);
       tradeWalls(r, "i_walltv", 4);
-      tradeWalls(r, "i_tvstand", 2).forEach(function (s) { adviceAdd("i_tv", s.x, s.y, s.turn || 0); });
+      tradeWalls(r, "i_tv", 2);
       var front = tradeTill(r, 0);
       tradePlain(tradeRows(r, "i_display", 0, b.t + T + 2.6 * P, front - 1.6 * P, 1.6 * P, 1.6 * P, 2.0)).forEach(function (t, i) {
         adviceAdd(i % 3 === 2 ? "i_tablet" : "i_laptop", t.x - 25, t.y);
@@ -91237,7 +91583,7 @@ window.addEventListener("load", function () {
       var front = tradeTill(r, 0);
       kindsAlong(r, "i_workbench", { x: b.r, y: r.y });
       tradePlain(tradeRows(r, "i_display", 0, b.t + T + ch + 1.4 * P, front - 1.4 * P, 1.6 * P, 1.4 * P, 1.6)).forEach(function (t, i) {
-        adviceAdd(i % 2 ? "i_vase" : "i_flowers", t.x - 25, t.y); adviceAdd("i_flowers", t.x + 25, t.y);
+        adviceAdd(i % 2 ? "i_vase" : "i_basket", t.x - 25, t.y); adviceAdd(i % 2 ? "i_succulent" : "i_vase", t.x + 25, t.y);
       });
       tradeWalls(r, "i_plant", 3); tradeWalls(r, "i_palm", 1);
     },
@@ -94104,7 +94450,10 @@ window.addEventListener("load", function () {
       var model = v3BuildBuilt.apply(this, arguments);
       var t = bpSiteNow();
       if (t === null || !model || !model.faces) { return model; }
-      try { return bpBuilding(model, Math.max(0, t)); } catch (e) { return model; }
+      var got;
+      try { got = bpBuilding(model, Math.max(0, t)); } catch (e) { return model; }
+      if (got && got !== model && got.faces) { got.whole = model.whole || model; }
+      return got;
     };
   }
   function bpEase(t) { return t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2; }
@@ -96355,8 +96704,10 @@ window.addEventListener("load", function () {
       var model = v3BuildAddress.apply(this, arguments);
       try {
         if (model && model.faces && V3 && V3.scene !== "space" && !(V3.flat && V3.flatDone)) {
-          var add = adrFaces(model);
-          for (var i = 0; i < add.length; i++) { model.faces.push(add[i]); }
+          v3Added("address", model.faces, typeof bpSite !== "undefined" && bpSite ? "building" : "", function () {
+            var add = adrFaces(model);
+            for (var i = 0; i < add.length; i++) { model.faces.push(add[i]); }
+          });
         }
       } catch (e) { /* no address */ }
       return model;
@@ -96655,8 +97006,10 @@ window.addEventListener("load", function () {
       var model = v3BuildFire.apply(this, arguments);
       try {
         if (model && model.faces && V3 && V3.scene !== "space" && !(V3.flat && V3.flatDone) && fsWanted()) {
-          var add = fsExits(model);
-          for (var i = 0; i < add.length; i++) { model.faces.push(add[i]); }
+          v3Added("exits", model.faces, typeof bpSite !== "undefined" && bpSite ? "building" : "", function () {
+            var add = fsExits(model);
+            for (var i = 0; i < add.length; i++) { model.faces.push(add[i]); }
+          });
         }
       } catch (e) { /* the building without them */ }
       return model;
@@ -96953,8 +97306,10 @@ window.addEventListener("load", function () {
       var model = v3BuildAccess.apply(this, arguments);
       try {
         if (model && model.faces && V3 && V3.scene !== "space" && !(V3.flat && V3.flatDone)) {
-          var add = acFaces().concat(acRails());
-          for (var i = 0; i < add.length; i++) { model.faces.push(add[i]); }
+          v3Added("access", model.faces, "", function () {
+            var add = acFaces().concat(acRails());
+            for (var i = 0; i < add.length; i++) { model.faces.push(add[i]); }
+          });
         }
       } catch (e) { /* the lot as it is */ }
       return model;
@@ -97960,7 +98315,7 @@ window.addEventListener("load", function () {
     made.forEach(function (f) {
       var pts = f.pts.map(function (p) { return [x + p[0] * c - p[1] * s, y + p[0] * s + p[1] * c, z + p[2]]; });
       var m = f.mesh;
-      faces.push({ pts: pts, n: f.n, how: f.how,
+      faces.push({ pts: pts, n: f.n, how: f.how, moves: !!moving,          // (on the move: drawn apart from what stands still, gl3Faces)
                    mesh: { p: moving ? moView(m.p) : m.p, n: m.n, uv: m.uv, a: m.a, base: pts[0].slice(), xf: [x, y, c, s, z] } });
     });
   }
@@ -99421,8 +99776,8 @@ window.addEventListener("load", function () {
   var BD_MAT = { skin: "plain", lips: "plain", hair: "fabric", eyes: "plastic", top: "fabric", top2: "fabric", bottom: "fabric", skirt: "fabric",
                  shoes: "leather", belt: "leather", white: "fabric", tie: "fabric", hat: "fabric" };
 
-  function bdMaker() {
-    var G = { slots: {}, order: [], xf: null };
+  function bdMaker(lod) {
+    var G = { slots: {}, order: [], xf: null, lod: lod || 0 };
     G.slot = function (name) {
       var s = G.slots[name];
       if (!s) { s = G.slots[name] = { p: [], n: [] }; G.order.push(name); }
@@ -99450,11 +99805,13 @@ window.addEventListener("load", function () {
   }
   function bdCapsule(G, slot, A, B, rA, rB, seg) {
     seg = seg || 6;
+    if (G.lod) { seg = G.lod > 1 ? Math.min(seg, 4) : Math.max(4, seg - 2); }
     var d = [B[0] - A[0], B[1] - A[1], B[2] - A[2]], L = Math.hypot(d[0], d[1], d[2]);
     if (L < 1e-6) { return; }
     var w = [d[0] / L, d[1] / L, d[2] / L];
     var u = bdUnit(Math.abs(w[2]) < 0.9 ? bdCross(w, [0, 0, 1]) : bdCross(w, [1, 0, 0])), v = bdCross(w, u);
-    var spec = [[A, rA, -1], [A, rA, -0.62], [A, rA, 0], [B, rB, 0], [B, rB, 0.62], [B, rB, 1]];
+    var spec = G.lod > 1 ? [[A, rA, -1], [A, rA, -0.35], [B, rB, 0.35], [B, rB, 1]]
+                         : [[A, rA, -1], [A, rA, -0.62], [A, rA, 0], [B, rB, 0], [B, rB, 0.62], [B, rB, 1]];
     bdRings(G, slot, spec.map(function (q) {
       var C = q[0], r = q[1], s = q[2], c = Math.sqrt(Math.max(0, 1 - s * s)), ring = [];
       for (var i = 0; i < seg; i++) {
@@ -99467,6 +99824,10 @@ window.addEventListener("load", function () {
   }
   function bdBall(G, slot, C, rx, ry, rz, rows, cols, keep, lat0, lat1) {
     var R = [], la0 = lat0 === undefined ? -90 : lat0, la1 = lat1 === undefined ? 90 : lat1;
+    if (G.lod) {
+      var by = G.lod > 1 ? 0.5 : 0.68;
+      rows = Math.max(2, Math.round(rows * by)); cols = Math.max(G.lod > 1 ? 5 : 6, Math.round(cols * by));
+    }
     for (var i = 0; i <= rows; i++) {
       var la = (la0 + (la1 - la0) * i / rows) * Math.PI / 180, ring = [];
       for (var j = 0; j < cols; j++) {
@@ -99491,6 +99852,7 @@ window.addEventListener("load", function () {
   }
   function bdLoft(G, slot, rings, seg, closeBottom, closeTop) {
     seg = seg || 12;
+    if (G.lod) { seg = G.lod > 1 ? 6 : Math.max(8, Math.round(seg * 0.7)); }
     function at(k, t) { var q = rings[k]; return [q.x + q.d * Math.cos(t), q.w * Math.sin(t), q.z]; }
     function reach(k, t) { var q = rings[k]; return q.x * Math.cos(t) + Math.hypot(q.d * Math.cos(t), q.w * Math.sin(t)); }
     var R = [];
@@ -99606,8 +99968,8 @@ window.addEventListener("load", function () {
     }
     return J;
   }
-  function bdMake(sp, phase, arms, armK, withHead, scale, legs) {
-    var G = bdMaker(), O = sp.O, T = BD_TORSO[sp.sex], J = bdJoints(sp, phase, arms, armK, legs);
+  function bdMake(sp, phase, arms, armK, withHead, scale, legs, lod) {
+    var G = bdMaker(lod), O = sp.O, T = BD_TORSO[sp.sex], J = bdJoints(sp, phase, arms, armK, legs);
     G.dz = -J.drop;
     var bare = O.legs === "skirt" || O.legs === "dress";
     var topSlot = O.vest ? "top2" : "top", legSlot = bare ? "skin" : "bottom";
@@ -99642,16 +100004,17 @@ window.addEventListener("load", function () {
                 { z: 0.76, w: 0.205, d: 0.148, x: 0 }, { z: 0.57, w: 0.222, d: 0.166, x: 0.004 }];
       bdLoft(G, O.legs === "dress" ? "top" : "skirt", bdTuck(sk, false, true), 14, false, false);
     }
-    if (O.belt && !O.jacket) { bdBall(G, "belt", [0, 0, 1.0], (sp.sex === "f" ? 0.106 : 0.11), (sp.sex === "f" ? 0.169 : 0.166), 0.019, 2, 14); }
+    var far = G.lod > 1, mid = G.lod > 0;
+    if (O.belt && !O.jacket && !far) { bdBall(G, "belt", [0, 0, 1.0], (sp.sex === "f" ? 0.106 : 0.11), (sp.sex === "f" ? 0.169 : 0.166), 0.019, 2, 14); }
     if (O.hood) { bdBall(G, topSlot, [-0.083, 0, 1.47], 0.055, 0.11, 0.052, 4, 10); }
-    if (O.collar) { bdBall(G, "top", [0.003, 0, 1.458], 0.074, 0.08, 0.027, 3, 12); }
+    if (O.collar && !far) { bdBall(G, "top", [0.003, 0, 1.458], 0.074, 0.08, 0.027, 3, 12); }
     if (O.shirtFront) {
       var vTop = sp.sex === "f" ? 1.432 : 1.44, vLow = sp.sex === "f" ? 1.31 : 1.29, vW = sp.sex === "f" ? 0.042 : 0.048;
       var fT = bdFront(T.chest, vTop) + 0.006, fL = bdFront(T.chest, vLow) + 0.005;
       bdFlat(G, "top2", [[fT, -vW, vTop], [fL, 0, vLow], [fT, vW, vTop]]);
       bdBall(G, "top2", [0.003, 0, 1.458], 0.07, 0.076, 0.024, 3, 12);
     }
-    if (O.tie) {
+    if (O.tie && !far) {
       var tz0 = 1.415, tz1 = 1.18;
       bdCapsule(G, "tie", [bdFront(T.chest, tz0) + 0.01, 0, tz0], [bdFront(T.chest, tz1) + 0.012, 0, tz1], 0.013, 0.018, 5);
     }
@@ -99674,13 +100037,14 @@ window.addEventListener("load", function () {
     if (hk !== 1) { G.xf = function (p) { return [N[0] + (p[0] - N[0]) * hk, N[1] + (p[1] - N[1]) * hk, N[2] + (p[2] - N[2]) * hk]; }; }
     var H = [0.012, 0, 1.635];
     bdBall(G, "skin", H, 0.098, 0.082, 0.112, 7, 12);
-    bdBall(G, "skin", [H[0] + 0.092, 0, H[2] - 0.012], 0.02, 0.013, 0.025, 3, 6);                       // the nose
+    if (!mid) { bdBall(G, "skin", [H[0] + 0.092, 0, H[2] - 0.012], 0.02, 0.013, 0.025, 3, 6); }                       // the nose
     [-1, 1].forEach(function (s) {
-      bdBall(G, "eyes", [H[0] + 0.083, s * 0.031, H[2] + 0.017], 0.011, 0.013, 0.011, 3, 6);
+      if (!far) { bdBall(G, "eyes", [H[0] + 0.083, s * 0.031, H[2] + 0.017], 0.011, 0.013, 0.011, 3, 6); }
+      if (mid) { return; }
       bdBall(G, "hair", [H[0] + 0.088, s * 0.032, H[2] + 0.039], 0.008, 0.022, 0.006, 2, 6);           // a brow
       if (sp.hair !== "long" && sp.hair !== "bob") { bdBall(G, "skin", [H[0] - 0.004, s * 0.08, H[2]], 0.016, 0.012, 0.027, 3, 6); }
     });
-    bdBall(G, "lips", [H[0] + 0.087, 0, H[2] - 0.05], 0.007, 0.021, 0.006, 2, 6);
+    if (!mid) { bdBall(G, "lips", [H[0] + 0.087, 0, H[2] - 0.05], 0.007, 0.021, 0.006, 2, 6); }
     if (sp.hair !== "bald") {
       var thick = sp.hair === "buzz" ? 0.004 : sp.hair === "long" || sp.hair === "bob" || sp.hair === "bun" || sp.hair === "pony" ? 0.013 : 0.009;
       bdBall(G, "hair", [H[0] - 0.006, 0, H[2] + 0.006], 0.098 + thick, 0.082 + thick, 0.112 + thick, 8, 14, bdHairKeep(sp.hair));
@@ -99697,7 +100061,7 @@ window.addEventListener("load", function () {
         var a = Math.abs(lon);
         return (lat < -14 && a < 1.72) || (lat < 14 && a > 1.28 && a < 1.72);
       });
-      bdBall(G, "hair", [H[0] + 0.092, 0, H[2] - 0.035], 0.012, 0.03, 0.008, 2, 6);                     // the moustache
+      if (!mid) { bdBall(G, "hair", [H[0] + 0.092, 0, H[2] - 0.035], 0.012, 0.03, 0.008, 2, 6); }        // the moustache
     }
     if (O.hat === "hard") {
       bdBall(G, "hat", [H[0] - 0.002, 0, H[2] + 0.028], 0.116, 0.104, 0.1, 4, 14, null, 0, 90);
@@ -99760,14 +100124,27 @@ window.addEventListener("load", function () {
       default: return "#f2f0ea";
     }
   }
+  function bdLodFor(x, y, z, P, others, withHead) {
+    if (!others || !withHead) { return 0; }            // (your own body, through your own eyes)
+    var G = typeof V3 !== "undefined" && V3 ? V3.gl : null, m = G && G.mvp, cv = G && G.canvas;
+    if (!m || !cv) { return 0; }
+    var h = cv.clientHeight || V3.h || 600, top = z + 1.75 * P;
+    var w0 = Math.max(Math.abs(m[3] * x + m[7] * y + m[11] * z + m[15]), 1e-3), w1 = Math.max(Math.abs(m[3] * x + m[7] * y + m[11] * top + m[15]), 1e-3);
+    var y0 = (m[1] * x + m[5] * y + m[9] * z + m[13]) / w0, y1 = (m[1] * x + m[5] * y + m[9] * top + m[13]) / w1;
+    var x0 = (m[0] * x + m[4] * y + m[8] * z + m[12]) / w0, x1 = (m[0] * x + m[4] * y + m[8] * top + m[12]) / w1;
+    var px = Math.hypot(x1 - x0, y1 - y0) * h / 2;
+    var q = typeof v3qBodyScale === "function" ? v3qBodyScale() : 1;
+    return px >= 150 * q ? 0 : px >= 48 * q ? 1 : 2;
+  }
   function bdDraw(faces, x, y, z, head, phase, look, withHead, k, others, fade) {
     var L = look || {}, sp = bdSpec(L), P = FLOOR_PX * (k || 1);
+    var lod = bdLodFor(x, y, z, P, others, withHead);
     var b = phase ? (((Math.round(phase / (Math.PI * 2) * BD_STEPS)) % BD_STEPS) + BD_STEPS) % BD_STEPS : 0;
     var arms = withHead && BD_ARMS[L.arms] ? L.arms : "", legs = L.legs === "kneel" ? "kneel" : "";
     var aq = arms === "hammer" ? Math.round(Math.max(0, Math.min(1, L.armK || 0)) * BD_ARMQ) : 0, kq = Math.round(P * 10) / 10;
     if (legs) { b = 0; }
-    var key = [sp.key, withHead ? 1 : 0, b, arms, aq, kq, legs].join("|");
-    var made = bdKept(key, function () { return bdMake(sp, b / BD_STEPS * Math.PI * 2, arms, aq / BD_ARMQ, withHead, kq, legs); });
+    var key = [sp.key, withHead ? 1 : 0, b, arms, aq, kq, legs, lod].join("|");
+    var made = bdKept(key, function () { return bdMake(sp, b / BD_STEPS * Math.PI * 2, arms, aq / BD_ARMQ, withHead, kq, legs, lod); });
     var moving = !!phase || arms === "hammer", c = Math.cos(head), s = Math.sin(head), fa = fade !== undefined && fade < 0.999 ? Math.max(0, fade) : -1;
     made.order.forEach(function (slot) {
       var g = made.slots[slot], color = bdColor(L, slot);
@@ -99786,6 +100163,7 @@ window.addEventListener("load", function () {
         p = g.views[vk] || (g.views[vk] = new Float32Array(g.p.buffer, g.p.byteOffset, g.p.length));
       }
       var f = { pts: pts, n: [0, 0, 1], how: how, mesh: { p: p, n: g.n, uv: BD_ZERO, a: null, base: [x, y, z], xf: [x, y, c, s, z] } };
+      if (moving) { f.moves = true; }            // (walking, at work: drawn apart from what stands still, gl3Faces)
       if (!others) { f.me = true; }
       faces.push(f);
     });
@@ -100739,7 +101117,9 @@ window.addEventListener("load", function () {
     for (var i = 0; i < model.faces.length; i++) {
       var f = model.faces[i], g = wkGroupOf(site, f);
       if (!g) { faces.push(f); continue; }
-      var R = plan.rv[g.key] || plan.lateR || WK_NOT_YET;
+      var R = g.Rp === plan ? g.R : plan.rv[g.key] || plan.lateR || WK_NOT_YET;
+      if (g.Rp !== plan && plan.done) { g.R = R; g.Rp = plan; }
+      if (T >= R.t1) { faces.push(f); continue; }
       if (R.carry && R.carry.wk && T >= R.carry.wk.t0 && T < R.t0) { (fly[g.key] || (fly[g.key] = [])).push(f); continue; }
       if (T < R.t0) {
         if (R.pre && !f.mesh && !(f.how && (f.how.glass || f.how.ghost))) {
@@ -105259,6 +105639,12 @@ window.addEventListener("load", function () {
     return true;
   }
   function mpRoomOf(n) {
+    if (ON_THE_WALL[n.kind]) {
+      var t = (n.turn || 0) * Math.PI / 180, d = (n.h || 12) / 2 + 8, fx = n.x - Math.sin(t) * d, fy = n.y + Math.cos(t) * d;
+      var faced = hand.nodes.filter(function (r) { return r.kind === "i_room" && insideArea(r, fx, fy); })
+        .sort(function (p, q) { return p.w * p.h - q.w * q.h; })[0];
+      if (faced) { return faced; }
+    }
     return hand.nodes.filter(function (r) { return r.kind === "i_room" && insideArea(r, n.x, n.y, -14); })
       .sort(function (p, q) { return p.w * p.h - q.w * q.h; })[0] || null;
   }
@@ -105432,37 +105818,58 @@ window.addEventListener("load", function () {
     h.w = Math.max(s.w || 60, 0.76 * P); h.h = 0.5 * P; h.own = true; h.mp = true;
     return h;
   }
-  function mpPutHeater() {
-    var plan = walkPlan(), P = MP_P(), rooms = hand.nodes.filter(function (n) { return n.kind === "i_room"; }), spot = null;
-    ["utility", "laundry", "garage", "storage", "stock", "staff", "kitchenette", "closet"].some(function (k) {
-      spot = rooms.filter(function (r) { var rk = wireKindOf(plan, r); return (rk === k || r.use === k || r.starter === k) && Math.min(r.w, r.h) >= 1.2 * P; })
-        .sort(function (a, b) { return b.w * b.h - a.w * a.h; })[0] || null;
-      return !!spot;
+  function mpRoomsFor(kinds) {
+    var plan = walkPlan(), P = MP_P(), rooms = hand.nodes.filter(function (n) { return n.kind === "i_room" && !n.attic; }), out = [];
+    kinds.forEach(function (k) {
+      rooms.filter(function (r) { var rk = wireKindOf(plan, r); return (rk === k || r.use === k || r.starter === k) && Math.min(r.w, r.h) >= 1.2 * P && out.indexOf(r) < 0; })
+        .sort(function (a, b) { return b.w * b.h - a.w * a.h; }).forEach(function (r) { out.push(r); });
     });
-    spot = spot || rooms.slice().sort(function (a, b) { return b.w * b.h - a.w * a.h; })[0];
-    if (!spot) { return null; }
-    var b = tieBox(spot), h = mpAlong(spot, "i_waterheater", { x: b.r, y: b.t });
+    rooms.filter(function (r) { var rk = wireKindOf(plan, r); return out.indexOf(r) < 0 && !/^(bed|main|bath|ensuite)$/.test(rk) && r.use !== "washroom" && r.use !== "restroom"; })
+      .sort(function (a, b) { return b.w * b.h - a.w * a.h; }).forEach(function (r) { out.push(r); });
+    return out;
+  }
+  function mpCorner(r, kind) {
+    var P2 = MP_P(), b = tieBox(r), T = roomWallOf(r), probe = { kind: kind, x: 0, y: 0, w: 140, h: 46 };
+    measure(probe);
+    var hw = probe.w / 2 + T + 2, hh = probe.h / 2 + T + 2, spots = [[b.l + hw, b.t + hh], [b.r - hw, b.t + hh], [b.l + hw, b.b - hh], [b.r - hw, b.b - hh]];
+    for (var i = 0; i < spots.length; i++) {
+      probe.x = Math.round(spots[i][0]); probe.y = Math.round(spots[i][1]);
+      if (probe.x - probe.w / 2 < b.l + T || probe.x + probe.w / 2 > b.r - T || probe.y - probe.h / 2 < b.t + T || probe.y + probe.h / 2 > b.b - T) { continue; }
+      var clear = !hand.nodes.some(function (m) {
+        if (m === r || !(isSolid(m.kind) || WALK_DOORS[m.kind])) { return false; }
+        var f = WALK_DOORS[m.kind] ? starterDoorFlip(m) : null;
+        return boxesTouch(probe, m, WALK_DOORS[m.kind] ? 0.3 * P2 : 2) || (f && boxesTouch(probe, f, 0.3 * P2));
+      });
+      if (clear) {
+        var n = adviceAdd(kind, probe.x, probe.y);
+        n.own = true; n.mp = true;
+        return n;
+      }
+    }
+    return null;
+  }
+  function mpPutIn(kinds, kind, nearOf) {
+    var list = mpRoomsFor(kinds);
+    for (var i = 0; i < list.length; i++) {
+      var b = tieBox(list[i]), n = mpAlong(list[i], kind, nearOf(b));
+      if (n) { return n; }
+    }
+    for (var k = 0; k < list.length; k++) { var m = mpCorner(list[k], kind); if (m) { return m; } }
+    return null;
+  }
+  function mpPutHeater() {
+    var h = mpPutIn(["utility", "laundry", "garage", "storage", "stock", "staff", "kitchenette", "closet"], "i_waterheater", function (b) { return { x: b.r, y: b.t }; });
     if (h) { h.wired = true; }
     return h;
   }
   function mpPutFurnace() {
-    var plan = walkPlan(), P = MP_P(), rooms = hand.nodes.filter(function (n) { return n.kind === "i_room"; }), spot = null;
     var wh = hand.nodes.filter(function (n) { return n.kind === "i_waterheater"; })[0], whRoom = wh ? mpRoomOf(wh) : null;
-    ["utility", "laundry", "garage", "storage", "stock", "closet", "hall"].some(function (k) {
-      spot = rooms.filter(function (r) { var rk = wireKindOf(plan, r); return (rk === k || r.use === k || r.starter === k) && Math.min(r.w, r.h) >= 1.2 * P; })
-        .sort(function (a, b) { return (b === whRoom) - (a === whRoom) || b.w * b.h - a.w * a.h; })[0] || null;
-      return !!spot;
-    });
-    spot = spot || rooms.slice().sort(function (a, b) { return b.w * b.h - a.w * a.h; })[0];
-    if (!spot) { return null; }
-    var b = tieBox(spot), n = mpAlong(spot, "i_furnace", { x: b.l, y: b.t });
-    if (!n) {
-      var P2 = MP_P();
-      n = adviceAdd("i_furnace", Math.round(b.l + 0.55 * P2), Math.round(b.t + 0.55 * P2));
-      n.x = Math.round(b.l + n.w / 2 + 0.16 * P2); n.y = Math.round(b.t + n.h / 2 + 0.16 * P2);
-      n.own = true; n.mp = true;
+    if (whRoom) {
+      var first = mpAlong(whRoom, "i_furnace", { x: tieBox(whRoom).l, y: tieBox(whRoom).t });
+      if (first) { first.wired = true; return first; }
     }
-    n.wired = true;
+    var n = mpPutIn(["utility", "laundry", "garage", "storage", "stock", "closet", "hall"], "i_furnace", function (b) { return { x: b.l, y: b.t }; });
+    if (n) { n.wired = true; }
     return n;
   }
   function mpCoSpots(plan, rooms, kindOf) {
@@ -105519,12 +105926,17 @@ window.addEventListener("load", function () {
     });
   }
   function mpMovePanel(b, plan, rooms, kindOf) {
-    var home = rooms.filter(function (r) { var k = kindOf(r); return k === "garage" || k === "utility" || k === "laundry"; })[0] ||
-               rooms.filter(function (r) { var k = kindOf(r); return k === "hall"; })[0];
-    if (!home) { return; }
+    var order = rooms.filter(function (r) { var k = kindOf(r); return k === "garage" || k === "utility" || k === "laundry"; })
+      .concat(rooms.filter(function (r) { return kindOf(r) === "hall"; }))
+      .concat(rooms.filter(function (r) { var k = kindOf(r); return !/^(bath|ensuite|closet|bed|main|garage|utility|laundry|hall)$/.test(k); })
+        .sort(function (p, q) { return q.w * q.h - p.w * p.h; }));
+    var was = hand.nodes.indexOf(b);
     hand.nodes = hand.nodes.filter(function (n) { return n !== b; });
-    var bb = tieBox(home), n = mpAlong(home, "i_breaker", { x: bb.l, y: bb.t });
-    if (n) { n.wired = true; }
+    for (var i = 0; i < order.length; i++) {
+      var bb = tieBox(order[i]), n = mpAlong(order[i], "i_breaker", { x: bb.l, y: bb.t });
+      if (n) { n.wired = true; return; }
+    }
+    hand.nodes.splice(Math.max(0, was), 0, b);              // (nowhere better: where it was)
   }
   function mpPeople(rooms) {
     var P = MP_P(), occ = 0;
@@ -105548,8 +105960,12 @@ window.addEventListener("load", function () {
     function count(kinds, where) {
       return hand.nodes.filter(function (n) { return kinds.indexOf(n.kind) >= 0 && publicRooms.some(function (r) { return insideArea(r, n.x, n.y) && (!where || where(r)); }); }).length;
     }
-    var rest = publicRooms.filter(function (r) { return r.use === "restroom"; });
-    var haveWc = count(["i_toilet"]), haveLav = count(["i_sink", "i_vanity"], function (r) { return r.use === "restroom"; });
+    function isRest(r) { return r.use === "restroom" || r.use === "washroom"; }
+    var rest = publicRooms.filter(isRest);
+    var urinalShare = occType === "educational" || occType === "assembly" ? 2 / 3 : 1 / 2;
+    var haveWc = count(["i_toilet", "i_toiletstall"]);
+    haveWc += Math.min(count(["i_urinal"]), Math.floor(wc * urinalShare));
+    var haveLav = count(["i_sink", "i_vanity"], isRest);
     var haveDf = count(["i_fountain"]), haveSs = count(["i_utilitysink"]);
     var words = { people: people };
     if (haveWc < wc) { out.push({ key: "mp_need_wc", text: say("mp_need_wc", Object.assign({ need: wc, have: haveWc }, words)), id: rest[0] ? rest[0].id : null, fix: function () { mpAddInto(rest, "i_toilet", wc - haveWc); } }); }
@@ -105559,7 +105975,7 @@ window.addEventListener("load", function () {
       out.push({ key: "mp_need_df", text: say("mp_need_df", Object.assign({ need: df, have: haveDf }, words)), id: hall[0] ? hall[0].id : null, fix: function () { mpAddInto(hall.length ? hall : rest, "i_fountain", df - haveDf); } });
     }
     if (haveSs < 1) {
-      var back = publicRooms.filter(function (r) { var k = r.use || r.starter; return k === "stock" || k === "staff" || k === "kitchenette" || k === "cafekitchen" || k === "restroom"; });
+      var back = publicRooms.filter(function (r) { var k = r.use || r.starter; return k === "stock" || k === "staff" || k === "kitchenette" || k === "cafekitchen" || k === "restroom" || k === "washroom"; });
       out.push({ key: "mp_need_ss", text: say("mp_need_ss", words), id: back[0] ? back[0].id : null, fix: function () { mpAddInto(back, "i_utilitysink", 1); } });
     }
     return out;
@@ -106707,6 +107123,7 @@ window.addEventListener("load", function () {
       hand.nodes.filter(function (n) {
         return n !== g && insideArea(g, n.x, n.y, -4) && !isArea(n.kind) && !WALK_DOORS[n.kind] && n.kind !== "i_window" &&
                !FROM_CEILING[n.kind] && !LIES_FLAT[n.kind] && n.kind !== "i_parked" && n.kind !== "i_garagebtn" &&
+               !n.attic &&
                keep.some(function (z) { return boxesTouch(n, z, 2); });
       }).forEach(function (m) {
         hand.nodes = hand.nodes.filter(function (n) { return n !== m; });
@@ -110124,6 +110541,7 @@ window.addEventListener("load", function () {
   if (typeof STARTER_CEILING === "object") { STARTER_CEILING.gardenctr = "i_pendant"; }
   if (typeof STARTER_VENTED === "object") { STARTER_VENTED.gardenctr = 1; }
   if (typeof TYPE_USE === "object") { TYPE_USE.gardenctr = 1; }
+  if (typeof ROOM_USE === "object") { ROOM_USE.gardenctr = "work"; }
   if (typeof FRONT_GLASS === "object" && FRONT_GLASS.sales) { FRONT_GLASS.gardenctr = FRONT_GLASS.sales; }
 
   if (typeof BUILDING_TYPES === "object" && BUILDING_TYPES.shop) {
@@ -112460,6 +112878,7 @@ window.addEventListener("load", function () {
   if (typeof STARTER_CEILING === "object") { STARTER_CEILING.mallunit = "i_pendant"; STARTER_CEILING.mallanchor = "i_pendant"; }
   if (typeof STARTER_VENTED === "object") { STARTER_VENTED.mallunit = 1; STARTER_VENTED.mallanchor = 1; }
   if (typeof TYPE_USE === "object") { TYPE_USE.mallunit = 1; TYPE_USE.mallanchor = 1; }
+  if (typeof ROOM_USE === "object") { ROOM_USE.mallunit = "work"; ROOM_USE.mallanchor = "work"; }
   if (typeof TYPE_LIT === "object") { TYPE_LIT.mallunit = 1; TYPE_LIT.mallanchor = 1; }
   if (typeof FRONT_GLASS === "object" && FRONT_GLASS.sales) { FRONT_GLASS.mallunit = FRONT_GLASS.sales; FRONT_GLASS.mallanchor = FRONT_GLASS.sales; }
   if (typeof GROUNDS_OF === "object") { GROUNDS_OF.mall = "store"; }
@@ -112483,10 +112902,16 @@ window.addEventListener("load", function () {
         }
         for (var k = 0; k < S; k++) {
           var core = (S > 1 ? typeCore(k, S - 1, true) : []).concat([R("restroom", 3.2), R("restroom", 3.2)]);
-          var food = k === S - 1 && S > 1 ? [R("cafe", 18, { id: "fc" + k, label: TXT.mall_food }), R("cafekitchen", 4.6, { via: "fc" + k }), R("cafekitchen", 4.6, { via: "fc" + k })] : [];
-          var mid = core.concat(food), rest = W - 2 * A - typeWidth(mid);
-          var left = units(rest / 2, 1, k, false), right = units(rest / 2, 1 + left.length, k, false);
-          var back = [R("mallanchor", A, { label: TXT.mall_anchor })].concat(left, mid, right, [R("mallanchor", A, { label: TXT.mall_anchor })]);
+          var side = (W - 2 * A - typeWidth(core)) / 2, food = [];
+          if (k === S - 1 && S > 1) {
+            var kit = side >= 17 ? 2 : side >= 12.6 ? 1 : 0, fw = Math.min(18, side - kit * 4.6);
+            food.push(R("cafe", fw, { id: "fc" + k, label: TXT.mall_food }));
+            for (var q = 0; q < kit; q++) { food.push(R("cafekitchen", 4.6, { via: q ? "fk" + k : "fc" + k, id: q ? undefined : "fk" + k })); }
+          }
+          var left = units(side, 1, k, false), rightW = side - typeWidth(food);
+          var right = food.concat(rightW >= 3 ? units(rightW, 1 + left.length, k, false) : []);
+          if (rightW > 0.01 && rightW < 3 && food.length) { food[0].w += rightW; }
+          var back = [R("mallanchor", A, { label: TXT.mall_anchor })].concat(left, core, right, [R("mallanchor", A, { label: TXT.mall_anchor })]);
           var front = [];
           if (k === 0) {
             var seg = (W - ways * 8) / (ways + 1), n0 = 1;
@@ -112934,8 +113359,11 @@ window.addEventListener("load", function () {
         if (!b || !b.length) { return; }
         var short = W - typeWidth(b);
         if (short < 0.05) { return; }
-        var grow = b.filter(function (r) { return r.kind !== "washroom" && r.kind !== "stairs" && r.kind !== "lift" && r.kind !== "suite"; })
-          .sort(function (p, q) { return q.w - p.w; })[0] || b[b.length - 1];
+        var can = b.filter(function (r) { return r.kind !== "washroom" && r.kind !== "stairs" && r.kind !== "lift" && r.kind !== "suite"; });
+        var lastWell = -1;
+        b.forEach(function (r, j) { if (r.kind === "stairs" || r.kind === "lift") { lastWell = j; } });
+        var after = can.filter(function (r) { return b.indexOf(r) > lastWell; });
+        var grow = (after.length ? after : can).slice().sort(function (p, q) { return q.w - p.w; })[0] || b[b.length - 1];
         grow.w += short;
       });
     });
@@ -112962,50 +113390,98 @@ window.addEventListener("load", function () {
     });
     return best || "foot";
   }
+  function slWalls(r) {
+    var f = roomInside(r);
+    return [{ name: "top", across: true, line: f.t, into: 1, from: f.l, to: f.r, turn: 0 },
+            { name: "foot", across: true, line: f.b, into: -1, from: f.l, to: f.r, turn: 180 },
+            { name: "left", across: false, line: f.l, into: 1, from: f.t, to: f.b, turn: 270 },
+            { name: "right", across: false, line: f.r, into: -1, from: f.t, to: f.b, turn: 90 }];
+  }
+  function slSpot(kind, e, at, w, d, off) {
+    var o = e.line + e.into * ((off || 0) + d / 2 + 1);
+    return { kind: kind, x: e.across ? at : o, y: e.across ? o : at, w: w, h: d, turn: e.turn };
+  }
+  function slFree(spot, f, doors, gap) {
+    var t = turned(spot);
+    if (spot.x - t.w / 2 < f.l - 0.5 || spot.x + t.w / 2 > f.r + 0.5 || spot.y - t.h / 2 < f.t - 0.5 || spot.y + t.h / 2 > f.b + 0.5) { return false; }
+    if (doors.some(function (d) { var f = starterDoorFlip(d); return boxesTouch(spot, d, 0.4 * FLOOR_PX) || (f && boxesTouch(spot, f, 0.4 * FLOOR_PX)); })) { return false; }
+    return typeClear(spot, gap === undefined ? 2 : gap);
+  }
+  function slPutAt(spot, sized) {
+    var n = adviceAdd(spot.kind, Math.round(spot.x), Math.round(spot.y), spot.turn);
+    if (n && sized) { n.w = Math.round(spot.w); n.h = Math.round(spot.h); n.own = true; }
+    return n;
+  }
   function slFit(r, made) {
-    var P = FLOOR_PX, b = tieBox(r), T = roomWallOf(r) + 2;
+    var P = FLOOR_PX, f = roomInside(r);
+    if ((r.turn || 0) % 90) { return; }
     r.mat = Object.assign({}, r.mat || {}, { floor: "tiles", floorC: "#e6e8e6", wall: "tiles", wallC: "#f4f4f1" });
-    var long = Math.max(b.r - b.l, b.b - b.t) / P;
-    var n = Math.max(2, Math.min(9, Math.floor((long - SL_WIDE - SL_BASINS - 0.3) / SL_STALL + 1e-6) + 1));
-    var boys = String(r.text || "") === TXT.sl_boys || String(r.text || "") === TXT.sl_men;
-    var inSide = slInSide(r, made), far = { foot: "top", top: "foot", left: "right", right: "left" }[inSide];
-    var across = far === "top" || far === "foot";                      // the far wall runs along x
-    var turn = { top: 0, foot: 180, left: 270, right: 90 }[far];
-    var len0 = across ? b.l : b.t, len1 = across ? b.r : b.b, line = far === "top" ? b.t : far === "foot" ? b.b : far === "left" ? b.l : b.r;
-    var inward = far === "top" || far === "left" ? 1 : -1;
-    var st = ICONS.i_toiletstall, deep = st ? st.box[1] : 75, wide = st ? st.box[0] : 45;
-    var was = typeof typeRoom !== "undefined" ? typeRoom : null;
-    try {
-      typeRoom = r;
-      var urinals = boys ? Math.max(1, Math.floor(n / 2)) : 0, stalls = Math.max(2, n - urinals), at = len1 - T;
-      var c = line + inward * (T + deep / 2);
-      for (var i = 0; i < stalls; i++) {
-        var w = i === 0 ? Math.round(SL_WIDE * P) : wide;
-        var mid = at - w / 2, x = across ? mid : c, y = across ? c : mid;
-        var s = typePut("i_toiletstall", x, y, turn, 0);
-        if (!s) {
-          s = adviceAdd("i_toiletstall", Math.round(x), Math.round(y), turn);
+    var boys = !!r.slBoys || String(r.text || "") === TXT.sl_boys || String(r.text || "") === TXT.sl_men;
+    var B = tieBox(r), T = roomWallOf(r);
+    var doors = hand.nodes.filter(function (d) {
+      if (!WALK_DOORS[d.kind]) { return false; }
+      var t = turned(d);
+      return d.x + t.w / 2 > B.l - T - 4 && d.x - t.w / 2 < B.r + T + 4 && d.y + t.h / 2 > B.t - T - 4 && d.y - t.h / 2 < B.b + T + 4;
+    });
+    var walls = slWalls(r);
+    function onWall(d, e) {
+      var t = turned(d), lo = e.across ? d.x - t.w / 2 : d.y - t.h / 2, hi = e.across ? d.x + t.w / 2 : d.y + t.h / 2;
+      var near = e.across ? Math.min(Math.abs(d.y - t.h / 2 - e.line), Math.abs(d.y + t.h / 2 - e.line)) : Math.min(Math.abs(d.x - t.w / 2 - e.line), Math.abs(d.x + t.w / 2 - e.line));
+      return near <= T + 6 && hi > e.from && lo < e.to;
+    }
+    var inSide = slInSide(r, made), mid = { x: (f.l + f.r) / 2, y: (f.t + f.b) / 2 };
+    var door = doors[0] ? { x: doors[0].x, y: doors[0].y } :
+      { x: inSide === "left" ? f.l : inSide === "right" ? f.r : mid.x, y: inSide === "top" ? f.t : inSide === "foot" ? f.b : mid.y };
+    walls.forEach(function (e) {
+      e.len = e.to - e.from;
+      e.door = doors.some(function (d) { return onWall(d, e); }) || (!doors.length && e.name === inSide);
+      e.away = Math.abs((e.across ? door.y : door.x) - e.line);
+    });
+    var st = ICONS.i_toiletstall, deep = st ? st.box[1] : 75, wide = Math.max(st ? st.box[0] : 45, Math.round(SL_STALL * P)), acc = Math.round(SL_WIDE * P);
+    var wall = walls.filter(function (e) { return !e.door && e.len >= acc + wide; })
+      .sort(function (p, q) { return (q.len - p.len) || (q.away - p.away); })[0];
+    if (!wall) { return; }
+    var dAlong = wall.across ? door.x : door.y, fromFar = Math.abs(dAlong - wall.from) > Math.abs(dAlong - wall.to);
+    var start = fromFar ? wall.from : wall.to, step = fromFar ? 1 : -1;
+    var want = Math.max(2, r.slToilets || 2), urinals = boys ? Math.max(1, Math.floor(want / 2)) : 0;
+    var stalls = Math.max(2, want - urinals), at = start, put = 0;
+    for (var i = 0; i < stalls + 3; i++) {
+      var w = put === 0 ? acc : wide, spot = slSpot("i_toiletstall", wall, at + step * w / 2, w, deep);
+      if (!slFree(spot, f, doors, 0.5)) { break; }
+      var s = slPutAt(spot, true);
+      if (put === 0 && s) { s.text = TXT.sl_accessible || ""; }
+      put++;
+      at += step * (w + 1);
+      if (put >= stalls) { break; }
+    }
+    var opp = walls.filter(function (e) { return e.across === wall.across && e !== wall; })[0];
+    var aisle = Math.abs(opp.line - wall.line) - deep;
+    var sinks = Math.max(2, Math.ceil(want / 2)), sk = ICONS.i_sink, sw = sk ? sk.box[0] : 30, sd = sk ? sk.box[1] : 20;
+    var row = [];
+    for (var k = 0; k < sinks; k++) { row.push(["i_sink", Math.max(sw, 0.7 * P), sd]); }
+    if (ICONS.i_handdryer) { row.push(["i_handdryer", ICONS.i_handdryer.box[0] + 0.3 * P, ICONS.i_handdryer.box[1]]); }
+    for (var u = 0; u < urinals; u++) { row.push(["i_urinal", Math.max(ICONS.i_urinal ? ICONS.i_urinal.box[0] : 24, 0.75 * P), ICONS.i_urinal ? ICONS.i_urinal.box[1] : 20]); }
+    var lines = [];
+    if (aisle >= 1.2 * P + sd) { lines.push({ e: opp, from: fromFar ? opp.to : opp.from, step: -step }); }
+    walls.filter(function (e) { return e.across !== wall.across; }).sort(function (p, q) { return p.away - q.away; }).forEach(function (e) {
+      var awayFromStalls = Math.abs(e.from - wall.line) > Math.abs(e.to - wall.line);
+      lines.push({ e: e, from: awayFromStalls ? e.from : e.to, step: awayFromStalls ? 1 : -1, stop: wall.line - wall.into * 0 + wall.into * (deep + 0.9 * P) });
+    });
+    var li = 0, pos = lines[0] ? lines[0].from : 0;
+    row.forEach(function (it) {
+      while (li < lines.length) {
+        var L = lines[li], e = L.e, w = it[1], spot = slSpot(it[0], e, pos + L.step * w / 2, w, it[2]);
+        var past = L.step > 0 ? pos + w > e.to : pos - w < e.from;
+        if (L.stop !== undefined) { var cc = e.across ? spot.x : spot.y; if (wall.into > 0 ? cc - w / 2 < L.stop : cc + w / 2 > L.stop) { past = true; } }
+        if (!past && slFree(spot, f, doors, it[0] === "i_handdryer" ? 0 : 1)) {
+          slPutAt(spot, false);
+          pos += L.step * (w + 1);
+          return;
         }
-        if (s) { s.w = w; s.own = true; if (i === 0) { s.text = TXT.sl_accessible || ""; } }
-        at -= w + 1;
+        if (past) { li++; pos = lines[li] ? lines[li].from : 0; continue; }
+        pos += L.step * 0.1 * P;
       }
-      var uc = line + inward * (T + 10);
-      for (var u = 0; u < urinals; u++) {
-        var um = at - 0.35 * P - u * 0.75 * P;
-        if (um - 0.4 * P < len0 + SL_BASINS * P) { break; }
-        typePut("i_urinal", across ? um : uc, across ? uc : um, turn, 0);
-      }
-      var endTurn = across ? 270 : 0, endLine = across ? b.l : b.t, sinks = Math.max(2, Math.ceil(n / 2));
-      var e0 = (across ? b.t : b.l) + T + 0.5 * P, e1 = (across ? b.b : b.r) - T - 0.5 * P, gap = Math.min(0.8 * P, (e1 - e0) / sinks);
-      for (var k = 0; k < sinks; k++) {
-        var em = e0 + gap * (k + 0.5), ex = across ? endLine + T + 0.3 * P : em, ey = across ? em : endLine + T + 0.3 * P;
-        typePut("i_sink", ex, ey, endTurn, 0);
-      }
-      if (ICONS.i_handdryer) {
-        var hm = Math.min(e1, e0 + gap * sinks + 0.3 * P), hx = across ? endLine + T + 0.15 * P : hm, hy = across ? hm : endLine + T + 0.15 * P;
-        adviceAdd("i_handdryer", Math.round(hx), Math.round(hy), endTurn);
-      }
-    } finally { typeRoom = was; }
+    });
   }
   var CA_GYM = 18, CA_ENDS = 6, CA_DEEP = 12;               // metres: a gym's length, a commons', the row inside's depth
   if (typeof STARTER_ROOMS === "object") {
@@ -113035,11 +113511,12 @@ window.addEventListener("load", function () {
   function caShape(plan, want, rnd) {
     var floors = plan.floors, W = plan.W, n = Math.max(2, Math.min(TYPE_MOST.classrooms, want.rooms || 4));
     if (!floors || !floors.length || !(W > 0)) { return; }
-    var r = rnd(), pick = n <= 5 ? "ell" : n <= 9 ? (r < 0.6 ? "court" : "ell") : (r < 0.8 ? "court" : "hub");
-    if (want.campus === "court" || want.campus === "hub" || want.campus === "ell") { pick = want.campus; }
+    var r = rnd(), pick = n <= 5 ? (r < 0.4 ? "ell" : "wing") : n <= 9 ? (r < 0.45 ? "court" : r < 0.65 ? "ell" : "wing") : (r < 0.6 ? "court" : r < 0.75 ? "hub" : "wing");
+    if (want.campus === "court" || want.campus === "hub" || want.campus === "ell" || want.campus === "wing") { pick = want.campus; }
     if (pick === "court" && W < 2 * CA_ENDS + 10) { pick = W >= CA_ENDS + CA_GYM ? "hub" : "ell"; }
     if (pick === "hub" && W < CA_ENDS + CA_GYM) { pick = "ell"; }
     plan.campus = pick;
+    if (pick === "wing") { return; }
     if (pick === "ell") { caEll(plan, rnd); } else { caRing(plan, pick, n); }
   }
   function caRing(plan, pick, n) {
@@ -113248,6 +113725,26 @@ window.addEventListener("load", function () {
     });
     return n;
   }
+  function exInsertAt(band, x, pair) {
+    if (x === null || x === undefined) { var m = Math.floor(band.length / 2); band.splice(m, 0, pair[0], pair[1]); return; }
+    var at = 0;
+    for (var i = 0; i < band.length; i++) {
+      var r = band[i], a = at, b = at + r.w;
+      at = b;
+      if (Math.abs(a - x) < 0.05) { band.splice(i, 0, pair[0], pair[1]); return; }
+      if (b <= x + 0.05) { continue; }
+      var fixed = r.kind === "stairs" || r.kind === "lift" || r.kind === "suite" || r.entry || r.id || r.bay;
+      var loose = function (q) { return q && !(q.kind === "stairs" || q.kind === "lift" || q.kind === "suite" || q.entry || q.bay); };
+      if (!fixed && x - a < 2.0 && loose(band[i - 1])) { band[i - 1].w += x - a; r.w -= x - a; band.splice(i, 0, pair[0], pair[1]); return; }
+      if (!fixed && b - x < 2.0 && loose(band[i + 1])) { band[i + 1].w += b - x; r.w -= b - x; band.splice(i + 1, 0, pair[0], pair[1]); return; }
+      if (fixed || x - a < 2.0 || b - x < 2.0) { band.splice(i + 1, 0, pair[0], pair[1]); return; }
+      var rest = Object.assign({}, r, { w: b - x });
+      r.w = x - a;
+      band.splice(i + 1, 0, pair[0], pair[1], rest);
+      return;
+    }
+    band.push(pair[0], pair[1]);
+  }
   function exPlan(plan) {
     var floors = plan.floors || [];
     if (floors.length < 2) { return; }
@@ -113258,13 +113755,19 @@ window.addEventListener("load", function () {
     var need = Math.min(4, Math.max(most >= 50 || top >= 1 ? 2 : 1, exNeed(most))), add = need - have;
     if (add <= 0) { return; }
     var bays = [["C", "D"], ["E", "F"], ["G", "H"]];
+    var midX = null;
+    if (add >= 2) {
+      var f0 = floors.filter(function (f) { return f.level === 0; })[0] || floors[0], half = typeWidth(f0.front) / 2, run = 0, best = null;
+      f0.front.forEach(function (r, j) { run += r.w; if (j < f0.front.length - 1 && (best === null || Math.abs(run - half) < Math.abs(best - half))) { best = run; } });
+      midX = best;
+    }
     for (var i = 0; i < Math.min(3, add); i++) {
       floors.forEach(function (f) {
         var k = f.level - low, A = k % 2 === 0, up = f.level < top, down = f.level > low;
         var pair = [R("stairs", 1.4, { bay: bays[i][0], go: A ? (up ? "up" : "none") : (down ? "down" : "none"), label: TXT.st_stairs }),
                     R("stairs", 1.4, { bay: bays[i][1], go: A ? (down ? "down" : "none") : (up ? "up" : "none"), label: TXT.st_stairs })];
         if (i === 0) { f.back.push(pair[0], pair[1]); }
-        else if (i === 1) { var m = Math.floor(f.front.length / 2); f.front.splice(m, 0, pair[0], pair[1]); }
+        else if (i === 1) { exInsertAt(f.front, midX, pair); }
         else { f.front.push(pair[0], pair[1]); }
       });
     }
@@ -113275,8 +113778,11 @@ window.addEventListener("load", function () {
         if (!b.length) { return; }
         var short = W - typeWidth(b);
         if (short < 0.05) { return; }
-        var grow = b.filter(function (r) { return r.kind !== "stairs" && r.kind !== "lift" && r.kind !== "suite" && r.kind !== "washroom" && r.kind !== "court"; })
-          .sort(function (p, q) { return q.w - p.w; })[0] || b[b.length - 1];
+        var can = b.filter(function (r) { return r.kind !== "stairs" && r.kind !== "lift" && r.kind !== "suite" && r.kind !== "washroom" && r.kind !== "court"; });
+        var lastWell = -1;
+        b.forEach(function (r, j) { if (r.kind === "stairs" || r.kind === "lift") { lastWell = j; } });
+        var after = can.filter(function (r) { return b.indexOf(r) > lastWell; });
+        var grow = (after.length ? after : can).slice().sort(function (p, q) { return q.w - p.w; })[0] || b[b.length - 1];
         grow.w += short;
       });
     });
@@ -113359,6 +113865,13 @@ window.addEventListener("load", function () {
   function mrCross(a, b) { return [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]]; }
   function mrUnit(a) { var l = Math.hypot(a[0], a[1], a[2]) || 1; return [a[0] / l, a[1] / l, a[2] / l]; }
   function mrFind(model) {
+    if (mrFound.model === model) { return mrFound.out; }
+    var out = mrFindAll(model);
+    mrFound = { model: model, out: out };
+    return out;
+  }
+  var mrFound = { model: null, out: [] };
+  function mrFindAll(model) {
     var P = FLOOR_PX, cm = P / 100, seen = new Map(), out = [];
     (model.faces || []).forEach(function (f) {
       var n = f.node;
@@ -113423,9 +113936,13 @@ window.addEventListener("load", function () {
   }
   function mirrorPass(X) {
     var gl = X.gl, G = X.G, U = X.U, P = FLOOR_PX;
+    for (var bi = X.batches.length - 1; bi >= 0; bi--) { if (X.batches[bi].mirror) { X.batches.splice(bi, 1); } }
     if (!X.model || X.dress < 0.98 || (typeof V3 !== "undefined" && V3 && V3.flat)) { return; }
+    if (!X.inside && typeof V3 !== "undefined" && V3 && V3.roof && (V3.roofV === undefined || V3.roofV > 0.98)) { return; }
     var all = mrFind(X.model);
     if (!all.length) { return; }
+    var every = typeof V3Q === "object" && V3Q.shadowEvery ? Math.min(4, V3Q.shadowEvery) : 1, R = G.mrLast;
+    if (every > 1 && R && R.model === X.model && (G.frameN || 0) - R.at < every) { mrPut(X, R.made); return; }
     var far = X.inside ? GL3_FAR : 6000 * P / 50;
     var picks = all.map(function (m) {
       var eye = X.inside && X.eye ? X.eye : mrAdd(m.mid, X.toward, 4000);
@@ -113479,6 +113996,10 @@ window.addEventListener("load", function () {
       if (U.uDepthK) { gl.uniform3fv(U.uEyeV, X.eye || [0, 0, 0]); gl.uniform1f(U.uOrthoV, X.inside ? 0 : 1); }
     }
     if (typeof V3 !== "undefined" && V3) { V3.mirrorsDrawn = made.length; V3.mirrorsSeen = picks.length; }
+    G.mrLast = { model: X.model, at: G.frameN || 0, made: made };
+    mrPut(X, made);
+  }
+  function mrPut(X, made) {
     made.forEach(function (o) {
       var m = o.m, lift = m.face, k = 0.35;
       var bl = mrAdd(m.bl, lift, k), br = mrAdd(m.br, lift, k), tl = mrAdd(m.tl, lift, k), tr = mrAdd(br, mrSub(tl, bl), 1);
@@ -113875,6 +114396,517 @@ window.addEventListener("load", function () {
       if (typeof starterQuiet === "number" && starterQuiet > 0) { starterOwed.keep = true; return undefined; }
       return handKeepWork.apply(this, arguments);
     };
+  }
+  var SH_FLEX = {
+    office: ["openoffice", "meeting", "office", "staff", "reception"],
+    apartments: ["flat", "lobby", "landing"],
+    condos: ["flat", "lobby", "gym", "landing"],
+    mall: ["mallunit", "mallanchor"],
+    school: ["classroom", "cafeteria"]
+  };
+  var SH_MENU = {
+    office: [["ell", 3], ["zed", 3], ["tee", 3], ["you", 2], ["fore", 2], ["aitch", 3], ["bar", 1]],
+    apartments: [["ell", 3], ["zed", 3], ["tee", 2], ["aitch", 3], ["bar", 1]],
+    condos: [["ell", 3], ["zed", 3], ["tee", 2], ["bar", 1]],
+    mall: [["zed", 3], ["aitch", 2], ["ell", 2], ["tee", 2], ["bar", 1]],
+    school: [["zed", 3], ["tee", 3], ["aitch", 3], ["you", 2]]
+  };
+  var SH_LEAST = 16;                                      // metres: shorter than this, a box
+  if (typeof STARTER_ROOMS === "object") { STARTER_ROOMS.void = { w: 4, h: 4, bw: 4, max: 999, wall: [], mid: [] }; }
+
+  if (typeof BUILDING_TYPES === "object") {
+    Object.keys(SH_MENU).forEach(function (t) {
+      var T = BUILDING_TYPES[t];
+      if (!T || typeof T.plan !== "function" || T.shShaped) { return; }
+      var plain = T.plan;
+      T.plan = function (want, rnd) {
+        var plan = plain.apply(this, arguments);
+        try { shShape(plan, t, want || {}); } catch (e) { if (window.console && console.warn) { console.warn("shapes:", e && e.message); } }
+        return plan;
+      };
+      T.shShaped = true;
+    });
+  }
+  function shLen(band) { return (band || []).reduce(function (s, r) { return s + (r.w || 0); }, 0); }
+  function shVoid(w) { return R("void", w, { via: "-", label: "", shVoid: true }); }
+  function shFixed(r) {
+    return !!(r.bay || r.kind === "lift" || r.kind === "stairs" || r.entry || r.kind === "lobby" || r.kind === "landing" ||
+              r.kind === "court" || r.kind === "commons" || r.shVoid ||
+              (r.kind === "suite" && (r.parts || []).some(shFixed)));
+  }
+  function shGroups(band) {
+    var groups = [], ids = function (r) { return r.kind === "suite" ? (r.parts || []).map(function (p) { return p.id; }) : [r.id]; };
+    var vias = function (r) { return r.kind === "suite" ? (r.parts || []).map(function (p) { return p.via; }) : [r.via]; };
+    band.forEach(function (r, i) {
+      var prev = i ? band[i - 1] : null;
+      var tied = prev && (vias(r).some(function (v) { return v && ids(prev).indexOf(v) >= 0; }) || vias(prev).some(function (v) { return v && ids(r).indexOf(v) >= 0; }));
+      if (tied) { groups[groups.length - 1].push(r); } else { groups.push([r]); }
+    });
+    return groups;
+  }
+  function shCuts(plan, side) {
+    var sets = plan.floors.map(function (f) {
+      var at = 0, out = [];
+      shGroups(f[side] || []).forEach(function (g, i, all) {
+        at += shLen(g);
+        if (i < all.length - 1 && !shFixed(g[g.length - 1]) && !shFixed(all[i + 1][0])) { out.push(at); }
+      });
+      return out;
+    });
+    return sets[0].filter(function (x) { return sets.every(function (s) { return s.some(function (y) { return Math.abs(x - y) < 0.05; }); }); });
+  }
+  function shInsert(band, x, w) {
+    var at = 0;
+    for (var i = 0; i < band.length; i++) {
+      at += band[i].w || 0;
+      if (Math.abs(at - x) < 0.05) { band.splice(i + 1, 0, shVoid(w)); return true; }
+    }
+    return false;
+  }
+  function shStretch(band, extra, kinds) {
+    var can = band.filter(function (r) { return kinds.indexOf(r.kind) >= 0 && !r.shVoid; }), sum = shLen(can);
+    if (!can.length || sum < extra * 0.6) { return false; }            // (none more than two and a half times as big)
+    can.forEach(function (r) { r.w += extra * r.w / sum; });
+    return true;
+  }
+  function shSplit(plan, side, x, kinds) {
+    var spots = plan.floors.map(function (f) {
+      var at = 0, band = f[side] || [];
+      for (var i = 0; i < band.length; i++) {
+        var r = band[i];
+        if (at + 2.5 < x && at + r.w - 2.5 > x && kinds.indexOf(r.kind) >= 0 && !shFixed(r) && !r.id) { return { band: band, i: i, a: at }; }
+        at += r.w;
+      }
+      return null;
+    });
+    if (spots.some(function (s) { return !s; })) { return false; }
+    spots.forEach(function (s) {
+      var r = s.band[s.i], first = x - s.a, second = Object.assign({}, r, { w: r.w - first });
+      r.w = first;
+      s.band.splice(s.i + 1, 0, second);
+    });
+    return true;
+  }
+  function shMiddle(plan, side, rnd, kinds) {
+    var W = plan.W, aim = W * (0.42 + rnd() * 0.16);
+    var cuts = shCuts(plan, side).filter(function (x) { return x > W * 0.28 && x < W * 0.72; })
+      .sort(function (a, b) { return Math.abs(a - aim) - Math.abs(b - aim); });
+    if (cuts.length) { return cuts[0]; }
+    return shSplit(plan, side, aim, kinds) ? aim : null;
+  }
+  function shShape(plan, type, want) {
+    if (!plan || !plan.floors || !plan.floors.length || plan.together) { return; }
+    if (type === "school" && plan.campus !== "wing") { return; }
+    if (plan.floors.some(function (f) { return (f.mid && f.mid.length) || f.open || !(f.H > 0) || !(f.back || []).length || !(f.front || []).length; })) { return; }
+    var W = plan.W || Math.max.apply(null, plan.floors.map(function (f) { return Math.max(shLen(f.back), shLen(f.front)); }));
+    if (!(W >= SH_LEAST)) { return; }
+    plan.W = W;
+    var rnd = starterRand((((want.seed >>> 0) || 1) * 31 + 17) >>> 0), menu = SH_MENU[type] || [];
+    var pick = want.shape;
+    if (!pick || !menu.some(function (m) { return m[0] === pick; })) {
+      var total = menu.reduce(function (s, m) { return s + m[1]; }, 0), roll = rnd() * total;
+      pick = "bar";
+      for (var i = 0; i < menu.length; i++) { roll -= menu[i][1]; if (roll < 0) { pick = menu[i][0]; break; } }
+    }
+    if (pick === "bar") { plan.shape = "bar"; return; }
+    var order = [pick].concat(menu.map(function (m) { return m[0]; }).filter(function (k) { return k !== pick && k !== "bar"; })
+      .map(function (k) { return [k, rnd()]; }).sort(function (a, b) { return a[1] - b[1]; }).map(function (p) { return p[0]; }));
+    var keep = JSON.stringify(plan.floors), kinds = SH_FLEX[type] || [], before = shBays(plan);
+    plan.shapeTried = [];
+    for (var k = 0; k < order.length; k++) {
+      var ok = false;
+      try { ok = SH_DO[order[k]](plan, rnd, kinds); } catch (e) { ok = false; }
+      if (ok) { ok = shLevel(plan, order[k]) && shStacked(plan, before); }
+      if (ok) { plan.shape = order[k]; return; }
+      plan.shapeTried.push(order[k]);
+      plan.floors = JSON.parse(keep); plan.W = W;
+    }
+    plan.shape = "bar";
+  }
+  var SH_DO = {
+    ell: function (plan, rnd, kinds) {
+      var W = plan.W, keepTo = W * (0.5 + rnd() * 0.15), groups = shGroups(plan.floors[0].back), at = 0, n = 0;
+      for (var i = groups.length - 1; i >= 0; i--) {
+        if (groups[i].some(shFixed)) { break; }
+        if (shLen(plan.floors[0].back) - at - shLen(groups[i]) < keepTo - 0.1) { break; }
+        at += shLen(groups[i]); n++;
+      }
+      if (!n || at < W * 0.2) {
+        var V = Math.round(W * (0.3 + rnd() * 0.12) * 10) / 10;
+        return plan.floors.every(function (f) { f.back.push(shVoid(V)); return shStretch(f.front, V, kinds); });
+      }
+      return plan.floors.every(function (f) {
+        var g = shGroups(f.back), moved = g.slice(g.length - n);
+        if (moved.some(function (x) { return x.some(shFixed); })) { return false; }
+        f.back = [].concat.apply([], g.slice(0, g.length - n));
+        f.front = f.front.concat([].concat.apply([], moved));
+        return true;
+      });
+    },
+    zed: function (plan, rnd) {
+      var V = Math.round(plan.W * (0.25 + rnd() * 0.15) * 10) / 10;
+      plan.floors.forEach(function (f) { f.back.unshift(shVoid(V)); f.front.push(shVoid(V)); });
+      return true;
+    },
+    tee: function (plan, rnd, kinds) {
+      var V = Math.round(plan.W * (0.18 + rnd() * 0.1) * 10) / 10;
+      return plan.floors.every(function (f) {
+        f.back.unshift(shVoid(V)); f.back.push(shVoid(V));
+        return shStretch(f.front, 2 * V, kinds);
+      });
+    },
+    you: function (plan, rnd, kinds) {
+      var x = shMiddle(plan, "back", rnd, kinds);
+      if (x === null) { return false; }
+      var M = Math.round(plan.W * (0.22 + rnd() * 0.12) * 10) / 10;
+      return plan.floors.every(function (f) { return shInsert(f.back, x, M) && shStretch(f.front, M, kinds); });
+    },
+    fore: function (plan, rnd, kinds) {
+      var x = shMiddle(plan, "front", rnd, kinds);
+      if (x === null) { return false; }
+      var M = Math.round(plan.W * (0.22 + rnd() * 0.12) * 10) / 10;
+      return plan.floors.every(function (f) { return shInsert(f.front, x, M) && shStretch(f.back, M, kinds); });
+    },
+    aitch: function (plan, rnd, kinds) {
+      var xb = shMiddle(plan, "back", rnd, kinds), xf = shMiddle(plan, "front", rnd, kinds);
+      if (xb === null || xf === null) { return false; }
+      var M = Math.round(plan.W * (0.2 + rnd() * 0.1) * 10) / 10;
+      return plan.floors.every(function (f) { return shInsert(f.back, xb, M) && shInsert(f.front, xf, M); });
+    }
+  };
+  function shLevel(plan, pick) {
+    var W = 0;
+    plan.floors.forEach(function (f) { W = Math.max(W, shLen(f.back), shLen(f.front)); });
+    plan.floors.forEach(function (f) {
+      ["back", "front"].forEach(function (side) {
+        var short = W - shLen(f[side]);
+        if (short < 0.05 || (pick === "ell" && side === "back")) { return; }
+        f[side].push(shVoid(Math.round(short * 100) / 100));
+      });
+    });
+    plan.W = W;
+    return true;
+  }
+  function shBays(plan) {
+    return plan.floors.map(function (f) {
+      var out = {};
+      ["back", "front"].forEach(function (side) {
+        var at = 0;
+        (f[side] || []).forEach(function (r) {
+          var key = r.bay ? side + ":" + r.bay : r.kind === "lift" ? side + ":lift" : null;
+          if (key && out[key] === undefined) { out[key] = at; }
+          at += r.w || 0;
+        });
+      });
+      return out;
+    });
+  }
+  function shStacked(plan, before) {
+    var after = shBays(plan), moved = {};
+    return before.every(function (was, i) {
+      return Object.keys(was).every(function (key) {
+        if (after[i][key] === undefined) { return false; }
+        var d = after[i][key] - was[key];
+        if (moved[key] === undefined) { moved[key] = d; return true; }
+        return Math.abs(moved[key] - d) < 0.05;
+      });
+    });
+  }
+
+  if (typeof typeFurnish === "function") {
+    var shFurnishWas = typeFurnish;
+    typeFurnish = function (made, rnd, want, plan) {
+      var out = shFurnishWas.apply(this, arguments);
+      try {
+        var rooms = made.filter(function (r) { return r.starter !== "void" && r.local; });
+        made.forEach(function (v) {
+          if (v.starter !== "void") { return; }
+          v.shVoid = true;
+          if (typeof caCourtWindows === "function" && v.local) { caCourtWindows({ local: v.local, x: v.x, y: v.y, courtOver: true, starter: "court" }, rooms); }
+        });
+      } catch (e) { if (window.console && console.warn) { console.warn("shapes:", e && e.message); } }
+      return out;
+    };
+  }
+  function shClear() {
+    var voids = hand.nodes.filter(function (n) { return n.kind === "i_room" && n.shVoid; });
+    if (!voids.length) { return 0; }
+    var gone = {};
+    voids.forEach(function (v) {
+      gone[v.id] = true;
+      var T = roomWallOf(v) + 3;
+      hand.nodes.forEach(function (n) {
+        if (n === v || n.kind === "i_room" || n.kind === "i_floor" || n.kind === "i_lot" || gone[n.id]) { return; }
+        if (insideArea(v, n.x, n.y, T)) { gone[n.id] = true; }
+      });
+    });
+    hand.nodes = hand.nodes.filter(function (n) { return !gone[n.id]; });
+    hand.links = hand.links.filter(function (l) { return !gone[l.from] && !gone[l.to]; });
+    return voids.length;
+  }
+  if (typeof STARTER_WRAPS === "object") {
+    STARTER_WRAPS.unshift(function* (inner, want) {
+      var out = yield* inner(want);
+      try { shClear(); } catch (e) { if (window.console && console.warn) { console.warn("shapes:", e && e.message); } }
+      return out;
+    });
+  }
+
+  var CL_MEET = 1.2;                                 // metres of wall two rooms share, for a door between them
+  function clSpans(band) {
+    var at = 0;
+    return band.map(function (r) { var s = { r: r, a: at, b: at + (r.w || 0) }; at += r.w || 0; return s; });
+  }
+  function clVias(plan) {
+    var next = 0;
+    function named(s, byId) { if (!s.r.id) { s.r.id = "_cl" + (next++); byId[s.r.id] = s; } return s.r.id; }
+    (plan.floors || []).forEach(function (f) {
+      if (f.open) { return; }
+      var rows = [f.back || []].concat(f.mid || [], [f.front || []]).map(clSpans), byId = {};
+      rows.forEach(function (row) { row.forEach(function (s) { if (s.r.id) { byId[s.r.id] = s; } }); });
+      function meet(p, q) { return Math.min(p.b, q.b) - Math.max(p.a, q.a); }
+      var facing = !(f.H > 0) && !(f.mid && f.mid.length);
+      rows.forEach(function (mine, ri) {
+        mine.forEach(function (s, i) {
+          var r = s.r;
+          if (!r.via || r.via === "-" || !byId[r.via] || r.kind === "suite") { return; }
+          var t = byId[r.via], j = mine.indexOf(t);
+          if (j >= 0 ? Math.abs(j - i) === 1 : !facing || meet(s, t) >= CL_MEET) { return; }
+          var other = facing ? rows[ri === 0 ? rows.length - 1 : 0] : [];
+          var best = other.slice().sort(function (p, q) { return meet(s, q) - meet(s, p); })[0];
+          if (best && meet(s, best) >= CL_MEET) { r.via = named(best, byId); return; }
+          if (j >= 0) { r.via = named(mine[i + (j > i ? 1 : -1)], byId); }
+        });
+      });
+    });
+    return plan;
+  }
+  if (typeof BUILDING_TYPES === "object") {
+    Object.keys(BUILDING_TYPES).forEach(function (t) {
+      var T = BUILDING_TYPES[t];
+      if (!T || typeof T.plan !== "function" || T.clVias) { return; }
+      var plain = T.plan;
+      T.plan = function () {
+        var plan = plain.apply(this, arguments);
+        try { if (plan && plan.floors) { clVias(plan); } } catch (e) { if (window.console && console.warn) { console.warn("clean:", e && e.message); } }
+        return plan;
+      };
+      T.clVias = true;
+    });
+  }
+
+  function clLooseStairs() {
+    var plan = walkPlan(), linked = {}, gone = [];
+    plan.links.forEach(function (pair) { linked[pair[0].id] = linked[pair[1].id] = true; });
+    hand.nodes.forEach(function (s) {
+      if ((s.kind !== "i_stairs" && s.kind !== "i_spiral") || linked[s.id]) { return; }
+      gone.push(s);
+    });
+    if (!gone.length) { return 0; }
+    hand.nodes = hand.nodes.filter(function (n) { return gone.indexOf(n) < 0; });
+    hand.links = hand.links.filter(function (l) { return !gone.some(function (s) { return s.id === l.from || s.id === l.to; }); });
+    gone.forEach(function (s) {
+      var bay = hand.nodes.filter(function (r) { return r.kind === "i_room" && r.starter === "stairs" && insideArea(r, s.x, s.y); })[0];
+      if (!bay || hand.nodes.some(function (o) { return BETWEEN_FLOORS[o.kind] && insideArea(bay, o.x, o.y); })) { return; }
+      bay.starter = "storage";
+      if (!String(bay.text || "").trim() || bay.text === TXT.st_stairs) { bay.text = TXT.st_storage; }
+    });
+    return gone.length;
+  }
+
+  var CL_ROUNDS = 5;
+  function clRemovable(n) {
+    return !!n && n.kind !== "i_room" && n.kind !== "i_floor" && n.kind !== "i_lot" && n.kind !== "i_window" && n.kind !== "i_wall" &&
+           !WALK_DOORS[n.kind] && !BETWEEN_FLOORS[n.kind] && !isArea(n.kind) && n.kind !== "i_driveway" && n.kind !== "i_path";
+  }
+  function clSaid() {
+    try { return checkDesign() || []; } catch (e) { if (window.console && console.warn) { console.warn("clean check:", e && e.message); } return []; }
+  }
+  function clTidy() {
+    var left = [];
+    clDid.fixed.length = 0; clDid.taken.length = 0;        // (kept the same lists: read from outside)
+    for (var round = 0; round < CL_ROUNDS; round++) {
+      var said = clSaid(), acted = 0, taken = {};
+      left = said;
+      if (!said.length) { break; }
+      said.forEach(function (b) {
+        if (b.fix && typeof b.fix.go === "function" && b.fix.says !== TXT.ad_fix_upstairs) {
+          try { b.fix.go(); acted++; clDid.fixed.push(b.text); return; } catch (e) { /* taken out, below */ }
+        }
+        var n = b.id ? nodeById(b.id) : null;
+        if (n && WALK_DOORS[n.kind]) {
+          n = hand.nodes.filter(function (p) { return p !== n && clRemovable(p) && isSolid(p.kind) && boxesTouch(n, p, -3); })[0] || null;
+        }
+        if (!clRemovable(n) || taken[n.id]) { return; }
+        taken[n.id] = true;
+        clDid.taken.push(n.kind + ": " + b.text);
+        hand.nodes = hand.nodes.filter(function (m) { return m !== n; });
+        hand.links = hand.links.filter(function (l) { return l.from !== n.id && l.to !== n.id; });
+        acted++;
+      });
+      if (typeof mpKept === "object" && mpKept) { mpKept.key = null; }
+      if (!acted) { break; }
+      left = [];
+    }
+    if (!left.length) { left = clSaid(); }
+    clLeft.length = 0;
+    left.forEach(function (b) { clLeft.push(b.text); });
+    if (clLeft.length && window.console && console.info) { console.info("clean: left " + clLeft.length + ": " + clLeft.slice(0, 4).join(" / ")); }
+    return clLeft.length;
+  }
+  var clLeft = [], clDid = { fixed: [], taken: [] };
+
+  if (typeof STARTER_WRAPS === "object") {
+    var clWrap = function* (inner, want) {
+      var out = yield* inner(want);
+      if ((want && want.services === "diy") || window.CL_OFF) { return out; }
+      try {
+        clLooseStairs();
+        clTidy();
+      } catch (e) { if (window.console && console.warn) { console.warn("clean:", e && e.message); } }
+      return out;
+    };
+    var clHoodAt = -1;
+    STARTER_WRAPS.forEach(function (fn, i) { if (clHoodAt < 0 && (String(fn).indexOf("hoodBuild") >= 0 || String(fn).indexOf("hoodAsk") >= 0)) { clHoodAt = i; } });
+    if (clHoodAt >= 0) { STARTER_WRAPS.splice(clHoodAt, 0, clWrap); } else { STARTER_WRAPS.push(clWrap); }
+  }
+  var V3Q_CPU = [
+    { gap: 95, shadowEvery: 12, bodies: 3, split: true },
+    { gap: 62, shadowEvery: 8, bodies: 2.4, split: true },
+    { gap: 45, shadowEvery: 4, bodies: 1.8, split: true },
+    { gap: 30, shadowEvery: 2, bodies: 1.3, split: false },
+    { gap: 0, shadowEvery: 1, bodies: 1, split: false }
+  ];
+  var V3Q_GPU = [
+    { dprCap: 1, scale: 0.8, noShadow: true },
+    { dprCap: 1, scale: 0.9 },
+    { dprCap: 1.25, scale: 1 },
+    { dprCap: 1.5, scale: 1 },
+    { dprCap: 2, scale: 1 }
+  ];
+  var V3Q_KEY = "flowchart-3d-quality";
+  var V3Q = { cpu: 3, gpu: 3, auto: true, win: [], bad: 0, good: 0, last: 0, drewAt: 0, vsync: 16.7, tried: null, ceil: { cpu: 9, gpu: 9 }, ceilAt: 0 };
+  function v3qApply(cpu, gpu) {
+    cpu = Math.max(0, Math.min(V3Q_CPU.length - 1, cpu)); gpu = Math.max(0, Math.min(V3Q_GPU.length - 1, gpu));
+    var C = V3Q_CPU[cpu], D = V3Q_GPU[gpu];
+    V3Q.cpu = cpu; V3Q.gpu = gpu; V3Q.name = "cpu" + cpu + "/gpu" + gpu;
+    V3Q.gap = C.gap; V3Q.shadowEvery = C.shadowEvery; V3Q.bodies = C.bodies; V3Q.split = C.split;
+    V3Q.dprCap = D.dprCap; V3Q.scale = D.scale; V3Q.noShadow = !!D.noShadow;
+    V3Q.win = []; V3Q.bad = 0; V3Q.good = 0;
+    if (typeof V3 !== "undefined" && V3) { V3.dirty = true; }
+  }
+  function v3qStart() {
+    var kept = null;
+    try { kept = JSON.parse(localStorage.getItem(V3Q_KEY) || "null"); } catch (e) { kept = null; }
+    var phone = false, weak = false;
+    try {
+      phone = !!(window.matchMedia && window.matchMedia("(pointer: coarse)").matches && Math.min(screen.width, screen.height) < 900);
+      weak = !!((navigator.deviceMemory && navigator.deviceMemory <= 2) || (navigator.hardwareConcurrency && navigator.hardwareConcurrency <= 2));
+    } catch (e) { phone = false; }
+    var cpu = weak ? 1 : phone ? 2 : 3, gpu = weak ? 1 : phone ? 2 : 3;
+    if (kept && typeof kept.cpu === "number") { cpu = Math.min(cpu + 1, kept.cpu + 1); gpu = Math.min(gpu + 1, kept.gpu + 1); }
+    v3qApply(cpu, gpu);
+  }
+  function v3qKeep() {
+    try { localStorage.setItem(V3Q_KEY, JSON.stringify({ cpu: V3Q.cpu, gpu: V3Q.gpu })); } catch (e) { /* not kept */ }
+  }
+  v3qStart();
+  function v3RenderDpr() {
+    var d = window.devicePixelRatio || 1;
+    return Math.max(0.5, Math.min(d, V3Q.dprCap) * V3Q.scale);
+  }
+  function v3qBodyScale() { return V3Q.bodies || 1; }
+  var v3qMarks = typeof WeakMap === "function" ? new WeakMap() : null, v3qMarkN = 0;
+  function v3qEditMark() {
+    if (typeof wasLike === "undefined" || !wasLike || !wasLike.length || !v3qMarks) { return 0; }
+    var last = wasLike[wasLike.length - 1];
+    if (!last || typeof last !== "object") { return wasLike.length; }
+    var m = v3qMarks.get(last);
+    if (m === undefined) { m = ++v3qMarkN; v3qMarks.set(last, m); }
+    return m;
+  }
+  function v3PaceSig() {
+    return [V3.mode, V3.upTo, V3.low ? 1 : 0, V3.flat ? 1 : 0, V3.flatDone ? 1 : 0, V3.roof ? 1 : 0, V3.labels ? 1 : 0,
+            V3.inRoom ? V3.inRoom.id : "", V3.myLevel, hand.nodes.length, hand.links ? hand.links.length : 0,
+            v3qEditMark(),
+            V3.scene, V3.xrayShow || "", V3.carry ? 1 : 0, V3.sel || "", V3.flightUp === undefined ? "" : V3.flightUp].join("|");
+  }
+  function v3qGapNow() {
+    if (!V3Q.gap) { return 0; }
+    var batch = typeof V3 !== "undefined" && V3 && V3.gl && V3.gl.batchCost ? V3.gl.batchCost : 0;
+    return Math.min(400, Math.max(V3Q.gap, 3 * ((V3Q.costMs || 0) + batch)));
+  }
+  function v3BuildPaced() {
+    var now = performance.now(), sig = v3PaceSig(), K = V3.paced, G = V3.gl;
+    if (K && K.sig === sig && K.model) {
+      if (G && G.pending === K.model) { return K.model; }
+      if (V3Q.gap && now - K.at < v3qGapNow()) { V3Q.owed = true; return K.model; }
+    }
+    V3Q.owed = false;
+    var tb = performance.now(), m = v3Build();
+    V3Q.buildMs = performance.now() - tb;      // (how long the making took: for measuring)
+    V3Q.costMs = V3Q.costMs ? V3Q.costMs * 0.7 + V3Q.buildMs * 0.3 : V3Q.buildMs;
+    if (m && typeof m === "object") { m.pacedSame = !!(K && K.sig === sig); }
+    V3.paced = { model: m, sig: sig, at: now };
+    return m;
+  }
+  if (typeof v3Draw === "function") {
+    var v3DrawPerf = v3Draw;
+    v3Draw = function () {
+      V3Q.drewAt = performance.now();
+      return v3DrawPerf.apply(this, arguments);
+    };
+  }
+  if (typeof v3Watch === "function") {
+    var v3WatchPerf = v3Watch;
+    v3Watch = function () {
+      var t = performance.now(), drewLast = V3Q.drewAt && V3Q.drewAt >= V3Q.last && V3Q.last > 0, iv = t - V3Q.last;
+      V3Q.last = t;
+      if (drewLast && document.visibilityState === "visible" && iv < 400 && V3) { v3qMeasure(iv, V3.drawMs || 0); }
+      if (V3 && ((V3.gl && V3.gl.pending) || (V3Q.owed && V3.paced && t - V3.paced.at >= v3qGapNow()))) { V3.dirty = true; }
+      return v3WatchPerf.apply(this, arguments);
+    };
+  }
+  function v3qMeasure(iv, cpuMs) {
+    var W = V3Q.win;
+    W.push([iv, cpuMs]);
+    if (W.length < 60) { return; }
+    V3Q.win = [];
+    if (!V3Q.auto) { return; }
+    var ivs = W.map(function (w) { return w[0]; }).sort(function (a, b) { return a - b; });
+    var cpus = W.map(function (w) { return w[1]; }).sort(function (a, b) { return a - b; });
+    var med = ivs[30], p90cpu = cpus[54], avgCpu = 0, avgIv = 0, late = 0;
+    for (var i = 0; i < W.length; i++) { avgIv += W[i][0] / W.length; avgCpu += W[i][1] / W.length; }
+    V3Q.vsync = Math.max(4, Math.min(V3Q.vsync, med));
+    var budget = Math.max(16.7, V3Q.vsync), lateAt = Math.max(24, V3Q.vsync * 1.45);
+    for (var j = 0; j < W.length; j++) { if (W[j][0] > lateAt) { late++; } }
+    var now = performance.now(), bad = late > 5 || avgIv > Math.max(19.5, V3Q.vsync * 1.2), good = late <= 1 && avgIv < Math.max(18, V3Q.vsync * 1.1);
+    V3Q.stats = { avgIv: Math.round(avgIv * 10) / 10, late: late, avgCpu: Math.round(avgCpu * 10) / 10, p90cpu: Math.round(p90cpu * 10) / 10, vsync: V3Q.vsync };
+    if (bad) {
+      V3Q.good = 0; V3Q.bad++;
+      if (V3Q.bad < 2 && avgIv < 40) { return; }
+      V3Q.bad = 0;
+      var making = p90cpu > budget * 0.8 || avgCpu > avgIv * 0.5;
+      var tried = V3Q.tried && now - V3Q.tried.at < 4000 ? V3Q.tried.side : null;
+      V3Q.tried = null;
+      if (tried) { V3Q.ceil[tried] = V3Q[tried] - 1; V3Q.ceilAt = now; }
+      if (tried === "cpu") { v3qApply(V3Q.cpu - 1, V3Q.gpu); }
+      else if (tried === "gpu") { v3qApply(V3Q.cpu, V3Q.gpu - 1); }
+      else if (making && V3Q.cpu > 0) { v3qApply(V3Q.cpu - 1, V3Q.gpu); }
+      else if (making) { return; }
+      else if (V3Q.gpu > 0) { v3qApply(V3Q.cpu, V3Q.gpu - 1); }
+      else if (V3Q.cpu > 0) { v3qApply(V3Q.cpu - 1, V3Q.gpu); }
+      else { return; }
+      v3qKeep();
+      return;
+    }
+    V3Q.bad = 0;
+    if (!good) { V3Q.good = Math.max(0, V3Q.good - 1); return; }
+    if (++V3Q.good < 8) { return; }
+    V3Q.good = 0;
+    if (now - V3Q.ceilAt > 60000) { V3Q.ceil = { cpu: 9, gpu: 9 }; }
+    if (V3Q.cpu < V3Q_CPU.length - 1 && V3Q.cpu < V3Q.ceil.cpu && p90cpu < budget * 0.45) { V3Q.tried = { side: "cpu", at: now }; v3qApply(V3Q.cpu + 1, V3Q.gpu); v3qKeep(); }
+    else if (V3Q.gpu < V3Q_GPU.length - 1 && V3Q.gpu < V3Q.ceil.gpu) { V3Q.tried = { side: "gpu", at: now }; v3qApply(V3Q.cpu, V3Q.gpu + 1); v3qKeep(); }
   }
   recall();
   recallSetup();                       // how it was left set up, not what was in it

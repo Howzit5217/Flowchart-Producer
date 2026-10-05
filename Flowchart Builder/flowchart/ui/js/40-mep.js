@@ -105,6 +105,14 @@
     return true;
   }
   function mpRoomOf(n) {
+    // (what hangs on a wall is in the room it faces: a panel on a hall's wall is the hall's, not the
+    // closet's behind it -- the smallest room either side was taken, 2026-10-04)
+    if (ON_THE_WALL[n.kind]) {
+      var t = (n.turn || 0) * Math.PI / 180, d = (n.h || 12) / 2 + 8, fx = n.x - Math.sin(t) * d, fy = n.y + Math.cos(t) * d;
+      var faced = hand.nodes.filter(function (r) { return r.kind === "i_room" && insideArea(r, fx, fy); })
+        .sort(function (p, q) { return p.w * p.h - q.w * q.h; })[0];
+      if (faced) { return faced; }
+    }
     return hand.nodes.filter(function (r) { return r.kind === "i_room" && insideArea(r, n.x, n.y, -14); })
       .sort(function (p, q) { return p.w * p.h - q.w * q.h; })[0] || null;
   }
@@ -296,40 +304,65 @@
     h.w = Math.max(s.w || 60, 0.76 * P); h.h = 0.5 * P; h.own = true; h.mp = true;
     return h;
   }
-  function mpPutHeater() {
-    var plan = walkPlan(), P = MP_P(), rooms = hand.nodes.filter(function (n) { return n.kind === "i_room"; }), spot = null;
-    ["utility", "laundry", "garage", "storage", "stock", "staff", "kitchenette", "closet"].some(function (k) {
-      spot = rooms.filter(function (r) { var rk = wireKindOf(plan, r); return (rk === k || r.use === k || r.starter === k) && Math.min(r.w, r.h) >= 1.2 * P; })
-        .sort(function (a, b) { return b.w * b.h - a.w * a.h; })[0] || null;
-      return !!spot;
+  // The rooms an appliance may go in, the likeliest first: those of the kinds asked for, in that
+  // order, then the rest but bedrooms and bathrooms, the biggest first. (Only the first of the kind
+  // was tried: a full utility closet left a house with no water heater, 2026-10-04.)
+  function mpRoomsFor(kinds) {
+    var plan = walkPlan(), P = MP_P(), rooms = hand.nodes.filter(function (n) { return n.kind === "i_room" && !n.attic; }), out = [];
+    kinds.forEach(function (k) {
+      rooms.filter(function (r) { var rk = wireKindOf(plan, r); return (rk === k || r.use === k || r.starter === k) && Math.min(r.w, r.h) >= 1.2 * P && out.indexOf(r) < 0; })
+        .sort(function (a, b) { return b.w * b.h - a.w * a.h; }).forEach(function (r) { out.push(r); });
     });
-    spot = spot || rooms.slice().sort(function (a, b) { return b.w * b.h - a.w * a.h; })[0];
-    if (!spot) { return null; }
-    var b = tieBox(spot), h = mpAlong(spot, "i_waterheater", { x: b.r, y: b.t });
+    rooms.filter(function (r) { var rk = wireKindOf(plan, r); return out.indexOf(r) < 0 && !/^(bed|main|bath|ensuite)$/.test(rk) && r.use !== "washroom" && r.use !== "restroom"; })
+      .sort(function (a, b) { return b.w * b.h - a.w * a.h; }).forEach(function (r) { out.push(r); });
+    return out;
+  }
+  // In a corner of the room, clear of what stands there and inside its walls; null where none is.
+  function mpCorner(r, kind) {
+    var P2 = MP_P(), b = tieBox(r), T = roomWallOf(r), probe = { kind: kind, x: 0, y: 0, w: 140, h: 46 };
+    measure(probe);
+    var hw = probe.w / 2 + T + 2, hh = probe.h / 2 + T + 2, spots = [[b.l + hw, b.t + hh], [b.r - hw, b.t + hh], [b.l + hw, b.b - hh], [b.r - hw, b.b - hh]];
+    for (var i = 0; i < spots.length; i++) {
+      probe.x = Math.round(spots[i][0]); probe.y = Math.round(spots[i][1]);
+      if (probe.x - probe.w / 2 < b.l + T || probe.x + probe.w / 2 > b.r - T || probe.y - probe.h / 2 < b.t + T || probe.y + probe.h / 2 > b.b - T) { continue; }
+      var clear = !hand.nodes.some(function (m) {
+        if (m === r || !(isSolid(m.kind) || WALK_DOORS[m.kind])) { return false; }
+        var f = WALK_DOORS[m.kind] ? starterDoorFlip(m) : null;
+        return boxesTouch(probe, m, WALK_DOORS[m.kind] ? 0.3 * P2 : 2) || (f && boxesTouch(probe, f, 0.3 * P2));
+      });
+      if (clear) {
+        var n = adviceAdd(kind, probe.x, probe.y);
+        n.own = true; n.mp = true;
+        return n;
+      }
+    }
+    return null;
+  }
+  function mpPutIn(kinds, kind, nearOf) {
+    var list = mpRoomsFor(kinds);
+    for (var i = 0; i < list.length; i++) {
+      var b = tieBox(list[i]), n = mpAlong(list[i], kind, nearOf(b));
+      if (n) { return n; }
+    }
+    for (var k = 0; k < list.length; k++) { var m = mpCorner(list[k], kind); if (m) { return m; } }
+    return null;
+  }
+  function mpPutHeater() {
+    var h = mpPutIn(["utility", "laundry", "garage", "storage", "stock", "staff", "kitchenette", "closet"], "i_waterheater", function (b) { return { x: b.r, y: b.t }; });
     if (h) { h.wired = true; }
     return h;
   }
   function mpPutFurnace() {
-    var plan = walkPlan(), P = MP_P(), rooms = hand.nodes.filter(function (n) { return n.kind === "i_room"; }), spot = null;
+    // (beside the water heater where it can: one closet for both)
     var wh = hand.nodes.filter(function (n) { return n.kind === "i_waterheater"; })[0], whRoom = wh ? mpRoomOf(wh) : null;
-    ["utility", "laundry", "garage", "storage", "stock", "closet", "hall"].some(function (k) {
-      spot = rooms.filter(function (r) { var rk = wireKindOf(plan, r); return (rk === k || r.use === k || r.starter === k) && Math.min(r.w, r.h) >= 1.2 * P; })
-        .sort(function (a, b) { return (b === whRoom) - (a === whRoom) || b.w * b.h - a.w * a.h; })[0] || null;
-      return !!spot;
-    });
-    spot = spot || rooms.slice().sort(function (a, b) { return b.w * b.h - a.w * a.h; })[0];
-    if (!spot) { return null; }
-    var b = tieBox(spot), n = mpAlong(spot, "i_furnace", { x: b.l, y: b.t });
-    if (!n) {
-      // (no wall free for it: in a corner, out of the way)
-      var P2 = MP_P();
-      n = adviceAdd("i_furnace", Math.round(b.l + 0.55 * P2), Math.round(b.t + 0.55 * P2));
-      // (in from the corner by half of itself and the walls' thickness: put 0.55 m in,
-      // a furnace 1.2 m across stood through both walls into the rooms beyond, 2026-10-04)
-      n.x = Math.round(b.l + n.w / 2 + 0.16 * P2); n.y = Math.round(b.t + n.h / 2 + 0.16 * P2);
-      n.own = true; n.mp = true;
+    if (whRoom) {
+      var first = mpAlong(whRoom, "i_furnace", { x: tieBox(whRoom).l, y: tieBox(whRoom).t });
+      if (first) { first.wired = true; return first; }
     }
-    n.wired = true;
+    // (in a corner where no wall is free -- never stood on what is there: a furnace through the
+    // closet's shelves, 2026-10-04)
+    var n = mpPutIn(["utility", "laundry", "garage", "storage", "stock", "closet", "hall"], "i_furnace", function (b) { return { x: b.l, y: b.t }; });
+    if (n) { n.wired = true; }
     return n;
   }
   // Where the CO alarms go: the halls the bedrooms open onto (each its own
@@ -390,12 +423,19 @@
     });
   }
   function mpMovePanel(b, plan, rooms, kindOf) {
-    var home = rooms.filter(function (r) { var k = kindOf(r); return k === "garage" || k === "utility" || k === "laundry"; })[0] ||
-               rooms.filter(function (r) { var k = kindOf(r); return k === "hall"; })[0];
-    if (!home) { return; }
+    // (a garage, a utility room, a laundry, a hall -- or, in a cabin or a duplex with none, the
+    // biggest room that is not a bathroom, a closet or a bedroom)
+    var order = rooms.filter(function (r) { var k = kindOf(r); return k === "garage" || k === "utility" || k === "laundry"; })
+      .concat(rooms.filter(function (r) { return kindOf(r) === "hall"; }))
+      .concat(rooms.filter(function (r) { var k = kindOf(r); return !/^(bath|ensuite|closet|bed|main|garage|utility|laundry|hall)$/.test(k); })
+        .sort(function (p, q) { return q.w * q.h - p.w * p.h; }));
+    var was = hand.nodes.indexOf(b);
     hand.nodes = hand.nodes.filter(function (n) { return n !== b; });
-    var bb = tieBox(home), n = mpAlong(home, "i_breaker", { x: bb.l, y: bb.t });
-    if (n) { n.wired = true; }
+    for (var i = 0; i < order.length; i++) {
+      var bb = tieBox(order[i]), n = mpAlong(order[i], "i_breaker", { x: bb.l, y: bb.t });
+      if (n) { n.wired = true; return; }
+    }
+    hand.nodes.splice(Math.max(0, was), 0, b);              // (nowhere better: where it was)
   }
   // The fixtures for the people in it: toilets, basins, fountains, a service sink.
   function mpPeople(rooms) {
@@ -421,8 +461,14 @@
     function count(kinds, where) {
       return hand.nodes.filter(function (n) { return kinds.indexOf(n.kind) >= 0 && publicRooms.some(function (r) { return insideArea(r, n.x, n.y) && (!where || where(r)); }); }).length;
     }
-    var rest = publicRooms.filter(function (r) { return r.use === "restroom"; });
-    var haveWc = count(["i_toilet"]), haveLav = count(["i_sink", "i_vanity"], function (r) { return r.use === "restroom"; });
+    // (a washroom's stalls each a toilet, and its urinals standing in for some: IPC 424.2, two
+    // thirds of them in a school or a hall, half anywhere else -- 40-stalls.js)
+    function isRest(r) { return r.use === "restroom" || r.use === "washroom"; }
+    var rest = publicRooms.filter(isRest);
+    var urinalShare = occType === "educational" || occType === "assembly" ? 2 / 3 : 1 / 2;
+    var haveWc = count(["i_toilet", "i_toiletstall"]);
+    haveWc += Math.min(count(["i_urinal"]), Math.floor(wc * urinalShare));
+    var haveLav = count(["i_sink", "i_vanity"], isRest);
     var haveDf = count(["i_fountain"]), haveSs = count(["i_utilitysink"]);
     var words = { people: people };
     if (haveWc < wc) { out.push({ key: "mp_need_wc", text: say("mp_need_wc", Object.assign({ need: wc, have: haveWc }, words)), id: rest[0] ? rest[0].id : null, fix: function () { mpAddInto(rest, "i_toilet", wc - haveWc); } }); }
@@ -432,7 +478,7 @@
       out.push({ key: "mp_need_df", text: say("mp_need_df", Object.assign({ need: df, have: haveDf }, words)), id: hall[0] ? hall[0].id : null, fix: function () { mpAddInto(hall.length ? hall : rest, "i_fountain", df - haveDf); } });
     }
     if (haveSs < 1) {
-      var back = publicRooms.filter(function (r) { var k = r.use || r.starter; return k === "stock" || k === "staff" || k === "kitchenette" || k === "cafekitchen" || k === "restroom"; });
+      var back = publicRooms.filter(function (r) { var k = r.use || r.starter; return k === "stock" || k === "staff" || k === "kitchenette" || k === "cafekitchen" || k === "restroom" || k === "washroom"; });
       out.push({ key: "mp_need_ss", text: say("mp_need_ss", words), id: back[0] ? back[0].id : null, fix: function () { mpAddInto(back, "i_utilitysink", 1); } });
     }
     return out;

@@ -981,13 +981,16 @@
     // A place along a room for a way up `len` long and `wide` across: along
     // its long way, against one side, clear of the doors in it (and, unless
     // `anyway`, of what stands there -- a ladder can fold down over a car).
-    function spotIn(r, len, wide, within, anyway) {
+    // A finished room's outline in from its walls: the top of a flight inside them, not in the wall
+    // (2026-10-04) -- a storage loft has no walls, and its ladder may use all of it.
+    function inWalls(rect) { var Tw = 0.18 * P; return { l: rect.l + Tw, r: rect.r - Tw, t: rect.t + Tw, b: rect.b - Tw }; }
+    function spotIn(r, len, wide, within, anyway, avoid) {
       var B = box(r), long = B.r - B.l >= B.b - B.t, doors = hand.nodes.filter(function (d) { return WALK_DOORS[d.kind]; }).map(pieceAt);
-      // (and clear of what stands in the room: a workbench, shelving, a car)
+      // (and clear of what stands in the room: a workbench, shelving, a car -- and of `avoid`: where the cars stand)
       var things = hand.nodes.filter(function (m) {
         return m.kind !== "i_room" && m.kind !== "i_floor" && m.kind !== "i_lot" && !WALK_DOORS[m.kind] && m.kind !== "i_window" &&
                !ON_THE_WALL[m.kind] && !FROM_CEILING[m.kind] && !LIES_FLAT[m.kind] && insideArea(r, m.x, m.y);
-      }).map(function (m) { var at = pieceAt(m), t = turned(m); return { x: at[0], y: at[1], w: t.w, h: t.h }; });
+      }).map(function (m) { var at = pieceAt(m), t = turned(m); return { x: at[0], y: at[1], w: t.w, h: t.h }; }).concat(avoid || []);
       var tries = [];
       for (var k = 0; k <= 8; k++) { tries.push(k / 8); }
       var best = null;
@@ -1005,6 +1008,23 @@
         });
       });
       return best;
+    }
+    // Where a garage's cars stand: from each wall with a garage door in it, 4.7 m in (a car and a
+    // step past its nose), the wall's length -- kept clear by 40-garage.js, which took the loft's
+    // stairs out of it and left their top going nowhere (2026-10-04).
+    function carZones(gr) {
+      var B = box(gr), D = 4.7 * P, out = [];
+      hand.nodes.forEach(function (d) {
+        if (d.kind !== "i_garagedoor") { return; }
+        var p = pieceAt(d);
+        if (p[2] !== B.f || p[0] < B.l - 30 || p[0] > B.r + 30 || p[1] < B.t - 30 || p[1] > B.b + 30) { return; }
+        var dl = Math.abs(p[0] - B.l), dr = Math.abs(p[0] - B.r), dt = Math.abs(p[1] - B.t), db = Math.abs(p[1] - B.b), m = Math.min(dl, dr, dt, db);
+        if (m === dt) { out.push({ x: (B.l + B.r) / 2, y: B.t + D / 2, w: B.r - B.l, h: D }); }
+        else if (m === db) { out.push({ x: (B.l + B.r) / 2, y: B.b - D / 2, w: B.r - B.l, h: D }); }
+        else if (m === dl) { out.push({ x: B.l + D / 2, y: (B.t + B.b) / 2, w: D, h: B.b - B.t }); }
+        else { out.push({ x: B.r - D / 2, y: (B.t + B.b) / 2, w: D, h: B.b - B.t }); }
+      });
+      return out;
     }
     // A room over the garage stands against the upstairs rooms beside it: a
     // window of theirs in that wall looked into it (2026-10-03, found by a
@@ -1143,8 +1163,9 @@
           hand.links.forEach(function (l) { var a = byId[l.from], b = byId[l.to]; if (a && b && BETWEEN_FLOORS[a.kind] && BETWEEN_FLOORS[b.kind]) { linked[a.id] = linked[b.id] = true; } });
           var spare = hand.nodes.filter(function (s) {
             if (s.kind !== "i_stairs" || linked[s.id] || s.attic) { return false; }
-            var p = pieceAt(s);
-            return p[2] === Tf && p[0] > rect.l && p[0] < rect.r && p[1] > rect.t && p[1] < rect.b;
+            // (all of its top inside the attic room's walls: one stood in the wall, 2026-10-04)
+            var p = pieceAt(s), q = inWalls(rect), t = turned(s);
+            return p[2] === Tf && p[0] - t.w / 2 > q.l && p[0] + t.w / 2 < q.r && p[1] - t.h / 2 > q.t && p[1] + t.h / 2 < q.b;
           })[0];
           if (spare) {
             var sp = pieceAt(spare);
@@ -1158,22 +1179,39 @@
             var host = halls.concat(roomsAll.filter(function (r) { var f = floorAt(floors, r.x, r.y); return f === Tf && garages.indexOf(r) < 0; })
               .sort(function (p, q) { return q.w * q.h - p.w * p.h; }));
             var len = 2.9 * P, wide = 0.95 * P;
-            host.some(function (r) {
-              var s = spotIn(r, len, wide, rect);
+            var up = host.some(function (r) {
+              var s = spotIn(r, len, wide, inWalls(rect));
               if (!s) { return false; }
               var low = toPaper(r, [s.x, s.y]), pair = flight(low, F, [s.x, s.y], false, s.long ? 90 : 0, Math.round(wide), Math.round(len));
               busy.push({ x: pair[1].x, y: pair[1].y, w: (s.long ? len : wide) + 1.2 * P, h: (s.long ? wide : len) + 1.2 * P });
               return true;
             });
+            // (no room for a stair under it: a folding one out of the ceiling -- and where not even that
+            // fits, no attic room, rather than one nobody can get into, 2026-10-04)
+            if (!up) {
+              var lw2 = Math.round(ATTIC_LADDER[0] * P), ll2 = Math.round(ATTIC_LADDER[1] * P);
+              up = host.some(function (r) {
+                var s = spotIn(r, ll2 + 0.5 * P, lw2, inWalls(rect));
+                if (!s) { return false; }
+                var pair = flight(toPaper(r, [s.x, s.y]), F, [s.x, s.y], true, s.long ? 90 : 0, lw2, ll2);
+                busy.push({ x: pair[1].x, y: pair[1].y, w: turned(pair[1]).w + 1.0 * P, h: turned(pair[1]).h + 1.0 * P });
+                return true;
+              });
+            }
+            if (!up) {
+              hand.nodes = hand.nodes.filter(function (n) { return n !== houseRoom && !(n.attic && n.kind === "i_window" && insideArea(houseRoom, n.x, n.y, -14)); });
+              made--;
+              houseRoom = null;
+            }
           }
-          gableWindows(houseRoom, rect, F);
+          if (houseRoom) { gableWindows(houseRoom, rect, F); }
         } else {
           // storage: a ladder folding down out of a hall's ceiling
           var hosts = roomsAll.filter(function (r) { var f = floorAt(floors, r.x, r.y); return f === Tf && kindOf(r) === "hall"; })
             .concat(roomsAll.filter(function (r) { var f = floorAt(floors, r.x, r.y); return f === Tf && garages.indexOf(r) < 0 && kindOf(r) !== "bath"; })
               .sort(function (p, q) { return q.w * q.h - p.w * p.h; }));
           var lw = Math.round(ATTIC_LADDER[0] * P), ll = Math.round(ATTIC_LADDER[1] * P);
-          hosts.some(function (r) {
+          var upS = hosts.some(function (r) {
             var B = box(r), long = B.r - B.l >= B.b - B.t, s = spotIn(r, ll + 0.5 * P, lw, rect);
             if (!s) { return false; }
             // (in the middle of a hall, not against its side)
@@ -1182,8 +1220,10 @@
             busy.push({ x: pair[1].x, y: pair[1].y, w: turned(pair[1]).w + 1.0 * P, h: turned(pair[1]).h + 1.0 * P });
             return true;
           });
+          // (nowhere for its ladder: none, rather than one nobody can get into)
+          if (!upS) { hand.nodes = hand.nodes.filter(function (n) { return n !== houseRoom; }); made--; houseRoom = null; }
         }
-        furnish(houseRoom, kind, busy);
+        if (houseRoom) { furnish(houseRoom, kind, busy); }
       }
     }
     // over the garage, up in its roof: storage up a ladder out of its
@@ -1216,11 +1256,19 @@
         if (gk === "room") { gableWindows(over, rect2, F2b); }
         var busy2 = [];
         var ladder = gk === "storage", fw = ladder ? Math.round(ATTIC_LADDER[0] * P) : Math.round(0.95 * P), fl = ladder ? Math.round(ATTIC_LADDER[1] * P) : Math.round(2.9 * P);
-        var s = spotIn(gr, fl + (ladder ? 0.5 * P : 0), fw, rect2) || spotIn(gr, fl + (ladder ? 0.5 * P : 0), fw, rect2, true);
+        // (stairs clear of where the cars stand; else a ladder there; else a ladder over a car, folded up out of its way)
+        var zones = carZones(gr), s = spotIn(gr, fl + (ladder ? 0.5 * P : 0), fw, ladder ? rect2 : inWalls(rect2), false, zones);
+        if (!s && !ladder) {
+          ladder = true; fw = Math.round(ATTIC_LADDER[0] * P); fl = Math.round(ATTIC_LADDER[1] * P);
+          s = spotIn(gr, fl + 0.5 * P, fw, rect2, false, zones);
+        }
+        if (!s && ladder) { s = spotIn(gr, fl + 0.5 * P, fw, rect2, true); }
         if (s) {
           var pair = flight(toPaper(gr, [s.x, s.y]), F2b, [s.x, s.y], ladder, s.long ? 90 : 0, fw, fl);
           busy2.push({ x: pair[1].x, y: pair[1].y, w: turned(pair[1]).w + 1.0 * P, h: turned(pair[1]).h + 1.0 * P });
         }
+        // (nowhere for its way up: no loft, rather than one nobody can get into)
+        if (!s) { hand.nodes = hand.nodes.filter(function (n) { return n !== over && !(n.attic && n.kind === "i_window" && insideArea(over, n.x, n.y, -14)); }); made--; return; }
         furnish(over, gk, busy2);
       });
     }

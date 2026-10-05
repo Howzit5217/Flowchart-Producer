@@ -921,6 +921,21 @@
     plan.links.forEach(function (pair) {
       pair.forEach(function (end) { var r = roomAt(plan, end.x, end.y); if (r) { joined[r.id] = true; } });
     });
+    // (a part of a room of more than one box -- an L, a T, 40-oddrooms.js -- or a room with a wall
+    // taken out, 39-inside.js: its way in is the rest of it, through where the wall was)
+    for (var pass = 0; pass < 4; pass++) {
+      var more = false;
+      plan.rooms.forEach(function (room) {
+        if (joined[room.id]) { return; }
+        // (the open air over a school's courtyard on its upper floors, 40-campus.js: no room to go in)
+        if (room.courtOver) { joined[room.id] = true; return; }
+        var main = typeof oddMainOf === "function" ? oddMainOf(room) : room;
+        var group = main && main !== room ? [main].concat(oddPartsOf(main)) : typeof oddPartsOf === "function" ? oddPartsOf(room) : [];
+        var open = typeof wallOpenTo === "function" && wallAnyOpen() ? wallOpenTo(room) : [];
+        if (group.concat(open).some(function (o) { return o && o !== room && joined[o.id]; })) { joined[room.id] = true; more = true; }
+      });
+      if (!more) { break; }
+    }
     plan.rooms.forEach(function (room) {
       if (!joined[room.id] && plan.rooms.length + plan.doors.length > 1) {
         found.push({ text: say("wk_no_door", { room: roomName(plan, room) }), id: room.id });

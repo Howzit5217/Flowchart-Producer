@@ -290,6 +290,8 @@
       return o !== spot && !isArea(o.kind) && !ON_THE_WALL[o.kind] && !FROM_CEILING[o.kind] && o.kind !== "i_window" && !LIES_FLAT[o.kind];
     });
     if (others.some(function (o) { return boxesTouch(spot, o, WALK_DOORS[o.kind] ? 8 : gap); })) { return false; }
+    // (nor on the doorway's other side, where its swing is not: starterDoorFlip)
+    if (others.some(function (o) { var f = WALK_DOORS[o.kind] && starterDoorFlip(o); return f && boxesTouch(spot, f, 8); })) { return false; }
     // nor in front of an oven, a drawer, a desk -- nor needing room something takes
     return !(typeof starterFrontClash === "function" && starterFrontClash(spot, others));
   }
@@ -546,6 +548,11 @@
       .sort(function (p, q) { return Math.hypot(p.x - r.x, p.y - r.y) - Math.hypot(q.x - r.x, q.y - r.y); })[0];
     if (!door || r.turn) { return [r.x, r.y]; }
     var hw = r.w / 2, hh = r.h / 2, lx = door.x - r.x, ly = door.y - r.y, b = 1.15 * FLOOR_PX;
+    // (past the door's swing where the room is deep enough: a mall's lift room ran the depth of the
+    // shops, and its door swung into the lift, 2026-10-04)
+    var half = ICONS.i_elevator ? ICONS.i_elevator.box[1] / 2 : 25, past = (door.h || 50) + half + 0.1 * FLOOR_PX;
+    var deep = Math.abs(ly) / hh >= Math.abs(lx) / hw ? 2 * hh : 2 * hw;
+    if (deep >= past + half + roomWallOf(r) + 0.1 * FLOOR_PX) { b = Math.max(b, past); }
     if (Math.abs(ly) / hh >= Math.abs(lx) / hw) { return [r.x, ly < 0 ? r.y - hh + Math.min(b, hh) : r.y + hh - Math.min(b, hh)]; }
     return [lx < 0 ? r.x - hw + Math.min(b, hw) : r.x + hw - Math.min(b, hw), r.y];
   }

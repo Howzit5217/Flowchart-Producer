@@ -66,7 +66,7 @@
     made.forEach(function (f) {
       var pts = f.pts.map(function (p) { return [x + p[0] * c - p[1] * s, y + p[0] * s + p[1] * c, z + p[2]]; });
       var m = f.mesh;
-      faces.push({ pts: pts, n: f.n, how: f.how,
+      faces.push({ pts: pts, n: f.n, how: f.how, moves: !!moving,          // (on the move: drawn apart from what stands still, gl3Faces)
                    mesh: { p: moving ? moView(m.p) : m.p, n: m.n, uv: m.uv, a: m.a, base: pts[0].slice(), xf: [x, y, c, s, z] } });
     });
   }

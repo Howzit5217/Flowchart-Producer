@@ -79,8 +79,12 @@
       var model = v3BuildFire.apply(this, arguments);
       try {
         if (model && model.faces && V3 && V3.scene !== "space" && !(V3.flat && V3.flatDone) && fsWanted()) {
-          var add = fsExits(model);
-          for (var i = 0; i < add.length; i++) { model.faces.push(add[i]); }
+          // (kept while the drawing and the house's settings are as they were, 38-view3d.js v3Added --
+          // while it goes up, the doors not in yet, worked out again once they are)
+          v3Added("exits", model.faces, typeof bpSite !== "undefined" && bpSite ? "building" : "", function () {
+            var add = fsExits(model);
+            for (var i = 0; i < add.length; i++) { model.faces.push(add[i]); }
+          });
         }
       } catch (e) { /* the building without them */ }
       return model;

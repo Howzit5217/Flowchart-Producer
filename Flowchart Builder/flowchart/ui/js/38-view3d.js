@@ -529,6 +529,25 @@
     list.unshift(made);
     if (list.length > 3) { list.length = 3; }
   }
+  // (2026-10-04, "a stable 60fps") What a part adds to the scene -- a roof, a
+  // house number, the wire from the street -- kept while what it is made from
+  // is the same (the drawing and the view as v3BuildSteps keys them, the
+  // house's settings, the land) and `extra` says the same: handed on as
+  // copies, as the rest are.  Each was worked out afresh every time the
+  // scene was made, sixty times a second.
+  var V3_ADDED = {};
+  function v3Added(name, faces, extra, add) {
+    var kept = V3.kept && V3.kept[0], key = kept ? kept.key : null, house = typeof hand !== "undefined" && hand ? hand.house : null;
+    var land = typeof TERR !== "undefined" && TERR && !TERR.off ? TERR.key || "" : "", K = V3_ADDED[name], i;
+    if (key !== null && K && K.key === key && K.house === house && K.land === land && K.extra === extra) {
+      for (i = 0; i < K.faces.length; i++) { faces.push(v3FaceCopy(K.faces[i])); }
+      return;
+    }
+    var f0 = faces.length;
+    add();
+    V3_ADDED[name] = { key: key, house: house, land: land, extra: extra, faces: faces.slice(f0) };
+    for (i = f0; i < faces.length; i++) { faces[i] = v3FaceCopy(faces[i]); }
+  }
   function v3FaceCopy(f) {
     var c = Object.assign({}, f);
     if (f.mesh) { c.mesh = Object.assign({}, f.mesh); }
@@ -1043,11 +1062,13 @@
     }
     // the roof, settling on or lifting off
     if (roofed && roofV > 0.01) {
-      roofPlan(floors, show, wallTop).forEach(function (R) {
-        var look = simLook(R.room);
-        roofFaces(faces, R, (1 - roofV) * 2.5 * FLOOR_PX,
-                  { roof: true, color: v3Mix(look.line, simSheet(), 0.55), edge: look.line, room: R.room,
-                    alpha: roofV, late: roofV < 0.999 || !!V3.tw.roofV });
+      v3Added("roof", faces, roofV + "|" + (V3.tw.roofV ? 1 : 0), function () {
+        roofPlan(floors, show, wallTop).forEach(function (R) {
+          var look = simLook(R.room);
+          roofFaces(faces, R, (1 - roofV) * 2.5 * FLOOR_PX,
+                    { roof: true, color: v3Mix(look.line, simSheet(), 0.55), edge: look.line, room: R.room,
+                      alpha: roofV, late: roofV < 0.999 || !!V3.tw.roofV });
+        });
       });
     }
     function* v3Names() {
@@ -1370,8 +1391,17 @@
       eye = [V3.eye.x, V3.eye.y, V3.eye.z];
       V3.inRoom = roomAt(plan, V3.me.x, V3.me.y) || null;   // under a ceiling, or out under the sky
     }
-    var model = v3Build();
-    if (inside) { V3.solids = v3Solids(model); }   // what walking bumps into (v3Bumps)
+    // (made again every picture -- or, where the device is slow, every second or third,
+    // the view still moving every picture: 40-perf.js)
+    var model = typeof v3BuildPaced === "function" ? v3BuildPaced() : v3Build();
+    if (inside && V3.solidsFor !== model) {
+      // (the drawing, the view, the doors and the land as they were: the same walls as last time --
+      // not while it goes up or is moved into, 40-build.js)
+      var kept0 = V3.kept && V3.kept[0], building = typeof bpSite !== "undefined" && bpSite;
+      var sk = kept0 && !building ? kept0.key + "|" + JSON.stringify(V3.doorAt || {}) + "|" + (typeof TERR !== "undefined" && TERR ? TERR.key || "" : "") + "|" + model.faces.length : null;
+      if (sk === null || V3.solidsKey !== sk) { V3.solids = v3Solids(model); V3.solidsKey = sk; }
+      V3.solidsFor = model;
+    }   // what walking bumps into (v3Bumps)
     if (!inside && (V3.fitNext || V3.cx === undefined)) { V3.fitNext = false; v3Fit(model); }
     var toward = inside ? null : v3Toward();
     // A home, by WebGL wherever the browser has it (38-view3d-gl.js): a

@@ -35,6 +35,14 @@
   // Each mirror in the picture: its glass's corners as seen from in front
   // (bl, br, tl), its middle, which way it faces -- from its model's faces.
   function mrFind(model) {
+    // (the same scene as last picture -- the view only turned -- its mirrors as found then)
+    if (mrFound.model === model) { return mrFound.out; }
+    var out = mrFindAll(model);
+    mrFound = { model: model, out: out };
+    return out;
+  }
+  var mrFound = { model: null, out: [] };
+  function mrFindAll(model) {
     var P = FLOOR_PX, cm = P / 100, seen = new Map(), out = [];
     (model.faces || []).forEach(function (f) {
       var n = f.node;
@@ -111,9 +119,19 @@
   // in with the house's batches to be drawn with them.
   function mirrorPass(X) {
     var gl = X.gl, G = X.G, U = X.U, P = FLOOR_PX;
+    // (2026-10-04, "a stable 60fps") the glasses' pictures from the picture before taken
+    // off first: a picture's batches kept from the last (40-perf.js) had them put on again
+    // each time, one more each picture
+    for (var bi = X.batches.length - 1; bi >= 0; bi--) { if (X.batches[bi].mirror) { X.batches.splice(bi, 1); } }
     if (!X.model || X.dress < 0.98 || (typeof V3 !== "undefined" && V3 && V3.flat)) { return; }
+    // (every mirror is indoors: from outside, the roof on, none can be seen -- each was
+    // the whole house drawn again into it, every picture)
+    if (!X.inside && typeof V3 !== "undefined" && V3 && V3.roof && (V3.roofV === undefined || V3.roofV > 0.98)) { return; }
     var all = mrFind(X.model);
     if (!all.length) { return; }
+    // (a slow device: the glasses' pictures drawn again every few pictures, as the sun's shadows are)
+    var every = typeof V3Q === "object" && V3Q.shadowEvery ? Math.min(4, V3Q.shadowEvery) : 1, R = G.mrLast;
+    if (every > 1 && R && R.model === X.model && (G.frameN || 0) - R.at < every) { mrPut(X, R.made); return; }
     // the eye: walking, where it is; from above, far off the way the view looks from
     var far = X.inside ? GL3_FAR : 6000 * P / 50;
     var picks = all.map(function (m) {
@@ -172,7 +190,11 @@
       if (U.uDepthK) { gl.uniform3fv(U.uEyeV, X.eye || [0, 0, 0]); gl.uniform1f(U.uOrthoV, X.inside ? 0 : 1); }
     }
     if (typeof V3 !== "undefined" && V3) { V3.mirrorsDrawn = made.length; V3.mirrorsSeen = picks.length; }
-    // each glass, its picture on it -- just in front of the model's own
+    G.mrLast = { model: X.model, at: G.frameN || 0, made: made };
+    mrPut(X, made);
+  }
+  // each glass, its picture on it -- just in front of the model's own
+  function mrPut(X, made) {
     made.forEach(function (o) {
       var m = o.m, lift = m.face, k = 0.35;
       var bl = mrAdd(m.bl, lift, k), br = mrAdd(m.br, lift, k), tl = mrAdd(m.tl, lift, k), tr = mrAdd(br, mrSub(tl, bl), 1);

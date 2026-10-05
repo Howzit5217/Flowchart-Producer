@@ -36,6 +36,8 @@
   if (typeof STARTER_CEILING === "object") { STARTER_CEILING.mallunit = "i_pendant"; STARTER_CEILING.mallanchor = "i_pendant"; }
   if (typeof STARTER_VENTED === "object") { STARTER_VENTED.mallunit = 1; STARTER_VENTED.mallanchor = 1; }
   if (typeof TYPE_USE === "object") { TYPE_USE.mallunit = 1; TYPE_USE.mallanchor = 1; }
+  // (shops, read by Check as places of work -- not a kitchen for the counter in them, 38-advice.js)
+  if (typeof ROOM_USE === "object") { ROOM_USE.mallunit = "work"; ROOM_USE.mallanchor = "work"; }
   if (typeof TYPE_LIT === "object") { TYPE_LIT.mallunit = 1; TYPE_LIT.mallanchor = 1; }
   if (typeof FRONT_GLASS === "object" && FRONT_GLASS.sales) { FRONT_GLASS.mallunit = FRONT_GLASS.sales; FRONT_GLASS.mallanchor = FRONT_GLASS.sales; }
   // what else knows a building by its type: a mall is a store's
@@ -63,10 +65,19 @@
           // behind the concourse: a department store at each end; the core,
           // the restrooms -- and upstairs at the top, the food court -- between shops
           var core = (S > 1 ? typeCore(k, S - 1, true) : []).concat([R("restroom", 3.2), R("restroom", 3.2)]);
-          var food = k === S - 1 && S > 1 ? [R("cafe", 18, { id: "fc" + k, label: TXT.mall_food }), R("cafekitchen", 4.6, { via: "fc" + k }), R("cafekitchen", 4.6, { via: "fc" + k })] : [];
-          var mid = core.concat(food), rest = W - 2 * A - typeWidth(mid);
-          var left = units(rest / 2, 1, k, false), right = units(rest / 2, 1 + left.length, k, false);
-          var back = [R("mallanchor", A, { label: TXT.mall_anchor })].concat(left, mid, right, [R("mallanchor", A, { label: TXT.mall_anchor })]);
+          // (the core the same distance along on every floor -- the food court put beside it, out of the
+          // shops' side, not pushing it along: its stairs and lift stood apart from the floor's under them,
+          // 2026-10-04)
+          var side = (W - 2 * A - typeWidth(core)) / 2, food = [];
+          if (k === S - 1 && S > 1) {
+            var kit = side >= 17 ? 2 : side >= 12.6 ? 1 : 0, fw = Math.min(18, side - kit * 4.6);
+            food.push(R("cafe", fw, { id: "fc" + k, label: TXT.mall_food }));
+            for (var q = 0; q < kit; q++) { food.push(R("cafekitchen", 4.6, { via: q ? "fk" + k : "fc" + k, id: q ? undefined : "fk" + k })); }
+          }
+          var left = units(side, 1, k, false), rightW = side - typeWidth(food);
+          var right = food.concat(rightW >= 3 ? units(rightW, 1 + left.length, k, false) : []);
+          if (rightW > 0.01 && rightW < 3 && food.length) { food[0].w += rightW; }
+          var back = [R("mallanchor", A, { label: TXT.mall_anchor })].concat(left, core, right, [R("mallanchor", A, { label: TXT.mall_anchor })]);
           // in front of it: shops, and on the ground floor the ways in between them
           var front = [];
           if (k === 0) {

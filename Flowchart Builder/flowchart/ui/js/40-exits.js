@@ -64,6 +64,29 @@
     });
     return n;
   }
+  // A pair of flights put in a band at x along it: between two rooms that meet there, else the room
+  // across it split in two there (a stairwell is not split: put in past it).
+  function exInsertAt(band, x, pair) {
+    if (x === null || x === undefined) { var m = Math.floor(band.length / 2); band.splice(m, 0, pair[0], pair[1]); return; }
+    var at = 0;
+    for (var i = 0; i < band.length; i++) {
+      var r = band[i], a = at, b = at + r.w;
+      at = b;
+      if (Math.abs(a - x) < 0.05) { band.splice(i, 0, pair[0], pair[1]); return; }
+      if (b <= x + 0.05) { continue; }
+      var fixed = r.kind === "stairs" || r.kind === "lift" || r.kind === "suite" || r.entry || r.id || r.bay;
+      var loose = function (q) { return q && !(q.kind === "stairs" || q.kind === "lift" || q.kind === "suite" || q.entry || q.bay); };
+      // (a sliver either side: given to the room beside, so the flights still go in at x)
+      if (!fixed && x - a < 2.0 && loose(band[i - 1])) { band[i - 1].w += x - a; r.w -= x - a; band.splice(i, 0, pair[0], pair[1]); return; }
+      if (!fixed && b - x < 2.0 && loose(band[i + 1])) { band[i + 1].w += b - x; r.w -= b - x; band.splice(i + 1, 0, pair[0], pair[1]); return; }
+      if (fixed || x - a < 2.0 || b - x < 2.0) { band.splice(i + 1, 0, pair[0], pair[1]); return; }
+      var rest = Object.assign({}, r, { w: b - x });
+      r.w = x - a;
+      band.splice(i + 1, 0, pair[0], pair[1], rest);
+      return;
+    }
+    band.push(pair[0], pair[1]);
+  }
   function exPlan(plan) {
     var floors = plan.floors || [];
     if (floors.length < 2) { return; }
@@ -74,6 +97,15 @@
     var need = Math.min(4, Math.max(most >= 50 || top >= 1 ? 2 : 1, exNeed(most))), add = need - have;
     if (add <= 0) { return; }
     var bays = [["C", "D"], ["E", "F"], ["G", "H"]];
+    // (half way along the front, the same place on every floor: floors not alike -- a mall's shops
+    // above its ways in -- had each floor's middle room somewhere else, and the flights did not stand
+    // one over the other, 2026-10-04)
+    var midX = null;
+    if (add >= 2) {
+      var f0 = floors.filter(function (f) { return f.level === 0; })[0] || floors[0], half = typeWidth(f0.front) / 2, run = 0, best = null;
+      f0.front.forEach(function (r, j) { run += r.w; if (j < f0.front.length - 1 && (best === null || Math.abs(run - half) < Math.abs(best - half))) { best = run; } });
+      midX = best;
+    }
     for (var i = 0; i < Math.min(3, add); i++) {
       floors.forEach(function (f) {
         var k = f.level - low, A = k % 2 === 0, up = f.level < top, down = f.level > low;
@@ -81,7 +113,7 @@
                     R("stairs", 1.4, { bay: bays[i][1], go: A ? (down ? "down" : "none") : (up ? "up" : "none"), label: TXT.st_stairs })];
         // the second at the far end of the back, a third half way along the front, a fourth at its far end
         if (i === 0) { f.back.push(pair[0], pair[1]); }
-        else if (i === 1) { var m = Math.floor(f.front.length / 2); f.front.splice(m, 0, pair[0], pair[1]); }
+        else if (i === 1) { exInsertAt(f.front, midX, pair); }
         else { f.front.push(pair[0], pair[1]); }
       });
     }
@@ -93,8 +125,12 @@
         if (!b.length) { return; }
         var short = W - typeWidth(b);
         if (short < 0.05) { return; }
-        var grow = b.filter(function (r) { return r.kind !== "stairs" && r.kind !== "lift" && r.kind !== "suite" && r.kind !== "washroom" && r.kind !== "court"; })
-          .sort(function (p, q) { return q.w - p.w; })[0] || b[b.length - 1];
+        // (past the band's last stairwell where it can: what stands before it, and the flights, stay put)
+        var can = b.filter(function (r) { return r.kind !== "stairs" && r.kind !== "lift" && r.kind !== "suite" && r.kind !== "washroom" && r.kind !== "court"; });
+        var lastWell = -1;
+        b.forEach(function (r, j) { if (r.kind === "stairs" || r.kind === "lift") { lastWell = j; } });
+        var after = can.filter(function (r) { return b.indexOf(r) > lastWell; });
+        var grow = (after.length ? after : can).slice().sort(function (p, q) { return q.w - p.w; })[0] || b[b.length - 1];
         grow.w += short;
       });
     });

@@ -48,11 +48,13 @@
   function caShape(plan, want, rnd) {
     var floors = plan.floors, W = plan.W, n = Math.max(2, Math.min(TYPE_MOST.classrooms, want.rooms || 4));
     if (!floors || !floors.length || !(W > 0)) { return; }
-    var r = rnd(), pick = n <= 5 ? "ell" : n <= 9 ? (r < 0.6 ? "court" : "ell") : (r < 0.8 ? "court" : "hub");
-    if (want.campus === "court" || want.campus === "hub" || want.campus === "ell") { pick = want.campus; }
+    // (or plain wings, shaped by 40-shapes.js: a T, an H, a U, two wings side-stepped)
+    var r = rnd(), pick = n <= 5 ? (r < 0.4 ? "ell" : "wing") : n <= 9 ? (r < 0.45 ? "court" : r < 0.65 ? "ell" : "wing") : (r < 0.6 ? "court" : r < 0.75 ? "hub" : "wing");
+    if (want.campus === "court" || want.campus === "hub" || want.campus === "ell" || want.campus === "wing") { pick = want.campus; }
     if (pick === "court" && W < 2 * CA_ENDS + 10) { pick = W >= CA_ENDS + CA_GYM ? "hub" : "ell"; }
     if (pick === "hub" && W < CA_ENDS + CA_GYM) { pick = "ell"; }
     plan.campus = pick;
+    if (pick === "wing") { return; }
     if (pick === "ell") { caEll(plan, rnd); } else { caRing(plan, pick, n); }
   }
   // The row inside, and its two halls: a commons at the west end joining

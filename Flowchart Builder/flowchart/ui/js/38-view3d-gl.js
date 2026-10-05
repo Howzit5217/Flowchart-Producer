@@ -1078,14 +1078,25 @@
   // stands -- and kept so, while it stays there: walking round, the house
   // is drawn sixty times a second and its furniture does not move.
   var gl3MeshKept = new WeakMap();
+  // (2026-10-04, "a stable 60fps") What moves -- the people going by, the
+  // lorries on a site -- once it has stood still a while (GL3_STILL makings
+  // of the batches running), goes in with what stands still: a parked car,
+  // a lorry waiting at the kerb, were joined and sent again every picture
+  // with those walking past them -- most of what the picture sent each time.
+  var gl3Round = 0, GL3_STILL = 20;
+  function gl3StillRun(k) {
+    if (k.seen === gl3Round) { return k.run || 0; }
+    k.run = k.seen === gl3Round - 1 ? (k.run || 0) + 1 : 0;
+    k.seen = gl3Round;
+    return k.run;
+  }
   function gl3Mesh(B, f) {
     var how = f.how, m = f.mesh, xf = m.xf || [0, 0, 1, 0, 0];
     var ox = f.pts[0][0] - m.base[0], oy = f.pts[0][1] - m.base[1], oz = f.pts[0][2] - m.base[2];
     // (one coming or going, faded: 40-bodies.js's people walking in)
     var fadeA = !how.glass && !how.shade && how.alpha !== undefined && how.alpha < 0.999 ? Math.max(0, how.alpha) : -1;
-    var batch = how.glass ? B.get("glass", { blend: true, late: true })
-              : how.shade ? B.get("shade", { blend: true, late: true, noDepthWrite: true })
-              : fadeA >= 0 ? B.get("fading", { blend: true, late: true }) : B.get("models", {});
+    var bName = how.glass ? "glass" : how.shade ? "shade" : fadeA >= 0 ? "fading" : "models";
+    var bHow = how.glass || fadeA >= 0 ? { blend: true, late: true } : how.shade ? { blend: true, late: true, noDepthWrite: true } : {};
     // (a light switched off, a screen switched on, walking round: 39-inside.js)
     var lightOff = how.mat === "glow" && f.node && typeof useLightOff === "function" && useLightOff(f.node);
     var screenOn = how.mat === "screen" && f.node && typeof useOn === "function" && useOn(f.node);
@@ -1098,6 +1109,12 @@
     if (!byWhere) { byWhere = new Map(); gl3MeshKept.set(m.p, byWhere); }
     var kept = byWhere.get(key);
     if (kept) { m.made = kept; }
+    // (made afresh this picture -- moved, or new -- with what moves; as it was, in its bucket)
+    B.volNow = !kept;
+    B.stillNow = !!kept && gl3StillRun(kept) >= GL3_STILL;
+
+
+    var batch = B.get(bName, bHow);
     if (!m.made || m.made.key !== key) {
       var col = gl3Rgb(how.color), pat = how.glass ? 0 : (GL3_MAT[how.mat] || 0), alpha = how.glass ? 0.3 : fadeA >= 0 ? fadeA : 1;
       if (lightOff) { pat = 0; col = gl3Mix(col, [0.42, 0.42, 0.4], 0.55); }
@@ -1111,7 +1128,7 @@
         out[o + 6] = col[0]; out[o + 7] = col[1]; out[o + 8] = col[2]; out[o + 9] = A ? A[i] : alpha;
         out[o + 10] = U[i * 2]; out[o + 11] = U[i * 2 + 1]; out[o + 12] = always ? pat + 200 : pat;
       }
-      m.made = { key: key, data: out };
+      m.made = { key: key, data: out, seen: gl3Round, run: 0 };
       if (byWhere.size > 6000) {
         var drop = 0;
         byWhere.forEach(function (v, k) { if (drop++ < 600) { byWhere.delete(k); } });
@@ -1119,6 +1136,61 @@
       byWhere.set(key, m.made);
     }
     (batch.chunks || (batch.chunks = [])).push(m.made.data);
+    B.meshInto = batch;                  // (the batch it went in: 40-land.js lays it on the land there)
+  }
+  // The batches as the house's own faces left them (before what moves round it):
+  // each batch's arrays as far as they went then, to be put back as they were.
+  function gl3Snap(B, faces, key) {
+    return { key: key, faces: faces, list: B.all.map(function (b) {
+      return { key: b.key, how: b.how, base: b.base, b: b, n: b.chunks ? b.chunks.length : 0, vlen: b.v.length };
+    }) };
+  }
+  function gl3FromSnap(B, snap) {
+    for (var i = 0; i < snap.list.length; i++) {
+      var e = snap.list[i], b = B.get(e.key, e.how);
+      b.base = e.base;
+      if (e.vlen) { b.v = e.b.v.slice(0, e.vlen); }
+      if (e.n) { b.chunks = e.b.chunks.slice(0, e.n); }
+    }
+  }
+  // what the batches' colors were worked out with (gl3Faces's `same`), and the lights switched off or on (39-inside.js)
+  function gl3SnapKey(ink, sheet, dress) {
+    var snowy = typeof houseSnow === "function" ? houseSnow() * dress : 0, wet = typeof houseWet === "function" ? houseWet() * dress : 0;
+    var lawn = typeof worldLawn === "function" ? worldLawn() : null, U = typeof V3 !== "undefined" && V3 ? V3.use : null;
+    return [ink, sheet, dress, snowy, wet, lawn ? lawn.pat + "," + lawn.color : "", typeof flat3dNow === "function" && flat3dNow() ? 1 : 0,
+            U ? JSON.stringify([U.on, U.dark, U.all]) : ""].join("|");
+  }
+  // every face the very same as before: what it is a copy of, its corners, how it is drawn, its model
+  function gl3SameFaces(a, b) {
+    if (a === b) { return true; }
+    if (!a || !b || a.length !== b.length) { return false; }
+    for (var i = 0; i < b.length; i++) {
+      var x = a[i], y = b[i];
+      if (x === y) { continue; }
+      if (y.src === undefined && !y.mesh) {
+        // (made afresh each time by what adds it -- a roof's edge, a gutter: the same by what it is, gl3WhatKey)
+        if (x.src !== undefined || x.mesh) { return false; }
+        var kx = x.ck0 || (x.ck0 = gl3WhatKey(x)), ky = y.ck0 || (y.ck0 = gl3WhatKey(y));
+        if (!kx || !ky || kx.h !== ky.h || kx.sig !== ky.sig || !gl3PtsSame(x.pts, y.pts)) { return false; }
+        continue;
+      }
+      if (y.mesh && x.mesh !== y.mesh) {
+        // (a model put where it stands afresh each time -- a lorry parked, a body standing: the same by
+        // its own numbers, where it is put, and how it is drawn)
+        var mx = x.mesh, my = y.mesh;
+        if (!mx || mx.p !== my.p || x.node !== y.node || !gl3NumsSame(mx.xf, my.xf) || !gl3NumsSame(mx.base, my.base) || !gl3NumsSame(x.pts[0], y.pts[0])) { return false; }
+        if (x.how !== y.how && gl3HowKey(x.how || {}) !== gl3HowKey(y.how || {})) { return false; }
+        continue;
+      }
+      if (x.src !== y.src || x.pts !== y.pts || x.how !== y.how) { return false; }
+    }
+    return true;
+  }
+  function gl3NumsSame(a, b) {
+    if (a === b) { return true; }
+    if (!a || !b || a.length !== b.length) { return false; }
+    for (var i = 0; i < a.length; i++) { if (a[i] !== b[i]) { return false; } }
+    return true;
   }
   // A batch as one array: its faces' vertices, then its models' kept ones.
   function gl3Join(x) {
@@ -1135,15 +1207,21 @@
   function gl3Faces(G, model, B, ink, sheet, dress) {
     var inkC = gl3Rgb(ink), sheetC = gl3Rgb(sheet), floorPats = new Map();
     // each room with how far its floor is moved to stand over the ground floor
-    var floors = typeof floorsOf === "function" ? floorsOf() : [];
-    var rooms = hand.nodes.filter(function (r) { return r.kind === "i_room"; }).map(function (r) {
-      var fl = floors.length ? floorAt(floors, r.x, r.y) : null;
-      return { n: r, dx: fl ? fl.dx : 0, dy: fl ? fl.dy : 0 };
-    });
-    if (typeof listNear === "function") {
-      rooms.near = listNear(rooms.map(function (r) {
-        return { x: r.n.x + r.dx, y: r.n.y + r.dy, w: r.n.w, h: r.n.h, turn: r.n.turn, r: r };
-      }));
+    // (worked out when a wall is first worked out afresh this picture: most pictures, none is)
+    var rooms = null;
+    function roomsNow() {
+      if (rooms) { return rooms; }
+      var floors = typeof floorsOf === "function" ? floorsOf() : [];
+      rooms = hand.nodes.filter(function (r) { return r.kind === "i_room"; }).map(function (r) {
+        var fl = floors.length ? floorAt(floors, r.x, r.y) : null;
+        return { n: r, dx: fl ? fl.dx : 0, dy: fl ? fl.dy : 0 };
+      });
+      if (typeof listNear === "function") {
+        rooms.near = listNear(rooms.map(function (r) {
+          return { x: r.n.x + r.dx, y: r.n.y + r.dy, w: r.n.w, h: r.n.h, turn: r.n.turn, r: r };
+        }));
+      }
+      return rooms;
     }
     var made = typeof houseMat === "function";
     // snow lying on what faces the sky out of doors; everything wet in the rain (39-house.js)
@@ -1159,45 +1237,106 @@
     // carried in, those at work: in batches of its own ("~m"), so the house
     // standing still round it is the same arrays as last picture (gl3JoinKept)
     // and not the whole of it joined and sent again sixty times a second.
-    var getB = B.get, rec = null, keepIt = true, apart = !!model.apart, sfx = "";
+    // (2026-10-04, "run smoothly ... at a stable 60fps") And what stands still,
+    // in sixteen buckets by what it is part of ("#0".."#15"): a piece put in,
+    // a light switched on, sends its own bucket again -- not the whole house.
+    // Whatever was not as it was last picture (a model moved, a face worked
+    // out afresh) is put with what moves, this once; the next picture, still,
+    // it goes back to its bucket.
+    var getB = B.get, rec = null, keepIt = true, apart = !!model.apart, sfx = "", bucket = "";
     B.get = function (key, how) {
-      var b = getB(sfx && key.slice(-2) !== "~m" ? key + sfx : key, how);
+      var vol = B.volNow, still = B.stillNow; B.volNow = undefined; B.stillNow = undefined;
+      if (vol) { FN.vol = (FN.vol || 0) + 1; }
+      var suf = sfx === "~r" ? "~r" : ((sfx === "~m" && !still) || vol) ? "~m" : bucket;
+      if (suf.charCodeAt(0) === 35 && !GL3_BUCKETED[key]) { suf = ""; }        // ("#": in buckets, or not)
+      var b = getB(key.slice(-2) === "~m" ? key : key + suf, how);
+      b.base = key.slice(-2) === "~m" ? key.slice(0, -2) : key;
       if (rec && rec.indexOf(b) < 0) { rec.push(b); b.mark = b.v.length; }
       return b;
     };
-    model.faces.forEach(function (f) {
+    // (2026-10-04, "a stable 60fps") a face as it was: its parts into the batches
+    // they went in last time this picture, found once -- not a batch's name put
+    // together and looked up for each of forty thousand faces each picture
+    function putParts(parts, suf) {
+      for (var w = 0; w < parts.length; w++) {
+        var pt = parts[w], into;
+        if (pt.bOf === B && pt.bSuf === suf) { into = pt.b; }
+        else {
+          var s = suf.charCodeAt(0) === 35 && !GL3_BUCKETED[pt.base] ? "" : suf;
+          into = getB(pt.base + s, pt.how); into.base = pt.base; pt.b = into; pt.bOf = B; pt.bSuf = suf;
+        }
+        (into.chunks || (into.chunks = [])).push(pt.data);
+      }
+    }
+    var faces = model.faces, FN = G.faceN || (G.faceN = { all: 0, kept: 0, what: 0, fresh: 0, mesh: 0, ghost: 0 });
+    FN.all += faces.length;
+    for (var fi = 0; fi < faces.length; fi++) { oneFace(faces[fi]); }
+    function oneFace(f) {
+      // (the quickest way first -- a face as it was, standing still: most faces, most pictures)
+      var src0 = f.src;
+      if (src0 !== undefined && !apart && gl3FaceKept) {
+        var was0 = gl3FaceKept.get(src0);
+        if (was0 !== undefined && was0.pts === f.pts && was0.how === f.how && was0.same === same && was0.bucket !== undefined && !f.moves && !f.rests) {
+          putParts(was0.parts, was0.bucket); FN.kept++;
+          return;
+        }
+      }
       var how = f.how || {};
       // (what the storm carried off and let fall, lying still: kept in batches of its own
       // ("~r"), not joined again with all that moves each picture -- 40-stormfx.js)
       sfx = f.rests ? "~r" : apart || f.moves ? "~m" : "";
+      bucket = GL3_BUCKET_SUF[gl3Bucket(f)];
       if (how.ghost) {                    // what walking bumps into, unseen
         // (or what only throws a shadow: drawn for the sun, not for the eye)
         if (how.caster) { gl3Poly(B.get("caster", { caster: true }).v, f.pts, f.n, [1, 1, 1], 1, null, PAT.plain); }
+        FN.ghost++;
         return;
       }
-      if (f.mesh) { gl3Mesh(B, f); return; }
+      if (f.mesh) { FN.mesh++; gl3Mesh(B, f); return; }
       var src = f.src, was = src && gl3FaceKept ? gl3FaceKept.get(src) : null;
-      if (was && was.same === same && was.pts === f.pts && was.how === f.how) {
-        for (var w = 0; w < was.parts.length; w++) {
-          var into = getB(was.parts[w].key, was.parts[w].how);
-          (into.chunks || (into.chunks = [])).push(was.parts[w].data);
+      // (no face it is a copy of -- made again each picture by what adds it: known by
+      // what it is -- its corners, how it is drawn -- the same as last picture's)
+      var ck = null;
+      if (!src && gl3ByWhat) {
+        ck = gl3WhatKey(f);
+        if (ck !== null) {
+          var hit = gl3ByWhat.get(ck.h);
+          if (hit && hit.same === same && hit.sig === ck.sig && gl3PtsSame(hit.c, f.pts)) {
+            hit.used = G.frameN || 0; FN.what++;
+            var bW = GL3_BUCKET_SUF[ck.h & 15];
+            putParts(hit.parts, sfx === "~m" && gl3StillRun(hit) >= GL3_STILL ? bW : sfx || bW);
+            return;
+          }
         }
+      }
+      if (was && was.same === same && was.pts === f.pts && was.how === f.how) {
+        putParts(was.parts, sfx === "~m" && gl3StillRun(was) >= GL3_STILL ? bucket : sfx || bucket);
+        FN.kept++;
         return;
       }
-      rec = src && gl3FaceKept ? [] : null;
-      keepIt = true;
+      rec = (src && gl3FaceKept) || ck ? [] : null;
+      keepIt = true; FN.fresh++;
+      // (worked out afresh this picture: with what moves, this once)
+      var sfxWas = sfx;
+      if (!sfx) { sfx = "~m"; }
       gl3FaceInto(f, how);
+      sfx = sfxWas;
       if (rec && keepIt) {
-        gl3FaceKept.set(src, { same: same, pts: f.pts, how: f.how, parts: rec.map(function (b) {
+        var partsK = rec.map(function (b) {
           var data = new Float32Array(b.v.slice(b.mark));
           b.v.length = b.mark;                       // (and in as kept, like the rest)
           (b.chunks || (b.chunks = [])).push(data);
-          return { key: b.key, how: b.how, data: data };
-        }) });
+          return { key: b.key, base: b.base, how: b.how, data: data };
+        });
+        if (src) { gl3FaceKept.set(src, { same: same, pts: f.pts, how: f.how, parts: partsK, bucket: bucket }); }
+        else if (ck) {
+          gl3ByWhat.set(ck.h, { same: same, sig: ck.sig, c: f.pts.map(function (q) { return [q[0], q[1], q[2] || 0]; }), parts: partsK, used: G.frameN || 0 });
+          if (gl3ByWhat.size > 60000) { gl3ByWhatPrune(G.frameN || 0, 0); }
+        }
       }
       rec = null;
-    });
-    B.get = getB; sfx = "";
+    }
+    B.get = getB; sfx = ""; bucket = "";
     function gl3FaceInto(f, how) {
       var base = gl3Rgb(how.color || sheet), edge = how.edge ? gl3Rgb(how.edge) : inkC, a = 1, pat = PAT.plain;
       if (how.wall && f.top) { base = edge; }
@@ -1205,7 +1344,7 @@
         // painted walls: a warm white, tinted by the room's own outline;
         // the side that faces the garden boarded -- or what the house was
         // made of, picked (HOUSE_MATS, 38-models.js)
-        var out = gl3Outside(f, rooms), wm = made ? houseMat(f.node, out ? "out" : "wall") : null;
+        var out = gl3Outside(f, roomsNow()), wm = made ? houseMat(f.node, out ? "out" : "wall") : null;
         if (wm) { pat = wm.pat; base = gl3Mix(base, gl3Rgb(wm.color), dress); }
         else {
           base = gl3Mix(base, [0.97, 0.95, 0.91], 0.55 * dress);
@@ -1281,6 +1420,58 @@
     }
   }
   var gl3FaceKept = typeof WeakMap === "function" ? new WeakMap() : null;
+  // Faces made afresh each picture with no face they are a copy of, known by what they are:
+  // a number from their corners and how they are drawn, checked against the corners kept.
+  var gl3ByWhat = typeof Map === "function" ? new Map() : null, gl3HowSig = typeof WeakMap === "function" ? new WeakMap() : null;
+  function gl3HowKey(how) {
+    var s = gl3HowSig ? gl3HowSig.get(how) : undefined;
+    if (s !== undefined) { return s; }
+    var keys = Object.keys(how).sort(), out = [];
+    for (var i = 0; i < keys.length; i++) {
+      var v = how[keys[i]];
+      if (v === undefined || typeof v === "function") { continue; }
+      out.push(keys[i] + ":" + (v && typeof v === "object" ? (v.key || v.id || JSON.stringify(v).slice(0, 60)) : v));
+    }
+    s = out.join(",");
+    if (gl3HowSig) { gl3HowSig.set(how, s); }
+    return s;
+  }
+  function gl3WhatKey(f) {
+    var pts = f.pts, h = 2166136261 | 0;
+    // (a picture laid on -- a house number's plate: known by its picture's own key, where it has one)
+    if (!pts || pts.length > 64 || (f.tex && (!f.tex.key || typeof f.tex.key !== "string"))) { return null; }
+    for (var i = 0; i < pts.length; i++) {
+      var p = pts[i];
+      h = Math.imul(h ^ Math.round(p[0] * 8), 16777619); h = Math.imul(h ^ Math.round(p[1] * 8), 16777619); h = Math.imul(h ^ Math.round((p[2] || 0) * 8), 16777619);
+    }
+    var sig = gl3HowKey(f.how || {}) + "|" + (f.n ? Math.round(f.n[0] * 100) + "," + Math.round(f.n[1] * 100) + "," + Math.round(f.n[2] * 100) : "") + (f.ground ? "|g" : "") + (f.top ? "|t" : "") + (f.side ? "|s" : "") + (f.node ? "|" + f.node.id : "") +
+              (f.tex ? "|x" + f.tex.key + "|" + (f.texAt || "") + (f.clipRound ? "|r" + f.clipRound.map(function (q) { return Math.round(q[0] * 8) + "," + Math.round(q[1] * 8); }).join(";") : "") : "");
+    for (var j = 0; j < sig.length; j++) { h = Math.imul(h ^ sig.charCodeAt(j), 16777619); }
+    return { h: h >>> 0, sig: sig };
+  }
+  function gl3PtsSame(a, b) {
+    if (a.length !== b.length) { return false; }
+    for (var i = 0; i < a.length; i++) {
+      var p = a[i], q = b[i];
+      if (Math.abs(p[0] - q[0]) > 1e-6 || Math.abs(p[1] - q[1]) > 1e-6 || Math.abs(p[2] - (q[2] || 0)) > 1e-6) { return false; }
+    }
+    return true;
+  }
+  function gl3ByWhatPrune(now, keep) {
+    gl3ByWhat.forEach(function (v, k) { if (now - v.used > keep) { gl3ByWhat.delete(k); } });
+  }
+  var gl3BucketIds = typeof WeakMap === "function" ? new WeakMap() : null, gl3BucketNext = 0, GL3_BUCKETS = 16;
+  var GL3_BUCKETED = { plain: 1, lines: 1, models: 1 };
+  var GL3_BUCKET_SUF = [];
+  for (var gl3Bi = 0; gl3Bi < GL3_BUCKETS; gl3Bi++) { GL3_BUCKET_SUF.push("#" + gl3Bi); }
+  function gl3Bucket(f) {
+    if (f.node && f.node.id !== undefined) { return Math.abs(f.node.id | 0) % GL3_BUCKETS; }
+    var o = f.src || (f.mesh ? f.mesh.p : null) || f;
+    if (!gl3BucketIds || typeof o !== "object") { return 0; }
+    var id = gl3BucketIds.get(o);
+    if (id === undefined) { id = gl3BucketNext++ % GL3_BUCKETS; gl3BucketIds.set(o, id); }
+    return id;
+  }
 
   // Those standing -- people, the one walking -- a picture turned to face
   // you, and a soft shadow at their feet.
@@ -1318,14 +1509,17 @@
     // (measured by what stands on the ground -- the rooms' floors -- not by
     // every face: a style's eaves, porch or chimney moved the middle, and
     // every tree with it, when the style was changed, 2026-10-03)
-    model.faces.forEach(function (f) {
+    // (and while it goes up, by the building as it will stand: measured by the
+    // floors laid so far, the trees moved about as each went in, 2026-10-04)
+    var measured = model.whole && model.whole.faces ? model.whole : model;
+    measured.faces.forEach(function (f) {
       if (!f.node || f.node.kind !== "i_room" || !f.pts.every(function (p) { return Math.abs(p[2] || 0) < 6; })) { return; }
       f.pts.forEach(function (p) {
         x0 = Math.min(x0, p[0]); x1 = Math.max(x1, p[0]); y0 = Math.min(y0, p[1]); y1 = Math.max(y1, p[1]);
       });
     });
     if (x0 === Infinity) {
-      model.faces.forEach(function (f) {
+      measured.faces.forEach(function (f) {
         f.pts.forEach(function (p) {
           x0 = Math.min(x0, p[0]); x1 = Math.max(x1, p[0]); y0 = Math.min(y0, p[1]); y1 = Math.max(y1, p[1]);
         });
@@ -1652,6 +1846,19 @@
   }
 
   // ---- drawing -----------------------------------------------------------------------
+  var GL3_NOFADE = [0, 0];
+  // only where each is found in the buffer just bound (gl3Bind turned them on already)
+  function gl3Point(gl, prog, stride) {
+    var at = prog.at, L = prog.ptrs;
+    if (!L) {
+      L = prog.ptrs = [];
+      [["aPos", 3, 0], ["aNorm", 3, 3], ["aColor", 4, 6], ["aUv", 2, 10], ["aPat", 1, 12]].forEach(function (a) {
+        var loc = at[a[0]];
+        if (loc !== undefined && loc >= 0) { L.push([loc, a[1], a[2] * 4]); }
+      });
+    }
+    for (var i = 0; i < L.length; i++) { gl.vertexAttribPointer(L[i][0], L[i][1], gl.FLOAT, false, stride * 4, L[i][2]); }
+  }
   function gl3Bind(gl, prog, stride) {
     var at = prog.at, F = 4;
     [["aPos", 3, 0], ["aNorm", 3, 3], ["aColor", 4, 6], ["aUv", 2, 10], ["aPat", 1, 12]].forEach(function (a) {
@@ -1699,8 +1906,11 @@
   function gl3JoinKept(G, x) {
     var K = G.kept || (G.kept = {}), k = K[x.key], chunks = x.chunks || [];
     if (k && gl3Same(k.chunks, chunks) && gl3Same(k.v, x.v)) { return k.data; }
-    G.same = false;
+    if (x.key.slice(-2) === "~m") { G.dynSame = false; } else { G.same = false; }
     var data = gl3Join(x);
+    // (how much is joined again each picture: for measuring, 40-perf.js)
+    var J = G.joined || (G.joined = { n: 0, floats: 0, dyn: 0 });
+    J.n++; J.floats += data.length; if (x.key.slice(-2) === "~m") { J.dyn += data.length; }
     K[x.key] = { v: x.v, chunks: chunks.slice(), data: data };
     return data;
   }
@@ -1808,7 +2018,9 @@
     });
     // each quarter: looked down from under the light (under what hangs in the
     // middle of the ceiling -- a fan's own light is under its blades)
-    var gl = G.gl, N = GL3_LAMP, kept = G.lampTiles || (G.lampTiles = []), moved = !G.same;
+    // (the house changed -- or what moves in it, as often as the sun's shadows of it are drawn, 40-perf.js)
+    var dynEvery = typeof V3Q === "object" && V3Q.shadowEvery ? V3Q.shadowEvery : 1;
+    var gl = G.gl, N = GL3_LAMP, kept = G.lampTiles || (G.lampTiles = []), moved = !G.same || (!G.dynSame && (G.frameN || 0) % dynEvery === 0);
     G.lampTurn = ((G.lampTurn || 0) + (moved ? 1 : 0)) % 3;
     tiles.forEach(function (o, t) {
       var R = o.R, lampZ = R.z0 + (ceilOf(R.r) - 0.35) * P;
@@ -1849,7 +2061,7 @@
   function v3GlDraw(model, inside) {
     var G = gl3Ready();
     if (!G) { return false; }
-    var gl = G.gl, dpr = window.devicePixelRatio || 1;
+    var gl = G.gl, dpr = typeof v3RenderDpr === "function" ? v3RenderDpr() : (window.devicePixelRatio || 1);
     var W = Math.max(1, Math.round(V3.w * dpr)), H = Math.max(1, Math.round(V3.h * dpr));
     if (G.canvas.width !== W || G.canvas.height !== H) { G.canvas.width = W; G.canvas.height = H; }
     var ink = simInk(), sheet = simSheet(), sheetC = gl3Rgb(sheet);
@@ -1865,16 +2077,62 @@
     // sky it gives (38-view3d-more.js)
     var sky = gl3SkyNow(), sun = sky.sun;
     try {
-      var scenery = gl3Scenery(G, model, inside, sheet);
-      var B = gl3Batches();
-      gl3Faces(G, model, B, ink, sheet, dress);
+      var lookNow = ink + "|" + sheet + "|" + dress + "|" + (inside ? 1 : 0);
+      var scenery = G.sceneryFor === model && G.sceneryLook === lookNow && G.scenery ? G.scenery : gl3Scenery(G, model, inside, sheet);
+      G.sceneryFor = model; G.sceneryLook = lookNow;
       // which way is "across" for those standing: across the screen
       var right = inside ? [-Math.sin(V3.me.head), Math.cos(V3.me.head)] : [Math.cos(V3.yaw), -Math.sin(V3.yaw)];
-      gl3Stand(G, model, B, right);
-      // people out walking, cars going by (39-world.js): drawn, but not what the view is fitted to
-      if (model.passing) {
-        gl3Faces(G, { faces: model.passing.faces, apart: true }, B, ink, sheet, dress);
-        gl3Stand(G, { stand: model.passing.stand }, { get: function (key, how) { return B.get(key + "~m", how); } }, right);
+      // (2026-10-04, "a stable 60fps"): the very model drawn last picture -- the view
+      // only turned, the scene not made again this picture (40-perf.js) -- its batches as they were
+      var reuse = !!(G.lastModel === model && G.lastB && G.lastLook === ink + "|" + sheet + "|" + dress);
+      // (and on a slow device, a scene made this picture -- the same way of looking,
+      // only later -- put into its batches next picture, this one drawn with the
+      // last's: the making and the batching not both in one picture, 40-perf.js)
+      var waits = !reuse && !!G.lastB && G.lastLook === ink + "|" + sheet + "|" + dress && typeof V3Q === "object" && V3Q.split &&
+                  !!model.pacedSame && G.pending !== model;
+      if (waits) { G.pending = model; reuse = true; }
+      else if (G.pending === model) { G.pending = null; }
+      var B = reuse ? G.lastB : gl3Batches();
+      var tBatch = performance.now();
+      if (!reuse) {
+        gl3Round++;
+        // (2026-10-04, "a stable 60fps") The house's own faces, every one the very same as
+        // when they were last put into batches -- the scene made again only for what moves
+        // round it (people, cars going by): its batches as they were then, only what moves
+        // put in afresh.  Each face of a big house sorted again was most of a picture's work.
+        // (walking round, your own body -- turned as you turn: put in afresh each time, with what moves)
+        // (and what moves in the house -- carried in, going up: 40-movein.js, 40-works.js -- apart too,
+        // so the rest can be as it was)
+        var houseOnly = model, mine = null, goes = null;
+        var own = model.faces, rest = null;
+        for (var oi = 0; oi < own.length; oi++) {
+          var of = own[oi], me = of.me && inside;
+          if (me || of.moves) {
+            if (!rest) { rest = own.slice(0, oi); }
+            if (me) { (mine || (mine = [])).push(of); } else { (goes || (goes = [])).push(of); }
+          } else if (rest) { rest.push(of); }
+        }
+        if (rest) { houseOnly = { faces: rest }; }
+        var snap = G.staticSnap, snapKey = gl3SnapKey(ink, sheet, dress);
+        if (snap && snap.key === snapKey && gl3SameFaces(snap.faces, houseOnly.faces)) {
+          gl3FromSnap(B, snap);
+          snap.faces = houseOnly.faces;
+          G.snapUsed = (G.snapUsed || 0) + 1;
+        } else {
+          var FN0 = G.faceN ? (G.faceN.fresh || 0) + (G.faceN.vol || 0) : 0;
+          gl3Faces(G, houseOnly, B, ink, sheet, dress);
+          // (taken only when every face was as it was kept: none new this once, with what moves)
+          var FN1 = (G.faceN.fresh || 0) + (G.faceN.vol || 0);
+          G.staticSnap = FN1 === FN0 ? gl3Snap(B, houseOnly.faces, snapKey) : null;
+        }
+        if (goes) { gl3Faces(G, { faces: goes }, B, ink, sheet, dress); }
+        if (mine) { gl3Faces(G, { faces: mine, apart: true }, B, ink, sheet, dress); }
+        gl3Stand(G, model, B, right);
+        // people out walking, cars going by (39-world.js): drawn, but not what the view is fitted to
+        if (model.passing) {
+          gl3Faces(G, { faces: model.passing.faces, apart: true }, B, ink, sheet, dress);
+          gl3Stand(G, { stand: model.passing.stand }, { get: function (key, how) { return B.get(key + "~m", how); } }, right);
+        }
       }
       // the camera
       var mvp, eye = null, toward = [0, 0, 1], cam = null;
@@ -1892,7 +2150,7 @@
         });
         // (the corners of the box round it all, not every corner of every
         // face: as near and as far, and a big building has forty thousand)
-        var all = gl3FacesBox(model.faces);
+        var all = reuse && G.lastBox ? G.lastBox : gl3FacesBox(model.faces);
         if (all.x0 !== Infinity) {
           [all.x0, all.x1].forEach(function (x) { [all.y0, all.y1].forEach(function (y) { [all.z0, all.z1].forEach(function (z) {
             var d = gl3Depth([x, y, z]); lo = Math.min(lo, d); hi = Math.max(hi, d);
@@ -1904,13 +2162,14 @@
       }
       G.mvp = mvp;                       // (for a press on the view, turned into a ray: 40-drag.js)
       // where the sun can throw a shadow from: the house and what is near it
-      var fb = gl3FacesBox(model.faces);
+      var fb = reuse && G.lastBox ? G.lastBox : gl3FacesBox(model.faces);
+      G.lastBox = fb;
       var b = { x0: fb.x0, x1: fb.x1, y0: fb.y0, y1: fb.y1, z0: Math.min(0, fb.z0), z1: Math.max(0, fb.z1) };
       var flatish = !inside && (V3.rise === undefined ? 1 : V3.rise) < 0.98;
       // (walking round inside too: the sun comes in at the windows and the
       // doors, and nowhere else -- 2026-10-01, "update the shadows so they
       // are also accurate")
-      var shadows = G.shadowOk && b.x0 !== Infinity && !flatish;
+      var shadows = G.shadowOk && b.x0 !== Infinity && !flatish && !(typeof V3Q === "object" && V3Q.noShadow);
       var under = typeof houseUnder === "function" && houseUnder();
       var sunMvp = gl3Mat([1, 0, 0, 0], [0, 1, 0, 0], [0, 0, 1, 0], [0, 0, 0, 1]), nudge = 0;
       if (shadows) {
@@ -1926,17 +2185,29 @@
 
       // the batches as arrays, once -- the same arrays as last picture where
       // nothing in them changed (gl3JoinKept), and then the GPU has them
-      var batches = B.all.filter(function (x) { return x.v.length || (x.chunks && x.chunks.length); });
-      G.same = true;
-      batches.forEach(function (x) { x.data = gl3JoinKept(G, x); });
-      var keys = batches.map(function (x) { return x.key; }).join("|");
+      var batches = reuse ? G.lastBatches : B.all.filter(function (x) { return x.v.length || (x.chunks && x.chunks.length); });
+      G.same = true; G.dynSame = true;
+      if (!reuse) { batches.forEach(function (x) { x.data = gl3JoinKept(G, x); }); }
+      G.batchMs = reuse ? 0 : performance.now() - tBatch;     // (how long the batching took: for measuring)
+      if (!reuse) { G.batchCost = G.batchCost ? G.batchCost * 0.7 + G.batchMs * 0.3 : G.batchMs; }    // (and the pace of making the scene, 40-perf.js)
+      if (!waits) { G.lastModel = model; G.lastB = B; G.lastBatches = batches; G.lastLook = ink + "|" + sheet + "|" + dress; }
+      var keys = batches.filter(function (x) { return x.key.slice(-2) !== "~m"; }).map(function (x) { return x.key; }).join("|");
       if (keys !== G.lastKeys) { G.same = false; G.lastKeys = keys; }
+      // (the old arrays of batches no longer drawn, let go)
+      if (G.kept) {
+        var live = {};
+        batches.forEach(function (x) { live[x.key] = true; });
+        Object.keys(G.kept).forEach(function (k) { if (!live[k] && k.slice(-2) === "~m") { delete G.kept[k]; } });
+      }
+      G.frameN = (G.frameN || 0) + 1;
+      if (gl3ByWhat && G.frameN % 240 === 0) { gl3ByWhatPrune(G.frameN, 240); }
 
       // ---- the sun's view: everything solid, how near the sun ----------------
       // (drawn again only when something in it, or the sun, has moved: walking
       // round looking, it has not)
       var sunKey = shadows ? Array.prototype.join.call(sunMvp, ",") + "|" + (under ? 1 : 0) : "";
-      var sunAgain = shadows && !(G.same && G.sunKey === sunKey && G.sunScene === scenery.verts);
+      var dynEvery = typeof V3Q === "object" && V3Q.shadowEvery ? V3Q.shadowEvery : 1;
+      var sunAgain = shadows && (!(G.same && G.sunKey === sunKey && G.sunScene === scenery.verts) || (!G.dynSame && G.frameN % dynEvery === 0));
       G.sunKey = shadows ? sunKey : null; G.sunScene = scenery.verts;
       if (sunAgain) {
         gl.bindFramebuffer(gl.FRAMEBUFFER, G.shadowFb);
@@ -2083,21 +2354,30 @@
       // laid on them win: away is down the depth counted from far to near)
       gl.enable(gl.DEPTH_TEST); gl.depthFunc(D ? gl.GEQUAL : gl.LEQUAL);
       gl.enable(gl.POLYGON_OFFSET_FILL); gl.polygonOffset(D ? -1 : 1, D ? -2 : 2);
+      // (2026-10-04, "a stable 60fps") each draw set everything again -- some
+      // twenty calls a draw, two thousand a picture; now only what is not
+      // already as it should be (DS: what is set now; forgotten -- null -- where
+      // something else may have set it: the mirrors' own pictures)
+      var DS = null;
       function draw(data, how, mode, key) {
         gl3Upload(G, data, key);
-        gl3Bind(gl, P, GL3_STRIDE);
-        gl.bindTexture(gl.TEXTURE_2D, how.tex || G.white);
-        gl.uniform1f(U.uUseTex, how.tex ? 1 : 0);
-        gl.uniform1f(U.uDecal, how.decal ? 1 : 0);
-        gl.uniform1f(U.uRound, how.round ? 1 : 0);
-        gl.uniform1f(U.uBill, how.bill ? 1 : 0);
-        gl.uniform1f(U.uAlpha, how.alpha === undefined ? 1 : how.alpha);
-        gl.uniform2fv(U.uFade, how.fade || [0, 0]);
-        gl.uniform1f(U.uGlow, how.glow || 0);
+        if (!DS) { gl3Bind(gl, P, GL3_STRIDE); DS = {}; } else { gl3Point(gl, P, GL3_STRIDE); }
+        var tex = how.tex || G.white, v;
+        if (DS.tex !== tex) { gl.bindTexture(gl.TEXTURE_2D, tex); DS.tex = tex; }
+        v = how.tex ? 1 : 0; if (DS.useTex !== v) { gl.uniform1f(U.uUseTex, v); DS.useTex = v; }
+        v = how.decal ? 1 : 0; if (DS.decal !== v) { gl.uniform1f(U.uDecal, v); DS.decal = v; }
+        v = how.round ? 1 : 0; if (DS.round !== v) { gl.uniform1f(U.uRound, v); DS.round = v; }
+        v = how.bill ? 1 : 0; if (DS.bill !== v) { gl.uniform1f(U.uBill, v); DS.bill = v; }
+        v = how.alpha === undefined ? 1 : how.alpha; if (DS.alpha !== v) { gl.uniform1f(U.uAlpha, v); DS.alpha = v; }
+        var fd = how.fade || GL3_NOFADE; if (DS.f0 !== fd[0] || DS.f1 !== fd[1]) { gl.uniform2fv(U.uFade, fd); DS.f0 = fd[0]; DS.f1 = fd[1]; }
+        v = how.glow || 0; if (DS.glow !== v) { gl.uniform1f(U.uGlow, v); DS.glow = v; }
         // (a picture laid on a face a little nearer; the lines left as they are)
-        if (U.uDepthK) { gl.uniform4f(U.uDepthK, depthK[0], depthK[1], mode === gl.LINES ? 2 : how.decal ? 1 : 0, depthK[2]); }
-        if (how.blend) { gl.enable(gl.BLEND); gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA); } else { gl.disable(gl.BLEND); }
-        gl.depthMask(!how.noDepthWrite);
+        if (U.uDepthK) {
+          v = mode === gl.LINES ? 2 : how.decal ? 1 : 0;
+          if (DS.dk !== depthK || DS.dz !== v) { gl.uniform4f(U.uDepthK, depthK[0], depthK[1], v, depthK[2]); DS.dk = depthK; DS.dz = v; }
+        }
+        v = !!how.blend; if (DS.blend !== v) { if (v) { gl.enable(gl.BLEND); gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA); } else { gl.disable(gl.BLEND); } DS.blend = v; }
+        v = !how.noDepthWrite; if (DS.dm !== v) { gl.depthMask(v); DS.dm = v; }
         gl.drawArrays(mode, 0, data.length / GL3_STRIDE);
       }
       // (mirrors, 40-mirrors.js: what each near one sees drawn first, into a
@@ -2105,11 +2385,12 @@
       // glass then put in with the batches, that picture on it)
       if (typeof mirrorPass === "function") {
         try {
-          mirrorPass({ gl: gl, G: G, U: U, draw: draw, batches: batches, scenery: scenery, model: model, inside: inside, eye: eye,
+          mirrorPass({ gl: gl, G: G, U: U, draw: function (a, b, c, d) { DS = null; draw(a, b, c, d); }, batches: batches, scenery: scenery, model: model, inside: inside, eye: eye,
                        toward: toward, ahead: cam ? cam.ahead : null, D: D, W: W, H: H, dress: dress, under: under, horizon: horizon,
                        depthK: depthK, setDepthK: function (k) { depthK = k; },
                        mainMvp: D ? gl3Reversed(mvp, !!inside, GL3_NEAR) : mvp });
         } catch (eMirror) { if (V3) { V3.mirrorErr = String(eMirror && eMirror.message); } }
+        DS = null;
       }
       // the ground and what grows on it; from above, it thins out at the edge
       if (dress > 0.01 && !under) {

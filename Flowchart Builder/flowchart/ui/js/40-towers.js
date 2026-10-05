@@ -755,8 +755,11 @@
       var model = v3BuildTowers.apply(this, arguments);
       try {
         if (model && V3 && V3.scene !== "space" && !(V3.flat && V3.flatDone)) {
-          var add = towerFaces();
-          if (add.length) { Array.prototype.push.apply(model.faces, add); }
+          // (kept while the drawing and the house's settings are as they were: 38-view3d.js v3Added)
+          v3Added("towers", model.faces, "", function () {
+            var add = towerFaces();
+            if (add.length) { Array.prototype.push.apply(model.faces, add); }
+          });
         }
       } catch (e) { if (window.console && console.warn) { console.warn("tower:", e && e.message); } }
       return model;

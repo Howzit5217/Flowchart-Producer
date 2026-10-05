@@ -995,7 +995,11 @@
     for (var i = 0; i < model.faces.length; i++) {
       var f = model.faces[i], g = wkGroupOf(site, f);
       if (!g) { faces.push(f); continue; }
-      var R = plan.rv[g.key] || plan.lateR || WK_NOT_YET;
+      // (2026-10-04, "a stable 60fps": each part's timing kept on it once the timetable is
+      // all made, and what is finished -- most of it, most of the time -- put in first)
+      var R = g.Rp === plan ? g.R : plan.rv[g.key] || plan.lateR || WK_NOT_YET;
+      if (g.Rp !== plan && plan.done) { g.R = R; g.Rp = plan; }
+      if (T >= R.t1) { faces.push(f); continue; }
       if (R.carry && R.carry.wk && T >= R.carry.wk.t0 && T < R.t0) { (fly[g.key] || (fly[g.key] = [])).push(f); continue; }
       if (T < R.t0) {
         if (R.pre && !f.mesh && !(f.how && (f.how.glass || f.how.ghost))) {

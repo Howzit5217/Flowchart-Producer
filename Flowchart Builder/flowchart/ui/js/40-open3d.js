@@ -1492,6 +1492,7 @@
     }
     return t0;
   }
+  var o3Boxes = typeof WeakMap === "function" ? new WeakMap() : null;
   function o3Look(R, far) {
     var model = V3 && V3.dragModel;
     if (!model || !model.faces || !R) { return null; }
@@ -1503,13 +1504,19 @@
       var n = f.node, how = f.how || {};
       var fixed = n ? !!(O3_FIXED[n.kind] || (typeof BETWEEN_FLOORS === "object" && BETWEEN_FLOORS[n.kind])) : !!(how.wall || how.roof);
       if (!n && !fixed) { return; }                // water running, a plug's cord, the grid carried over: not in the way
-      var x0 = Infinity, y0 = Infinity, z0 = Infinity, x1 = -Infinity, y1 = -Infinity, z1 = -Infinity;
-      for (var i = 0; i < P.length; i++) {
-        var p = P[i];
-        if (p[0] < x0) { x0 = p[0]; } if (p[0] > x1) { x1 = p[0]; }
-        if (p[1] < y0) { y0 = p[1]; } if (p[1] > y1) { y1 = p[1]; }
-        if (p[2] < z0) { z0 = p[2]; } if (p[2] > z1) { z1 = p[2]; }
+      // (a face's box kept with its corners, which last from picture to picture: 2026-10-04)
+      var bx = o3Boxes ? o3Boxes.get(P) : null;
+      if (!bx) {
+        bx = [Infinity, -Infinity, Infinity, -Infinity, Infinity, -Infinity];
+        for (var i = 0; i < P.length; i++) {
+          var p = P[i];
+          if (p[0] < bx[0]) { bx[0] = p[0]; } if (p[0] > bx[1]) { bx[1] = p[0]; }
+          if (p[1] < bx[2]) { bx[2] = p[1]; } if (p[1] > bx[3]) { bx[3] = p[1]; }
+          if (p[2] < bx[4]) { bx[4] = p[2]; } if (p[2] > bx[5]) { bx[5] = p[2]; }
+        }
+        if (o3Boxes) { o3Boxes.set(P, bx); }
       }
+      var x0 = bx[0], x1 = bx[1], y0 = bx[2], y1 = bx[3], z0 = bx[4], z1 = bx[5];
       var ex = Math.max(x0 - o[0], 0, o[0] - x1), ey = Math.max(y0 - o[1], 0, o[1] - y1), ez = Math.max(z0 - o[2], 0, o[2] - z1);
       if (ex * ex + ey * ey + ez * ez > reach * reach) { return; }
       if (fixed) {

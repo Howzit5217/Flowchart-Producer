@@ -94,7 +94,8 @@
     return best || "program";
   }
 
-  var boardSeen = { key: null, name: "program" };
+  var boardSeen = { key: null, name: "program" }, boardKnown = new Map();
+  var boardQuick = typeof WeakMap === "function" ? new WeakMap() : null;
   // The name of what the drawing is being run as: what it was told, or
   // what it reads as.  "program" is the program, as before.
   function boardName() {
@@ -102,13 +103,26 @@
     // a flowchart is a program, whatever pictures are beside it; a design
     // is never one (39-design.js)
     var made = typeof makingNow === "function" ? makingNow() : "";
+    // (asked many times a picture in 3D -- of the drawing and of the house put together
+    // in turn: each one's kinds read over once a picture, and what they read as kept
+    // for each way they come -- 2026-10-04, "a stable 60fps")
+    var now = typeof V3 !== "undefined" && V3 && V3.last ? V3.last : -1;
+    var Q = boardQuick && now >= 0 ? boardQuick.get(hand.nodes) : null;
+    if (Q && Q.at === now && Q.n === hand.nodes.length && Q.links === hand.links.length && Q.made === made && Q.choice === boardChoice) { return Q.name; }
     var key = made + "|" + boardChoice + "|" + hand.links.length + "|" +
               hand.nodes.map(function (n) { return n.kind; }).join(",");
     if (boardSeen.key !== key) {
-      var name = made === "flowchart" ? "program" : boardChoice !== "auto" ? boardChoice : boardGuess();
-      if (made === "design" && (name === "program" || !SCENES[name])) { name = "flow"; }
-      boardSeen = { key: key, name: SCENES[name] || name === "program" ? name : "program" };
+      var known = boardKnown.get(key);
+      if (known === undefined) {
+        var name = made === "flowchart" ? "program" : boardChoice !== "auto" ? boardChoice : boardGuess();
+        if (made === "design" && (name === "program" || !SCENES[name])) { name = "flow"; }
+        known = SCENES[name] || name === "program" ? name : "program";
+        if (boardKnown.size > 8) { boardKnown.clear(); }
+        boardKnown.set(key, known);
+      }
+      boardSeen = { key: key, name: known };
     }
+    if (boardQuick && now >= 0) { boardQuick.set(hand.nodes, { at: now, n: hand.nodes.length, links: hand.links.length, made: made, choice: boardChoice, name: boardSeen.name }); }
     return boardSeen.name;
   }
 

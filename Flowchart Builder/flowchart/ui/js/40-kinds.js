@@ -154,7 +154,8 @@
     electronics: function (r) {
       var P = FLOOR_PX, b = tieBox(r), T = roomWallOf(r);
       tradeWalls(r, "i_walltv", 4);
-      tradeWalls(r, "i_tvstand", 2).forEach(function (s) { adviceAdd("i_tv", s.x, s.y, s.turn || 0); });
+      // (a television on its own unit, as a house's: not stood inside a TV stand)
+      tradeWalls(r, "i_tv", 2);
       var front = tradeTill(r, 0);
       tradePlain(tradeRows(r, "i_display", 0, b.t + T + 2.6 * P, front - 1.6 * P, 1.6 * P, 1.6 * P, 2.0)).forEach(function (t, i) {
         adviceAdd(i % 3 === 2 ? "i_tablet" : "i_laptop", t.x - 25, t.y);
@@ -203,7 +204,8 @@
       var front = tradeTill(r, 0);
       kindsAlong(r, "i_workbench", { x: b.r, y: r.y });
       tradePlain(tradeRows(r, "i_display", 0, b.t + T + ch + 1.4 * P, front - 1.4 * P, 1.6 * P, 1.4 * P, 1.6)).forEach(function (t, i) {
-        adviceAdd(i % 2 ? "i_vase" : "i_flowers", t.x - 25, t.y); adviceAdd("i_flowers", t.x + 25, t.y);
+        // (flowers in vases and baskets, standing on the table -- a floor stand of flowers would go through it)
+        adviceAdd(i % 2 ? "i_vase" : "i_basket", t.x - 25, t.y); adviceAdd(i % 2 ? "i_succulent" : "i_vase", t.x + 25, t.y);
       });
       tradeWalls(r, "i_plant", 3); tradeWalls(r, "i_palm", 1);
     },

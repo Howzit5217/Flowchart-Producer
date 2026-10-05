@@ -92,8 +92,12 @@
         if (!b || !b.length) { return; }
         var short = W - typeWidth(b);
         if (short < 0.05) { return; }
-        var grow = b.filter(function (r) { return r.kind !== "washroom" && r.kind !== "stairs" && r.kind !== "lift" && r.kind !== "suite"; })
-          .sort(function (p, q) { return q.w - p.w; })[0] || b[b.length - 1];
+        // (past the band's last stairwell where it can: the flights stay one over the other)
+        var can = b.filter(function (r) { return r.kind !== "washroom" && r.kind !== "stairs" && r.kind !== "lift" && r.kind !== "suite"; });
+        var lastWell = -1;
+        b.forEach(function (r, j) { if (r.kind === "stairs" || r.kind === "lift") { lastWell = j; } });
+        var after = can.filter(function (r) { return b.indexOf(r) > lastWell; });
+        var grow = (after.length ? after : can).slice().sort(function (p, q) { return q.w - p.w; })[0] || b[b.length - 1];
         grow.w += short;
       });
     });
@@ -122,53 +126,110 @@
     });
     return best || "foot";
   }
+  // The room's walls inside, each with the way into the room from it and the turn of a piece
+  // standing with its back to it (as alongWall turns them, 38-advice.js).
+  function slWalls(r) {
+    var f = roomInside(r);
+    return [{ name: "top", across: true, line: f.t, into: 1, from: f.l, to: f.r, turn: 0 },
+            { name: "foot", across: true, line: f.b, into: -1, from: f.l, to: f.r, turn: 180 },
+            { name: "left", across: false, line: f.l, into: 1, from: f.t, to: f.b, turn: 270 },
+            { name: "right", across: false, line: f.r, into: -1, from: f.t, to: f.b, turn: 90 }];
+  }
+  // A spot against wall `e` at `at` along it, `w` along the wall and `d` out from it.
+  function slSpot(kind, e, at, w, d, off) {
+    var o = e.line + e.into * ((off || 0) + d / 2 + 1);
+    return { kind: kind, x: e.across ? at : o, y: e.across ? o : at, w: w, h: d, turn: e.turn };
+  }
+  // Inside the room, clear of every door's swing and of what stands there.
+  function slFree(spot, f, doors, gap) {
+    var t = turned(spot);
+    if (spot.x - t.w / 2 < f.l - 0.5 || spot.x + t.w / 2 > f.r + 0.5 || spot.y - t.h / 2 < f.t - 0.5 || spot.y + t.h / 2 > f.b + 0.5) { return false; }
+    if (doors.some(function (d) { var f = starterDoorFlip(d); return boxesTouch(spot, d, 0.4 * FLOOR_PX) || (f && boxesTouch(spot, f, 0.4 * FLOOR_PX)); })) { return false; }
+    return typeClear(spot, gap === undefined ? 2 : gap);
+  }
+  // (a stall as wide as its spot, kept so; anything else its own size, in the middle of its spot)
+  function slPutAt(spot, sized) {
+    var n = adviceAdd(spot.kind, Math.round(spot.x), Math.round(spot.y), spot.turn);
+    if (n && sized) { n.w = Math.round(spot.w); n.h = Math.round(spot.h); n.own = true; }
+    return n;
+  }
+  // The stalls in a row along the longest wall with no door in it, the accessible one at the far
+  // end from the way in; the basins (and a boys' urinals) across from them, by the door -- or,
+  // where the room is too narrow for that, along the end wall by the door.
   function slFit(r, made) {
-    var P = FLOOR_PX, b = tieBox(r), T = roomWallOf(r) + 2;
+    var P = FLOOR_PX, f = roomInside(r);
+    if ((r.turn || 0) % 90) { return; }
     r.mat = Object.assign({}, r.mat || {}, { floor: "tiles", floorC: "#e6e8e6", wall: "tiles", wallC: "#f4f4f1" });
-    // (the plan's numbers are not the room's: how many by how long it is, which by its name)
-    var long = Math.max(b.r - b.l, b.b - b.t) / P;
-    var n = Math.max(2, Math.min(9, Math.floor((long - SL_WIDE - SL_BASINS - 0.3) / SL_STALL + 1e-6) + 1));
-    var boys = String(r.text || "") === TXT.sl_boys || String(r.text || "") === TXT.sl_men;
-    var inSide = slInSide(r, made), far = { foot: "top", top: "foot", left: "right", right: "left" }[inSide];
-    var across = far === "top" || far === "foot";                      // the far wall runs along x
-    var turn = { top: 0, foot: 180, left: 270, right: 90 }[far];
-    var len0 = across ? b.l : b.t, len1 = across ? b.r : b.b, line = far === "top" ? b.t : far === "foot" ? b.b : far === "left" ? b.l : b.r;
-    var inward = far === "top" || far === "left" ? 1 : -1;
-    var st = ICONS.i_toiletstall, deep = st ? st.box[1] : 75, wide = st ? st.box[0] : 45;
-    var was = typeof typeRoom !== "undefined" ? typeRoom : null;
-    try {
-      typeRoom = r;
-      // the stalls: the accessible one in the far corner, then the rest toward the basins' end
-      var urinals = boys ? Math.max(1, Math.floor(n / 2)) : 0, stalls = Math.max(2, n - urinals), at = len1 - T;
-      var c = line + inward * (T + deep / 2);
-      for (var i = 0; i < stalls; i++) {
-        var w = i === 0 ? Math.round(SL_WIDE * P) : wide;
-        var mid = at - w / 2, x = across ? mid : c, y = across ? c : mid;
-        var s = typePut("i_toiletstall", x, y, turn, 0);
-        if (!s) {
-          // (pressed against its neighbour: put down as it is, its own room checked)
-          s = adviceAdd("i_toiletstall", Math.round(x), Math.round(y), turn);
+    var boys = !!r.slBoys || String(r.text || "") === TXT.sl_boys || String(r.text || "") === TXT.sl_men;
+    var B = tieBox(r), T = roomWallOf(r);
+    var doors = hand.nodes.filter(function (d) {
+      if (!WALK_DOORS[d.kind]) { return false; }
+      var t = turned(d);
+      return d.x + t.w / 2 > B.l - T - 4 && d.x - t.w / 2 < B.r + T + 4 && d.y + t.h / 2 > B.t - T - 4 && d.y - t.h / 2 < B.b + T + 4;
+    });
+    var walls = slWalls(r);
+    function onWall(d, e) {
+      var t = turned(d), lo = e.across ? d.x - t.w / 2 : d.y - t.h / 2, hi = e.across ? d.x + t.w / 2 : d.y + t.h / 2;
+      var near = e.across ? Math.min(Math.abs(d.y - t.h / 2 - e.line), Math.abs(d.y + t.h / 2 - e.line)) : Math.min(Math.abs(d.x - t.w / 2 - e.line), Math.abs(d.x + t.w / 2 - e.line));
+      return near <= T + 6 && hi > e.from && lo < e.to;
+    }
+    // (the way in: a door, or where the hall is when the doors come later)
+    var inSide = slInSide(r, made), mid = { x: (f.l + f.r) / 2, y: (f.t + f.b) / 2 };
+    var door = doors[0] ? { x: doors[0].x, y: doors[0].y } :
+      { x: inSide === "left" ? f.l : inSide === "right" ? f.r : mid.x, y: inSide === "top" ? f.t : inSide === "foot" ? f.b : mid.y };
+    walls.forEach(function (e) {
+      e.len = e.to - e.from;
+      e.door = doors.some(function (d) { return onWall(d, e); }) || (!doors.length && e.name === inSide);
+      e.away = Math.abs((e.across ? door.y : door.x) - e.line);
+    });
+    var st = ICONS.i_toiletstall, deep = st ? st.box[1] : 75, wide = Math.max(st ? st.box[0] : 45, Math.round(SL_STALL * P)), acc = Math.round(SL_WIDE * P);
+    var wall = walls.filter(function (e) { return !e.door && e.len >= acc + wide; })
+      .sort(function (p, q) { return (q.len - p.len) || (q.away - p.away); })[0];
+    if (!wall) { return; }
+    // from the end away from the door, along the wall
+    var dAlong = wall.across ? door.x : door.y, fromFar = Math.abs(dAlong - wall.from) > Math.abs(dAlong - wall.to);
+    var start = fromFar ? wall.from : wall.to, step = fromFar ? 1 : -1;
+    var want = Math.max(2, r.slToilets || 2), urinals = boys ? Math.max(1, Math.floor(want / 2)) : 0;
+    var stalls = Math.max(2, want - urinals), at = start, put = 0;
+    for (var i = 0; i < stalls + 3; i++) {
+      var w = put === 0 ? acc : wide, spot = slSpot("i_toiletstall", wall, at + step * w / 2, w, deep);
+      if (!slFree(spot, f, doors, 0.5)) { break; }
+      var s = slPutAt(spot, true);
+      if (put === 0 && s) { s.text = TXT.sl_accessible || ""; }
+      put++;
+      at += step * (w + 1);
+      // (more than asked for where the wall has room and the room is short of toilets: never fewer than wanted)
+      if (put >= stalls) { break; }
+    }
+    // across from the stalls, by the door: the basins, the dryer, then a boys' urinals further in
+    var opp = walls.filter(function (e) { return e.across === wall.across && e !== wall; })[0];
+    var aisle = Math.abs(opp.line - wall.line) - deep;
+    var sinks = Math.max(2, Math.ceil(want / 2)), sk = ICONS.i_sink, sw = sk ? sk.box[0] : 30, sd = sk ? sk.box[1] : 20;
+    var row = [];
+    for (var k = 0; k < sinks; k++) { row.push(["i_sink", Math.max(sw, 0.7 * P), sd]); }
+    if (ICONS.i_handdryer) { row.push(["i_handdryer", ICONS.i_handdryer.box[0] + 0.3 * P, ICONS.i_handdryer.box[1]]); }
+    for (var u = 0; u < urinals; u++) { row.push(["i_urinal", Math.max(ICONS.i_urinal ? ICONS.i_urinal.box[0] : 24, 0.75 * P), ICONS.i_urinal ? ICONS.i_urinal.box[1] : 20]); }
+    var lines = [];
+    if (aisle >= 1.2 * P + sd) { lines.push({ e: opp, from: fromFar ? opp.to : opp.from, step: -step }); }
+    // (or along the end wall by the door, then the far end)
+    walls.filter(function (e) { return e.across !== wall.across; }).sort(function (p, q) { return p.away - q.away; }).forEach(function (e) {
+      // (out of the stalls' row: from the side away from the stalls' wall)
+      var awayFromStalls = Math.abs(e.from - wall.line) > Math.abs(e.to - wall.line);
+      lines.push({ e: e, from: awayFromStalls ? e.from : e.to, step: awayFromStalls ? 1 : -1, stop: wall.line - wall.into * 0 + wall.into * (deep + 0.9 * P) });
+    });
+    var li = 0, pos = lines[0] ? lines[0].from : 0;
+    row.forEach(function (it) {
+      while (li < lines.length) {
+        var L = lines[li], e = L.e, w = it[1], spot = slSpot(it[0], e, pos + L.step * w / 2, w, it[2]);
+        var past = L.step > 0 ? pos + w > e.to : pos - w < e.from;
+        if (L.stop !== undefined) { var cc = e.across ? spot.x : spot.y; if (wall.into > 0 ? cc - w / 2 < L.stop : cc + w / 2 > L.stop) { past = true; } }
+        if (!past && slFree(spot, f, doors, it[0] === "i_handdryer" ? 0 : 1)) {
+          slPutAt(spot, false);
+          pos += L.step * (w + 1);
+          return;
         }
-        if (s) { s.w = w; s.own = true; if (i === 0) { s.text = TXT.sl_accessible || ""; } }
-        at -= w + 1;
+        if (past) { li++; pos = lines[li] ? lines[li].from : 0; continue; }
+        pos += L.step * 0.1 * P;
       }
-      // the urinals on the same wall, a screen's width apart
-      var uc = line + inward * (T + 10);
-      for (var u = 0; u < urinals; u++) {
-        var um = at - 0.35 * P - u * 0.75 * P;
-        if (um - 0.4 * P < len0 + SL_BASINS * P) { break; }
-        typePut("i_urinal", across ? um : uc, across ? uc : um, turn, 0);
-      }
-      // the basins along the end wall away from the stalls, the hand dryer by them
-      var endTurn = across ? 270 : 0, endLine = across ? b.l : b.t, sinks = Math.max(2, Math.ceil(n / 2));
-      var e0 = (across ? b.t : b.l) + T + 0.5 * P, e1 = (across ? b.b : b.r) - T - 0.5 * P, gap = Math.min(0.8 * P, (e1 - e0) / sinks);
-      for (var k = 0; k < sinks; k++) {
-        var em = e0 + gap * (k + 0.5), ex = across ? endLine + T + 0.3 * P : em, ey = across ? em : endLine + T + 0.3 * P;
-        typePut("i_sink", ex, ey, endTurn, 0);
-      }
-      if (ICONS.i_handdryer) {
-        var hm = Math.min(e1, e0 + gap * sinks + 0.3 * P), hx = across ? endLine + T + 0.15 * P : hm, hy = across ? hm : endLine + T + 0.15 * P;
-        adviceAdd("i_handdryer", Math.round(hx), Math.round(hy), endTurn);
-      }
-    } finally { typeRoom = was; }
+    });
   }

@@ -127,8 +127,11 @@
       var model = v3BuildAddress.apply(this, arguments);
       try {
         if (model && model.faces && V3 && V3.scene !== "space" && !(V3.flat && V3.flatDone)) {
-          var add = adrFaces(model);
-          for (var i = 0; i < add.length; i++) { model.faces.push(add[i]); }
+          // (while it goes up, the door not in yet: worked out again once it is, 40-build.js)
+          v3Added("address", model.faces, typeof bpSite !== "undefined" && bpSite ? "building" : "", function () {
+            var add = adrFaces(model);
+            for (var i = 0; i < add.length; i++) { model.faces.push(add[i]); }
+          });
         }
       } catch (e) { /* no address */ }
       return model;

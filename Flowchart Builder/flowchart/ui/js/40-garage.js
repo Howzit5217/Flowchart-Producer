@@ -429,6 +429,9 @@
       var f0 = faces.length;
       try { gdDoor(faces, n, Math.min(90, Math.max(0, open))); }
       catch (e) { faces.length = f0; return v3DoorGd.apply(this, arguments); }
+      // (on its way up or down, a dozen seconds: put in apart, with what moves,
+      // so the rest of the house is kept as it was each picture -- 38-view3d-gl.js)
+      if (open > 0.01 && open < 89.99) { for (var i = f0; i < faces.length; i++) { faces[i].moves = true; } }
     };
   }
 
@@ -478,6 +481,9 @@
       hand.nodes.filter(function (n) {
         return n !== g && insideArea(g, n.x, n.y, -4) && !isArea(n.kind) && !WALK_DOORS[n.kind] && n.kind !== "i_window" &&
                !FROM_CEILING[n.kind] && !LIES_FLAT[n.kind] && n.kind !== "i_parked" && n.kind !== "i_garagebtn" &&
+               // (the way up to the loft over it, 40-attic.js: a ladder folds up into the ceiling over the car;
+               // taken away, its top was left going nowhere -- the stairs are kept clear of the cars there)
+               !n.attic &&
                keep.some(function (z) { return boxesTouch(n, z, 2); });
       }).forEach(function (m) {
         hand.nodes = hand.nodes.filter(function (n) { return n !== m; });
