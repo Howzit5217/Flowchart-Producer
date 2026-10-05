@@ -1922,7 +1922,8 @@
   if (typeof houseSceneKey === "function") {
     var houseSceneKeySite = houseSceneKey;
     houseSceneKey = function () {
-      return houseSceneKeySite.apply(this, arguments) + "|lw" + [lwAttach(), houseOpt("parkAt"), houseOpt("parkSide"), houseOpt("style")].join(",");
+      // (and whether a building is going up: its lorries' stretch of kerb kept clear of parked cars)
+      return houseSceneKeySite.apply(this, arguments) + "|lw" + [lwAttach(), houseOpt("parkAt"), houseOpt("parkSide"), houseOpt("style"), bpSite && bpSite.wk ? 1 : 0].join(",");
     };
   }
 
@@ -1956,13 +1957,19 @@
     if (corner === "left") { cuts.push([-Infinity, -lot.w / 2 - 1.0 * P]); }
     if (corner === "right") { cuts.push([lot.w / 2 + 1.0 * P, Infinity]); }
     var rnd = gl3Rand(Math.round(Math.abs(lot.x) + Math.abs(lot.y) * 3) + 61);
+    // (while a building goes up, the bays the lorries stop in are kept clear: 40-works.js's wkCurbFree)
+    var free = null;
+    try { free = typeof wkCurbFree === "function" ? wkCurbFree() : null; } catch (e) { free = null; }
     for (var x = -reach; x + bay <= reach; x += bay) {
       if (cuts.some(function (c) { return x + bay > c[0] && x < c[1]; })) { continue; }
       var B = { x0: x, x1: x + bay, y0: y0, y1: y0 + wide, car: null };
       out.push(B);
+      if (free && x + bay > free[0] && x < free[1]) { B.works = true; }
       if (rnd() > 0.62) { continue; }
       var col = WORLD_CAR_COLORS[Math.floor(rnd() * WORLD_CAR_COLORS.length)];
-      B.car = { x: x + bay / 2 + (rnd() - 0.5) * 0.4 * P, y: y0 + wide / 2 + 0.05 * P, col: col, back: rnd() >= 0.85 };
+      var car = { x: x + bay / 2 + (rnd() - 0.5) * 0.4 * P, y: y0 + wide / 2 + 0.05 * P, col: col, back: rnd() >= 0.85 };
+      // (the same draws either way, so the cars outside the works' stretch stay where they were)
+      if (!B.works) { B.car = car; }
     }
     return out;
   }
@@ -1970,7 +1977,13 @@
     var P = FLOOR_PX, white = gl3Mix([0.94, 0.94, 0.92], sheetC, 0.05);
     var e = lotWorld(1, 0, 0), o = lotWorld(0, 0, 0), dd = lotWorld(0, 1, 0);
     var ex = [e[0] - o[0], e[1] - o[1]], dy = [dd[0] - o[0], dd[1] - o[1]];
-    lwCurbList(lot, lotLocal).forEach(function (B) {
+    var list = lwCurbList(lot, lotLocal), kept = list.filter(function (B) { return B.works; });
+    // a traffic cone at each end of the stretch kept for the works' lorries, on the bay line
+    if (kept.length) {
+      var ends = [Math.min.apply(null, kept.map(function (B) { return B.x0; })), Math.max.apply(null, kept.map(function (B) { return B.x1; }))];
+      ends.forEach(function (cx) { lwCone(v, lotWorld(cx, kept[0].y0 + (kept[0].y1 - kept[0].y0) * 0.55, 0), ex, dy); });
+    }
+    list.forEach(function (B) {
       var x = B.x0, y0 = B.y0, wide = B.y1 - B.y0;
       // the bay's line at its start, and the short tick along the kerb's edge of the lane
       gl3Poly(v, [lotWorld(x - 0.05 * P, y0, 0.5), lotWorld(x + 0.05 * P, y0, 0.5), lotWorld(x + 0.05 * P, y0 + wide, 0.5), lotWorld(x - 0.05 * P, y0 + wide, 0.5)], [0, 0, 1], white, 1, null, PAT.plain);
@@ -1980,6 +1993,15 @@
       var fwd = B.car.back ? ex : [-ex[0], -ex[1]];      // (on the near side, facing the way the near lane runs)
       worldCarParts(at, fwd, dy, gl3Rgb(B.car.col)).forEach(function (b) { worldBox(v, b.c, b.e, b.d, b.hx, b.hy, b.z0, b.z1, b.col, b.pat); });
     });
+  }
+  // A traffic cone standing at `at` (world [x, y, z]): black square foot, orange with a white band.
+  function lwCone(v, at, ex, dy) {
+    var P = FLOOR_PX, orange = [0.93, 0.42, 0.1], white = [0.95, 0.95, 0.93], z = at[2] || 0;
+    worldBox(v, at, ex, dy, 0.19 * P, 0.19 * P, z, z + 0.035 * P, [0.12, 0.12, 0.13], PAT.plain);
+    var tube = function (z0, z1, r0, r1, c) { worldTube(v, [at[0], at[1], z + z0 * P], [at[0], at[1], z + z1 * P], r0 * P, r1 * P, 10, c, PAT.plain); };
+    tube(0.035, 0.3, 0.14, 0.095, orange);
+    tube(0.3, 0.44, 0.095, 0.07, white);
+    tube(0.44, 0.7, 0.07, 0.025, orange);
   }
   if (typeof worldNearLane === "function") {
     var worldNearLaneSite = worldNearLane;

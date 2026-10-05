@@ -281,8 +281,10 @@
     // cars parked along the kerb (40-site.js); the lamps, poles and trees along the pavement
     if (lot && typeof lwCurbList === "function") {
       try {
+        var free = wkCurbFree();
         lwCurbList(lot, function (p) { return S.L(p[0], p[1]); }).forEach(function (b) {
           if (!b.car) { return; }
+          if (free && b.x1 > free[0] && b.x0 < free[1]) { return; }       // (coned off for the works)
           wkMarkLocal(site, [[b.x0, b.y0], [b.x1, b.y0], [b.x1, b.y1], [b.x0, b.y1]], WK_CAR);
         });
       } catch (e) { /* none parked */ }
@@ -292,6 +294,15 @@
     wkKerbThings(site).forEach(function (q) {
       wkMarkLocal(site, [[q.x - q.r, q.y - q.r], [q.x + q.r, q.y - q.r], [q.x + q.r, q.y + q.r], [q.x - q.r, q.y + q.r]], WK_THING, [WK_WALKWAY, WK_LOT, WK_PAVED]);
     });
+  }
+  // The kerb's parking bays in front of the lot and either side of it (lot-local x range),
+  // kept empty for the lorries while a building goes up -- 40-site.js leaves its parked
+  // cars out of them (and may cone them off) while this says so; null when nothing is built.
+  function wkCurbFree() {
+    if (!bpSite || !bpSite.wk) { return null; }
+    var lot = typeof houseStreetLot === "function" ? houseStreetLot() : null;
+    if (!lot) { return null; }
+    return [-lot.w / 2 - 24 * FLOOR_PX, lot.w / 2 + 24 * FLOOR_PX];
   }
   function wkMarkLocal(site, loc, v, only) {
     var S = site.S;
@@ -1322,7 +1333,9 @@
           deep = y;
           var rear = [x, y - hl], d = Math.hypot(rear[0] - tgt[0], rear[1] - tgt[1]);
           if (d <= (spec.reach || 3 * P) && (!best || d + Math.abs(x - tgt[0]) * 0.3 < best.score)) {
-            if (wkRectFree(site, x, (y + S.lane) / 2, (S.lane - y) / 2 + hl * 0.2, hw, Math.PI / 2, okWay, plan.res, t0, t1)) {
+            // (the way in behind it, out to the lane it comes from -- as wide as the bend it backs round sweeps)
+            var ln = site.lanes ? site.lanes.w : S.lane;
+            if (wkRectFree(site, x, (y + ln) / 2, (ln - y) / 2 + hl * 0.2, hw + 1.2 * P, Math.PI / 2, okWay, plan.res, t0, t1)) {
               best = { x: x, y: y, ang: Math.PI / 2, score: d + Math.abs(x - tgt[0]) * 0.3 };
             }
           }
@@ -1332,11 +1345,11 @@
     }
     if (!best || spec.street) {
       // along the kerb: as near the target as the parked cars and the others let it
-      var yk = S.kerb + spec.wid / 2 + 0.25 * P, hk = spec.wid / 2 + 0.1 * P;
-      for (var dx = 0; dx < 60 * P; dx += 0.5 * P) {
+      var yk = S.kerb + spec.wid / 2 + 0.25 * P, hk = spec.wid / 2 + 0.1 * P, hlRoom = hl + 1.2 * P;
+      for (var dx = 0; dx < 100 * P; dx += 0.5 * P) {
         var found = null;
         [tgt[0] + dx, tgt[0] - dx].some(function (xx) {
-          if (wkRectFree(site, xx, yk, hl, hk, Math.PI, [WK_ROAD], plan.res, t0, t1)) { found = xx; return true; }
+          if (wkRectFree(site, xx, yk, hlRoom, hk, Math.PI, [WK_ROAD], plan.res, t0, t1)) { found = xx; return true; }
           return false;
         });
         if (found !== null) { best = { x: found, y: yk, ang: Math.PI, street: true }; break; }

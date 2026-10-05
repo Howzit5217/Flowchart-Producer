@@ -193,8 +193,10 @@
       took.push(tt + 3);
       tt += 4;
       var drop = [J.yard.l[0] + (i - 1.5) * 1.5 * P, J.yard.l[1]];
-      var at = [drop[0], drop[1] + J.yard.hh + 2.2 * P];
-      tt = jbTeleDrive(plan, tele, at, tt, -Math.PI / 2, { boom: 0.15, ext: 0.6, load: { h: 0.9, how: WK_STUD } });
+      // (stood where it fits beside the yard, facing it)
+      var near = wkNearStand(plan, { len: 5.2 * P, wid: 2.5 * P, target: drop, reach: 9 * P, min: J.yard.hh + 1.2 * P, t0: tt, t1: tt + 20 });
+      var at = near ? [near.x, near.y] : tele.at.slice();
+      tt = jbTeleDrive(plan, tele, at, tt, Math.atan2(drop[1] - at[1], drop[0] - at[0]), { boom: 0.15, ext: 0.6, load: { h: 0.9, how: WK_STUD } });
       jbTeleHold(plan, tele, tt, tt + 3, function (k) { return { boom: 0.15 - 0.1 * k, ext: 0.6, load: k < 0.6 ? { h: 0.9, how: WK_STUD } : null }; });
       offs.push(tt + 2);
       tele.free = tt + 3;
@@ -213,7 +215,8 @@
     J.lumberAt = tele.free;
     J.lumberStacks = offs;
     wkSay(plan, "jb_lumber", t - 15, tele.free);
-    tele.at = [tele.stand.x, tele.stand.y];
+    // back to its own spot by the yard
+    jbTeleDrive(plan, tele, [tele.stand.x, tele.stand.y], tele.free, tele.stand.ang, { boom: 0.05 });
   } });
 
   // ---- 6. the frame: storey by storey -- the deck, its walls, the stairs ---------------------------------

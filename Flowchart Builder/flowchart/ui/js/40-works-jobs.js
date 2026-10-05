@@ -133,7 +133,7 @@
     for (var p = 0; p < picks; p++) {
       // (along the kerb past the lot's sides: its own frontage kept for the deliveries)
       var lotHw = site.lot ? site.lot.w / 2 : (S.box[1] - S.box[0]) / 2 + 8 * P, side = p % 2 ? 1 : -1, nth = Math.floor(p / 2);
-      var m2 = jbVehicle(plan, "pickup", { len: 5.6 * P, wid: 2.0 * P, target: [side * (lotHw + 4 * P + nth * 6.5 * P), S.kerb + 1.2 * P], street: true, t0: 0, t1: 1e9 },
+      var m2 = jbVehicle(plan, "pickup", { len: 5.6 * P, wid: 2.0 * P, target: [side * (lotHw + 7 * P + nth * 6.5 * P), S.kerb + 1.2 * P], street: true, t0: 0, t1: 1e9 },
                          { paint: WK_PAINT[p % WK_PAINT.length] });
       var way0 = wkArrive(site, m2.stand, 5.6 * P), tf0 = way0.fwd.len / (8 * P) + 2 + (way0.back ? way0.back.len / (2 * P) + 2 : 0);
       var ready = Math.max(3 + p * 5, (J.lastPickStart === undefined ? -Infinity : J.lastPickStart + 3.5) + tf0);
@@ -285,7 +285,12 @@
     var t0 = Math.max(J.stakedAt || 0, J.startAt) + 4;
     // (the pit marked: no machine stands in it)
     pits.forEach(function (u) { site.mark([[-u.hw, -u.hh], [u.hw, -u.hh], [u.hw, u.hh], [-u.hw, u.hh]].map(function (q) { return jbRectPt(u, q[0], q[1]); }), WK_PIT); });
-    var ex = jbVehicle(plan, "excavator", { len: 5.0 * P, wid: 3.4 * P, target: near, reach: 3.5 * P, t0: t0, t1: t0 + 600, ground: true });
+    // (tracked: it can stand anywhere beside the pit it can crawl to -- not only where a lorry could back in)
+    var ex = wkMachine(plan, "excavator", {});
+    ex.site = site;
+    var exSt = wkNearStand(plan, { len: 4.4 * P, wid: 2.9 * P, target: near, reach: 7 * P, min: 2.4 * P, t0: t0, t1: t0 + 900 });
+    if (exSt) { exSt.ang = Math.atan2(near[1] - exSt.y, near[0] - exSt.x) + Math.PI; exSt.cx = exSt.x; exSt.cy = exSt.y; ex.stand = exSt; }
+    else { ex.stand = wkStand(plan, { kind: "excavator", target: near, reach: 3.5 * P, t0: t0, t1: t0 + 600, ground: true }); }
     var lb = jbVehicle(plan, "lowboy", { len: 19 * P, wid: 2.6 * P, target: [ex.stand.x + 10 * P, S.kerb + 1.5 * P], street: true, t0: t0 - 30, t1: t0 + 60 });
     var arriveLow = t0;
     jbCome(plan, lb, lb.stand, 19 * P, arriveLow, { speed: 5, extra: { carrying: true } });
@@ -301,7 +306,8 @@
     lb.here = tOff;
     var lbBack = lb;
     var tAt = jbTracked(plan, ex, path, tOff, 1.0, { working: false });
-    wkReserve(plan, Object.assign({}, ex.stand), tAt - 5, 1e9);
+    var exRes = { rect: [ex.stand.cx === undefined ? ex.stand.x : ex.stand.cx, ex.stand.cy === undefined ? ex.stand.y : ex.stand.cy, 2.6 * P, 1.9 * P, ex.stand.ang], t0: tAt - 5, t1: 1e9 };
+    plan.res.push(exRes);
     // the lorry's stand: by the excavator, within its reach
     var exW = jbWorld(J, [ex.stand.x, ex.stand.y]);
     var trk = wkStand(plan, { kind: "dumper", target: [ex.stand.x, ex.stand.y], reach: 7 * P, t0: tAt, t1: tAt + 600, ground: true });
@@ -369,6 +375,7 @@
     jbCome(plan, lbBack, lb.stand, 19 * P, tDone - 2, { speed: 5, extra: { carrying: false } });
     var tOn = jbTracked(plan, ex, back, tDone, 1.0, {});
     ex.segs[ex.segs.length - 1].gone = true;
+    exRes.t1 = tOn;
     jbStay(lbBack, tDone - 2, tOn, function () { return { carrying: false }; });
     lbBack.here = tOn;
     jbGo(plan, lbBack, tOn + 1, { speed: 5, extra: { carrying: true } });
