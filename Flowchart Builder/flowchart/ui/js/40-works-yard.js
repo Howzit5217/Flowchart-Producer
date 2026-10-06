@@ -48,9 +48,15 @@
     var ydBuildingWas = bpBuilding;
     if (ydGpPut) { gpPut = function (model) { if (model && model.ydBefore) { return; } return ydGpPut.apply(this, arguments); }; }
     if (ydGpTub) { gpTubFaces = function (model) { if (model && model.ydBefore) { return; } return ydGpTub.apply(this, arguments); }; }
+    // (2026-10-05, "make the busy stretches smooth too") the building kept as it will stand,
+    // picture after picture the same (40-blueprint.js): the pool and the rails put into it once,
+    // not copied and put in again each picture -- unless a hot tub bubbles, which moves
+    var ydKept = null;
     bpBuilding = function (model, t) {
       var m = model;
-      if (model && model.faces && !model.ydBefore && V3 && V3.scene !== "space") {
+      var still = typeof bpKept === "object" && bpKept && bpKept.model === model && !(ydGpTub && typeof gpTubs === "function" && gpTubs().length);
+      if (still && ydKept && ydKept.from === model && ydKept.flat === !!V3.flat) { m = ydKept.m; }
+      else if (model && model.faces && !model.ydBefore && V3 && V3.scene !== "space") {
         // (a copy: the model as built is kept as it is, for the next picture)
         m = Object.assign({}, model, { faces: model.faces.slice(),
                                        passing: model.passing ? { faces: model.passing.faces.slice(), stand: model.passing.stand } : undefined });
@@ -59,6 +65,7 @@
           if (typeof acPutInto === "function") { acPutInto(m); }
           m.ydBefore = true;
         } catch (e) { m = model; }
+        ydKept = still && m !== model ? { from: model, flat: !!V3.flat, m: m } : null;
       }
       var got = ydBuildingWas.apply(this, [m].concat(Array.prototype.slice.call(arguments, 1)));
       if (got && m.ydBefore) { got.ydBefore = true; }

@@ -95,6 +95,8 @@
       M.box(-0.65 * m, 0.65 * m, -1.0 * m, 1.0 * m, 2.7 * m, 2.8 * m, yel, 0.04 * m);
     });
   }
+  // (their footprints, for what keeps machines apart: 40-works.js's WK_FOOT -- the paver's screed to its hopper)
+  if (typeof WK_FOOT === "object") { if (!WK_FOOT.paver) { WK_FOOT.paver = [0.1, 2.6, 1.65]; } if (!WK_FOOT.roller) { WK_FOOT.roller = [0, 1.95, 1.0]; } }
   if (typeof WK_DRAW === "object") {
     WK_DRAW.paver = function (faces, st) { wkPutM(faces, jwPaver(), wkFrame(st), 0, true); };
     WK_DRAW.roller = function (faces, st) { wkPutM(faces, jwRoller(), wkFrame(st), 0, true); };
@@ -137,11 +139,28 @@
     });
     if (kerbs.length) { t = wkTogether(two, t); }
     if (!cells.length) { return t; }
-    // the lanes: along its long way, 3 m apart, there and back
+    // the lanes: along its long way, 3 m apart, there and back -- (2026-10-05, the clip check) each end far enough in
+    // for the whole paver, its screed behind and its hopper in front, to stay off the building and what stands by it
     var long = e.r - e.l >= e.b - e.t, a0 = long ? e.l : e.t, a1 = long ? e.r : e.b, b0 = long ? e.t : e.l, b1 = long ? e.b : e.r;
     var lanes = Math.max(1, Math.round((b1 - b0) / (3 * P))), pts = [], step = (b1 - b0) / lanes;
+    var inset = Math.min(2.8 * P, Math.max(0.6 * P, (a1 - a0) / 2 - 0.2 * P)), PF = WK_FOOT.paver || [0.1, 2.6, 1.65];
+    var road = [WK_LOT, WK_PAVED, WK_WALKWAY, WK_ROAD, WK_CAR, WK_STACK];
+    function laneEnd(bb, a, toward) {
+      // slid in along the lane till the paver standing there, facing along it, is over nothing it must not be
+      var ang = long ? (toward > 0 ? 0 : Math.PI) : (toward > 0 ? Math.PI / 2 : -Math.PI / 2), midA = (a0 + a1) / 2;
+      for (var g = 0; g < 30; g++) {
+        var x = long ? a : bb, y = long ? bb : a, cx = x + Math.cos(ang) * PF[0] * P, cy = y + Math.sin(ang) * PF[0] * P;
+        if (wkRectFree(site, cx, cy, PF[1] * P, PF[2] * P - 0.2 * P, ang, road, null)) { return a; }
+        var na = a + toward * 0.3 * P;
+        if ((toward > 0 && na > midA) || (toward < 0 && na < midA)) { return a; }
+        a = na;
+      }
+      return a;
+    }
     for (var i = 0; i < lanes; i++) {
-      var bb = b0 + step * (i + 0.5), from = i % 2 ? a1 - 1.2 * P : a0 + 1.2 * P, to = i % 2 ? a0 + 1.2 * P : a1 - 1.2 * P;
+      var bb = b0 + step * (i + 0.5);
+      if (b1 - b0 > 2 * PF[2] * P) { bb = Math.max(b0 + PF[2] * P, Math.min(b1 - PF[2] * P, bb)); }
+      var dir = i % 2 ? -1 : 1, from = laneEnd(bb, dir > 0 ? a0 + inset : a1 - inset, dir), to = laneEnd(bb, dir > 0 ? a1 - inset : a0 + inset, -dir);
       pts.push(long ? [from, bb] : [bb, from], long ? [to, bb] : [bb, to]);
     }
     var area = (a1 - a0) * (b1 - b0) / (P * P), dur = Math.max(12, Math.min(260, area * 0.12)) * scale;
@@ -149,23 +168,48 @@
     // up from the street to the first lane, and back out to it after
     var kerbAt = [pts[0][0], S.kerb + 2.0 * P], tIn = Math.hypot(pts[0][0] - kerbAt[0], pts[0][1] - kerbAt[1]) / (2.0 * P) + 2;
     var tPave = Math.max(t, crew.reduce(function (m, w) { return Math.max(m, w.free); }, t)) + tIn;
+    // (their way on and off at the kerb kept for them while they are at it: the walks' mixer stopped in it, 2026-10-05)
+    var kerbRes = { rect: [kerbAt[0], kerbAt[1], 3.2 * P, 2.0 * P, 0], t0: tPave - tIn - 2, t1: 1e9 };
+    plan.res.push(kerbRes);
     function onPath(s) {
       var A = wkAlong(path, Math.max(0, Math.min(len, s))), B = wkAlong(path, Math.max(0, Math.min(len, s + 0.5 * P)));
       var C = wkAlong(path, Math.max(0, Math.min(len, s - 0.5 * P))), ang = Math.atan2(B.p[1] - C.p[1], B.p[0] - C.p[0]);
       return { x: A.p[0], y: A.p[1], ang: ang };
     }
-    [["paver", 0], ["roller", 4.5 * P]].forEach(function (mk) {
-      var m = wkMachine(plan, mk[0], {}), lag = mk[1], lagT = lag / len * dur;
+    // the paver along the lanes; the roller behind it -- (2026-10-05, the clip check) kept clear of it, not a
+    // fixed 4.5 m back along the way: at each turn, back along the way, the two met.  Where the roller is for each
+    // place of the paver's: as far on as it can be and still be the paver's length and its own clear of it.
+    var RF = WK_FOOT.roller || [0, 1.95, 1.0], gapM = (PF[1] + PF[0] + RF[1]) * P + 0.9 * P, NS = 240, back = new Float32Array(NS + 1);
+    for (var q = 0, sr = -Infinity; q <= NS; q++) {
+      var sp = q / NS * len, A2 = onPath(sp), cand = sp - gapM;
+      while (cand > 0) { var B2 = onPath(cand); if (Math.hypot(B2.x - A2.x, B2.y - A2.y) >= gapM) { break; } cand -= 0.3 * P; }
+      sr = Math.max(sr, Math.min(cand, sp - gapM));
+      back[q] = sr;
+    }
+    function rollerAt(sp) { var f = Math.max(0, Math.min(NS, sp / len * NS)), i0 = Math.floor(f), i1 = Math.min(NS, i0 + 1); return back[i0] + (back[i1] - back[i0]) * (f - i0); }
+    var tRoll0 = tPave, tailS = len - rollerAt(len), tTail = tailS / len * dur, after = true;
+    for (var q2 = 0; q2 <= NS; q2++) { if (back[q2] >= 0) { tRoll0 = tPave + q2 / NS * dur; after = false; break; } }
+    // (an area too small for the roller ever to be clear behind it -- a short drive: rolled once the paver is off it)
+    var rollDur = Math.max(6, dur * 0.7);
+    if (after) { tRoll0 = tPave + dur + tIn + tIn; tTail = 0; }
+    ["paver", "roller"].forEach(function (kindM) {
+      var m = wkMachine(plan, kindM, {}), roll = kindM === "roller";
       m.site = site;
-      var first = onPath(0), last = onPath(len);
-      wkMSeg(m, tPave - tIn + lagT, tPave + lagT, function (k) {
-        var q = wkSmooth(k);
-        return { x: kerbAt[0] + (first.x - kerbAt[0]) * q, y: kerbAt[1] + (first.y - kerbAt[1]) * q, ang: Math.atan2(first.y - kerbAt[1], first.x - kerbAt[0]), site: site, moving: true };
+      // (the roller waits where it is while the paver drives off, then rolls the last of it)
+      var first = onPath(0), last = onPath(len), tA = roll ? tRoll0 : tPave, tB = roll ? (after ? tRoll0 + rollDur : tPave + dur + tIn + tTail) : tPave + dur;
+      wkMSeg(m, tA - tIn, tA, function (k) {
+        var q3 = wkSmooth(k);
+        return { x: kerbAt[0] + (first.x - kerbAt[0]) * q3, y: kerbAt[1] + (first.y - kerbAt[1]) * q3, ang: Math.atan2(first.y - kerbAt[1], first.x - kerbAt[0]), site: site, moving: true };
       });
-      wkMSeg(m, tPave + lagT, tPave + dur + lagT, function (k) { return Object.assign(onPath(k * len), { site: site, moving: true }); });
-      wkMSeg(m, tPave + dur + lagT, tPave + dur + lagT + tIn, function (k) {
-        var q = wkSmooth(k);
-        return { x: last.x + (kerbAt[0] - last.x) * q, y: last.y + (kerbAt[1] - last.y) * q, ang: Math.atan2(kerbAt[1] - last.y, kerbAt[0] - last.x), site: site, moving: true };
+      wkMSeg(m, tA, tB, function (k, T) {
+        if (!roll || after) { return Object.assign(onPath(k * len), { site: site, moving: true }); }
+        var spNow = Math.max(0, Math.min(len, (T - tPave) / dur * len));
+        var s3 = T <= tPave + dur ? rollerAt(spNow) : T <= tPave + dur + tIn ? rollerAt(len) : rollerAt(len) + (T - tPave - dur - tIn) / dur * len;
+        return Object.assign(onPath(Math.max(0, Math.min(len, s3))), { site: site, moving: true });
+      });
+      wkMSeg(m, tB, tB + tIn, function (k) {
+        var q4 = wkSmooth(k);
+        return { x: last.x + (kerbAt[0] - last.x) * q4, y: last.y + (kerbAt[1] - last.y) * q4, ang: Math.atan2(kerbAt[1] - last.y, kerbAt[0] - last.x), site: site, moving: true };
       }).gone = true;
     });
     // each square in as the paver passes it (its middle nearest along the lanes)
@@ -197,7 +241,8 @@
         wkDo(w, Math.max(0.5, tl - w.free), "hold", null);
       }
     });
-    t = Math.max(tPave + dur + 4.5 * P / len * dur + tIn, wkTogether(crew.slice(0, 3)));
+    t = Math.max(after ? tRoll0 + rollDur + tIn : tPave + dur + tIn + tTail + tIn, wkTogether(crew.slice(0, 3)));
+    kerbRes.t1 = (after ? tRoll0 + rollDur + tIn : tPave + dur + tIn + tTail + tIn) + 2;
     // the lines, once it has set: one walking each, with the cart
     if (lines.length) {
       var painter = crew[0], tSet = t + 6 * scale;
@@ -244,7 +289,11 @@
       // the lorry with the trees, at the kerb till they are all in
       var first = jwMid(trees[0]);
       try {
-        var lorry = jbVehicle(plan, "pickup", { len: 5.6 * P, wid: 2.0 * P, target: [first[0], S.kerb + 1.2 * P], street: true, t0: t - 20, t1: t + trees.length * 8 * scale + 60 }, { paint: "#3f7a4a" });
+        // (its spot kept for as long as it stays -- till the last bed, tree and strip of lawn are done,
+        // known only once they are: its stand chosen clear of anything there meanwhile (the walks' mixer,
+        // 77ac5e found standing in it), then held only till it goes, below)
+        var lorry = jbVehicle(plan, "pickup", { len: 5.6 * P, wid: 2.0 * P, target: [first[0], S.kerb + 1.2 * P], street: true, t0: t - 40, t1: 1e9 }, { paint: "#3f7a4a" });
+        lorry.res = plan.res[plan.res.length - 1];
         jbCome(plan, lorry, lorry.stand, 5.6 * P, t, { speed: 7 });
         lorry.here = t;
         J.jwLorry = lorry;
@@ -280,7 +329,11 @@
     if (lawns.length) { jwLawn(plan, lawns[0], list, crew, wkTogether(crew, t)); }
     if (J.jwLorry) {
       var done = wkTogether(crew, t);
-      try { J.jwLorry.here = Math.max(J.jwLorry.here, done); jbGo(plan, J.jwLorry, done + 1, { speed: 7 }); } catch (err) { /* gone */ }
+      try {
+        if (J.jwLorry.res) { J.jwLorry.res.t1 = done + 4; }
+        J.jwLorry.here = Math.max(J.jwLorry.here, done);
+        jbGo(plan, J.jwLorry, done + 1, { speed: 7 });
+      } catch (err) { /* gone */ }
     }
     // the fence: post by post along each run
     fences.forEach(function (e, i) {

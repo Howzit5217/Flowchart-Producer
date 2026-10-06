@@ -385,6 +385,17 @@
   .dz-dtile span { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .dz-dtile:hover { border-color: color-mix(in srgb, var(--accent) 45%, var(--line)); color: var(--ink); }
   .dz-dtile.on { border-color: var(--accent); background: var(--accent-soft); color: var(--accent); }
+  /* a tree's, a shrub's, a bed's or a hedge's kind (40-flora.js): its groups as chips over the tiles */
+  .dz-flora-groups { display: flex; flex-wrap: wrap; gap: 4px; margin: 6px 0 2px; }
+  .dz-fgroup {
+    padding: 3px 9px; border: 1px solid var(--line); border-radius: 999px; background: var(--panel); color: var(--muted);
+    font: inherit; font-size: 11px; font-weight: 600; line-height: 16px; cursor: pointer;
+    transition: border-color var(--quick, .15s) ease, background-color var(--quick, .15s) ease, color var(--quick, .15s) ease;
+  }
+  .dz-fgroup:hover { border-color: color-mix(in srgb, var(--accent) 45%, var(--line)); color: var(--ink); }
+  .dz-fgroup.on { border-color: var(--accent); background: var(--accent-soft); color: var(--accent); }
+  .dz-fgroup:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  @media (prefers-reduced-motion: reduce) { .dz-fgroup { transition: none; } }
   .dz-chip.dz-way { width: 26px; height: 26px; }
 
   /* ---- the arrows joining rooms, on a design's paper (40-plan.js) */

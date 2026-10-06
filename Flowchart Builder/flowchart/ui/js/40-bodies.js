@@ -27,7 +27,7 @@
   var BD_STEPS = 24;                     // poses to a stride
   var BD_ARMS = { carry: 1, hammer: 1, shoulder: 1, up: 1, climb: 1, push: 1 };    // what the hands can be doing
   var BD_ARMQ = 32;                      // heights of a hammer's swing
-  var BD_KEPT = new Map(), BD_KEPT_MAX = 1500;
+  var BD_KEPT = new Map(), BD_KEPT_MAX = 3600;     // (a crew moving in, every step of every stride of each: 2026-10-05)
   var BD_ZERO = new Float32Array(2 * 24000);
   var BD_EYES = "#2a211c";
   // What each outfit is cut as.  sleeves: long/short; legs: long, shorts,
@@ -611,7 +611,9 @@
     var lod = bdLodFor(x, y, z, P, others, withHead);
     var b = phase ? (((Math.round(phase / (Math.PI * 2) * BD_STEPS)) % BD_STEPS) + BD_STEPS) % BD_STEPS : 0;
     var arms = withHead && BD_ARMS[L.arms] ? L.arms : "", legs = L.legs === "kneel" ? "kneel" : "";
-    var aq = arms === "hammer" ? Math.round(Math.max(0, Math.min(1, L.armK || 0)) * BD_ARMQ) : 0, kq = Math.round(P * 10) / 10;
+    // (how tall, in steps of a twenty-fifth: each worker of his own height had a body made for every
+    // step of his stride -- some hundreds a second as a crew walked in, 2026-10-05 -- the same few now)
+    var aq = arms === "hammer" ? Math.round(Math.max(0, Math.min(1, L.armK || 0)) * BD_ARMQ) : 0, kq = Math.round(P / FLOOR_PX * 25) / 25 * FLOOR_PX;
     if (legs) { b = 0; }
     var key = [sp.key, withHead ? 1 : 0, b, arms, aq, kq, legs, lod].join("|");
     var made = bdKept(key, function () { return bdMake(sp, b / BD_STEPS * Math.PI * 2, arms, aq / BD_ARMQ, withHead, kq, legs, lod); });
@@ -625,14 +627,12 @@
         var wx = x + q[0] * c - q[1] * s, wy = y + q[0] * s + q[1] * c;
         pts.push([wx, wy, z + g.lo[2]]); pts.push([wx, wy, z + g.hi[2]]);
       });
-      var p = g.p;
-      if (moving) { p = new Float32Array(g.p.buffer, g.p.byteOffset, g.p.length); }
-      else {
-        // (one view of them for each color: gl3Mesh keeps what it worked out by the numbers and where, not the color)
-        var vk = color + "|" + fa;
-        g.views = g.views || {};
-        p = g.views[vk] || (g.views[vk] = new Float32Array(g.p.buffer, g.p.byteOffset, g.p.length));
-      }
+      // (one view of them for each color: gl3Mesh keeps what it worked out by the numbers and where, not
+      // the color -- walking too now: its arrays for what moves kept on the view, 38-view3d-gl.js, used
+      // again each picture, where a new view each picture was a new array each picture)
+      var vk = color + "|" + fa;
+      g.views = g.views || {};
+      var p = g.views[vk] || (g.views[vk] = new Float32Array(g.p.buffer, g.p.byteOffset, g.p.length));
       var f = { pts: pts, n: [0, 0, 1], how: how, mesh: { p: p, n: g.n, uv: BD_ZERO, a: null, base: [x, y, z], xf: [x, y, c, s, z] } };
       if (moving) { f.moves = true; }            // (walking, at work: drawn apart from what stands still, gl3Faces)
       if (!others) { f.me = true; }

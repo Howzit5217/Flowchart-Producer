@@ -91,6 +91,9 @@
                 i_soundbar: 0.1, i_console: 0.08, i_recordplayer: 0.15 };
   var V3_DROP = { i_hanging: [0.8, 0.35], i_pendant: [0.6, 0.25], i_chandelier: [0.8, 0.4],
                   i_ceilingfan: [0.4, 0.06], i_projector: [0.35, 0.15], i_vent: [0.02, 0.02], i_smoke: [0.05, 0.05], i_exhaustfan: [0.03, 0.03] };
+  // What sits flat in a ceiling: drawn only where the ceiling is (2026-10-05: "remove the floating ceiling
+  // vents in the overhead view" -- from above, the roof off, there is no ceiling, and they hung at its height)
+  var V3_FLUSH = { i_vent: true, i_smoke: true, i_exhaustfan: true };
   // What hangs on a wall: from how high to how high, in metres.
   var V3_WALL = { i_picture: [1.3, 1.9], i_mirror: [0.9, 1.9], i_shelf: [1.45, 1.5],
                   i_walltv: [1.1, 1.75], i_wallclock: [1.9, 2.3], i_sconce: [1.72, 1.95],
@@ -746,6 +749,8 @@
         if (big && !WALK_DOORS[n.kind] && n.kind !== "i_window" && holders.length >= 1) { return; }
       }
       if (big && !hush && n.kind !== "i_room" && !isArea(n.kind) && !WALK_DOORS[n.kind] && n.kind !== "i_window" && unseen(n)) { return; }
+      // (a vent, a smoke alarm, an exhaust fan: with its ceiling -- walking in, or through a window under the roof -- or not at all)
+      if (V3_FLUSH[n.kind] && !inside && !hush) { return; }
       if (n.kind === "i_lot") {                  // the ground the house stands on
         faces.push({ pts: [[-n.w / 2, -n.h / 2], [n.w / 2, -n.h / 2], [n.w / 2, n.h / 2], [-n.w / 2, n.h / 2]]
                        .map(function (p) { var q = v3Local(n, p[0], p[1]); return [q[0], q[1], -1]; }),
@@ -1928,7 +1933,10 @@
       var want = typeof doorSwingTo === "function" ? doorSwingTo(n) : doorIsOpen(n) ? 90 : 0, at = V3.doorAt[n.id];
       if (at === undefined) { V3.doorAt[n.id] = want; return; }
       if (at !== want) {
-        var rate = doorRate(n);
+        // (while a building goes up, seen from outside: a door swung as fast as the site's own clock
+        // goes -- the front door held open for the movers in a moment, not a second of the picture
+        // made again whole each frame at two hundred and fifty-six times the speed of everything else)
+        var rate = doorRate(n) * (V3.mode !== "walk" && typeof bpPlaying === "function" && bpPlaying() && bpSite.rate > 1 ? bpSite.rate : 1);
         V3.doorAt[n.id] = at < want ? Math.min(want, at + dt * rate) : Math.max(want, at - dt * rate);
         swung = true;
       }

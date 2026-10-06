@@ -140,7 +140,10 @@
       loc.forEach(function (q) { x0 = Math.min(x0, q[0]); x1 = Math.max(x1, q[0]); y0 = Math.min(y0, q[1]); y1 = Math.max(y1, q[1]); });
       // (a drive out to the street in front, and deep enough for one)
       if (drive && y1 < S.hy - 1.0 * P) { return; }
-      var front = Math.min(y1, S.hy) - (drive ? 0.3 : 0.8) * P, cy = front - len / 2, cols = Math.floor((x1 - x0 - 0.2 * P + gap) / (wid + gap));
+      // (on a drive, set back from the street where the drive is deep enough: a lorry swinging into
+      // the kerb in front brushed their noses, 2026-10-05)
+      var front = Math.min(y1, S.hy) - (drive ? 1.2 : 0.8) * P, cy = front - len / 2, cols = Math.floor((x1 - x0 - 0.2 * P + gap) / (wid + gap));
+      if (drive && cy - len / 2 < y0 - 0.3 * P) { front = Math.min(y1, S.hy) - 0.3 * P; cy = front - len / 2; }
       if (cy - len / 2 < y0 - 0.3 * P || cols < 1) { return; }
       for (var k = 0; k < cols && out.length < most && (drive || out.length === had); k++) {
         var cx = (x0 + x1) / 2 + (k - (cols - 1) / 2) * (wid + gap);
@@ -161,9 +164,10 @@
     return out;
   }
   // a parked vehicle's squares: not driven through by the others
-  function jbMarkCar(J, st) {
+  // (or, `v`, what its squares are marked instead -- kept for one to come, given back once it has gone)
+  function jbMarkCar(J, st, v, only) {
     var S = J.S, P = J.P, c = Math.cos(st.ang), s2 = Math.sin(st.ang), cx = st.cx === undefined ? st.x : st.cx, cy = st.cy === undefined ? st.y : st.cy, hl = 2.9 * P, hw = 1.0 * P;
-    J.site.mark([[-hl, -hw], [hl, -hw], [hl, hw], [-hl, hw]].map(function (q) { return S.W(cx + q[0] * c - q[1] * s2, cy + q[0] * s2 + q[1] * c); }), WK_CAR);
+    J.site.mark([[-hl, -hw], [hl, -hw], [hl, hw], [-hl, hw]].map(function (q) { return S.W(cx + q[0] * c - q[1] * s2, cy + q[0] * s2 + q[1] * c); }), v === undefined ? WK_CAR : v, only);
   }
 
   // ---- 1. the crew arrives -----------------------------------------------------------------------------
@@ -193,7 +197,10 @@
     // (2026-10-05: "make it so the trucks can park in the driveway") the crew's pickups on the
     // drive, put there before anything is stacked -- the rest in the parking lots, or along the kerb
     var picks = Math.ceil(n / 3), drives = jbDriveStands(J, picks);
-    drives.forEach(function (st) { jbMarkCar(J, st); });
+    // (kept for them -- nothing stacked there, nothing standing there -- but driven over till they come:
+    // on the kerb while the ground is dug and the foundations go in, onto the drive after, "parkin" below)
+    drives.forEach(function (st) { jbMarkCar(J, st, WK_STACK, [WK_CAR]); });
+    J.driveStands = drives;
     // where the timber, the blocks and the windows are stacked: the front yard if it can be
     var front = [(S.box[0] + S.box[1]) / 2, (S.box[3] + S.hy) / 2];
     J.yard = jbSpot(J, 7, 4.5, front, 1.0);
@@ -219,9 +226,9 @@
       wkMSeg(m, 0, 1e9, function () { return { x: st.x, y: st.y, ang: st.ang, site: site }; });
       if (a[0] === "loo") { J.looMs.push(m); if (!J.looM) { J.looM = m; } } else { J[a[0] + "M"] = m; }
     });
-    // the crew in their pickups: on the lot first -- the drives and the parking lots, spots
-    // kept before anything was stacked (above) -- the rest along the kerb; out of them, to
-    // the yard.  Moved off before the paving (40-works-site.js), the deliveries' frontage kept clear.
+    // the crew in their pickups along the kerb, past the lot's sides; out of them, to the yard.  Onto
+    // the drive or the lot once the earth movers are done (spots kept for them above, "parkin"
+    // below); moved off before the paving (40-works-site.js).
     var looks = [];
     J.pickups = [];
     var kerbN = 0;
@@ -229,11 +236,6 @@
       // (along the kerb past the lot's sides: its own frontage kept for the deliveries)
       var lotHw = site.lot ? site.lot.w / 2 : (S.box[1] - S.box[0]) / 2 + 8 * P, side, nth;
       var m2 = null;
-      if (drives.length) {
-        m2 = wkMachine(plan, "pickup", { paint: WK_PAINT[p % WK_PAINT.length] });
-        m2.site = site; m2.stand = drives.shift(); m2.onLot = true;
-        wkReserve(plan, m2.stand, 0, 1e9);
-      }
       if (!m2) {
         side = kerbN % 2 ? 1 : -1; nth = Math.floor(kerbN / 2); kerbN++;
         m2 = jbVehicle(plan, "pickup", { len: 5.6 * P, wid: 2.0 * P, target: [side * (lotHw + 7 * P + nth * 6.5 * P), S.kerb + 1.2 * P], street: true, t0: 0, t1: 1e9 },
@@ -770,20 +772,22 @@
       var p = pours[i], q = wkClamp(s / Math.max(1, p.len));
       return wkLerp(p.a, p.b, q);
     }
-    jbStay(pump, tUp - 12, tUp, function (k) { return { legs: wkSmooth(k), fold: 1 - wkSmooth((k - 0.5) * 2) }; });
-    jbStay(pump, tUp, tPour, function (k) { return { legs: 1, fold: 0, tip: wkLerp(wkLerp(pumpW, tipAt(0), 0.5), tipAt(0), wkSmooth(k)), pour: 0 }; });
-    jbStay(pump, tPour, tPour + pourDur, function (k) { return { legs: 1, fold: 0, tip: tipAt(k), pour: 1, pourZ: basement ? formZ0 : -0.3 * P }; });
-    jbStay(pump, tPour + pourDur, tPour + pourDur + 12, function (k) { return { legs: 1 - wkSmooth((k - 0.5) * 2), fold: wkSmooth(k * 2), tip: tipAt(1), pour: 0 }; });
-    pump.here = tPour + pourDur + 12;
-    jbGo(plan, pump, pump.here, { speed: 5 });
     // the mixers, each in turn backed up behind the pump
     var mstand = { x: pump.stand.x + 11.8 * P, y: pump.stand.y, ang: 0, street: true, hl: 5 * P, hw: 1.5 * P, cx: pump.stand.x + 11.8 * P, cy: pump.stand.y };
-    var gap = 24, each = Math.max(12, (pourDur - gap * (mixers - 1)) / mixers);
+    var gap = 24, each = Math.max(12, (pourDur - gap * (mixers - 1)) / mixers), later = 0, lastOut = tPour;
     for (var mi = 0; mi < mixers; mi++) {
       var mx = wkMachine(plan, "mixer", { paint: mi % 2 ? "#f2f2ee" : "#2f5d8a" });
       mx.site = site;
-      var r0 = tPour + mi * (each + gap), r1 = r0 + each;
-      jbCome(plan, mx, mstand, 9.4 * P, r0 - 1, { speed: 6, extra: { turn: 0 } });
+      var r0 = tPour + mi * (each + gap) + later, r1 = r0 + each;
+      // (2026-10-06: backed round wide of the lamps at the kerb -- wkArrive -- one waited in the far lane
+      // to back in as the one before drove off along it, through it.  Each comes later then, four
+      // seconds at a time, till its way in is clear of all but the pump it backs up to; those after it
+      // too, and the pump pumps on till the last is done.)
+      for (var late = 0, segsAt = mx.segs.length; late < 10; late++) {
+        var tA = jbCome(plan, mx, mstand, 9.4 * P, r0 - 1, { speed: 6, extra: { turn: 0 } });
+        if (mi === 0 || late === 9 || jbTripClear(plan, mx, tA, r0 - 5, [pump])) { break; }
+        mx.segs.length = segsAt; r0 += 4; r1 += 4; later += 4;
+      }
       (function (mx, r0, r1) {
         jbStay(mx, r0 - 1, r1, function (k, T) { return { turn: T * 2.2, pour: k > 0.02 && k < 0.98 ? 1 : 0, chute: 0, pourZ: 1.6 * P }; });
         mx.here = r1;
@@ -791,7 +795,16 @@
       })(mx, r0, r1);
       // (the next can only back in once this one has gone)
       wkReserve(plan, mstand, r0 - 30, r1 + 10);
+      lastOut = r1;
     }
+    // (the pump pouring till the last mixer is empty: six of them, and the waits between, ran past it)
+    pourDur = Math.max(pourDur, lastOut - tPour);
+    jbStay(pump, tUp - 12, tUp, function (k) { return { legs: wkSmooth(k), fold: 1 - wkSmooth((k - 0.5) * 2) }; });
+    jbStay(pump, tUp, tPour, function (k) { return { legs: 1, fold: 0, tip: wkLerp(wkLerp(pumpW, tipAt(0), 0.5), tipAt(0), wkSmooth(k)), pour: 0 }; });
+    jbStay(pump, tPour, tPour + pourDur, function (k) { return { legs: 1, fold: 0, tip: tipAt(k), pour: 1, pourZ: basement ? formZ0 : -0.3 * P }; });
+    jbStay(pump, tPour + pourDur, tPour + pourDur + 12, function (k) { return { legs: 1 - wkSmooth((k - 0.5) * 2), fold: wkSmooth(k * 2), tip: tipAt(1), pour: 0 }; });
+    pump.here = tPour + pourDur + 12;
+    jbGo(plan, pump, pump.here, { speed: 5 });
     // the concrete: up the forms (walls), across (the slab), as the boom passes
     var conc = wkPiece(plan, tPour, [], { live: function (faces, T) {
       var k = wkClamp((T - tPour) / pourDur), wet = T < tPour + pourDur + 40;
@@ -870,4 +883,58 @@
     wkSay(plan, "jb_pour", tPour - 10, tPour + pourDur);
     wkSay(plan, "jb_strike", strike, struck);
     plan.T = Math.max(plan.T, J.foundAt);
+  } });
+
+  // ---- 4b. the crew's pickups onto the drive -----------------------------------------------------------
+  // (a vehicle's own trip, t0 to t1, against every other machine there then: true when it meets none)
+  function jbTripClear(plan, m, t0, t1, skip) {
+    var P = plan.site.P, others = plan.machines.filter(function (o) { return o !== m && WK_FOOT[o.kind] && o.kind !== "towercrane" && !(skip && skip.indexOf(o) >= 0); });
+    function box(o, st) {
+      var f = WK_FOOT[o.kind], c = Math.cos(st.ang), s = Math.sin(st.ang);
+      return [st.x + c * f[0] * P, st.y + s * f[0] * P, f[1] * P + 0.3 * P, f[2] * P + 0.3 * P, st.ang];
+    }
+    for (var T = t0; T <= t1; T += 0.5) {
+      var a = wkMachineAt(m, T);
+      if (!a || a.x === undefined) { continue; }
+      var me = box(m, a);
+      for (var i = 0; i < others.length; i++) {
+        var b = wkMachineAt(others[i], T);
+        if (b && b.x !== undefined && !b.onTrailer && wkRectsMeet(me, box(others[i], b))) { return false; }
+      }
+    }
+    return true;
+  }
+  // (2026-10-05: parked on the drive from the first day, the low loader and the excavator had no way
+  // past them onto the lot, and drove through them.)  On the kerb while the ground is dug and the
+  // foundations go in; then, one after another, each driven off round the block and backed onto the
+  // drive -- or into the parking lot -- its place at the kerb given back.  Those after drive round them.
+  WK_PHASES.push({ name: "parkin", make: function (plan) {
+    var J = jbJ(plan), P = J.P, site = J.site, spots = (J.driveStands || []).slice();
+    if (!spots.length || !J.pickups || !J.pickups.length) { return; }
+    var t = Math.max(J.foundAt || 0, J.slabAt || 0, J.dugAt || 0) + 10, next = t;
+    J.pickups.forEach(function (m) {
+      if (!spots.length || m.onLot || !m.stand) { return; }
+      var st = spots.shift();
+      // (still free from then on: nothing reserved there since, nothing stood or stacked on it)
+      if (!wkRectFree(site, st.cx, st.cy, 2.85 * P, 1.0 * P, st.ang, [WK_STACK, WK_LOT, WK_PAVED, WK_WALKWAY], plan.res, t, 1e9)) { return; }
+      var go = next, kerb = m.stand, kc = [kerb.cx === undefined ? kerb.x : kerb.cx, kerb.cy === undefined ? kerb.y : kerb.cy];
+      // (2026-10-05, machines clipping: pulled out of the kerb into a lorry driving away along the
+      // street, or backed onto the drive through one stood at the kerb in front of it -- now each
+      // waits, ten seconds at a time, till its way off and back is clear of what is there then)
+      var keep = { segs: m.segs.length, res: plan.res.length, stand: m.stand, len: m.len, here: m.here, arrived: m.arrived };
+      for (var tries = 0; tries < 60; tries++) {
+        jbGo(plan, m, go, { speed: 6 });
+        jbCome(plan, m, st, 5.6 * P, go + 50, { speed: 6 });
+        if (tries === 59 || jbTripClear(plan, m, go, go + 51)) { break; }
+        m.segs.length = keep.segs; plan.res.length = keep.res;
+        m.stand = keep.stand; m.len = keep.len; m.here = keep.here; m.arrived = keep.arrived;
+        go += 10;
+      }
+      next = go + 30;
+      plan.res.forEach(function (r) { if (r.t1 >= 1e8 && Math.abs(r.rect[0] - kc[0]) < 1 && Math.abs(r.rect[1] - kc[1]) < 1) { r.t1 = go + 10; } });
+      jbMarkCar(J, kerb, WK_ROAD, [WK_CAR]);
+      m.onLot = true;
+      jbMarkCar(J, st);
+      wkReserve(plan, st, go + 30, 1e9);
+    });
   } });

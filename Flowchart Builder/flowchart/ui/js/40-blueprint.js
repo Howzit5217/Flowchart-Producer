@@ -259,19 +259,63 @@
   // far laid down at it (walls cut off there; what is wholly above, not
   // yet there), the roof on at the end; the scaffold at the height it has
   // got to, the builders round it, a crane by a tall one.
+  // (2026-10-05: "the animation that plays is super laggy and not smooth")
+  // While the works play, the building as it will stand -- everything the
+  // picture is made of before the works take out what is not up yet -- is
+  // the same picture after picture: nothing of it moves, only the clock.
+  // It was made again for every one (a block of flats: 14 ms of a 24 ms
+  // picture, the building put in ten times a second).  Kept now, and made
+  // again when anything it is made from changes (v3PaceSig: an edit, the
+  // view, a storey, the roof ...), when the house's settings are another
+  // object, or every few seconds whatever (BP_KEEP_MS) -- and never when
+  // anything in it moves of itself (a door swinging, someone walking by).
+  var BP_KEEP_MS = 10000, bpKept = null;
+  function bpPlaying() {
+    return !!bpSite && typeof WK === "object" && WK && WK.plan && WK.plan.bp === bpSite && WK.plan.done && WK.plan.ok !== false;
+  }
+  function bpInner(self, args) {
+    if (!bpPlaying() || typeof v3PaceSig !== "function" || !V3) { bpKept = null; return v3BuildBuilt.apply(self, args); }
+    // (and what is used in it: the doors as far open as they are -- the front door held open for the
+    // movers, 40-movein.js -- the lights and what is switched on, a piece's doors and drawers, the land;
+    // anything of that still on its way open or shut, not kept at all)
+    var U = V3.use, sig = v3PaceSig() + "|" + (V3.mode === "walk" && V3.me ? Math.round(V3.me.x / 24) + "," + Math.round(V3.me.y / 24) : "") +
+              "|" + JSON.stringify(V3.doorAt || {}) + "|" + (U ? JSON.stringify([U.on, U.dark, U.all, U.fr]) : "") +
+              "|" + (typeof TERR !== "undefined" && TERR ? TERR.key || "" : ""),
+        now = performance.now(), K = bpKept;
+    if (U && U.anim && Object.keys(U.anim).some(function (k) { return U.anim[k] && Object.keys(U.anim[k]).length; })) { bpKept = null; return v3BuildBuilt.apply(self, args); }
+    if (K && K.sig === sig && K.V === V3 && K.house === hand.house && K.plan === WK.plan && now - K.at < BP_KEEP_MS) { return K.model; }
+    var m = v3BuildBuilt.apply(self, args);
+    bpKept = null;
+    if (m && m.faces && !(m.passing && m.passing.faces && m.passing.faces.length)) {
+      var still = true;
+      for (var i = 0; i < m.faces.length; i++) { if (m.faces[i].moves) { still = false; break; } }
+      if (still) { bpKept = { sig: sig, V: V3, house: hand.house, plan: WK.plan, model: m, at: now }; }
+    }
+    return m;
+  }
   if (typeof v3Build === "function") {
     var v3BuildBuilt = v3Build;
     v3Build = function () {
-      var model = v3BuildBuilt.apply(this, arguments);
+      var model = bpInner(this, arguments);
       var t = bpSiteNow();
-      if (t === null || !model || !model.faces) { return model; }
+      if (t === null || !model || !model.faces) { return model === (bpKept && bpKept.model) ? bpOwn(model, model) : model; }
       var got;
-      try { got = bpBuilding(model, Math.max(0, t)); } catch (e) { return model; }
+      try { got = bpBuilding(model, Math.max(0, t)); } catch (e) { return bpOwn(model, model); }
       // (the building as it will stand, with it: what is round it -- the trees, the ground --
       // measured by that, not moved about, and made again, as each floor goes in: 38-view3d-gl.js)
       if (got && got !== model && got.faces) { got.whole = model.whole || model; }
-      return got;
+      return bpOwn(got, model);
     };
+  }
+  // A picture handed on with lists of its own where it shares them with the
+  // building kept: what is added to it after (a label, someone standing) is
+  // not added to the one kept, again each picture.
+  function bpOwn(got, model) {
+    if (!got || !bpKept || bpKept.model !== model) { return got; }
+    var out = got === model ? Object.assign({}, model) : got;
+    Object.keys(out).forEach(function (k) { if (Array.isArray(out[k]) && out[k] === model[k]) { out[k] = out[k].slice(); } });
+    if (out.passing && out.passing === model.passing) { out.passing = { faces: out.passing.faces.slice(), stand: (out.passing.stand || []).slice() }; }
+    return out;
   }
   function bpEase(t) { return t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2; }
   function bpBuilding(model, t) {

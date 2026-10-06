@@ -50,9 +50,29 @@
       h = (h * 31 + n.id * 7 + n.x * 13 + n.y * 17 + n.w * 3 + n.h * 5 + (n.turn || 0) * 11 + n.kind.length * 19 +
            t.length * 23 + (t.charCodeAt(0) || 0) * 37 + (n.ceil || 0) * 29 + (n.lift || 0) * 41) % 1000000007;
     }
-    H.links.forEach(function (l) { h = (h * 31 + (+l.from || 0) * 7 + (+l.to || 0) * 11) % 1000000007; });
+    for (var li = 0, Ls = H.links; li < Ls.length; li++) { var l = Ls[li]; h = (h * 31 + (+l.from || 0) * 7 + (+l.to || 0) * 11) % 1000000007; }
     return list.length + "|" + H.links.length + "|" + h;
   }
+  // (2026-10-05, "make the moving in spikes smooth too") While a building goes up, the drawing it is
+  // drawn from is the same picture after picture -- nothing is changed but by an edit (a step kept to
+  // undo) or a piece carried: its name worked out again then, or half a second on, not each picture
+  // all of it again, numbers made by the hundred thousand for the memory to clear.
+  var smoothKeyMemo = typeof WeakMap === "function" ? new WeakMap() : null;
+  function smoothKeyed(H, kind, make) {
+    if (!smoothKeyMemo || typeof bpPlaying !== "function" || !bpPlaying() || typeof V3 === "undefined" || !V3 || V3.carry || (typeof simNow !== "undefined" && simNow)) { return make(); }
+    var by = smoothKeyMemo.get(H) || {}, m = by[kind], now = performance.now(), mark = typeof v3qEditMark === "function" ? v3qEditMark() : 0;
+    if (m && m.nodes === H.nodes && m.n === H.nodes.length && m.l === H.links.length && m.mark === mark && now - m.at < 500) { return m.key; }
+    var key = make();
+    by[kind] = { nodes: H.nodes, n: H.nodes.length, l: H.links.length, mark: mark, at: now, key: key };
+    smoothKeyMemo.set(H, by);
+    return key;
+  }
+  if (typeof tieKey === "function") {
+    var tieKeyPlaying = tieKey;
+    tieKey = function (H) { return smoothKeyed(H, "tie", function () { return tieKeyPlaying(H); }); };
+  }
+  var smoothHashEach = smoothHash;
+  smoothHash = function (H) { return smoothKeyed(H, "hash", function () { return smoothHashEach(H); }); };
   if (typeof v3Ground === "function") {
     v3Ground = function () {
       return smoothGet("ground", hand, function () {

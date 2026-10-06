@@ -312,6 +312,10 @@
     if (lot && typeof lwCurbList === "function") {
       try {
         var free = wkCurbFree();
+        // (2026-10-05) the site is laid out before bpSite.wk is set -- but it is laid out only for the works, whose
+        // frontage is coned off: no cars there then (none are drawn there), not cars to drive round or count as hit
+        var lotF = !free && typeof houseStreetLot === "function" ? houseStreetLot() : null;
+        if (lotF) { free = [-lotF.w / 2 - 24 * FLOOR_PX, lotF.w / 2 + 24 * FLOOR_PX]; }
         lwCurbList(lot, function (p) { return S.L(p[0], p[1]); }).forEach(function (b) {
           if (!b.car) { return; }
           if (free && b.x1 > free[0] && b.x0 < free[1]) { return; }       // (coned off for the works)
@@ -1127,14 +1131,38 @@
     var T = plan.done ? wkCalWork(siteS, plan) : siteS, site = plan.site, faces = [], P = site.P;
     plan.now = T; plan.siteNow = siteS; WK.lastIn = model;
     var fly = plan.fly = {};
+    // (2026-10-05: "super laggy and not smooth") Each face's group and times kept by where it
+    // stands in the picture, once the timetable is all made: picture after picture the same
+    // faces come in the same order (the building kept as it will stand, 40-blueprint.js), and
+    // most of them are finished, or not begun and nothing to show yet -- told apart by two
+    // numbers, not looked up again (49,000 faces of a block of flats, ten milliseconds a picture).
+    var FC = plan.done ? wkFastFor(plan, site, model.faces) : null;
+    // (and what is put into the picture's batches as standing still -- the batches kept as they
+    // were while that is the very same, 38-view3d-gl.js -- changed only every few seconds, not each
+    // time a face is finished: what is finished since, or will change before then, goes in as moving)
+    var FD = FC ? wkFoldFor(plan, T) : null, held = 0;
+    // (the picture's faces into an array made the size it will be, once -- not grown and copied as it
+    // fills, three arrays the size of a block of flats a picture for the memory to clear: 2026-10-05)
+    faces = new Array(model.faces.length + 64);
+    var fi = 0, xtra = WK.xtra || (WK.xtra = []);
     for (var i = 0; i < model.faces.length; i++) {
-      var f = model.faces[i], g = wkGroupOf(site, f);
-      if (!g) { faces.push(f); continue; }
+      var f = model.faces[i];
+      var fj = FC ? FC.idx[i] : -1;
+      if (fj >= 0) {
+        var fk = FC.kind[fj];
+        if (fk === 0) { faces[fi++] = f; continue; }
+        if (T >= FC.t1[fj]) { if (FD && FC.t1[fj] > FD.T0) { faces[fi++] = wkMoving(f, FC.hold[fj]); held++; } else { faces[fi++] = f; } continue; }
+        if (fk === 1 && T < FC.t0[fj]) { continue; }
+        if (fk === 2 && T < FC.tp[fj]) { continue; }
+      }
+      var g = wkGroupOf(site, f);
+      if (!g) { faces[fi++] = f; continue; }
       // (2026-10-04, "a stable 60fps": each part's timing kept on it once the timetable is
       // all made, and what is finished -- most of it, most of the time -- put in first)
       var R = g.Rp === plan ? g.R : plan.rv[g.key] || plan.lateR || WK_NOT_YET;
       if (g.Rp !== plan && plan.done) { g.R = R; g.Rp = plan; }
-      if (T >= R.t1) { faces.push(f); continue; }
+      if (T >= R.t1) { if (FD && R.t1 > FD.T0) { faces[fi++] = wkMoving(f, wkHoldOf(g.key)); held++; } else { faces[fi++] = f; } continue; }
+      var steady = !FD || (fj >= 0 && FC.tp[fj] <= FD.T0 && FC.t0[fj] > FD.Tw);
       if (R.carry && R.carry.wk && T >= R.carry.wk.t0 && T < R.t0) { (fly[g.key] || (fly[g.key] = [])).push(f); continue; }
       if (T < R.t0) {
         if (R.pre && !f.mesh && !(f.how && (f.how.glass || f.how.ghost))) {
@@ -1143,26 +1171,39 @@
             // (put on from the foot up too: boards course by course)
             if (T >= pre.t0) {
               var plo = pre.lo !== undefined ? pre.lo : g.lo, phi = pre.hi !== undefined ? pre.hi : g.hi, pc2 = plo + (phi - plo) * (T - pre.t0) / Math.max(1e-6, pre.t1 - pre.t0);
-              if (g.hi <= pc2) { faces.push(wkPreLook(f, pre.how)); }
-              else if (g.lo < pc2) { var lowp = wkClipZ(f.pts, pc2, true); if (lowp) { faces.push(Object.assign(wkPreLook(f, pre.how), { pts: lowp, moves: true })); } }
+              if (g.hi <= pc2) { faces[fi++] = wkHeldLook(wkPreLook(f, pre.how), steady, g.key); }
+              else if (g.lo < pc2) { var lowp = wkClipZ(f.pts, pc2, true); if (lowp) { faces[fi++] = Object.assign(wkPreLook(f, pre.how), { pts: lowp, moves: true }); } }
             }
-          } else if (T >= wkPreAt(pre, g)) { faces.push(wkPreLook(f, pre.how)); }
+          } else if (T >= wkPreAt(pre, g)) { faces[fi++] = wkHeldLook(wkPreLook(f, pre.how), steady, g.key); }
         }
         continue;
       }
-      if (T >= R.t1) { faces.push(f); continue; }
-      var gf = wkAnimFace(f, g, R, (T - R.t0) / Math.max(1e-6, R.t1 - R.t0), P, faces, T);
-      if (gf) { faces.push(gf); }
+      if (T >= R.t1) { faces[fi++] = f; continue; }
+      var gf = wkAnimFace(f, g, R, (T - R.t0) / Math.max(1e-6, R.t1 - R.t0), P, xtra, T);
+      if (xtra.length) { for (var xi = 0; xi < xtra.length; xi++) { faces[fi++] = xtra[xi]; } xtra.length = 0; }
+      if (gf && FD && !gf.moves) { if (gf === f) { gf = wkMoving(f, wkHoldOf(g.key)); } else { gf.moves = true; gf.hold = wkHoldOf(g.key); } held++; }
+      if (gf) { faces[fi++] = gf; }
     }
+    faces.length = fi;
+    if (FD && held > WK_FOLD_MOST) { FD.over = true; }       // (too much going in as moving: folded in, next picture)
     var out = Object.assign({}, model, { faces: faces });
     var passing = out.passing = { faces: model.passing ? model.passing.faces.slice() : [], stand: model.passing ? model.passing.stand.slice() : [] };
     // what has been put there, and what is being put there
     for (var p = 0; p < plan.pieces.length; p++) {
       var pc = plan.pieces[p];
       if (T < pc.t0 || T >= pc.t1 || (pc.level !== undefined && wkStoreyHidden(plan, pc.level))) { continue; }
-      if (pc.live) { pc.live(faces, T); continue; }
-      if (pc.move && T < pc.moveTo) { pc.move(faces, T); continue; }
-      for (var q = 0; q < pc.faces.length; q++) { faces.push(pc.faces[q]); }
+      var pcHold = WK_HOLDS[p % WK_HOLDS.length];
+      // (2026-10-05, "make the moving in spikes smooth too") What a piece draws for itself each
+      // picture -- movers going back for the next load, a dolly, the door held open -- is not the
+      // house standing still, even what of it is not marked as moving: in its piece's held batch,
+      // as it was where it is as it was (38-view3d-gl.js), not a few faces more or less in what
+      // stands still -- which put the whole house into its batches again, picture after picture.
+      if (pc.live) { var lf = faces.length; pc.live(faces, T); if (FD) { wkHoldFrom(faces, lf, pcHold, pc); } continue; }
+      if (pc.move && T < pc.moveTo) { var mf = faces.length; pc.move(faces, T); if (FD) { wkHoldFrom(faces, mf, pcHold, pc); } continue; }
+      // (a piece put in or taken out before the next fold: standing still meanwhile, in a held batch
+      // of its own piece's -- in or out, one held batch joined again, not the house's)
+      var pcStill = !FD || (pc.t0 <= FD.T0 && pc.t1 > FD.Tw);
+      for (var q = 0; q < pc.faces.length; q++) { faces.push(pcStill || pc.faces[q].moves ? pc.faces[q] : wkMoving(pc.faces[q], pcHold)); }
     }
     // the machines, and those at work
     plan.machines.forEach(function (m) { try { wkMachineDraw(passing.faces, m, T, plan); } catch (e) { /* not this one */ } });
@@ -1173,6 +1214,105 @@
     // (the names of rooms and pieces not there yet: none, till it is all in)
     if (out.labels && T < (plan.labelsAt || plan.T - 3)) { out.labels = []; }
     return out;
+  }
+  // What goes into the picture's batches as standing still, from T0: what is still over the next
+  // few seconds of the clock (Tw) -- finished by T0, and a first look not to be taken off by then.
+  // Folded in afresh as the clock passes Tw, goes back past T0 (a seek), or too much is moving.
+  var WK_FOLD_MS = 3000, WK_FOLD_MOST = 2500;
+  function wkFoldFor(plan, T) {
+    var F = WK.fold;
+    if (F && F.plan === plan && !F.over && T >= F.T0 && T <= F.Tw) { return F; }
+    var B = plan.bp, rate = B && B.rate ? B.rate : WK_RATE_OPEN;
+    WK.fold = F = { plan: plan, T0: T, Tw: T + rate * WK_FOLD_MS / 1000 * 1.5, over: false };
+    return F;
+  }
+  // a face that stands still, put in as moving meanwhile (the same copy each picture), in one of a
+  // few held batches (38-view3d-gl.js, f.hold) -- by its job, so a job done changes one of them
+  var WK_HOLDS = ["~h0", "~h1", "~h2", "~h3", "~h4", "~h5"], WK_HOLD_BY = {};
+  function wkHoldOf(key) {
+    var got = WK_HOLD_BY[key];
+    if (got === undefined) {
+      var h = 0, s = String(key);
+      for (var i = 0; i < s.length; i++) { h = (h * 31 + s.charCodeAt(i)) | 0; }
+      got = WK_HOLD_BY[key] = WK_HOLDS[(h >>> 0) % WK_HOLDS.length];
+    }
+    return got;
+  }
+  function wkMoving(f, hold) {
+    var M = WK.moving || (WK.moving = new WeakMap()), c = M.get(f);
+    if (!c || c.hold !== hold) { c = Object.assign({}, f, { moves: true, hold: hold || WK_HOLDS[0] }); M.set(f, c); }
+    return c;
+  }
+  // (and what a piece draws afresh each picture the very same as the last -- a pit dug, standing
+  // open: the same copies as last picture, not new ones each picture told apart by what they are)
+  function wkHoldFrom(faces, from, hold, pc) {
+    var was = pc && pc.wkHeld, now = [], same = !!was && was.inp.length === faces.length - from;
+    for (var i = from; i < faces.length; i++) {
+      var f = faces[i];
+      if (f.moves) { now.push(f); continue; }          // (what moves is new each picture: the rest still matched by place)
+      var j = i - from;
+      if (same) {
+        var g = was.inp[j];
+        if (g === f || (g && !g.moves && g.how === f.how && g.mesh === f.mesh && g.node === f.node && wkPtsSame(g.pts, f.pts))) { now.push(f); faces[i] = was.out[j]; continue; }
+        same = false;
+      }
+      now.push(f);
+      faces[i] = wkMoving(f, hold);
+    }
+    if (pc) {
+      if (!same || !was) { pc.wkHeld = { inp: now, out: faces.slice(from) }; }
+    }
+  }
+  function wkPtsSame(a, b) {
+    if (a === b) { return true; }
+    if (!a || !b || a.length !== b.length) { return false; }
+    for (var i = 0; i < a.length; i++) { var p = a[i], q = b[i]; if (p[0] !== q[0] || p[1] !== q[1] || (p[2] || 0) !== (q[2] || 0)) { return false; } }
+    return true;
+  }
+  function wkHeldLook(f, steady, key) { if (!steady) { f.moves = true; f.hold = wkHoldOf(key); } return f; }
+  // The faces of the picture, by what each is a copy of (its src, as wkGroupOf keys them: the same
+  // from one picture to the next, the building made again or not), and for each: 0, of no group --
+  // always in; 1, in from t1 and nothing of it before t0; 2, something of it before t0 (carried in,
+  // a first look) -- worked out in full each picture from tp, the first moment anything of it shows,
+  // until t1.  Matched in order, the list as last time; where it is not (faces taken out -- a pool's
+  // ground, 40-gatespool.js -- or put in), found again by name; made again when much of it is new.
+  function wkFastFor(plan, site, list) {
+    var C = WK.fast, n = list.length, i, f, key;
+    // (the very list as last picture, no longer: its places as they were)
+    if (C && C.plan === plan && C.list === list && C.listN === n) { return C; }
+    if (C && C.plan === plan) {
+      if (!C.idx || C.idx.length < n) { C.idx = new Int32Array(n + 1024); }
+      var idx = C.idx, j = 0, miss = 0;
+      for (i = 0; i < n; i++) {
+        f = list[i]; key = f.src || f;
+        if (j < C.n && C.refs[j] === key) { idx[i] = j++; continue; }
+        var at = C.where.get(key);
+        if (at !== undefined) { idx[i] = at; j = at + 1; } else { idx[i] = -1; miss++; }
+      }
+      if (miss <= Math.max(256, n * 0.1)) { C.list = list; C.listN = n; return C; }
+    }
+    var refs = new Array(n), where = new Map(), kind = new Uint8Array(n), t0 = new Float64Array(n), t1 = new Float64Array(n), tp = new Float64Array(n),
+        idx2 = new Int32Array(n + 1024), hold = new Array(n);
+    for (i = 0; i < n; i++) {
+      f = list[i]; key = f.src || f;
+      refs[i] = key; idx2[i] = i;
+      if (!where.has(key)) { where.set(key, i); }
+      var g = wkGroupOf(site, f);
+      if (!g) { continue; }
+      var R = g.Rp === plan ? g.R : plan.rv[g.key] || plan.lateR || WK_NOT_YET;
+      if (g.Rp !== plan) { g.R = R; g.Rp = plan; }
+      kind[i] = R.pre || (R.carry && R.carry.wk) ? 2 : 1;
+      t0[i] = R.t0; t1[i] = R.t1; hold[i] = wkHoldOf(g.key);
+      if (kind[i] === 2) {
+        // (when the first of it shows: carried in, or its first look -- as wkBuilding tells it)
+        var first = R.t0;
+        if (R.carry && R.carry.wk) { first = Math.min(first, R.carry.wk.t0); }
+        if (R.pre && !f.mesh && !(f.how && (f.how.glass || f.how.ghost))) { first = Math.min(first, R.pre.cut ? R.pre.t0 : wkPreAt(R.pre, g)); }
+        tp[i] = first;
+      }
+    }
+    WK.fast = { plan: plan, refs: refs, where: where, n: n, idx: idx2, kind: kind, t0: t0, t1: t1, tp: tp, hold: hold, list: list, listN: n };
+    return WK.fast;
   }
   // (2026-10-05: "the beams ... then the floor so they are in that in-between state") Looked at from
   // above with the storeys over one taken off (38-view3d.js's V3.upTo), a storey's framing -- its deck's
@@ -1463,32 +1603,119 @@
   // The pose (lot-local x, y, heading) of a machine at distance s along a
   // path; `back` if it is reversing along it.  A trailer behind: its pose
   // a hitch's length further back along the same path.
+  function wkAlongOn(L, s) {
+    if (s >= 0 && s <= L.len) { return wkAlong(L, s).p; }
+    var e = 0.5 * FLOOR_PX, a = wkAlong(L, s < 0 ? 0 : L.len).p, b = wkAlong(L, s < 0 ? Math.min(L.len, e) : Math.max(0, L.len - e)).p, d = Math.hypot(b[0] - a[0], b[1] - a[1]);
+    if (d < 1e-6) { return a; }
+    var over = s < 0 ? -s : s - L.len;
+    return [a[0] + (a[0] - b[0]) / d * over, a[1] + (a[1] - b[1]) / d * over];
+  }
   function wkPoseOn(L, s, back) {
     var A = wkAlong(L, s), e = 0.6 * FLOOR_PX, B = wkAlong(L, Math.min(L.len, s + e)), C = wkAlong(L, Math.max(0, s - e));
     var dx = B.p[0] - C.p[0], dy = B.p[1] - C.p[1], ang = Math.atan2(dy, dx);
     // a trailer's heading: from its back axles to its kingpin, both on the way the cab has come
     // (or, backing, the way it is going) -- following round a bend, not swung out across it
-    var P = FLOOR_PX, dir = back ? 1 : -1, K = wkAlong(L, Math.max(0, Math.min(L.len, s + dir * 2.1 * P))), Ax = wkAlong(L, Math.max(0, Math.min(L.len, s + dir * 12.6 * P)));
+    // (2026-10-06: and past either end of the way, on straight along its first or last stretch -- a
+    // trailer pulled away from the kerb lay straight behind its cab there, not swung out across the
+    // pavement round the way's first point, into the lamps)
+    var P = FLOOR_PX, dir = back ? 1 : -1, K = { p: wkAlongOn(L, s + dir * 2.1 * P) }, Ax = { p: wkAlongOn(L, s + dir * 12.6 * P) };
     var tang = Math.hypot(K.p[0] - Ax.p[0], K.p[1] - Ax.p[1]) > 0.5 * P ? Math.atan2(K.p[1] - Ax.p[1], K.p[0] - Ax.p[0]) : (back ? ang + Math.PI : ang);
     return { x: A.p[0], y: A.p[1], ang: back ? ang + Math.PI : ang, tang: tang };
+  }
+  // (2026-10-06, machines clipping: a lorry turning in to the kerb, or out from it, swept its cab --
+  // and its trailer behind it -- over the lamps and poles on the pavement and the cars parked past
+  // the coned stretch.  Its turn is tried as it was, gentler and sharper; the first that sweeps over
+  // nothing is kept, or, none, the one that sweeps over least.  And a stand along the kerb is kept
+  // only where one does -- wkStandMid.)
+  var WK_SWEEP_BAD = {}, WK_SWEEP_K = [1, 1.3, 0.8, 1.6, 0.65, 2.0];
+  [WK_HOUSE, WK_THING, WK_CAR, WK_PIT, WK_OFF, WK_YARD].forEach(function (v) { WK_SWEEP_BAD[v] = 1; });
+  // the squares it would be over, driven along L (`back`: reversing), that it may not be -- not
+  // counting its own stand's (a parked pickup's own squares, marked as a car); `most`: stopped once past
+  function wkSweepHits(site, L, back, stand, len, most, reach) {
+    var G = site.G, P = site.P, hits = 0;
+    // (its own squares: as wide as a parked pickup is marked, jbMarkCar -- not the stand's room round it,
+    // which reaches the lamps at the kerb)
+    var own = [stand.cx === undefined ? stand.x : stand.cx, stand.cy === undefined ? stand.y : stand.cy, stand.hl || len / 2 + 0.4 * P, 1.05 * P, stand.ang || 0];
+    var oc = Math.cos(own[4]), os = Math.sin(own[4]);
+    function rect(cx, cy, hl, hw, ang) {
+      var c = Math.cos(ang), s = Math.sin(ang), ex = Math.abs(c) * hl + Math.abs(s) * hw, ey = Math.abs(s) * hl + Math.abs(c) * hw;
+      var k0 = Math.max(0, Math.floor((cx - ex - G.x0) / G.c)), k1 = Math.min(G.cols - 1, Math.floor((cx + ex - G.x0) / G.c));
+      var r0 = Math.max(0, Math.floor((cy - ey - G.y0) / G.c)), r1 = Math.min(G.rows - 1, Math.floor((cy + ey - G.y0) / G.c));
+      for (var rr = r0; rr <= r1; rr++) {
+        for (var kk = k0; kk <= k1; kk++) {
+          if (!WK_SWEEP_BAD[G.t[rr * G.cols + kk]]) { continue; }
+          var px = G.x0 + (kk + 0.5) * G.c, py = G.y0 + (rr + 0.5) * G.c, dx = px - cx, dy = py - cy;
+          if (Math.abs(dx * c + dy * s) > hl || Math.abs(-dx * s + dy * c) > hw) { continue; }
+          var ox = px - own[0], oy = py - own[1];
+          if (Math.abs(ox * oc + oy * os) <= own[2] && Math.abs(-ox * os + oy * oc) <= own[3]) { continue; }
+          hits++;
+        }
+      }
+    }
+    // (a lorry and its trailer bending behind it; a crane, a pump, a mixer all one -- by its kind, kept on
+    // the stand by wkStand, or its length)
+    var kind = stand.kind, ft = kind && WK_FOOT[kind], hw = 1.2 * P, half = len * 0.41;
+    var artic = kind ? kind === "semi" || kind === "lowboy" : len > 15 * P;
+    // (a stand found for more than comes to it -- the pump's, room for a mixer behind: as long as it is)
+    if (ft && Math.abs(ft[1] * 2 * P - len) > 2.5 * P) { ft = null; }
+    for (var s = 0; s <= L.len && hits <= most; s += 0.75 * P) {
+      var q = wkPoseOn(L, s, back);
+      // (only near the stand: on along the lane, far off, nothing is parked in the way)
+      if (Math.abs(q.x - stand.x) > reach) { continue; }
+      if (artic) {
+        rect(q.x, q.y, 3.4 * P, hw, q.ang);
+        var kx = q.x - Math.cos(q.ang) * 2.1 * P, ky = q.y - Math.sin(q.ang) * 2.1 * P;
+        rect(kx - Math.cos(q.tang) * half, ky - Math.sin(q.tang) * half, half, hw, q.tang);
+      } else if (ft) {
+        rect(q.x + Math.cos(q.ang) * ft[0] * P, q.y + Math.sin(q.ang) * ft[0] * P, ft[1] * P, hw, q.ang);
+      } else {
+        rect(q.x, q.y, len / 2 + 0.4 * P, hw, q.ang);
+      }
+    }
+    return hits;
+  }
+  // `make(R)` the way's points for a turn as wide as R: the R that sweeps over least (kept on the
+  // stand, as how many squares it does: stand.wkSw).  `quick`: only whether one sweeps over nothing.
+  function wkSweepPick(site, stand, len, R, make, back, tag, quick) {
+    if (!site.G || !stand) { return make(R); }
+    var key = (quick ? "q" : "") + tag + Math.round(len) + ":" + (site.gridGen || 0), memo = stand.wkSw || (stand.wkSw = {});
+    if (memo[key] !== undefined) { return make(R * memo[key]); }
+    var bestK = 1, bestHits = Infinity, reach = 2.4 * R * WK_SWEEP_K[WK_SWEEP_K.length - 1] + len;
+    for (var i = 0; i < WK_SWEEP_K.length && bestHits > 0; i++) {
+      var h = wkSweepHits(site, wkDrivePath(site, make(R * WK_SWEEP_K[i])), back, stand, len, quick ? 0 : bestHits, reach);
+      if (h < bestHits) { bestHits = h; bestK = WK_SWEEP_K[i]; }
+    }
+    memo[key] = bestK; memo[key + "h"] = bestHits;
+    return make(R * bestK);
+  }
+  // a stand along the kerb with a turn in to it and one out of it over nothing (lot-local, heading -x)
+  function wkSweepClear(site, stand, len) {
+    wkArrive(site, stand, len, true); wkLeave(site, stand, len, true);
+    var m = stand.wkSw || {}, g = Math.round(len) + ":" + (site.gridGen || 0);
+    return !m["qin" + g + "h"] && !m["qout" + g + "h"];
   }
   // A vehicle's arrival: along the near lane from far away (heading -x),
   // and then -- `stand` a pose in the lot, nose to the street -- backed in
   // past the kerb to it; or pulled in along the kerb (stand.street).
-  function wkArrive(site, stand, len) {
+  function wkArrive(site, stand, len, quick) {
     var S = site.S, P = site.P, lane = site.lanes.w, R = Math.max(7 * P, len * 0.75), far = S.far || 60 * P;
     if (stand.street && Math.cos(stand.ang) > 0) {
       // (heading +x: come along the far lane, pulled over to this kerb)
       // (driven past along the far lane, pulled in to the kerb beyond it, and backed up to it -- what it
       // backs up to, a pump, stands at the kerb behind it)
       // (in the far lane, out past what is parked at the kerb, then backed round into it)
-      var fl = site.lanes.e, past = stand.x + len * 1.25 + 3 * P;
-      var road2 = [[-far, fl], [past, fl]];
-      var bk2 = wkCurve([past, fl], [stand.x + len * 0.55, fl], [stand.x + len * 0.55, stand.y], [stand.x, stand.y], 18);
+      // (and backed round as wide as sweeps over nothing at the kerb -- wkSweepPick, R as a share)
+      var fl = site.lanes.e, bk2 = wkSweepPick(site, stand, len, R, function (R2) {
+        var u = R2 / R, past2 = stand.x + (len * 1.25 + 3 * P) * u;
+        return wkCurve([past2, fl], [stand.x + len * 0.55 * u, fl], [stand.x + len * 0.55 * u, stand.y], [stand.x, stand.y], 18);
+      }, true, "bin", quick);
+      var road2 = [[-far, fl], bk2[0]];
       return { fwd: wkDrivePath(site, road2), back: wkDrivePath(site, bk2) };
     }
     if (stand.street) {
-      var road = [[far, lane], [stand.x + R * 0.9, lane]].concat(wkCurve([stand.x + R * 0.9, lane], [stand.x + R * 0.5, lane], [stand.x + R * 0.4, stand.y], [stand.x, stand.y], 10).slice(1));
+      var road = wkSweepPick(site, stand, len, R, function (R2) {
+        return [[far, lane], [stand.x + R2 * 0.9, lane]].concat(wkCurve([stand.x + R2 * 0.9, lane], [stand.x + R2 * 0.5, lane], [stand.x + R2 * 0.4, stand.y], [stand.x, stand.y], 10).slice(1));
+      }, false, "in", quick);
       return { fwd: wkDrivePath(site, road), back: null };
     }
     var pass = stand.x - R;                         // driven past it, then backed in
@@ -1500,14 +1727,19 @@
     return { fwd: fwd, back: wkDrivePath(site, bk) };
   }
   // and away: out to the road, on along it (heading -x)
-  function wkLeave(site, stand, len) {
+  function wkLeave(site, stand, len, quick) {
     var S = site.S, P = site.P, lane = site.lanes.w, R = Math.max(7 * P, len * 0.75), far = S.far || 60 * P;
     if (stand.street && Math.cos(stand.ang) > 0) {
-      var fl = site.lanes.e, R3 = R * 1.7;
-      return wkDrivePath(site, wkCurve([stand.x, stand.y], [stand.x + R3 * 0.5, stand.y], [stand.x + R3 * 0.6, fl], [stand.x + R3 * 1.2, fl], 16).concat([[far, fl]]));
+      var fl = site.lanes.e;
+      return wkDrivePath(site, wkSweepPick(site, stand, len, R, function (R2) {
+        var R3 = R2 * 1.7;
+        return wkCurve([stand.x, stand.y], [stand.x + R3 * 0.5, stand.y], [stand.x + R3 * 0.6, fl], [stand.x + R3 * 1.2, fl], 16).concat([[far, fl]]);
+      }, false, "bout", quick));
     }
     if (stand.street) {
-      return wkDrivePath(site, wkCurve([stand.x, stand.y], [stand.x - R * 0.4, stand.y], [stand.x - R * 0.5, lane], [stand.x - R * 0.9, lane], 10).concat([[-far, lane]]));
+      return wkDrivePath(site, wkSweepPick(site, stand, len, R, function (R2) {
+        return wkCurve([stand.x, stand.y], [stand.x - R2 * 0.4, stand.y], [stand.x - R2 * 0.5, lane], [stand.x - R2 * 0.9, lane], 10).concat([[-far, lane]]);
+      }, false, "out", quick));
     }
     var y0 = Math.max(stand.y, Math.min(lane - R * 0.9, S.hy));
     var pts = [[stand.x, stand.y]];
@@ -1519,10 +1751,10 @@
   // within `reach` of the target -- or, failing that, along the kerb.
   function wkStand(plan, spec) {
     var ft = spec.kind && WK_FOOT[spec.kind], P0 = plan.site.P;
-    if (ft) { spec = Object.assign({}, spec, { len: ft[1] * 2 * P0, wid: ft[2] * 2 * P0 }); }
+    if (ft) { spec = Object.assign({}, spec, { len: ft[1] * 2 * P0, wid: ft[2] * 2 * P0, foff: ft[0] * P0 }); }
     var got = wkStandMid(plan, spec), off = ft ? ft[0] * P0 : 0;
     // (the machine put so its middle is there)
-    got.cx = got.x; got.cy = got.y;
+    got.cx = got.x; got.cy = got.y; got.kind = spec.kind;
     got.x -= Math.cos(got.ang) * off; got.y -= Math.sin(got.ang) * off;
     return got;
   }
@@ -1558,14 +1790,27 @@
     if (!best || spec.street) {
       // along the kerb: as near the target as the parked cars and the others let it
       var yk = S.kerb + spec.wid / 2 + 0.25 * P, hk = spec.wid / 2 + 0.1 * P, hlRoom = hl + 1.2 * P;
-      for (var dx = 0; dx < 100 * P; dx += 0.5 * P) {
-        var found = null;
-        [tgt[0] + dx, tgt[0] - dx].some(function (xx) {
-          if (wkRectFree(site, xx, yk, hlRoom, hk, Math.PI, [WK_ROAD], plan.res, t0, t1)) { found = xx; return true; }
-          return false;
-        });
-        if (found !== null) { best = { x: found, y: yk, ang: Math.PI, street: true }; break; }
-      }
+      // (and with a way in to it and out of it over nothing parked or standing -- wkSweepClear: of
+      // the first stretches long enough, the nearest that has; or, none, the nearest)
+      var foff = spec.foff || 0;
+      var kerbAt = function (busy) {
+        var first = null, tries = 0, got = null;
+        for (var dx = 0; dx < 100 * P && got === null; dx += 0.5 * P) {
+          [tgt[0] + dx, tgt[0] - dx].some(function (xx) {
+            if (!wkRectFree(site, xx, yk, hlRoom, hk, Math.PI, [WK_ROAD], busy, t0, t1)) { return false; }
+            if (first === null) { first = xx; }
+            if (tries++ < 160 && !wkSweepClear(site, { x: xx + foff, y: yk, cx: xx, cy: yk, ang: Math.PI, street: true, hl: hl, hw: hw, kind: spec.kind }, spec.len)) { return false; }
+            got = tries <= 160 ? xx : first;
+            return true;
+          });
+        }
+        return got !== null ? got : first;
+      };
+      var kx = kerbAt(plan.res);
+      // (none free for all the time it is wanted: the nearest stretch with nothing parked or standing
+      // on it -- the times left to whoever asked, plan.noStand counting it -- not the target, cars and all)
+      if (kx === null) { kx = kerbAt(null); if (kx !== null) { plan.noStand = (plan.noStand || 0) + 1; } }
+      if (kx !== null) { best = { x: kx, y: yk, ang: Math.PI, street: true }; }
     }
     if (!best) {
       best = { x: tgt[0], y: S.kerb + spec.wid / 2 + 0.25 * P, ang: Math.PI, street: true };

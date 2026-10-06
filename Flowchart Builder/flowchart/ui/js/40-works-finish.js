@@ -291,7 +291,7 @@
       kEnd = Math.max(kEnd, s0 + 3);
     });
     // (the empty pallets stacked and taken off with the rest)
-    if (del) { del.pallets.forEach(function (pl) { pl.taken.sort(function (a, b) { return a - b; }); pl.end = kEnd + 20; }); wkSay(plan, "jb_deliver", del.pallets.length ? del.pallets[0].up - 20 : fEnd - 200, del.doneAt); }
+    if (del) { del.pallets.forEach(function (pl) { pl.taken.sort(function (a, b) { return a - b; }); pl.end = kEnd + 20; if (pl.res) { pl.res.t1 = pl.end; } }); wkSay(plan, "jb_deliver", del.pallets.length ? del.pallets[0].up - 20 : fEnd - 200, del.doneAt); }
     wkSay(plan, "jb_fittings", fEnd - 50, kEnd);
     // lights, switches, sockets, alarms: the electrician round them all
     var xEnd = kEnd, fx = keys.filter(function (k) { return k.indexOf("fix:") === 0; });
@@ -320,7 +320,14 @@
     if (!M.items.length && !M.residents.length) { return; }
     // the lorry's stand: at the kerb by the path to the door, clear of the parked cars
     var tractorX = M.vanRear - 16.8 * P, stand = { x: tractorX, y: S.kerb + 1.55 * P, ang: Math.PI, street: true, hl: 9.5 * P, hw: 1.4 * P };
-    var free = wkStand(plan, { kind: "semi", target: [tractorX + 6.65 * P, S.kerb], street: true, t0: t, t1: t + 9000 });
+    // (2026-10-06: the stretch by the door still taken a moment longer -- the planting's pickup leaving --
+    // and no other free all the while: waited for, ten seconds at a time, not stood behind a parked car)
+    var free = null, n0 = plan.noStand || 0;
+    for (var wait = 0; wait < 30; wait++) {
+      free = wkStand(plan, { kind: "semi", target: [tractorX + 6.65 * P, S.kerb], street: true, t0: t, t1: t + 9000 });
+      if ((plan.noStand || 0) === n0 || wait === 29) { break; }
+      plan.noStand = n0; t += 10;
+    }
     stand = free;
     if (Math.abs(free.x - tractorX) > 0.5 * P) {
       tractorX = free.x;

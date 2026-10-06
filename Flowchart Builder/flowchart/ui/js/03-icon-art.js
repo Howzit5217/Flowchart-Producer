@@ -995,7 +995,7 @@
     ["ic_tech", ["i_tv", "i_walltv", "i_soundbar", "i_console", "i_pc", "i_monitor", "i_speaker",
                  "i_projector", "i_proscreen", "i_recordplayer", "i_fan", "i_ac"]],
     ["ic_outdoor", ["i_lot", "i_driveway", "i_path", "i_deck", "i_fence", "i_hedge", "i_flowerbed",
-                    "i_parked", "i_shrub", "i_grill", "i_pool", "i_patio", "i_gardenbench", "i_hottub",
+                    "i_parked", "i_tree", "i_shrub", "i_grill", "i_pool", "i_patio", "i_gardenbench", "i_hottub",
                     "i_dogbed", "i_cattree", "i_firepit", "i_lounger", "i_gazebo", "i_shed", "i_planter",
                     "i_birdbath", "i_lamppost", "i_pathlight", "i_porchlight", "i_floodlight", "i_mailbox", "i_bikerack",
                     "i_bins", "i_condenser", "i_dumpster", "i_parking", "i_pavilion", "i_court", "i_gate",

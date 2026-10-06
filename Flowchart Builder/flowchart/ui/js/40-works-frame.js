@@ -119,10 +119,23 @@
   }
   // drive it from where it is to `to` (lot-local [x, y]), facing `face` (local radians) at the end
   function jbTeleDrive(plan, m, to, t, face, extra) {
-    var site = plan.site, P = site.P, from = m.at, way = wkVehWay(site, from, to, 1.75 * P);
+    var site = plan.site, P = site.P, from = m.at;
+    // (2026-10-05, machines clipping: it drove to its spot by the walls and turned on it there to
+    // face them -- four and a half metres swung round through the building, every lift.  Now the
+    // last of the way is driven straight in from behind, already facing where it works, wherever
+    // the ground behind the spot is clear for it)
+    var lead = null;
+    if (face !== undefined && Math.hypot(to[0] - from[0], to[1] - from[1]) > 1.5 * P) {
+      var back = 3.0 * P, fx = Math.cos(face), fy = Math.sin(face);
+      if (wkRectFree(site, to[0] - fx * back / 2, to[1] - fy * back / 2, 2.9 * P + back / 2, 1.55 * P, face, [WK_LOT, WK_PAVED, WK_STACK, WK_WALKWAY], plan.res, t, t + 90)) {
+        lead = [to[0] - fx * back, to[1] - fy * back];
+      }
+    }
+    var way = wkVehWay(site, from, lead || to, 1.75 * P);
     // (nowhere it can drive to there: it works from where it is, its boom reaching further)
-    if (way.blocked) { to = from.slice(); way = [from, from]; }
-    var pts = way.length > 1 ? way : [from, to];
+    if (way.blocked) { to = from.slice(); way = [from, from]; lead = null; }
+    var pts = way.length > 1 ? way : [from, lead || to];
+    if (lead) { pts = pts.concat([to]); }
     var L = wkPolyline(pts.map(function (q) { return [q[0], q[1], 0]; })), dur = Math.max(1.5, L.len / (2.2 * P));
     var x0 = Object.assign({}, extra || {});
     wkMSeg(m, t, t + dur, function (k) { return Object.assign({ site: site, moving: true }, wkPoseOn(L, L.len * wkSmooth(k), false), x0); });
@@ -218,6 +231,14 @@
     // back to its own spot by the yard
     jbTeleDrive(plan, tele, [tele.stand.x, tele.stand.y], tele.free, tele.stand.ang, { boom: 0.05 });
   } });
+
+  // (the pickups onto the drive, 40-works-jobs.js's "parkin", worked out after the lumber's lorry: it
+  // comes first, and they wait for its way to be clear -- 2026-10-05)
+  (function () {
+    var a = -1, b = -1;
+    WK_PHASES.forEach(function (ph, i) { if (ph.name === "parkin") { a = i; } if (ph.name === "lumber") { b = i; } });
+    if (a >= 0 && b > a) { WK_PHASES.splice(b, 0, WK_PHASES.splice(a, 1)[0]); }
+  })();
 
   // ---- 6. the frame: storey by storey -- the deck, its walls, the stairs ---------------------------------
   WK_PHASES.push({ name: "frame", make: function (plan) {

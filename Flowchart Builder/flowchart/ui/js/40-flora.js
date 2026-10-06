@@ -362,9 +362,9 @@
     }
     if (kind === "date") {                // the dead fronds hang in a skirt under the crown
       var dead = M.mat("leaves", "#8a7650");
-      for (var d = 0; d < 10; d++) { flFrond(M, [lean, 0, top - H * 0.02], d / 10 * Math.PI * 2, R * 0.55, -0.2, 0.6, 4 * FL_CM, dead, dead, "coco"); }
+      for (var d = 0; d < 8; d++) { flFrond(M, [lean, 0, top - H * 0.02], d / 8 * Math.PI * 2, R * 0.55, -0.2, 0.6, 4 * FL_CM, dead, dead, "coco"); }
     }
-    var fronds = kind === "date" ? 22 : kind === "fan" ? 16 : kind === "royal" ? 14 : 12;
+    var fronds = kind === "date" ? 16 : kind === "fan" ? 14 : kind === "royal" ? 12 : 12;
     var len = R * (kind === "fan" ? 0.45 : 0.92), rise = kind === "date" ? 0.75 : kind === "fan" ? 0.5 : 0.45, droop = kind === "date" ? 0.75 : kind === "fan" ? 0.3 : 1.0;
     var room = H - crown[2];
     for (var f = 0; f < fronds; f++) {
@@ -752,33 +752,33 @@
     } else if (kind === "cup") {          // a tulip: a cup of petals on its stem
       M.lathe(tx, ty, [[size * 0.35, top], [size * 0.95, top + size * 0.7], [size * 0.85, top + size * 1.7], [size * 0.55, top + size * 2.1]], head, { seg: 7, bottom: true });
     } else if (kind === "pom") {          // a ball of petals: a marigold, a peony, a dahlia, a geranium's head
-      M.ball(tx, ty, top + size * 0.6, size, size, size * 0.8, head, { seg: 6, lat0: -90, lat1: 90 });
-      M.ball(tx, ty, top + size * 1.1, size * 0.55, size * 0.55, size * 0.45, M.mat("fabric", mShade(color, 0.12)), { seg: 4, lat0: -90, lat1: 90 });
+      M.ball(tx, ty, top + size * 0.6, size, size, size * 0.8, head, { seg: 5, lat0: -90, lat1: 90 });
+      M.ball(tx, ty, top + size * 1.1, size * 0.55, size * 0.55, size * 0.45, M.mat("fabric", mShade(color, 0.12)), { seg: 3, lat0: -90, lat1: 90 });
     } else if (kind === "spike") {        // little flowers up the top of the stem
-      for (var k = 0; k < 7; k++) {
-        var kz = top - size * 5 + k * size * 0.85;
-        M.ball(tx, ty, kz, size * (1 - k * 0.08), size * (1 - k * 0.08), size * 0.75, head, { seg: 4, lat0: -90, lat1: 90 });
+      for (var k = 0; k < 4; k++) {
+        var kz = top - size * 4 + k * size * 1.3;
+        M.ball(tx, ty, kz, size * (1.1 - k * 0.14), size * (1.1 - k * 0.14), size * 0.9, head, { seg: 3, lat0: -90, lat1: 90 });
       }
     } else if (kind === "trumpet") {      // a lily, a petunia: a flared trumpet looking out
       M.push().move(tx, ty, top).turn(rnd() * 360).tiltY(-50);
       M.lathe(0, 0, [[size * 0.15, 0], [size * 0.35, size * 1.2], [size * 1.1, size * 2.0], [size * 1.25, size * 2.15]], head, { seg: 7 });
       M.pop();
     } else if (kind === "bell") {         // bells hanging down an arching stem
-      var bells = s.spike ? 9 : 5;
+      var bells = s.spike ? 6 : 4;
       for (var b = 0; b < bells; b++) {
-        var bz = top - b * size * (s.spike ? 2.2 : 1.6), ba = b * 2.3;
+        var bz = top - b * size * (s.spike ? 3.0 : 1.9), ba = b * 2.3;
         var bx = tx + Math.cos(ba) * size * 0.9, by = ty + Math.sin(ba) * size * 0.9;
-        M.lathe(bx, by, [[size * 0.85, bz - size * 1.4], [size * 0.7, bz - size * 0.6], [size * 0.25, bz], [0, bz]], head, { seg: 6 });
+        M.lathe(bx, by, [[size * 0.85, bz - size * 1.4], [size * 0.5, bz - size * 0.4], [0, bz]], head, { seg: 5 });
       }
     } else if (kind === "rose") {
-      M.ball(tx, ty, top + size * 0.6, size, size, size * 0.8, head, { seg: 6, lat0: -90, lat1: 90 });
-      M.ball(tx, ty, top + size * 1.05, size * 0.55, size * 0.55, size * 0.5, M.mat("fabric", mShade(color, -0.15)), { seg: 5, lat0: -90, lat1: 90 });
-      M.ball(tx, ty, top - size * 1.5, size * 1.6, size * 1.6, size * 1.0, mats.leaf, { seg: 5, lat0: -90, lat1: 90 });
+      M.ball(tx, ty, top + size * 0.6, size, size, size * 0.8, head, { seg: 5, lat0: -90, lat1: 90 });
+      M.ball(tx, ty, top + size * 1.05, size * 0.55, size * 0.55, size * 0.5, M.mat("fabric", mShade(color, -0.15)), { seg: 3, lat0: -90, lat1: 90 });
+      M.ball(tx, ty, top - size * 1.5, size * 1.6, size * 1.6, size * 1.0, mats.leaf, { seg: 4, lat0: -90, lat1: 90 });
     } else if (kind === "iris") {         // three falls drooping, three standards up
       for (var f = 0; f < 6; f++) {
         var fa = f / 6 * Math.PI * 2, up = f % 2 ? -60 : 35;
         M.push().move(tx, ty, top).turn(fa * 180 / Math.PI).tiltY(up);
-        M.ball(size * 0.8, 0, 0, size * 0.85, size * 0.45, 0.4 * FL_CM, f % 2 ? head : M.mat("fabric", mShade(color, 0.15)), { seg: 4 });
+        M.ball(size * 0.8, 0, 0, size * 0.85, size * 0.45, 0.4 * FL_CM, f % 2 ? head : M.mat("fabric", mShade(color, 0.15)), { seg: 3 });
         M.pop();
       }
       M.ball(tx, ty, top, size * 0.2, size * 0.2, size * 0.2, M.mat("fabric", "#f2c94c"), { seg: 3, lat0: -90, lat1: 90 });
@@ -786,8 +786,8 @@
       M.lathe(tx, ty, [[size * 0.2, top], [size * 1.0, top + size * 0.5], [size * 1.2, top + size * 0.9]], head, { seg: 7, bottom: true });
       M.ball(tx, ty, top + size * 0.35, size * 0.32, size * 0.32, size * 0.3, M.mat("fabric", s.center || "#1e1a1a"), { seg: 4, lat0: -90, lat1: 90 });
     } else if (kind === "pansy") {        // a flat face, two-toned
-      M.ball(tx, ty, top, size, size, size * 0.18, head, { seg: 6, lat0: -90, lat1: 90 });
-      M.ball(tx, ty, top + size * 0.12, size * 0.45, size * 0.45, size * 0.1, M.mat("fabric", "#2a1a3a"), { seg: 5, lat0: -90, lat1: 90 });
+      M.ball(tx, ty, top, size, size, size * 0.18, head, { seg: 5, lat0: -90, lat1: 90 });
+      M.ball(tx, ty, top + size * 0.12, size * 0.45, size * 0.45, size * 0.1, M.mat("fabric", "#2a1a3a"), { seg: 3, lat0: -90, lat1: 90 });
     }
   }
   function flBed(M, W, D, H, C, n, s) {
@@ -835,8 +835,11 @@
       }
       return;
     }
-    // flowers in rows, staggered, as close as each grows
+    // flowers in rows, staggered, as close as each grows -- but no more than about ninety to a bed
+    // (thirty sunflowers), further apart in a big one: planted 8 cm apart however big the bed,
+    // a bed of lavender was 200,000 corners, and took the page half a second to make (2026-10-06)
     var gap = Math.max(8, (s.size || 2.5) * (s.big ? 3 : s.dense ? 3.2 : 4.6)) * FL_CM;
+    gap = Math.max(gap, Math.sqrt(iw * id / (s.big ? 30 : 90)));
     var cols = s.cols || ["#e46b6b"];
     for (var yy = -id / 2 + gap / 2, row = 0; yy <= id / 2 - gap * 0.3; yy += gap, row++) {
       for (var xx = -iw / 2 + gap / 2 + (row % 2) * gap / 2; xx <= iw / 2 - gap * 0.3; xx += gap) {
@@ -847,11 +850,11 @@
           for (var lb = 0; lb < 2; lb++) {
             var la2 = rnd() * Math.PI * 2;
             M.push().move(fx, fy, soil).turn(la2 * 180 / Math.PI).tiltY(s.leaves === "sword" ? -75 : -55);
-            M.ball(tall * (s.leaves === "sword" ? 0.35 : 0.2), 0, 0, tall * (s.leaves === "sword" ? 0.35 : 0.2), (s.leaves === "sword" ? 1.2 : 2.2) * FL_CM, 0.4 * FL_CM, mats.leaf, { seg: 4 });
+            M.ball(tall * (s.leaves === "sword" ? 0.35 : 0.2), 0, 0, tall * (s.leaves === "sword" ? 0.35 : 0.2), (s.leaves === "sword" ? 1.2 : 2.2) * FL_CM, 0.4 * FL_CM, mats.leaf, { seg: 3 });
             M.pop();
           }
         } else if (!s.big) {
-          M.ball(fx, fy, soil + 2 * FL_CM, gap * 0.38, gap * 0.38, Math.min(tall * 0.3, 5 * FL_CM), mats.leaf, { seg: 5, lat0: -90, lat1: 90 });
+          M.ball(fx, fy, soil + 2 * FL_CM, Math.min(gap * 0.38, 9 * FL_CM), Math.min(gap * 0.38, 9 * FL_CM), Math.min(tall * 0.3, 5 * FL_CM), mats.leaf, { seg: 4, lat0: -90, lat1: 90 });
         }
         flFlower(M, fx, fy, soil, tall, s, cols[Math.floor(rnd() * cols.length)], rnd, mats);
       }
@@ -939,8 +942,11 @@
     });
     return out;
   }
+  // (a house of no style of any land: whatever grows in its landscape -- not only the kinds
+  // that are at home everywhere, which was two trees)
   function floraGrowsHere(s) {
-    return floraScapes().some(function (sc) { return (s.z[sc] || 0) > 0; }) && floraHome(s, floraRegion()) >= 1;
+    var region = floraRegion();
+    return floraScapes().some(function (sc) { return (s.z[sc] || 0) > 0; }) && (!region || floraHome(s, region) >= 1);
   }
 
   // ---- the land's own planting --------------------------------------------------------------------
@@ -965,6 +971,16 @@
         if (out[k] !== undefined || k === FLORA_KINDS[p[0]] || FLORA[k].head === "veg" || FLORA[k].head === "rock") { delete w[k]; } else { sum += w[k]; }
       });
       Object.keys(w).forEach(function (k) { out[k] = Math.round(w[k] / sum * p[1] * 1000) / 1000; });
+    });
+    // (each sort -- trees, what grows low, flowers -- as much of the land as it was, its new kinds
+    // taking their share of it, not added on top: the trees grew by nine tenths over the grass and
+    // the stones, and a beach's scenery to two and a half times as many corners, 2026-10-06)
+    function sortOf(k) { return FLORA[k] && FLORA[k].kind === "i_tree" ? "t" : FLORA_LOW[k] || (FLORA[k] && FLORA[k].kind === "i_shrub") ? "l" : k === "flowers" || (FLORA[k] && FLORA[k].kind === "i_flowerbed") ? "f" : ""; }
+    var was = { t: trees, l: low, f: beds }, now = { t: 0, l: 0, f: 0 };
+    Object.keys(out).forEach(function (k) { var so = sortOf(k); if (so) { now[so] += out[k]; } });
+    Object.keys(out).forEach(function (k) {
+      var so = sortOf(k);
+      if (so && now[so] > 0 && was[so] > 0) { out[k] = Math.round(out[k] * was[so] / now[so] * 1000) / 1000; }
     });
     floraGrowKept[key] = { base: base, out: out };
     return out;

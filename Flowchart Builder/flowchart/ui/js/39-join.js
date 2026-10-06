@@ -137,13 +137,16 @@
   // room goes, and `boxes` where every room is, put together.
   var tieSeen = { H: null, key: null, J: null };
   function tieKey(H) {
-    var h = 0;
-    H.nodes.forEach(function (n) {
+    // (2026-10-05) in plain loops, the same sum: kept in a closure, each step of it was a number
+    // made anew in memory -- every piece of the drawing, every picture, the memory filling for it
+    var h = 0, N = H.nodes, Ls = H.links, i;
+    for (i = 0; i < N.length; i++) {
+      var n = N[i];
       h = (h * 31 + n.id * 7 + n.x * 13 + n.y * 17 + n.w * 3 + n.h * 5 + (n.turn || 0) * 11 +
            n.kind.length * 19 + String(n.text || "").length * 23 + (n.ceil || 0) * 29) % 1000000007;
-    });
-    H.links.forEach(function (l) { h = (h * 31 + (+l.from || 0) * 7 + (+l.to || 0) * 11) % 1000000007; });
-    return H.nodes.length + "|" + H.links.length + "|" + h;
+    }
+    for (i = 0; i < Ls.length; i++) { var l = Ls[i]; h = (h * 31 + (+l.from || 0) * 7 + (+l.to || 0) * 11) % 1000000007; }
+    return N.length + "|" + Ls.length + "|" + h;
   }
   var tieHeld = null;                    // a layout kept as it is while a house is furnished (39-starter.js)
   function tieLayout() {

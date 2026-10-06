@@ -22,6 +22,8 @@
   var WH_LEAN = 6;                       // degrees: a hand truck's lean made in steps of this
   var WH_TRUCK_LEAN = 30;                // degrees back, wheeled
   var WH_DECK = 1.25;                    // m: a flatbed's deck off the road (40-works-mach.js's ramp)
+  // (its own footprint -- the frame, the mast, not the forks -- for what keeps machines apart: 40-works.js's WK_FOOT)
+  if (typeof WK_FOOT === "object" && !WK_FOOT.forklift) { WK_FOOT.forklift = [-0.22, 1.0, 1.05]; }
   var WH_TRUCKED = { i_fridge: 1, i_washer: 1, i_dryer: 1, i_dishwasher: 1, i_stove: 1, i_oven: 1, i_freezer: 1, i_waterheater: 1 };
   var WH_DOLLIED = { i_dresser: 1, i_chest: 1, i_wardrobe: 1, i_bookcase: 1, i_cabinet: 1, i_sideboard: 1, i_piano: 1, i_desk: 1, i_tvstand: 1 };
 
@@ -278,35 +280,78 @@
     var near = spec.near || J.yard.l, t = spec.at;
     var semi = wkMachine(plan, "semi", { paint: "#7a2e2a", stripe: "#3b4350" });
     semi.site = site;
-    var stand = wkStand(plan, { kind: "semi", target: [near[0], S.kerb], street: true, t0: t - 60, t1: t + 400 });
+    // (2026-10-05, the clip check) where the lorry stops: its trailer, and the forklift working beside it, in front
+    // of the lot -- not along the kerb past its edge, the forklift then over the next lot's front garden; the stop
+    // tried nearer the middle of the frontage till it is so
+    var stand = null, tryX = near[0];
+    function standOk(st) {
+      var ss = { x: st.x, y: st.y, ang: st.ang, site: site }, F = wkFrame(ss), kp = F.at(MO_FIFTH * P, 0, 0), ty = S.a + st.ang;
+      // (on the side the lot is: where it will work)
+      var pw = [kp[0] - 10 * P * Math.cos(ty) - 3 * P * Math.sin(ty), kp[1] - 10 * P * Math.sin(ty) + 3 * P * Math.cos(ty)], mw = [kp[0] - 10 * P * Math.cos(ty), kp[1] - 10 * P * Math.sin(ty)];
+      var lotSide = S.L(pw[0], pw[1])[1] < S.L(mw[0], mw[1])[1] ? 1 : -1;
+      // (the whole of where it works -- round the trailer's back corner, along beside it to the last pallet --
+      // clear of the ground's own obstacles and of anything parked or kept there then)
+      var ok = true;
+      for (var fx = -17.4; fx <= -8.6 && ok; fx += 1.2) {
+        var w = [kp[0] + fx * P * Math.cos(ty) - lotSide * 3.6 * P * Math.sin(ty), kp[1] + fx * P * Math.sin(ty) + lotSide * 3.6 * P * Math.cos(ty)], l = S.L(w[0], w[1]);
+        ok = l[1] < S.kerb + 0.5 * P && wkRectFree(site, l[0], l[1], 1.45 * P, 1.45 * P, ty - S.a, [WK_LOT, WK_PAVED, WK_WALKWAY, WK_ROAD, WK_STACK], plan.res, t - 10, t + 400);
+      }
+      return ok;
+    }
+    var lotHw = (typeof houseStreetLot === "function" && houseStreetLot() ? houseStreetLot().w / 2 : 15 * P), tries = [tryX], firstSt = null;
+    for (var dx = 3; dx <= 30; dx += 3) { tries.push(tryX + dx * P, tryX - dx * P); }
+    tries = tries.map(function (x) { return Math.max(-lotHw + 3 * P, Math.min(lotHw + 12 * P, x)); });
+    for (var at0 = 0; at0 < tries.length && !stand; at0++) {
+      var st0 = wkStand(plan, { kind: "semi", target: [tries[at0], S.kerb], street: true, t0: t - 60, t1: t + 400 });
+      if (!firstSt) { firstSt = st0; }
+      if (standOk(st0)) { stand = st0; }
+    }
+    if (!stand) { stand = firstSt; }
     var t0 = jbCome(plan, semi, stand, 19 * P, t, { speed: 5, extra: { load: 0 } });
     // the trailer's deck, as the lorry is just then: a point on it, so far back of the fifth wheel, so far to its side
     function deckAt(ss, fx, fy) {
       var F = wkFrame(ss), kp = F.at(MO_FIFTH * P, 0, 0), ty = S.a + (ss.tang === undefined ? ss.ang : ss.tang);
       return { p: [kp[0] + fx * Math.cos(ty) - fy * Math.sin(ty), kp[1] + fx * Math.sin(ty) + fy * Math.cos(ty), WH_DECK * P], yaw: ty };
     }
+    function loc(w) { return S.L(w[0], w[1]); }
     var still = { x: stand.x, y: stand.y, ang: stand.ang, site: site };
     // which side of it the lot is on
-    var probe = deckAt(still, -10 * P, 3 * P).p, mid = deckAt(still, -10 * P, 0).p, side = S.L(probe[0], probe[1])[1] < S.L(mid[0], mid[1])[1] ? 1 : -1;
+    var probe = deckAt(still, -10 * P, 3 * P).p, mid = deckAt(still, -10 * P, 0).p, side = loc(probe)[1] < loc(mid)[1] ? 1 : -1;
     var slots = [-13.4, -11.0, -8.6].slice(0, n).map(function (fx) { return fx * P; });
     var fork = wkMachine(plan, "forklift", {});
     fork.site = site;
+    // (riding on the back of the lorry -- and getting down off it, up onto it -- it is part of the lorry: onTrailer, as
+    // the excavator on its low loader, so what keeps machines apart does not take the lorry and it for a collision)
     function rideState(T, extra) {
-      var ss = wkMachineAt(semi, T) || still, at = deckAt(ss, -15.3 * P, 0), l = S.L(at.p[0], at.p[1]);
-      return Object.assign({ x: l[0], y: l[1], ang: at.yaw - S.a, site: site, z: 0.32 * P, lift: 0.9, riding: true, moving: !!ss.moving }, extra || {});
+      var ss = wkMachineAt(semi, T) || still, at = deckAt(ss, -15.3 * P, 0), l = loc(at.p);
+      return Object.assign({ x: l[0], y: l[1], ang: at.yaw - S.a, site: site, z: 0.32 * P, lift: 0.9, riding: true, onTrailer: true, moving: !!ss.moving }, extra || {});
     }
     // riding in on the back of it
     wkMSeg(fork, t0, t, function (k, T) { return rideState(T); });
     // down off it, onto the road behind
-    var ride = rideState(t), back = deckAt(still, -17.2 * P, 0), backL = S.L(back.p[0], back.p[1]);
-    wkMSeg(fork, t, t + 3, function (k) { var q = wkSmooth(k); return Object.assign({}, ride, { x: ride.x + (backL[0] - ride.x) * q, y: ride.y + (backL[1] - ride.y) * q, z: 0.32 * P * (1 - q), lift: 0.9 - 0.7 * q, riding: false, moving: true }); });
+    var ride = rideState(t), backL = loc(deckAt(still, -18.6 * P, 0).p);
+    wkMSeg(fork, t, t + 3, function (k) { var q = wkSmooth(k); return Object.assign({}, ride, { x: ride.x + (backL[0] - ride.x) * q, y: ride.y + (backL[1] - ride.y) * q, z: 0.32 * P * (1 - q), lift: 0.9 - 0.7 * q, riding: false, onTrailer: true, moving: true }); });
     var tt = t + 3, at = [backL[0], backL[1]], head = ride.ang, pallets = [];
     function hold(dur, fn) { var a0 = at.slice(), h0 = head, s0 = tt; wkMSeg(fork, s0, s0 + dur, function (k) { return Object.assign({ x: a0[0], y: a0[1], ang: h0, site: site }, fn(wkSmooth(k))); }); tt += dur; }
-    function drive(to, load) {
-      var pts = wkVehWay(site, at, to, 1.0 * P).map(function (q) { return [q[0], q[1]]; });
-      pts.head = head;
-      tt = jbTracked(plan, fork, pts, tt, 2.2, { lift: 0.2, load: load || null }) + 0.2;
-      at = to.slice(); head = fork.head;
+    // (2026-10-05, 77ac5e/c769fe's clip check) driven round what is there, never a way through it: a way that could
+    // not be found is not taken; and if a machine is in the way just then, waited for -- a little at a time
+    function routeTo(to) {
+      // (room either side of it past what is parked: its own half and more -- less only where there is no more)
+      var halves = [1.6, 1.35, 1.15];
+      for (var hi = 0; hi < halves.length; hi++) { var w = wkVehWay(site, at, to, halves[hi] * P); if (w && !w.blocked) { return w; } }
+      return null;
+    }
+    function drive(to, load, way) {
+      var pts0 = (way || routeTo(to) || [at, to]).map(function (q) { return [q[0], q[1]]; });
+      for (var tries = 0; tries < 10; tries++) {
+        var before = fork.segs.length, from = tt, a0 = at.slice(), h0 = head;
+        if (tries) { wkMSeg(fork, tt, tt + tries * 3, function () { return { x: a0[0], y: a0[1], ang: h0, site: site, lift: 0.2, load: load || null }; }); }
+        var pts = pts0.slice(); pts.head = head;
+        var end = jbTracked(plan, fork, pts, tt + tries * 3, 2.2, { lift: 0.2, load: load || null }) + 0.2;
+        if (typeof jbTripClear !== "function" || jbTripClear(plan, fork, from, end) || tries === 9) { tt = end; at = to.slice(); head = fork.head; return; }
+        fork.segs.splice(before, fork.segs.length - before);
+        head = h0;
+      }
     }
     function straight(to, back2, extra) {
       var a0 = at.slice(), dur = Math.max(1.2, Math.hypot(to[0] - a0[0], to[1] - a0[1]) / (0.8 * P)), h0 = head, s0 = tt;
@@ -320,13 +365,41 @@
       wkMSeg(fork, s0, s0 + dur, function (k) { return { x: a0[0], y: a0[1], ang: wkTurnTo(h0, ang, wkSmooth(k)), site: site, lift: 0.2, moving: true }; });
       tt += dur; head = ang;
     }
+    // Where each is set down: on the lot near the lorry -- not in the materials yard, which nothing drives into
+    // (its way there not found, the forklift went straight over the house and the cars) -- on open ground or paving
+    // clear of everything kept for then, with a way to it from beside the lorry and room to come at it.
+    var chosen = [], DECK_OFF = 0.8, PICK = DECK_OFF + 1.38, OFF = DECK_OFF + 2.8;
+    // (round the trailer's back corner on the way to its side and back -- not along the side of it)
+    var cornerL = loc(deckAt(still, -17.4 * P, side * OFF * P).p);
+    // how far a lot-local point is from the trailer's middle line
+    var lineA = loc(deckAt(still, -4 * P, 0).p), lineB = loc(deckAt(still, -14 * P, 0).p), lineD = Math.hypot(lineB[0] - lineA[0], lineB[1] - lineA[1]) || 1;
+    function offLine(q) { return Math.abs((lineB[0] - lineA[0]) * (q[1] - lineA[1]) - (lineB[1] - lineA[1]) * (q[0] - lineA[0])) / lineD; }
+    function dropSpot(fromL) {
+      var aim = loc(deckAt(still, -11 * P, side * (OFF + 3.5) * P).p), best = null;
+      for (var r = 0; r <= 26 * P && !best; r += 0.6 * P) {
+        var steps = Math.max(1, Math.round(2 * Math.PI * r / (0.6 * P)));
+        for (var k = 0; k < steps && !best; k++) {
+          var a = k / steps * Math.PI * 2, x = aim[0] + Math.cos(a) * r, y = aim[1] + Math.sin(a) * r;
+          if (chosen.some(function (c) { return Math.hypot(c[0] - x, c[1] - y) < 1.9 * P; })) { continue; }
+          if (!wkRectFree(site, x, y, 0.95 * P, 0.85 * P, 0, [WK_LOT, WK_PAVED, WK_STACK], plan.res, tt, tt + 900)) { continue; }
+          var dx = fromL[0] - x, dy = fromL[1] - y, dl = Math.hypot(dx, dy) || 1, appr = [x + dx / dl * 2.6 * P, y + dy / dl * 2.6 * P];
+          // (far enough in from beside the lorry that the way in to it is on the lot side -- not turning against the trailer)
+          if (dl < 4.2 * P || offLine(appr) < OFF * P - 0.1 * P) { continue; }
+          if (!wkRectFree(site, appr[0], appr[1], 1.25 * P, 1.1 * P, Math.atan2(-dy, -dx), [WK_LOT, WK_PAVED, WK_WALKWAY, WK_ROAD], plan.res, tt, tt + 900)) { continue; }
+          var way = wkVehWay(site, fromL, appr, 1.6 * P);
+          if (!way || way.blocked) { continue; }
+          best = { l: [x, y], appr: appr, way: way };
+        }
+      }
+      return best;
+    }
     slots.forEach(function (fx, i) {
       var P0 = { kind: kind, left: undefined, taken: [], slot: fx };
-      // facing the trailer from the lot side, the forks at the pallet near its edge
-      var onDeck = deckAt(still, fx, side * 0.55 * P), face = onDeck.yaw - S.a - side * Math.PI / 2;
-      var pickW = deckAt(still, fx, side * (0.55 + 1.38) * P).p, offW = deckAt(still, fx, side * (0.55 + 2.6) * P).p;
-      var pickL = S.L(pickW[0], pickW[1]), offL = S.L(offW[0], offW[1]);
-      drive(offL, null);
+      // facing the trailer from the lot side, the forks under the pallet at its edge (its mast clear of the deck)
+      var face = deckAt(still, fx, 0).yaw - S.a - side * Math.PI / 2;
+      var pickL = loc(deckAt(still, fx, side * PICK * P).p), offL = loc(deckAt(still, fx, side * OFF * P).p);
+      // (the first: round the trailer's back corner -- found its way to it -- then along beside it)
+      if (i === 0) { drive(cornerL, null); drive(offL, null, [cornerL, offL]); } else { drive(offL, null); }
       turnTo(face);
       hold(2, function (k) { return { lift: 0.2 + (WH_DECK + 0.03 - 0.2) * k }; });                    // the forks up to the deck
       straight(pickL, false, { lift: WH_DECK + 0.03 });
@@ -334,33 +407,52 @@
       hold(0.8, function (k) { return { lift: WH_DECK + 0.03 + 0.08 * k, load: { kind: kind } }; });   // lifted off it
       straight(offL, true, { lift: WH_DECK + 0.11, load: { kind: kind } });
       hold(2, function (k) { return { lift: WH_DECK + 0.11 - (WH_DECK + 0.11 - 0.2) * k, load: { kind: kind } }; });
-      // into the yard, set down in a row
-      var spot = jbSpot(J, 1.4, 1.2, [near[0] + (i - (n - 1) / 2) * 1.8 * P, near[1]], 0.15), dw = spot.w;
-      var dirL = [spot.l[0] - at[0], spot.l[1] - at[1]], dl = Math.hypot(dirL[0], dirL[1]) || 1;
-      var appr = [spot.l[0] - dirL[0] / dl * 2.6 * P, spot.l[1] - dirL[1] / dl * 2.6 * P], downAt = [spot.l[0] - dirL[0] / dl * 1.38 * P, spot.l[1] - dirL[1] / dl * 1.38 * P];
-      drive(appr, { kind: kind });
-      turnTo(Math.atan2(dirL[1], dirL[0]));
+      // onto the lot, set down in a row
+      var spot = dropSpot(offL), dw, appr, downAt, dirA;
+      if (spot) {
+        dw = jbWorld(J, spot.l, 0); appr = spot.appr;
+        dirA = [spot.l[0] - appr[0], spot.l[1] - appr[1]];
+        var da = Math.hypot(dirA[0], dirA[1]) || 1;
+        downAt = [spot.l[0] - dirA[0] / da * 1.38 * P, spot.l[1] - dirA[1] / da * 1.38 * P];
+        chosen.push(spot.l);
+        // (what stands there kept off, by what drives, for as long as it stands there)
+        site.mark([[-0.75, -0.65], [0.75, -0.65], [0.75, 0.65], [-0.75, 0.65]].map(function (q) { return S.W(spot.l[0] + q[0] * P, spot.l[1] + q[1] * P); }), WK_STACK);
+        drive(appr, { kind: kind }, spot.way);
+      } else {
+        // (nowhere on the lot to put it down: by the lorry, on the pavement it stands over)
+        var lotL = loc(deckAt(still, fx, side * (OFF + 1.5) * P).p);
+        appr = offL.slice(); dirA = [lotL[0] - offL[0], lotL[1] - offL[1]];
+        var db = Math.hypot(dirA[0], dirA[1]) || 1;
+        var spotL = [offL[0] + dirA[0] / db * 1.5 * P, offL[1] + dirA[1] / db * 1.5 * P];
+        dw = jbWorld(J, spotL, 0); downAt = [spotL[0] - dirA[0] / db * 1.38 * P, spotL[1] - dirA[1] / db * 1.38 * P];
+        chosen.push(spotL);
+      }
+      turnTo(Math.atan2(dirA[1], dirA[0]));
       straight(downAt, false, { lift: 0.2, load: { kind: kind } });
       hold(1.5, function (k) { return { lift: 0.2 - 0.17 * k, load: { kind: kind } }; });
       P0.at = tt; P0.w = [dw[0], dw[1], 0]; P0.yaw = S.a + head;
+      var cl = chosen[chosen.length - 1];
+      P0.res = { rect: [cl[0], cl[1], 0.8 * P, 0.7 * P, 0], t0: tt - 1, t1: 1e9 };
+      plan.res.push(P0.res);
       straight(appr, true, { lift: 0.03 });
       pallets.push(P0);
     });
     // back up on the lorry, and away with it
-    drive(backL, null);
+    drive(cornerL, null);
+    drive(backL, null, [cornerL, backL]);
     turnTo(ride.ang);
     var upT = tt;
-    wkMSeg(fork, upT, upT + 3, function (k) { var q = wkSmooth(k); return Object.assign({}, ride, { x: backL[0] + (ride.x - backL[0]) * q, y: backL[1] + (ride.y - backL[1]) * q, z: 0.32 * P * q, lift: 0.2 + 0.7 * q, riding: false, moving: true }); });
+    wkMSeg(fork, upT, upT + 3, function (k) { var q = wkSmooth(k); return Object.assign({}, ride, { x: backL[0] + (ride.x - backL[0]) * q, y: backL[1] + (ride.y - backL[1]) * q, z: 0.32 * P * q, lift: 0.2 + 0.7 * q, riding: false, onTrailer: true, moving: true }); });
     tt = upT + 3;
     jbStay(semi, t, tt, function () { return { load: 0 }; });
     semi.here = tt;
     var gone = jbGo(plan, semi, tt + 0.5, { speed: 5, extra: { load: 0 } });
     wkMSeg(fork, tt, gone, function (k, T) { return rideState(T); }).gone = true;
-    // the pallets: on the trailer till lifted off, on the forks (drawn with them), in the yard -- less on them each load taken
+    // the pallets: on the trailer till lifted off, on the forks (drawn with them), on the lot -- less on them each load taken
     pallets.forEach(function (pl) {
       wkPiece(plan, t0, [], { t1: 1e9, live: function (faces, T) {
         if (T < pl.up) {
-          var ss = wkMachineAt(semi, T) || still, d = deckAt(ss, pl.slot, side * 0.55 * P);
+          var ss = wkMachineAt(semi, T) || still, d = deckAt(ss, pl.slot, side * DECK_OFF * P);
           moPut(faces, whPalletModel(pl.kind), d.p[0], d.p[1], d.yaw + Math.PI / 2, d.p[2] + 0.01 * P, true);
           return;
         }

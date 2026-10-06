@@ -41,10 +41,13 @@
     return me.wk ? !plan || (!plan.done && plan.ok !== false) : false;
   }
   function wvFrac(me) { return Math.max(0, Math.min(1, (performance.now() - me.start) / me.ms)); }
+  // (2026-10-05: "the time to be formatted in the d h m s format") -- 1d 2h 3m 4s, from the
+  // biggest unit there is down to the seconds; a unit in between kept at nought (1h 0m 5s)
   function wvTime(sec) {
     sec = Math.max(0, Math.round(sec));
-    var h = Math.floor(sec / 3600), m = Math.floor((sec % 3600) / 60), s = sec % 60;
-    return (h ? h + ":" + (m < 10 ? "0" : "") : "") + m + ":" + (s < 10 ? "0" : "") + s;
+    var U = String(TXT.wv_units || "d h m s").split(" "), parts = [sec / 86400, (sec % 86400) / 3600, (sec % 3600) / 60, sec % 60].map(Math.floor), out = [];
+    for (var i = 0; i < 4; i++) { if (parts[i] || out.length || i === 3) { out.push(parts[i] + (U[i] || "")); } }
+    return out.join(" ");
   }
   // the site's clock at a moment of the work, and back (the calendar's, or the same)
   function wvShowOf(plan, w) {
@@ -122,7 +125,7 @@
         '<div class="wv-rail"><div class="wv-fill"></div><div class="wv-hover"></div></div><div class="wv-marks"></div><div class="wv-knob"></div>' +
         '<div class="wv-tip" hidden><b class="wv-tip-what"></b><span class="wv-tip-day"></span><span class="wv-tip-time"></span></div>' +
       '</div>' +
-      '<span class="wv-time" aria-hidden="true"><span class="wv-gone">0:00</span><span class="wv-of"> / </span><span class="wv-all">–:––</span></span>';
+      '<span class="wv-time" aria-hidden="true"><span class="wv-gone">0s</span><span class="wv-of"> / </span><span class="wv-all">–</span></span>';
     box.appendChild(root);
     return root;
   }
@@ -198,7 +201,7 @@
       W.fill.style.width = pct + "%";
       W.knob.style.left = pct + "%";
     }
-    var gone = held ? "0:00" : wvTime(f * total), all = held || !total ? "–:––" : wvTime(total);
+    var gone = held ? wvTime(0) : wvTime(f * total), all = held || !total ? "–" : wvTime(total);
     if (L.gone !== gone) { L.gone = gone; W.gone.textContent = gone; }
     if (L.all !== all) { L.all = all; W.all.textContent = all; W.root.title = held ? TXT.wv_wait : ""; }
     if (force || L.val !== gone + all) {
