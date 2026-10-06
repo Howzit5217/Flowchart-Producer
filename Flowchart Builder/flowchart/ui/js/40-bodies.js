@@ -355,15 +355,46 @@
   // The joints as 40-tour.js had them: hips at 0.93, the step swinging the
   // legs; shoulders at 1.42, the arms swinging the other way -- or out in
   // front carrying, or one raised with a hammer (40-crew.js's own numbers).
+  // (2026-10-06, "make it more realistic") Walking, each foot is down a little over half the stride
+  // (BD_STANCE): flat on the ground, carried back under the body exactly as far as the body goes on,
+  // so it stays where it was put. Then it is lifted, swung through and set down ahead (BD_REACH in
+  // front of the hip, BD_LIFT clear at the most). Each knee bends as far as puts its foot there: most
+  // as the leg passes under the body, all but straight as the heel comes down. The hips are as high as
+  // the foot or feet on the ground let them be, a little lower as the legs part.
+  // Before, the legs swung to and fro whatever the ground did: the feet slid, a knee bent the further
+  // its leg was ahead, the foot scraped through mid-stride, and the right knee alone was lifted, even
+  // standing, its shin stretched.
+  // One stride, two steps: BD_STRIDE metres (40-works.js walks by it).
+  var BD_STANCE = 0.55, BD_REACH = 0.3, BD_LIFT = 0.09, BD_LEG = 0.42, BD_STRIDE = 2 * BD_REACH / BD_STANCE;
+  // where a foot is in its stride: in front of the hip (x), its height, on the ground or not, and how far through (u, 0 as it comes down)
+  function bdFoot(phase, side) {
+    var u = phase / (Math.PI * 2) + (side > 0 ? 0 : 0.5);
+    u -= Math.floor(u);
+    if (u < BD_STANCE) { return { u: u, down: true, x: BD_REACH * (1 - 2 * u / BD_STANCE), z: 0.08 }; }
+    var s = (u - BD_STANCE) / (1 - BD_STANCE);
+    return { u: u, down: false, x: -BD_REACH * Math.cos(Math.PI * s), z: 0.08 + BD_LIFT * Math.sin(Math.PI * s) };
+  }
   function bdJoints(sp, phase, arms, armK, legs) {
-    var T = BD_TORSO[sp.sex], swing = Math.sin(phase) * 0.42, lift = Math.max(0, Math.cos(phase)) * 0.06, J = { legs: [], arms: [] };
-    [-1, 1].forEach(function (side) {
-      var sw = swing * side, hy = side * T.hip, bend = sw > 0 ? sw * 0.6 : 0;
-      var hip = [0, hy, 0.93];
-      var knee = [Math.sin(sw) * 0.42, hy, 0.93 - Math.cos(sw) * 0.42 + (side > 0 ? lift : 0)];
-      var ankle = [Math.sin(sw) * 0.42 + Math.sin(sw - bend) * 0.42, hy, Math.max(0.08, 0.93 - Math.cos(sw) * 0.42 - Math.cos(sw - bend) * 0.42)];
+    var T = BD_TORSO[sp.sex], J = { legs: [], arms: [] }, most = 2 * BD_LEG * 0.998;
+    var feet = phase ? [bdFoot(phase, -1), bdFoot(phase, 1)] : null, hipZ = 0.93;
+    // (never let down with a hammer: 40-crew.js draws it from the hand where it was asked to be)
+    if (feet && arms !== "hammer") {
+      feet.forEach(function (F) { if (F.down) { hipZ = Math.min(hipZ, F.z + Math.sqrt(Math.max(0, most * most - F.x * F.x))); } });
+    }
+    var drop = 0.93 - hipZ;
+    [-1, 1].forEach(function (side, si) {
+      var hy = side * T.hip, hip = [0, hy, 0.93], knee = [0, hy, 0.93 - BD_LEG], ankle = [0, hy, 0.93 - 2 * BD_LEG];
+      if (feet) {
+        // (from the hip, before the body is let down: the knee forward of the line from hip to foot)
+        var F = feet[si], ax = F.x, az = F.z + drop - 0.93, d = Math.hypot(ax, az);
+        if (d > most) { ax *= most / d; az *= most / d; d = most; }
+        var h = Math.sqrt(Math.max(0, BD_LEG * BD_LEG - d * d / 4));
+        knee = [ax / 2 - az / d * h, hy, 0.93 + az / 2 + ax / d * h];
+        ankle = [ax, hy, 0.93 + az];
+      }
       J.legs.push({ side: side, hip: hip, knee: knee, ankle: ankle });
-      var as = -swing * side * 0.8, sh = [0, side * T.shoulder, 1.42];
+      // (each arm the other way to its own side's leg: back as that foot comes down ahead)
+      var as = feet ? -0.34 * Math.cos(Math.PI * 2 * feet[si].u) : 0, sh = [0, side * T.shoulder, 1.42];
       var elbow = [Math.sin(as) * 0.3, side * 0.24, 1.42 - Math.cos(as) * 0.3];
       var wrist = [Math.sin(as) * 0.3 + Math.sin(as + 0.25) * 0.27, side * 0.25, 1.42 - Math.cos(as) * 0.3 - Math.cos(as + 0.25) * 0.27];
       if (arms === "carry" || (arms === "hammer" && side < 0)) {
@@ -388,8 +419,7 @@
     });
     // (on the move, the body as low as puts the lower foot on the ground: mid
     // stride both feet were in the air; it dips as the legs part, rises as they pass)
-    // (never with a hammer: 40-crew.js draws it from the hand where it was asked to be)
-    J.drop = phase && arms !== "hammer" ? Math.max(0, Math.min(J.legs[0].ankle[2], J.legs[1].ankle[2]) - 0.08) : 0;
+    J.drop = drop;
     if (legs === "kneel") {
       // down on one knee (laying a floor, a form board): the left knee on the
       // ground, the right foot flat, the body that much lower

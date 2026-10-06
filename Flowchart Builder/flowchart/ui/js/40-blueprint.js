@@ -153,9 +153,18 @@
   // ---- in 3D: built ------------------------------------------------------------------------------
   var BP_BUILD = 6500, BP_BUILD_TALL = 9000;       // ms the building takes to go up
   var bpSite = null;                               // the building going up: when it began, how tall
+  // (2026-10-06: "when paused the shadows like to flicker") How far the build has gone, 0..1: where it
+  // was stopped while it is paused (B.heldAt, 40-works-video.js) -- not worked out from the clock again
+  // each time it is asked: the pause put its start back once a picture, and whatever asked before that
+  // in a picture found it a picture on (at the fastest, three-quarters of a minute of the site's time
+  // there and back), the sun and its shadows moved to and fro picture after picture.
+  function bpFracOf(B, now) {
+    if (B.heldAt !== undefined && B.heldAt !== null) { return B.heldAt; }
+    return ((now === undefined ? performance.now() : now) - B.start) / B.ms;
+  }
   function bpSiteNow() {
     if (!bpSite || !V3) { return null; }
-    var t = (performance.now() - bpSite.start) / bpSite.ms;
+    var t = bpFracOf(bpSite);
     if (t >= 1) { bpSite = null; V3.dirty = true; return null; }
     return t;
   }
@@ -212,7 +221,7 @@
     var shown = -1;
     (function tick() {
       if (bpSite !== me || !V3 || V3.box !== box) { stop(); return; }
-      var done = Math.round(Math.max(0, Math.min(1, (performance.now() - me.start) / me.ms)) * 100);
+      var done = Math.round(Math.max(0, Math.min(1, bpFracOf(me))) * 100);
       if (done !== shown) { shown = done; skip.style.setProperty("--done", done + "%"); }
       V3.dirty = true;
       requestAnimationFrame(tick);

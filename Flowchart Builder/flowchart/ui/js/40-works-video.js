@@ -40,7 +40,7 @@
     var plan = wvPlanOf(me);
     return me.wk ? !plan || (!plan.done && plan.ok !== false) : false;
   }
-  function wvFrac(me) { return Math.max(0, Math.min(1, (performance.now() - me.start) / me.ms)); }
+  function wvFrac(me) { return Math.max(0, Math.min(1, bpFracOf(me))); }
   // (2026-10-05: "the time to be formatted in the d h m s format") -- 1d 2h 3m 4s, from the
   // biggest unit there is down to the seconds; a unit in between kept at nought (1h 0m 5s)
   function wvTime(sec) {
@@ -94,7 +94,7 @@
     if (!me || bpSite !== me || wvHeld(me)) { return; }
     f = Math.max(0, Math.min(WV_END, f));
     me.start = performance.now() - f * me.ms;
-    if (W.paused) { W.at = f; }
+    if (W.paused) { W.at = f; me.heldAt = f; }
     if (V3) { V3.dirty = true; }
     wvShow(W, true);
   }
@@ -104,8 +104,12 @@
     if (W.ended) { wvAgain(0); return; }
     if (!me || bpSite !== me || wvHeld(me)) { return; }
     W.paused = !on;
-    if (W.paused) { W.at = Math.min(WV_END, wvFrac(me)); }
-    else if (W.at >= WV_END - 1e-4) { W.at = 0; me.start = performance.now(); }       // (played from the start again)
+    if (W.paused) { W.at = Math.min(WV_END, wvFrac(me)); me.heldAt = W.at; }
+    else {
+      // (played on from the very place it was held: 40-blueprint.js bpFracOf)
+      me.heldAt = undefined; me.start = performance.now() - W.at * me.ms;
+      if (W.at >= WV_END - 1e-4) { W.at = 0; me.start = performance.now(); }       // (played from the start again)
+    }
     wvShow(W, true);
   }
   // Done: the building watched again (40-blueprint.js's Watch), from where the bar was clicked.
@@ -151,7 +155,8 @@
           // finished: played to its end, the bar kept a while to watch it again from; skipped or shut, gone
           if ((W.last.f || 0) >= 0.97) { wvEnd(W); } else { wvStop(); return; }
         } else {
-          if (W.paused && !wvHeld(me)) { me.start = performance.now() - W.at * me.ms; }
+          if (W.paused && !wvHeld(me)) { me.start = performance.now() - W.at * me.ms; me.heldAt = W.at; }
+          else if (me.heldAt !== undefined) { me.heldAt = undefined; }
           if (wvPending !== null && !wvHeld(me)) {
             var go = wvPending; wvPending = null; wvSeek(go);
           }
@@ -254,7 +259,7 @@
       drag = null;
       W.root.classList.remove("wv-drag");
       W.paused = was;
-      if (!was && W.me && bpSite === W.me) { W.me.start = performance.now() - W.at * W.me.ms; }
+      if (!was && W.me && bpSite === W.me) { W.me.start = performance.now() - W.at * W.me.ms; W.me.heldAt = undefined; }
       wvShow(W, true);
       if (ev.pointerType !== "mouse") { W.tip.hidden = true; }
     }

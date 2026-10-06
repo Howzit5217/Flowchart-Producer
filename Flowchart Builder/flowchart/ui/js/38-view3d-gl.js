@@ -967,9 +967,11 @@
       // with a depth of floating-point numbers counted from far (0) to near
       // (1), which is as fine a mile off as at arm's length -- then copied
       // onto this canvas.  Elsewhere it is drawn as it always was.
+      // (2026-10-06, "uses the GPU correct and not the CPU") asking for the faster GPU where the
+      // device has two -- a laptop's own graphics card, not the power-saving chip beside it
       try {
         gl = canvas.getContext("webgl2", { antialias: false, alpha: false, depth: false, stencil: false,
-                                           premultipliedAlpha: false, preserveDrawingBuffer: false });
+                                           premultipliedAlpha: false, preserveDrawingBuffer: false, powerPreference: "high-performance" });
         var clipCtl = gl && gl.getExtension("EXT_clip_control");
         if (gl && clipCtl && !GL3_NO_DEEP) { deep = { cc: clipCtl, samples: gl3Samples(gl), w: 0, h: 0 }; }
         else {
@@ -977,7 +979,7 @@
           gl = null; canvas = document.createElement("canvas");
         }
       } catch (e0) { gl = null; deep = null; canvas = document.createElement("canvas"); }
-      var opts = { antialias: true, alpha: false, depth: true, premultipliedAlpha: false, preserveDrawingBuffer: false };
+      var opts = { antialias: true, alpha: false, depth: true, premultipliedAlpha: false, preserveDrawingBuffer: false, powerPreference: "high-performance" };
       gl = gl || canvas.getContext("webgl2", opts) || canvas.getContext("webgl", opts) ||
            canvas.getContext("experimental-webgl", opts);
       if (!gl) { return false; }
@@ -1627,6 +1629,10 @@
   // Grass to the horizon, hills along it, trees round the plot, and a road
   // along its front.  Made once for where the house is and how big it is,
   // and kept while that stays the same.
+  // (the box the land is measured by, kept with what it was measured on: a building going up is
+  // the same building as it will stand every picture -- its forty thousand faces gone through again
+  // each picture only to find the same box, a tenth of each picture's work, 2026-10-06)
+  var gl3SceneBounds = { of: null, faces: null, n: -1, b: null };
   function gl3Scenery(G, model, walk, sheet) {
     var x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity;
     // (measured by what stands on the ground -- the rooms' floors -- not by
@@ -1634,19 +1640,24 @@
     // every tree with it, when the style was changed, 2026-10-03)
     // (and while it goes up, by the building as it will stand: measured by the
     // floors laid so far, the trees moved about as each went in, 2026-10-04)
-    var measured = model.whole && model.whole.faces ? model.whole : model;
-    measured.faces.forEach(function (f) {
-      if (!f.node || f.node.kind !== "i_room" || !f.pts.every(function (p) { return Math.abs(p[2] || 0) < 6; })) { return; }
-      f.pts.forEach(function (p) {
-        x0 = Math.min(x0, p[0]); x1 = Math.max(x1, p[0]); y0 = Math.min(y0, p[1]); y1 = Math.max(y1, p[1]);
-      });
-    });
-    if (x0 === Infinity) {
+    var measured = model.whole && model.whole.faces ? model.whole : model, SB = gl3SceneBounds;
+    if (SB.of === measured && SB.faces === measured.faces && SB.n === measured.faces.length) {
+      x0 = SB.b[0]; x1 = SB.b[1]; y0 = SB.b[2]; y1 = SB.b[3];
+    } else {
       measured.faces.forEach(function (f) {
+        if (!f.node || f.node.kind !== "i_room" || !f.pts.every(function (p) { return Math.abs(p[2] || 0) < 6; })) { return; }
         f.pts.forEach(function (p) {
           x0 = Math.min(x0, p[0]); x1 = Math.max(x1, p[0]); y0 = Math.min(y0, p[1]); y1 = Math.max(y1, p[1]);
         });
       });
+      if (x0 === Infinity) {
+        measured.faces.forEach(function (f) {
+          f.pts.forEach(function (p) {
+            x0 = Math.min(x0, p[0]); x1 = Math.max(x1, p[0]); y0 = Math.min(y0, p[1]); y1 = Math.max(y1, p[1]);
+          });
+        });
+      }
+      gl3SceneBounds = { of: measured, faces: measured.faces, n: measured.faces.length, b: [x0, x1, y0, y1] };
     }
     if (x0 === Infinity) { x0 = y0 = -200; x1 = y1 = 200; }
     var mid = [(x0 + x1) / 2, (y0 + y1) / 2], radius = Math.max(150, Math.hypot(x1 - x0, y1 - y0) / 2);

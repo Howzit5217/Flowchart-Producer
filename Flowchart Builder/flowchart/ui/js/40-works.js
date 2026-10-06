@@ -83,10 +83,12 @@
   function wkClock(plan) {
     var B = plan.bp, now = performance.now(), rate = B.rate || wkRateDefault(B), L = wkCalLength(plan);
     // (seconds gone on the site, kept: then the length it really is)
-    var gone = B.start > now ? 0 : (now - B.start) / B.ms * (B.T || L);
-    if (!WK.rate) { rate = wkRateFor(L, B.fast); }
+    var gone = B.start > now ? 0 : bpFracOf(B, now) * (B.T || L);
+    // (the speed by the calendar's length at the usual pace: at a faster one its hours off go quicker -- 40-works-day.js)
+    if (!WK.rate) { var CB = WK.calendar; rate = wkRateFor(CB && typeof CB.base === "function" && plan.done ? CB.base(plan) : L, B.fast); }
     var ms = L * 1000 / rate;
     if (B.start <= now) { B.start = now - Math.min(gone, L * 0.999) / L * ms; }
+    if (B.heldAt !== undefined && B.heldAt !== null) { B.heldAt = Math.min(gone, L * 0.999) / L; }
     B.ms = ms; B.T = L; B.rate = rate;
     B.moK = 1; B.moMs = ms;                              // (40-movein.js's own stretching, not wanted)
     wkSpeedShow();
@@ -98,9 +100,25 @@
     return r;
   }
   function wkSetRate(r) {
+    var B0 = bpSite, plan = B0 && WK.plan && WK.plan.bp === B0 && WK.plan.done ? WK.plan : null, C = WK.calendar;
+    // (the moment of the calendar it is at, kept: laid out again for this speed its nights are shorter or longer --
+    // 40-works-day.js -- and the same share of the way is another day)
+    var now0 = performance.now(), cal = null;
+    if (plan && B0.T && C && typeof C.calAt === "function") {
+      var t0 = B0.start > now0 ? 0 : Math.max(0, Math.min(1, bpFracOf(B0, now0)));
+      cal = C.calAt(t0 * B0.T, plan);
+    }
     WK.rate = r;
     if (!bpSite || !bpSite.T) { wkSpeedShow(); return; }
-    var now = performance.now(), B = bpSite, t = B.start > now ? 0 : Math.max(0, Math.min(1, (now - B.start) / B.ms)), ms = B.T * 1000 / r;
+    var now = performance.now(), B = bpSite, t = B.start > now ? 0 : Math.max(0, Math.min(1, bpFracOf(B, now)));
+    if (plan && cal !== null) {
+      var L = wkCalLength(plan);
+      t = Math.max(0, Math.min(1, C.siteAt(cal, plan) / L));
+      B.T = L;
+      if (B.heldAt !== undefined && B.heldAt !== null) { B.heldAt = t; }
+      if (typeof wvNow !== "undefined" && wvNow && wvNow.me === B) { if (wvNow.paused) { wvNow.at = t; } wvNow.chapters = null; }
+    }
+    var ms = B.T * 1000 / r;
     if (B.start <= now) { B.start = now - t * ms; }
     B.ms = ms; B.moMs = ms; B.rate = r;
     if (V3) { V3.dirty = true; }
@@ -170,7 +188,7 @@
             }
             var plan = WK.plan && WK.plan.bp === me ? WK.plan : null;
             if (plan && plan.ok && me.T) {
-              var now = performance.now(), T = Math.max(0, Math.min(1, (now - me.start) / me.ms)) * me.T;
+              var T = Math.max(0, Math.min(1, bpFracOf(me))) * me.T;
               // (the site's clock is its calendar's once that is made -- nights, weekends, rain: the work's own time from it)
               wkPhaseShow(wkPhaseAt(plan, plan.done ? wkCalWork(T, plan) : T));
             }
@@ -1140,7 +1158,8 @@
     // (and what is put into the picture's batches as standing still -- the batches kept as they
     // were while that is the very same, 38-view3d-gl.js -- changed only every few seconds, not each
     // time a face is finished: what is finished since, or will change before then, goes in as moving)
-    var FD = FC ? wkFoldFor(plan, T) : null, held = 0;
+    var EZ = FC && !WK.easeOff ? wkEaseNow(plan, T) : null;           // (WK.easeOff: in all at once, as before)
+    var FD = FC ? wkFoldFor(plan, T, EZ ? EZ.from : undefined) : null, held = 0;
     // (the picture's faces into an array made the size it will be, once -- not grown and copied as it
     // fills, three arrays the size of a block of flats a picture for the memory to clear: 2026-10-05)
     faces = new Array(model.faces.length + 64);
@@ -1151,8 +1170,15 @@
       if (fj >= 0) {
         var fk = FC.kind[fj];
         if (fk === 0) { faces[fi++] = f; continue; }
-        if (T >= FC.t1[fj]) { if (FD && FC.t1[fj] > FD.T0) { faces[fi++] = wkMoving(f, FC.hold[fj]); held++; } else { faces[fi++] = f; } continue; }
-        if (fk === 1 && T < FC.t0[fj]) { continue; }
+        if (T >= FC.t1[fj]) {
+          if (EZ && FC.t1[fj] > EZ.from && FC.kind[fj] === 1 && FC.t1[fj] - FC.t0[fj] < EZ.short) {
+            var ek = wkEaseK(EZ, f.src || f, FC.t1[fj], f);
+            if (ek < 1) { faces[fi++] = wkSettle(f, ek, P); continue; }
+          }
+          if (FD && FC.t1[fj] > FD.T0) { faces[fi++] = wkMoving(f, FC.hold[fj]); held++; } else { faces[fi++] = f; }
+          continue;
+        }
+        if ((fk === 1 || fk === 3) && T < FC.t0[fj]) { continue; }
         if (fk === 2 && T < FC.tp[fj]) { continue; }
       }
       var g = wkGroupOf(site, f);
@@ -1161,7 +1187,14 @@
       // all made, and what is finished -- most of it, most of the time -- put in first)
       var R = g.Rp === plan ? g.R : plan.rv[g.key] || plan.lateR || WK_NOT_YET;
       if (g.Rp !== plan && plan.done) { g.R = R; g.Rp = plan; }
-      if (T >= R.t1) { if (FD && R.t1 > FD.T0) { faces[fi++] = wkMoving(f, wkHoldOf(g.key)); held++; } else { faces[fi++] = f; } continue; }
+      if (T >= R.t1) {
+        if (EZ && R.t1 > EZ.from && wkEaseShort(EZ, R)) {
+          var ek2 = wkEaseK(EZ, f.src || f, R.t1, f);
+          if (ek2 < 1) { faces[fi++] = wkSettle(f, ek2, P); continue; }
+        }
+        if (FD && R.t1 > FD.T0) { faces[fi++] = wkMoving(f, wkHoldOf(g.key)); held++; } else { faces[fi++] = f; }
+        continue;
+      }
       var steady = !FD || (fj >= 0 && FC.tp[fj] <= FD.T0 && FC.t0[fj] > FD.Tw);
       if (R.carry && R.carry.wk && T >= R.carry.wk.t0 && T < R.t0) { (fly[g.key] || (fly[g.key] = [])).push(f); continue; }
       if (T < R.t0) {
@@ -1179,7 +1212,13 @@
         continue;
       }
       if (T >= R.t1) { faces[fi++] = f; continue; }
+      if (EZ && wkEaseShort(EZ, R)) { continue; }          // (set in at its end: above)
+      WK.sweptAt = undefined;
       var gf = wkAnimFace(f, g, R, (T - R.t0) / Math.max(1e-6, R.t1 - R.t0), P, xtra, T);
+      if (gf === f && EZ && WK.sweptAt !== undefined && WK.sweptAt > EZ.from) {
+        var sk = wkEaseK(EZ, f.src || f, WK.sweptAt, f);
+        if (sk < 1) { gf = wkSettle(f, sk, P); }
+      }
       if (xtra.length) { for (var xi = 0; xi < xtra.length; xi++) { faces[fi++] = xtra[xi]; } xtra.length = 0; }
       if (gf && FD && !gf.moves) { if (gf === f) { gf = wkMoving(f, wkHoldOf(g.key)); } else { gf.moves = true; gf.hold = wkHoldOf(g.key); } held++; }
       if (gf) { faces[fi++] = gf; }
@@ -1219,12 +1258,63 @@
   // few seconds of the clock (Tw) -- finished by T0, and a first look not to be taken off by then.
   // Folded in afresh as the clock passes Tw, goes back past T0 (a seek), or too much is moving.
   var WK_FOLD_MS = 3000, WK_FOLD_MOST = 2500;
-  function wkFoldFor(plan, T) {
+  function wkFoldFor(plan, T, from) {
     var F = WK.fold;
     if (F && F.plan === plan && !F.over && T >= F.T0 && T <= F.Tw) { return F; }
     var B = plan.bp, rate = B && B.rate ? B.rate : WK_RATE_OPEN;
-    WK.fold = F = { plan: plan, T0: T, Tw: T + rate * WK_FOLD_MS / 1000 * 1.5, over: false };
+    // (what went in a moment ago, still settling into its place, kept out of what stands still: wkEaseNow)
+    WK.fold = F = { plan: plan, T0: from !== undefined && from < T ? from : T, Tw: T + rate * WK_FOLD_MS / 1000 * 1.5, over: false };
     return F;
+  }
+  // ---- set in, not popped in -------------------------------------------------------------------------
+  // (2026-10-06: "the animation is still really choppy and at like 1fps for the building rather than
+  // something smoother")  Three pieces in five came in all at once -- the windows' glass, the fittings,
+  // each stud as its wall's framing passed it -- one jump after another at whatever speed it played:
+  // the building went up a step at a time, a second or so apart, the view and those at work moving
+  // smoothly round it.  Now each, as it is seen to go in, is set down into its place over a third of a
+  // second -- the screen's own time, not the site's: over a night, or paused, nothing is left halfway.
+  // Not what is jumped to (a seek), nor more than WK_EASE_MOST at once -- a face one, a model one for every
+  // WK_EASE_VERTS of its corners (a fitted kitchen's fifty models, forty thousand corners, put together
+  // again each picture as they settled: thirty milliseconds) -- what would go over it in at once.
+  var WK_EASE_MS = 340, WK_EASE_MOST = 600, WK_EASE_VERTS = 15, WK_EASE_DROP = 0.3;
+  function wkEaseNow(plan, T) {
+    var E = WK.ease, now = performance.now();
+    if (!E || E.plan !== plan) { E = WK.ease = { plan: plan, seen: new WeakMap(), hist: [], lastT: T }; }
+    var B = plan.bp, rate = B && B.rate ? B.rate : WK_RATE_OPEN;
+    if (T < E.lastT) { E.seen = new WeakMap(); E.hist.length = 0; }
+    E.jump = T < E.lastT || T - E.lastT > rate * 0.25 + 1;
+    E.prevT = E.lastT; E.lastT = T; E.now = now; E.was = E.n || 0; E.n = 0; E.fresh = 0;
+    E.hist.push(now, T);
+    while (E.hist.length > 2 && E.hist[0] < now - WK_EASE_MS - 60) { E.hist.splice(0, 2); }
+    E.from = Math.min(E.hist[1], E.prevT);          // (what went in since then may still be settling)
+    // (and what would go in quicker than that by its own way -- a door faded in in two seconds of the
+    // work, a twentieth of a second at the usual speed: set in the same way, at its end)
+    E.short = rate * WK_EASE_MS / 1000;
+    return E;
+  }
+  // a group of faces that goes in that way: its own, plain (no first look, not carried in), quick
+  function wkEaseShort(E, R) {
+    return R.t1 - R.t0 < E.short && !R.pre && !(R.carry && R.carry.wk) && R.anim !== "cut" && R.anim !== "sweep";
+  }
+  // how far a piece that went in at `ta` (the work's time) has settled, 0..1 (1: in its place)
+  function wkEaseK(E, key, ta, f) {
+    var at = E.seen.get(key), w = f && f.mesh && f.mesh.p ? Math.ceil(f.mesh.p.length / 3 / WK_EASE_VERTS) : 1;
+    if (at === undefined) {
+      // (what is settling already -- the last picture's -- and what began to this picture, counted)
+      if (E.jump || !(ta > E.prevT) || E.was + E.fresh + w > WK_EASE_MOST) { return 1; }
+      E.seen.set(key, at = E.now);
+      E.fresh += w;
+    }
+    var k = (E.now - at) / WK_EASE_MS;
+    if (k < 1) { E.n += w; }
+    return k;
+  }
+  // (with what moves each picture -- the machines, those at work -- not in a held batch: one changing a picture
+  // put the whole of its batch, every face finished since the last fold, together again each picture)
+  function wkSettle(f, k, P) {
+    var z = (1 - wkSmooth(Math.max(0, k))) * WK_EASE_DROP * P;
+    return Object.assign({}, f, { pts: f.pts.map(function (p) { return [p[0], p[1], (p[2] || 0) + z]; }), moves: true,
+                                  mesh: f.mesh ? Object.assign({}, f.mesh, { p: moView(f.mesh.p), xf: f.mesh.xf ? f.mesh.xf.slice(0, 4).concat([(f.mesh.xf[4] || 0) + z]) : f.mesh.xf }) : f.mesh });
   }
   // a face that stands still, put in as moving meanwhile (the same copy each picture), in one of a
   // few held batches (38-view3d-gl.js, f.hold) -- by its job, so a job done changes one of them
@@ -1301,7 +1391,8 @@
       if (!g) { continue; }
       var R = g.Rp === plan ? g.R : plan.rv[g.key] || plan.lateR || WK_NOT_YET;
       if (g.Rp !== plan) { g.R = R; g.Rp = plan; }
-      kind[i] = R.pre || (R.carry && R.carry.wk) ? 2 : 1;
+      // (3: as 1, but put on by a cut or a sweep -- its faces in one by one, not set in all at once: wkEaseNow)
+      kind[i] = R.pre || (R.carry && R.carry.wk) ? 2 : R.anim === "cut" || R.anim === "sweep" ? 3 : 1;
       t0[i] = R.t0; t1[i] = R.t1; hold[i] = wkHoldOf(g.key);
       if (kind[i] === 2) {
         // (when the first of it shows: carried in, or its first look -- as wkBuilding tells it)
@@ -1368,6 +1459,7 @@
         if (R.angle) { frac = ((Math.atan2(c[1] - R.angle[1], c[0] - R.angle[0]) + Math.PI * 2) % (Math.PI * 2)) / (Math.PI * 2); }
         else { var a = R.axis; frac = ((c[0] - a[0]) * a[2] + (c[1] - a[1]) * a[3]) / Math.max(1, R.len); }
         if (frac > k) { return R.pre && T >= wkPreAt(R.pre, g) ? wkPreLook(f, R.pre.how) : null; }
+        WK.sweptAt = R.t0 + (R.t1 - R.t0) * Math.max(0, frac);         // (when the work passed it: wkEaseK)
         return f;
       }
       case "pop": return null;
@@ -1407,7 +1499,8 @@
         head = Math.hypot(a[0] - prev[0], a[1] - prev[1]) > 1e-3 ? Math.atan2(a[1] - prev[1], a[0] - prev[0]) : head;
         return { p: A.p, head: head, pose: "climb", phase: d / (0.18 * FLOOR_PX), seg: s, k: k };
       }
-      return { p: A.p, head: head, pose: s.carry ? "carry" : "walk", phase: d / (0.36 * FLOOR_PX), seg: s, k: k };
+      // (a stride -- two steps -- as far as the legs reach, 40-bodies.js: the feet stay where they are put, 2026-10-06)
+      return { p: A.p, head: head, pose: s.carry ? "carry" : "walk", phase: d / (WK_STRIDE_M * FLOOR_PX / (Math.PI * 2)), seg: s, k: k };
     }
     return { p: s.at, head: s.face === null || s.face === undefined ? (w.segs[i - 1] && w.segs[i - 1].L ? wkLastHead(w.segs[i - 1]) : 0) : s.face, pose: s.pose, seg: s, k: k, T: T };
   }
@@ -1415,20 +1508,56 @@
     var p = s.L.pts, a = p[p.length - 2], b = p[p.length - 1];
     return a && b ? Math.atan2(b[1] - a[1], b[0] - a[0]) : 0;
   }
+  // (2026-10-06, "smooth the animation of the workers and make it more realistic") How each worker
+  // moves from one picture to the next, kept beside the worker (WK_MOVES):
+  // - the legs go round as far as the ground walked, but never faster than a brisk pace's strides
+  //   (WK_STRIDE_HZ). With the film at 32 times and more, a walk's strides went round dozens of times
+  //   between two pictures, and the legs were somewhere new at random each picture;
+  // - stopping, the step under way is finished and the feet brought together, not snapped shut
+  //   from mid-stride;
+  // - a hammer is swung in time with the picture (WK_HAMMER), not with the site's clock, which at
+  //   256 times flickered it;
+  // - each new way is turned to over a moment (WK_TURN, radians a second), not in no time.
+  // Paused, nothing goes on; skipped back, or not seen for a while, it starts again where the worker is.
+  var WK_STRIDE_M = typeof BD_STRIDE === "number" ? BD_STRIDE : 1.09, WK_STRIDE_HZ = 1.6, WK_TURN = 9, WK_HAMMER = Math.PI * 1.3, WK_MOVES = new WeakMap();
+  function wkWorkerMove(w, st, T) {
+    var now = performance.now(), A = WK_MOVES.get(w), going = st.pose === "walk" || st.pose === "carry" || st.pose === "climb";
+    var raw = going ? st.phase : 0;
+    if (!A || now - A.now > 500 || T < A.T) {
+      A = { now: now, T: T, seg: st.seg, raw: raw, ph: raw, sw: 0, hd: st.head, go: going };
+      WK_MOVES.set(w, A);
+      return A;
+    }
+    if (now === A.now) { return A; }          // (asked again for the same picture)
+    var dt = Math.min(0.1, (now - A.now) / 1000), on = T > A.T, most = Math.PI * 2 * WK_STRIDE_HZ * dt;
+    if (going) {
+      // (on a new stretch, counted from its start)
+      var gone = A.go && A.seg === st.seg ? raw - A.raw : raw;
+      A.ph += Math.max(0, Math.min(gone, most));
+    } else if (A.ph) {
+      var to = Math.ceil(A.ph / Math.PI - 1e-6) * Math.PI;      // (the feet together: the next half stride)
+      if (on) { A.ph = Math.min(to, A.ph + most); }
+      if (A.ph >= to - 1e-6) { A.ph = 0; }
+    }
+    if (on) { A.sw += WK_HAMMER * dt; }
+    var dh = Math.atan2(Math.sin(st.head - A.hd), Math.cos(st.head - A.hd)), turn = WK_TURN * dt;
+    A.hd = Math.abs(dh) <= turn ? st.head : A.hd + (dh > 0 ? turn : -turn);
+    A.now = now; A.T = T; A.seg = st.seg; A.raw = raw; A.go = going;
+    return A;
+  }
   function wkWorkerDraw(faces, w, T, plan) {
     var st = wkWorkerAt(w, T);
-    if (!st) { return; }
+    if (!st) { WK_MOVES.delete(w); return; }
     if (wkStoreyHidden(plan, wkLevelOf(plan.site, st.p))) { return; }      // (up on a storey taken off the view: with it)
-    var P = plan.site.P, look = Object.assign({}, w.look), phase = 0, s = st.seg;
-    var pose = st.pose;
-    if (pose === "walk" || pose === "carry") { phase = st.phase; }
+    var P = plan.site.P, look = Object.assign({}, w.look), s = st.seg;
+    var pose = st.pose, mv = wkWorkerMove(w, st, T), phase = pose === "kneel" || pose === "hammer" ? 0 : mv.ph;
     if (pose === "carry" && s.carry && (s.carry.kind === "studs" || s.carry.kind === "board" || s.carry.kind === "sheet" || s.carry.kind === "rebar")) { look.arms = "shoulder"; }
     else if (pose === "carry" && s.carry && s.carry.kind === "barrow") { look.arms = "push"; }
     else if (pose === "carry") { look.arms = "carry"; }
-    else if (pose === "hammer") { look.arms = "hammer"; look.armK = Math.abs(Math.sin((T + w.id) * 7.5)); }
+    else if (pose === "hammer") { look.arms = "hammer"; look.armK = Math.abs(Math.sin(mv.sw + w.id)); }
     else if (pose === "up") { look.arms = "up"; }
-    else if (pose === "climb") { look.arms = "climb"; phase = st.phase; }
-    else if (pose === "kneel") { look.legs = "kneel"; look.arms = "hammer"; look.armK = Math.abs(Math.sin((T + w.id) * 6)) * 0.6; }
+    else if (pose === "climb") { look.arms = "climb"; }
+    else if (pose === "kneel") { look.legs = "kneel"; look.arms = "hammer"; look.armK = Math.abs(Math.sin(mv.sw * 0.85 + w.id)) * 0.6; }
     else if (pose === "shovel") { look.arms = "carry"; }
     else if (pose === "hold") { look.arms = "carry"; }
     var fade = 1;
@@ -1443,11 +1572,11 @@
       anchor = wkAnchor(plan, st.p, T);
       look.tied = !!anchor;
     }
-    peopleBody(faces, { kind: "i_builder", id: 600 + w.id }, st.p[0], st.p[1], st.p[2] || 0, st.head, phase, look, fade < 0.999 ? fade : undefined);
+    peopleBody(faces, { kind: "i_builder", id: 600 + w.id }, st.p[0], st.p[1], st.p[2] || 0, mv.hd, phase, look, fade < 0.999 ? fade : undefined);
     if (anchor) { wkLanyard(faces, st, look, w, anchor, fade); }
     var carry = s && s.carry;
-    if (carry && (pose === "carry" || pose === "walk" || pose === "climb")) { wkCarryDraw(faces, carry, st.p, st.head, P, look); }
-    if (s && s.hold && (pose !== "walk")) { wkCarryDraw(faces, s.hold, st.p, st.head, P, look); }
+    if (carry && (pose === "carry" || pose === "walk" || pose === "climb")) { wkCarryDraw(faces, carry, st.p, mv.hd, P, look); }
+    if (s && s.hold && (pose !== "walk")) { wkCarryDraw(faces, s.hold, st.p, mv.hd, P, look); }
   }
   // The roof's planes (from the roof groups, as the trusses are cut to them, 40-works-frame.js), each
   // with its ridge: the top edge a lifeline runs along.

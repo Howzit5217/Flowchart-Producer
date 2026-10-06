@@ -34,6 +34,15 @@
   // themselves slowly enough to be seen -- it had all gone by ten times faster, a fifth of a second of
   // dusk at the usual speed, never dark.
   var JC_DUSK_K = 10, JC_DARK_K = 2.4, JC_DARK0 = 18.5 * 3600, JC_DARK1 = 5.5 * 3600;
+  // (2026-10-06: "when going at fast speeds too it just stops then goes to the next jump") Played faster
+  // than the usual speed, the hours no one works -- the nights, the weekends, a lunch, a day rained off --
+  // go by that many times quicker again (speed / JC_IDLE_AT): at eight times the usual speed the building
+  // going up without a stop and a jump each day, nearly half of it spent waiting.  And (the same day: "yes
+  // shorten the nights at normal speed too") at the usual speed itself, three times quicker -- a night
+  // still dark, a third of a second, not a second of the building standing still each day; slowed right
+  // down, below ten times, as long as they are.  The calendar laid out for each speed (jcOf); the speed
+  // itself chosen by its length as it is laid out with them as long (WK.calendar.base: 40-works.js wkClock).
+  var JC_IDLE_AT = 10;
   // working days by floor area: [k, power] -- a wood house of 200 m2 about 130 days, of 500 m2 about 190;
   // a steel office of 1,500 m2 about 220, a mall of 20,000 m2 about 450; a tower of 10,000 m2 about 470
   var JC_FRAME = { wood: [14.5, 0.414], steel: [29, 0.28], tall: [30, 0.3] };
@@ -98,7 +107,7 @@
   }
   // Every stretch of the site's time, in order: its seconds on the site's clock (s), the work done
   // (w), the calendar (c, seconds from the first midnight), whether the crews are there, and why.
-  function jcLay(plan) {
+  function jcLay(plan, idleF) {
     var T = plan.T, D = jcDaysFor(plan), perSec = T / (D * JC_WORKED);   // work-seconds for each second worked
     var seed = (Math.round(T * 7) ^ Math.round(jcArea(plan) * 13)) >>> 0, rnd = gl3Rand(seed % 100000 + 11);
     var start = new Date(); start.setHours(0, 0, 0, 0);
@@ -112,6 +121,7 @@
     var segs = [], s = 0, w = 0, worked = 0, wx = "clear", stats = { days: 0, lost: 0, rain: 0, snow: 0, storm: 0, wind: 0, late: 0, broke: 0, short: 0, insp: 0, failed: 0 };
     function push(c0, c1, k, rate, pres, state, extra) {
       if (c1 <= c0) { return; }
+      if (!(rate > 0) && idleF > 1) { k *= idleF; }          // (no work going on: quicker, played fast -- JC_IDLE_AT)
       var ds = (c1 - c0) * perSec / k, dw = rate * (c1 - c0) * perSec;
       segs.push(Object.assign({ s0: s, s1: s + ds, w0: w, w1: w + dw, c0: c0, c1: c1, pres: pres, state: state, wx: wx, day: Math.max(1, stats.days) }, extra || {}));
       s += ds; w += dw;
@@ -208,9 +218,30 @@
   }
   function jcOf(plan) {
     if (!plan || !plan.done || !(plan.T > 0) || !plan.site) { return null; }
-    if (plan.jc && plan.jc.T === plan.T) { return plan.jc; }
-    try { plan.jc = jcLay(plan); } catch (e) { if (window.console && console.warn) { console.warn("calendar:", e && e.message); } plan.jc = null; }
+    var base = plan.jcBase && plan.jcBase.T === plan.T ? plan.jcBase : null;
+    if (!base) {
+      try { base = plan.jcBase = jcLay(plan, 1); } catch (e) { if (window.console && console.warn) { console.warn("calendar:", e && e.message); } plan.jcBase = null; return null; }
+    }
+    var f = jcIdleFor(plan, base);
+    if (f <= 1) { return base; }
+    if (plan.jc && plan.jc.T === plan.T && plan.jc.idleF === f) { return plan.jc; }
+    try { plan.jc = jcLay(plan, f); plan.jc.idleF = f; } catch (e2) { plan.jc = null; return base; }
     return plan.jc;
+  }
+  // how much quicker the hours off go by at the speed it plays (chosen, or as wkClock chooses it)
+  function jcIdleFor(plan, base) {
+    var B = plan.bp, rate = WK.rate || (typeof wkRateFor === "function" ? wkRateFor(base.length, B && B.fast) : 32);
+    return Math.max(1, rate / JC_IDLE_AT);
+  }
+  // the stretch of the site's clock at a moment of the calendar (seconds from its first day)
+  function jcSiteAt(J, c) {
+    var segs = J.segs, lo = 0, hi = segs.length - 1;
+    if (!segs.length) { return 0; }
+    if (c <= segs[0].c0) { return segs[0].s0; }
+    if (c >= segs[hi].c1) { return segs[hi].s1; }
+    while (lo < hi) { var mid = (lo + hi + 1) >> 1; if (segs[mid].c0 <= c) { lo = mid; } else { hi = mid - 1; } }
+    var g = segs[lo];
+    return g.s0 + (g.s1 - g.s0) * Math.max(0, Math.min(1, g.c1 > g.c0 ? (c - g.c0) / (g.c1 - g.c0) : 0));
   }
   // The stretch at s on the site's clock, and how far into it.
   function jcAt(J, s) {
@@ -230,7 +261,11 @@
         var J = jcOf(plan), a = J && jcAt(J, s);
         return a ? a.seg.w0 + (a.seg.w1 - a.seg.w0) * a.k : s;
       },
-      present: function (s, plan) { var J = jcOf(plan), a = J && jcAt(J, s); return a ? a.seg.pres : 1; }
+      present: function (s, plan) { var J = jcOf(plan), a = J && jcAt(J, s); return a ? a.seg.pres : 1; },
+      // its length laid out at the usual pace (the speed chosen by it), and the calendar's moment at s and back
+      base: function (plan) { var J = jcOf(plan); return plan.jcBase ? plan.jcBase.length : J ? J.length : plan.T; },
+      calAt: function (s, plan) { var J = jcOf(plan), a = J && jcAt(J, s); return a ? jcCal(a) : null; },
+      siteAt: function (c, plan) { var J = jcOf(plan); return J ? jcSiteAt(J, c) : c; }
     };
   }
 
@@ -285,7 +320,7 @@
       var J = jcOf(plan);
       if (J) {
         var now = performance.now(), B = me, L = B.T || J.length;
-        var s = B.start > now ? 0 : Math.max(0, Math.min(1, (now - B.start) / B.ms)) * L;
+        var s = B.start > now ? 0 : Math.max(0, Math.min(1, bpFracOf(B, now))) * L;
         if (Math.abs(L - J.length) > 1e-6 && isFinite(plan.siteNow)) { s = plan.siteNow; }
         var a = jcAt(J, s);
         if (a) {
@@ -332,13 +367,16 @@
                date.toLocaleTimeString(loc, { hour: "numeric", minute: "2-digit" });
     var says = ended ? jcDone(J) : jcSays(seg, (c % JC_DAY) / 3600);
     var head = ended ? say("jc_done_head", {}) : say("jc_day", { n: day, d: J.D });
-    if (!ended) { card.classList.remove("jc-ended"); }
+    if (!ended && card.classList.contains("jc-ended")) { card.classList.remove("jc-ended"); }
     var text = head + "|" + when + "|" + says + "|" + seg.wx;
     if (text === last.text) { return; }
     last.text = text;
-    el(".jc-day", card).textContent = head;
-    el(".jc-when", card).textContent = ended ? date.toLocaleDateString(loc, { weekday: "short", month: "short", day: "numeric", year: "numeric" }) : when;
-    el(".jc-say", card).textContent = says;
+    // (each line put in only when it reads differently: the clock changes every picture, the day
+    // and what is going on seldom -- each written again made the page lay the card out again, 2026-10-06)
+    function put(sel, words) { var n = el(sel, card); if (n.textContent !== words) { n.textContent = words; } }
+    put(".jc-day", head);
+    put(".jc-when", ended ? date.toLocaleDateString(loc, { weekday: "short", month: "short", day: "numeric", year: "numeric" }) : when);
+    put(".jc-say", says);
     if (last.wx !== seg.wx) {
       last.wx = seg.wx;
       var wx = el(".jc-wx", card);

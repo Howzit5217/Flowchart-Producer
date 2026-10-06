@@ -64030,6 +64030,7 @@ window.addEventListener("load", function () {
            roof: v3Pref("roof"), labels: v3Pref("labels") };
     v3Words();
     v3Place();
+    setTimeout(function () { if (V3 && V3.box === box && !V3.leaving) { v3Behind(true); } }, 300);
     var r0 = box.getBoundingClientRect();
     V3.w = Math.max(1, r0.width); V3.h = Math.max(1, r0.height);
     var big = scene.name !== "space" && v3Big() && typeof workLive === "function";
@@ -64222,6 +64223,10 @@ window.addEventListener("load", function () {
     V3.dirty = true;
   }
   window.addEventListener("resize", function () { if (V3) { v3Place(); } });
+  function v3Behind(hide) {
+    var st = el("#stage");
+    if (st) { st.style.visibility = hide ? "hidden" : ""; }
+  }
 
   function v3Flat(on) {
     if (!V3) { return; }
@@ -64265,6 +64270,7 @@ window.addEventListener("load", function () {
 
   function v3Leave() {
     if (!V3 || V3.leaving) { return; }
+    v3Behind(false);
     if (V3.warming) { var job = V3.warming; V3.warming = null; if (typeof workStop === "function") { workStop(job); } }
     if (v3Still() || (V3.scene !== "space" && v3Big())) { v3Close(); return; }
     V3.leaving = true;
@@ -64296,6 +64302,7 @@ window.addEventListener("load", function () {
     if (!V3) { return; }
     if (document.pointerLockElement && document.exitPointerLock) { document.exitPointerLock(); }
     if (V3.box.parentNode) { V3.box.parentNode.removeChild(V3.box); }
+    v3Behind(false);
     V3 = null;
     var openBtn = el("#view3d-open");
     if (openBtn) { openBtn.setAttribute("aria-pressed", "false"); }
@@ -68091,7 +68098,7 @@ window.addEventListener("load", function () {
       var canvas = document.createElement("canvas"), gl = null, deep = null;
       try {
         gl = canvas.getContext("webgl2", { antialias: false, alpha: false, depth: false, stencil: false,
-                                           premultipliedAlpha: false, preserveDrawingBuffer: false });
+                                           premultipliedAlpha: false, preserveDrawingBuffer: false, powerPreference: "high-performance" });
         var clipCtl = gl && gl.getExtension("EXT_clip_control");
         if (gl && clipCtl && !GL3_NO_DEEP) { deep = { cc: clipCtl, samples: gl3Samples(gl), w: 0, h: 0 }; }
         else {
@@ -68099,7 +68106,7 @@ window.addEventListener("load", function () {
           gl = null; canvas = document.createElement("canvas");
         }
       } catch (e0) { gl = null; deep = null; canvas = document.createElement("canvas"); }
-      var opts = { antialias: true, alpha: false, depth: true, premultipliedAlpha: false, preserveDrawingBuffer: false };
+      var opts = { antialias: true, alpha: false, depth: true, premultipliedAlpha: false, preserveDrawingBuffer: false, powerPreference: "high-performance" };
       gl = gl || canvas.getContext("webgl2", opts) || canvas.getContext("webgl", opts) ||
            canvas.getContext("experimental-webgl", opts);
       if (!gl) { return false; }
@@ -68641,21 +68648,27 @@ window.addEventListener("load", function () {
     });
   }
 
+  var gl3SceneBounds = { of: null, faces: null, n: -1, b: null };
   function gl3Scenery(G, model, walk, sheet) {
     var x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity;
-    var measured = model.whole && model.whole.faces ? model.whole : model;
-    measured.faces.forEach(function (f) {
-      if (!f.node || f.node.kind !== "i_room" || !f.pts.every(function (p) { return Math.abs(p[2] || 0) < 6; })) { return; }
-      f.pts.forEach(function (p) {
-        x0 = Math.min(x0, p[0]); x1 = Math.max(x1, p[0]); y0 = Math.min(y0, p[1]); y1 = Math.max(y1, p[1]);
-      });
-    });
-    if (x0 === Infinity) {
+    var measured = model.whole && model.whole.faces ? model.whole : model, SB = gl3SceneBounds;
+    if (SB.of === measured && SB.faces === measured.faces && SB.n === measured.faces.length) {
+      x0 = SB.b[0]; x1 = SB.b[1]; y0 = SB.b[2]; y1 = SB.b[3];
+    } else {
       measured.faces.forEach(function (f) {
+        if (!f.node || f.node.kind !== "i_room" || !f.pts.every(function (p) { return Math.abs(p[2] || 0) < 6; })) { return; }
         f.pts.forEach(function (p) {
           x0 = Math.min(x0, p[0]); x1 = Math.max(x1, p[0]); y0 = Math.min(y0, p[1]); y1 = Math.max(y1, p[1]);
         });
       });
+      if (x0 === Infinity) {
+        measured.faces.forEach(function (f) {
+          f.pts.forEach(function (p) {
+            x0 = Math.min(x0, p[0]); x1 = Math.max(x1, p[0]); y0 = Math.min(y0, p[1]); y1 = Math.max(y1, p[1]);
+          });
+        });
+      }
+      gl3SceneBounds = { of: measured, faces: measured.faces, n: measured.faces.length, b: [x0, x1, y0, y1] };
     }
     if (x0 === Infinity) { x0 = y0 = -200; x1 = y1 = 200; }
     var mid = [(x0 + x1) / 2, (y0 + y1) / 2], radius = Math.max(150, Math.hypot(x1 - x0, y1 - y0) / 2);
@@ -94947,9 +94960,13 @@ window.addEventListener("load", function () {
 
   var BP_BUILD = 6500, BP_BUILD_TALL = 9000;       // ms the building takes to go up
   var bpSite = null;                               // the building going up: when it began, how tall
+  function bpFracOf(B, now) {
+    if (B.heldAt !== undefined && B.heldAt !== null) { return B.heldAt; }
+    return ((now === undefined ? performance.now() : now) - B.start) / B.ms;
+  }
   function bpSiteNow() {
     if (!bpSite || !V3) { return null; }
-    var t = (performance.now() - bpSite.start) / bpSite.ms;
+    var t = bpFracOf(bpSite);
     if (t >= 1) { bpSite = null; V3.dirty = true; return null; }
     return t;
   }
@@ -95000,7 +95017,7 @@ window.addEventListener("load", function () {
     var shown = -1;
     (function tick() {
       if (bpSite !== me || !V3 || V3.box !== box) { stop(); return; }
-      var done = Math.round(Math.max(0, Math.min(1, (performance.now() - me.start) / me.ms)) * 100);
+      var done = Math.round(Math.max(0, Math.min(1, bpFracOf(me))) * 100);
       if (done !== shown) { shown = done; skip.style.setProperty("--done", done + "%"); }
       V3.dirty = true;
       requestAnimationFrame(tick);
@@ -100707,15 +100724,32 @@ window.addEventListener("load", function () {
     bdBall(G, "ring", [side[0] - 0.09, -0.172, 1.0], 0.016, 0.006, 0.022, 2, 6);
   }
 
+  var BD_STANCE = 0.55, BD_REACH = 0.3, BD_LIFT = 0.09, BD_LEG = 0.42, BD_STRIDE = 2 * BD_REACH / BD_STANCE;
+  function bdFoot(phase, side) {
+    var u = phase / (Math.PI * 2) + (side > 0 ? 0 : 0.5);
+    u -= Math.floor(u);
+    if (u < BD_STANCE) { return { u: u, down: true, x: BD_REACH * (1 - 2 * u / BD_STANCE), z: 0.08 }; }
+    var s = (u - BD_STANCE) / (1 - BD_STANCE);
+    return { u: u, down: false, x: -BD_REACH * Math.cos(Math.PI * s), z: 0.08 + BD_LIFT * Math.sin(Math.PI * s) };
+  }
   function bdJoints(sp, phase, arms, armK, legs) {
-    var T = BD_TORSO[sp.sex], swing = Math.sin(phase) * 0.42, lift = Math.max(0, Math.cos(phase)) * 0.06, J = { legs: [], arms: [] };
-    [-1, 1].forEach(function (side) {
-      var sw = swing * side, hy = side * T.hip, bend = sw > 0 ? sw * 0.6 : 0;
-      var hip = [0, hy, 0.93];
-      var knee = [Math.sin(sw) * 0.42, hy, 0.93 - Math.cos(sw) * 0.42 + (side > 0 ? lift : 0)];
-      var ankle = [Math.sin(sw) * 0.42 + Math.sin(sw - bend) * 0.42, hy, Math.max(0.08, 0.93 - Math.cos(sw) * 0.42 - Math.cos(sw - bend) * 0.42)];
+    var T = BD_TORSO[sp.sex], J = { legs: [], arms: [] }, most = 2 * BD_LEG * 0.998;
+    var feet = phase ? [bdFoot(phase, -1), bdFoot(phase, 1)] : null, hipZ = 0.93;
+    if (feet && arms !== "hammer") {
+      feet.forEach(function (F) { if (F.down) { hipZ = Math.min(hipZ, F.z + Math.sqrt(Math.max(0, most * most - F.x * F.x))); } });
+    }
+    var drop = 0.93 - hipZ;
+    [-1, 1].forEach(function (side, si) {
+      var hy = side * T.hip, hip = [0, hy, 0.93], knee = [0, hy, 0.93 - BD_LEG], ankle = [0, hy, 0.93 - 2 * BD_LEG];
+      if (feet) {
+        var F = feet[si], ax = F.x, az = F.z + drop - 0.93, d = Math.hypot(ax, az);
+        if (d > most) { ax *= most / d; az *= most / d; d = most; }
+        var h = Math.sqrt(Math.max(0, BD_LEG * BD_LEG - d * d / 4));
+        knee = [ax / 2 - az / d * h, hy, 0.93 + az / 2 + ax / d * h];
+        ankle = [ax, hy, 0.93 + az];
+      }
       J.legs.push({ side: side, hip: hip, knee: knee, ankle: ankle });
-      var as = -swing * side * 0.8, sh = [0, side * T.shoulder, 1.42];
+      var as = feet ? -0.34 * Math.cos(Math.PI * 2 * feet[si].u) : 0, sh = [0, side * T.shoulder, 1.42];
       var elbow = [Math.sin(as) * 0.3, side * 0.24, 1.42 - Math.cos(as) * 0.3];
       var wrist = [Math.sin(as) * 0.3 + Math.sin(as + 0.25) * 0.27, side * 0.25, 1.42 - Math.cos(as) * 0.3 - Math.cos(as + 0.25) * 0.27];
       if (arms === "carry" || (arms === "hammer" && side < 0)) {
@@ -100734,7 +100768,7 @@ window.addEventListener("load", function () {
       }
       J.arms.push({ side: side, sh: sh, elbow: elbow, wrist: wrist });
     });
-    J.drop = phase && arms !== "hammer" ? Math.max(0, Math.min(J.legs[0].ankle[2], J.legs[1].ankle[2]) - 0.08) : 0;
+    J.drop = drop;
     if (legs === "kneel") {
       J.legs.forEach(function (L) {
         var hy = L.hip[1];
@@ -101076,10 +101110,11 @@ window.addEventListener("load", function () {
   }
   function wkClock(plan) {
     var B = plan.bp, now = performance.now(), rate = B.rate || wkRateDefault(B), L = wkCalLength(plan);
-    var gone = B.start > now ? 0 : (now - B.start) / B.ms * (B.T || L);
-    if (!WK.rate) { rate = wkRateFor(L, B.fast); }
+    var gone = B.start > now ? 0 : bpFracOf(B, now) * (B.T || L);
+    if (!WK.rate) { var CB = WK.calendar; rate = wkRateFor(CB && typeof CB.base === "function" && plan.done ? CB.base(plan) : L, B.fast); }
     var ms = L * 1000 / rate;
     if (B.start <= now) { B.start = now - Math.min(gone, L * 0.999) / L * ms; }
+    if (B.heldAt !== undefined && B.heldAt !== null) { B.heldAt = Math.min(gone, L * 0.999) / L; }
     B.ms = ms; B.T = L; B.rate = rate;
     B.moK = 1; B.moMs = ms;                              // (40-movein.js's own stretching, not wanted)
     wkSpeedShow();
@@ -101090,9 +101125,23 @@ window.addEventListener("load", function () {
     return r;
   }
   function wkSetRate(r) {
+    var B0 = bpSite, plan = B0 && WK.plan && WK.plan.bp === B0 && WK.plan.done ? WK.plan : null, C = WK.calendar;
+    var now0 = performance.now(), cal = null;
+    if (plan && B0.T && C && typeof C.calAt === "function") {
+      var t0 = B0.start > now0 ? 0 : Math.max(0, Math.min(1, bpFracOf(B0, now0)));
+      cal = C.calAt(t0 * B0.T, plan);
+    }
     WK.rate = r;
     if (!bpSite || !bpSite.T) { wkSpeedShow(); return; }
-    var now = performance.now(), B = bpSite, t = B.start > now ? 0 : Math.max(0, Math.min(1, (now - B.start) / B.ms)), ms = B.T * 1000 / r;
+    var now = performance.now(), B = bpSite, t = B.start > now ? 0 : Math.max(0, Math.min(1, bpFracOf(B, now)));
+    if (plan && cal !== null) {
+      var L = wkCalLength(plan);
+      t = Math.max(0, Math.min(1, C.siteAt(cal, plan) / L));
+      B.T = L;
+      if (B.heldAt !== undefined && B.heldAt !== null) { B.heldAt = t; }
+      if (typeof wvNow !== "undefined" && wvNow && wvNow.me === B) { if (wvNow.paused) { wvNow.at = t; } wvNow.chapters = null; }
+    }
+    var ms = B.T * 1000 / r;
     if (B.start <= now) { B.start = now - t * ms; }
     B.ms = ms; B.moMs = ms; B.rate = r;
     if (V3) { V3.dirty = true; }
@@ -101161,7 +101210,7 @@ window.addEventListener("load", function () {
             }
             var plan = WK.plan && WK.plan.bp === me ? WK.plan : null;
             if (plan && plan.ok && me.T) {
-              var now = performance.now(), T = Math.max(0, Math.min(1, (now - me.start) / me.ms)) * me.T;
+              var T = Math.max(0, Math.min(1, bpFracOf(me))) * me.T;
               wkPhaseShow(wkPhaseAt(plan, plan.done ? wkCalWork(T, plan) : T));
             }
             requestAnimationFrame(tick);
@@ -102018,7 +102067,8 @@ window.addEventListener("load", function () {
     plan.now = T; plan.siteNow = siteS; WK.lastIn = model;
     var fly = plan.fly = {};
     var FC = plan.done ? wkFastFor(plan, site, model.faces) : null;
-    var FD = FC ? wkFoldFor(plan, T) : null, held = 0;
+    var EZ = FC && !WK.easeOff ? wkEaseNow(plan, T) : null;           // (WK.easeOff: in all at once, as before)
+    var FD = FC ? wkFoldFor(plan, T, EZ ? EZ.from : undefined) : null, held = 0;
     faces = new Array(model.faces.length + 64);
     var fi = 0, xtra = WK.xtra || (WK.xtra = []);
     for (var i = 0; i < model.faces.length; i++) {
@@ -102027,15 +102077,29 @@ window.addEventListener("load", function () {
       if (fj >= 0) {
         var fk = FC.kind[fj];
         if (fk === 0) { faces[fi++] = f; continue; }
-        if (T >= FC.t1[fj]) { if (FD && FC.t1[fj] > FD.T0) { faces[fi++] = wkMoving(f, FC.hold[fj]); held++; } else { faces[fi++] = f; } continue; }
-        if (fk === 1 && T < FC.t0[fj]) { continue; }
+        if (T >= FC.t1[fj]) {
+          if (EZ && FC.t1[fj] > EZ.from && FC.kind[fj] === 1 && FC.t1[fj] - FC.t0[fj] < EZ.short) {
+            var ek = wkEaseK(EZ, f.src || f, FC.t1[fj], f);
+            if (ek < 1) { faces[fi++] = wkSettle(f, ek, P); continue; }
+          }
+          if (FD && FC.t1[fj] > FD.T0) { faces[fi++] = wkMoving(f, FC.hold[fj]); held++; } else { faces[fi++] = f; }
+          continue;
+        }
+        if ((fk === 1 || fk === 3) && T < FC.t0[fj]) { continue; }
         if (fk === 2 && T < FC.tp[fj]) { continue; }
       }
       var g = wkGroupOf(site, f);
       if (!g) { faces[fi++] = f; continue; }
       var R = g.Rp === plan ? g.R : plan.rv[g.key] || plan.lateR || WK_NOT_YET;
       if (g.Rp !== plan && plan.done) { g.R = R; g.Rp = plan; }
-      if (T >= R.t1) { if (FD && R.t1 > FD.T0) { faces[fi++] = wkMoving(f, wkHoldOf(g.key)); held++; } else { faces[fi++] = f; } continue; }
+      if (T >= R.t1) {
+        if (EZ && R.t1 > EZ.from && wkEaseShort(EZ, R)) {
+          var ek2 = wkEaseK(EZ, f.src || f, R.t1, f);
+          if (ek2 < 1) { faces[fi++] = wkSettle(f, ek2, P); continue; }
+        }
+        if (FD && R.t1 > FD.T0) { faces[fi++] = wkMoving(f, wkHoldOf(g.key)); held++; } else { faces[fi++] = f; }
+        continue;
+      }
       var steady = !FD || (fj >= 0 && FC.tp[fj] <= FD.T0 && FC.t0[fj] > FD.Tw);
       if (R.carry && R.carry.wk && T >= R.carry.wk.t0 && T < R.t0) { (fly[g.key] || (fly[g.key] = [])).push(f); continue; }
       if (T < R.t0) {
@@ -102052,7 +102116,13 @@ window.addEventListener("load", function () {
         continue;
       }
       if (T >= R.t1) { faces[fi++] = f; continue; }
+      if (EZ && wkEaseShort(EZ, R)) { continue; }          // (set in at its end: above)
+      WK.sweptAt = undefined;
       var gf = wkAnimFace(f, g, R, (T - R.t0) / Math.max(1e-6, R.t1 - R.t0), P, xtra, T);
+      if (gf === f && EZ && WK.sweptAt !== undefined && WK.sweptAt > EZ.from) {
+        var sk = wkEaseK(EZ, f.src || f, WK.sweptAt, f);
+        if (sk < 1) { gf = wkSettle(f, sk, P); }
+      }
       if (xtra.length) { for (var xi = 0; xi < xtra.length; xi++) { faces[fi++] = xtra[xi]; } xtra.length = 0; }
       if (gf && FD && !gf.moves) { if (gf === f) { gf = wkMoving(f, wkHoldOf(g.key)); } else { gf.moves = true; gf.hold = wkHoldOf(g.key); } held++; }
       if (gf) { faces[fi++] = gf; }
@@ -102078,12 +102148,45 @@ window.addEventListener("load", function () {
     return out;
   }
   var WK_FOLD_MS = 3000, WK_FOLD_MOST = 2500;
-  function wkFoldFor(plan, T) {
+  function wkFoldFor(plan, T, from) {
     var F = WK.fold;
     if (F && F.plan === plan && !F.over && T >= F.T0 && T <= F.Tw) { return F; }
     var B = plan.bp, rate = B && B.rate ? B.rate : WK_RATE_OPEN;
-    WK.fold = F = { plan: plan, T0: T, Tw: T + rate * WK_FOLD_MS / 1000 * 1.5, over: false };
+    WK.fold = F = { plan: plan, T0: from !== undefined && from < T ? from : T, Tw: T + rate * WK_FOLD_MS / 1000 * 1.5, over: false };
     return F;
+  }
+  var WK_EASE_MS = 340, WK_EASE_MOST = 600, WK_EASE_VERTS = 15, WK_EASE_DROP = 0.3;
+  function wkEaseNow(plan, T) {
+    var E = WK.ease, now = performance.now();
+    if (!E || E.plan !== plan) { E = WK.ease = { plan: plan, seen: new WeakMap(), hist: [], lastT: T }; }
+    var B = plan.bp, rate = B && B.rate ? B.rate : WK_RATE_OPEN;
+    if (T < E.lastT) { E.seen = new WeakMap(); E.hist.length = 0; }
+    E.jump = T < E.lastT || T - E.lastT > rate * 0.25 + 1;
+    E.prevT = E.lastT; E.lastT = T; E.now = now; E.was = E.n || 0; E.n = 0; E.fresh = 0;
+    E.hist.push(now, T);
+    while (E.hist.length > 2 && E.hist[0] < now - WK_EASE_MS - 60) { E.hist.splice(0, 2); }
+    E.from = Math.min(E.hist[1], E.prevT);          // (what went in since then may still be settling)
+    E.short = rate * WK_EASE_MS / 1000;
+    return E;
+  }
+  function wkEaseShort(E, R) {
+    return R.t1 - R.t0 < E.short && !R.pre && !(R.carry && R.carry.wk) && R.anim !== "cut" && R.anim !== "sweep";
+  }
+  function wkEaseK(E, key, ta, f) {
+    var at = E.seen.get(key), w = f && f.mesh && f.mesh.p ? Math.ceil(f.mesh.p.length / 3 / WK_EASE_VERTS) : 1;
+    if (at === undefined) {
+      if (E.jump || !(ta > E.prevT) || E.was + E.fresh + w > WK_EASE_MOST) { return 1; }
+      E.seen.set(key, at = E.now);
+      E.fresh += w;
+    }
+    var k = (E.now - at) / WK_EASE_MS;
+    if (k < 1) { E.n += w; }
+    return k;
+  }
+  function wkSettle(f, k, P) {
+    var z = (1 - wkSmooth(Math.max(0, k))) * WK_EASE_DROP * P;
+    return Object.assign({}, f, { pts: f.pts.map(function (p) { return [p[0], p[1], (p[2] || 0) + z]; }), moves: true,
+                                  mesh: f.mesh ? Object.assign({}, f.mesh, { p: moView(f.mesh.p), xf: f.mesh.xf ? f.mesh.xf.slice(0, 4).concat([(f.mesh.xf[4] || 0) + z]) : f.mesh.xf }) : f.mesh });
   }
   var WK_HOLDS = ["~h0", "~h1", "~h2", "~h3", "~h4", "~h5"], WK_HOLD_BY = {};
   function wkHoldOf(key) {
@@ -102149,7 +102252,7 @@ window.addEventListener("load", function () {
       if (!g) { continue; }
       var R = g.Rp === plan ? g.R : plan.rv[g.key] || plan.lateR || WK_NOT_YET;
       if (g.Rp !== plan) { g.R = R; g.Rp = plan; }
-      kind[i] = R.pre || (R.carry && R.carry.wk) ? 2 : 1;
+      kind[i] = R.pre || (R.carry && R.carry.wk) ? 2 : R.anim === "cut" || R.anim === "sweep" ? 3 : 1;
       t0[i] = R.t0; t1[i] = R.t1; hold[i] = wkHoldOf(g.key);
       if (kind[i] === 2) {
         var first = R.t0;
@@ -102206,6 +102309,7 @@ window.addEventListener("load", function () {
         if (R.angle) { frac = ((Math.atan2(c[1] - R.angle[1], c[0] - R.angle[0]) + Math.PI * 2) % (Math.PI * 2)) / (Math.PI * 2); }
         else { var a = R.axis; frac = ((c[0] - a[0]) * a[2] + (c[1] - a[1]) * a[3]) / Math.max(1, R.len); }
         if (frac > k) { return R.pre && T >= wkPreAt(R.pre, g) ? wkPreLook(f, R.pre.how) : null; }
+        WK.sweptAt = R.t0 + (R.t1 - R.t0) * Math.max(0, frac);         // (when the work passed it: wkEaseK)
         return f;
       }
       case "pop": return null;
@@ -102242,7 +102346,7 @@ window.addEventListener("load", function () {
         head = Math.hypot(a[0] - prev[0], a[1] - prev[1]) > 1e-3 ? Math.atan2(a[1] - prev[1], a[0] - prev[0]) : head;
         return { p: A.p, head: head, pose: "climb", phase: d / (0.18 * FLOOR_PX), seg: s, k: k };
       }
-      return { p: A.p, head: head, pose: s.carry ? "carry" : "walk", phase: d / (0.36 * FLOOR_PX), seg: s, k: k };
+      return { p: A.p, head: head, pose: s.carry ? "carry" : "walk", phase: d / (WK_STRIDE_M * FLOOR_PX / (Math.PI * 2)), seg: s, k: k };
     }
     return { p: s.at, head: s.face === null || s.face === undefined ? (w.segs[i - 1] && w.segs[i - 1].L ? wkLastHead(w.segs[i - 1]) : 0) : s.face, pose: s.pose, seg: s, k: k, T: T };
   }
@@ -102250,20 +102354,44 @@ window.addEventListener("load", function () {
     var p = s.L.pts, a = p[p.length - 2], b = p[p.length - 1];
     return a && b ? Math.atan2(b[1] - a[1], b[0] - a[0]) : 0;
   }
+  var WK_STRIDE_M = typeof BD_STRIDE === "number" ? BD_STRIDE : 1.09, WK_STRIDE_HZ = 1.6, WK_TURN = 9, WK_HAMMER = Math.PI * 1.3, WK_MOVES = new WeakMap();
+  function wkWorkerMove(w, st, T) {
+    var now = performance.now(), A = WK_MOVES.get(w), going = st.pose === "walk" || st.pose === "carry" || st.pose === "climb";
+    var raw = going ? st.phase : 0;
+    if (!A || now - A.now > 500 || T < A.T) {
+      A = { now: now, T: T, seg: st.seg, raw: raw, ph: raw, sw: 0, hd: st.head, go: going };
+      WK_MOVES.set(w, A);
+      return A;
+    }
+    if (now === A.now) { return A; }          // (asked again for the same picture)
+    var dt = Math.min(0.1, (now - A.now) / 1000), on = T > A.T, most = Math.PI * 2 * WK_STRIDE_HZ * dt;
+    if (going) {
+      var gone = A.go && A.seg === st.seg ? raw - A.raw : raw;
+      A.ph += Math.max(0, Math.min(gone, most));
+    } else if (A.ph) {
+      var to = Math.ceil(A.ph / Math.PI - 1e-6) * Math.PI;      // (the feet together: the next half stride)
+      if (on) { A.ph = Math.min(to, A.ph + most); }
+      if (A.ph >= to - 1e-6) { A.ph = 0; }
+    }
+    if (on) { A.sw += WK_HAMMER * dt; }
+    var dh = Math.atan2(Math.sin(st.head - A.hd), Math.cos(st.head - A.hd)), turn = WK_TURN * dt;
+    A.hd = Math.abs(dh) <= turn ? st.head : A.hd + (dh > 0 ? turn : -turn);
+    A.now = now; A.T = T; A.seg = st.seg; A.raw = raw; A.go = going;
+    return A;
+  }
   function wkWorkerDraw(faces, w, T, plan) {
     var st = wkWorkerAt(w, T);
-    if (!st) { return; }
+    if (!st) { WK_MOVES.delete(w); return; }
     if (wkStoreyHidden(plan, wkLevelOf(plan.site, st.p))) { return; }      // (up on a storey taken off the view: with it)
-    var P = plan.site.P, look = Object.assign({}, w.look), phase = 0, s = st.seg;
-    var pose = st.pose;
-    if (pose === "walk" || pose === "carry") { phase = st.phase; }
+    var P = plan.site.P, look = Object.assign({}, w.look), s = st.seg;
+    var pose = st.pose, mv = wkWorkerMove(w, st, T), phase = pose === "kneel" || pose === "hammer" ? 0 : mv.ph;
     if (pose === "carry" && s.carry && (s.carry.kind === "studs" || s.carry.kind === "board" || s.carry.kind === "sheet" || s.carry.kind === "rebar")) { look.arms = "shoulder"; }
     else if (pose === "carry" && s.carry && s.carry.kind === "barrow") { look.arms = "push"; }
     else if (pose === "carry") { look.arms = "carry"; }
-    else if (pose === "hammer") { look.arms = "hammer"; look.armK = Math.abs(Math.sin((T + w.id) * 7.5)); }
+    else if (pose === "hammer") { look.arms = "hammer"; look.armK = Math.abs(Math.sin(mv.sw + w.id)); }
     else if (pose === "up") { look.arms = "up"; }
-    else if (pose === "climb") { look.arms = "climb"; phase = st.phase; }
-    else if (pose === "kneel") { look.legs = "kneel"; look.arms = "hammer"; look.armK = Math.abs(Math.sin((T + w.id) * 6)) * 0.6; }
+    else if (pose === "climb") { look.arms = "climb"; }
+    else if (pose === "kneel") { look.legs = "kneel"; look.arms = "hammer"; look.armK = Math.abs(Math.sin(mv.sw * 0.85 + w.id)) * 0.6; }
     else if (pose === "shovel") { look.arms = "carry"; }
     else if (pose === "hold") { look.arms = "carry"; }
     var fade = 1;
@@ -102277,11 +102405,11 @@ window.addEventListener("load", function () {
       anchor = wkAnchor(plan, st.p, T);
       look.tied = !!anchor;
     }
-    peopleBody(faces, { kind: "i_builder", id: 600 + w.id }, st.p[0], st.p[1], st.p[2] || 0, st.head, phase, look, fade < 0.999 ? fade : undefined);
+    peopleBody(faces, { kind: "i_builder", id: 600 + w.id }, st.p[0], st.p[1], st.p[2] || 0, mv.hd, phase, look, fade < 0.999 ? fade : undefined);
     if (anchor) { wkLanyard(faces, st, look, w, anchor, fade); }
     var carry = s && s.carry;
-    if (carry && (pose === "carry" || pose === "walk" || pose === "climb")) { wkCarryDraw(faces, carry, st.p, st.head, P, look); }
-    if (s && s.hold && (pose !== "walk")) { wkCarryDraw(faces, s.hold, st.p, st.head, P, look); }
+    if (carry && (pose === "carry" || pose === "walk" || pose === "climb")) { wkCarryDraw(faces, carry, st.p, mv.hd, P, look); }
+    if (s && s.hold && (pose !== "walk")) { wkCarryDraw(faces, s.hold, st.p, mv.hd, P, look); }
   }
   function wkRoofPlanes(plan) {
     if (plan.wkRoofPl) { return plan.wkRoofPl; }
@@ -105755,6 +105883,7 @@ window.addEventListener("load", function () {
   var JC_WORKED = (JC_LUNCH - JC_ON) + (JC_OFF - JC_BACK);          // 8 hours
   var JC_NIGHT_K = 10, JC_PAUSE_K = 3, JC_STOP_K = 3;                 // days off, pauses, days rained off: played this many times faster
   var JC_DUSK_K = 10, JC_DARK_K = 2.4, JC_DARK0 = 18.5 * 3600, JC_DARK1 = 5.5 * 3600;
+  var JC_IDLE_AT = 10;
   var JC_FRAME = { wood: [14.5, 0.414], steel: [29, 0.28], tall: [30, 0.3] };
   var JC_QUICK = { garage: 0.5, hall: 0.5, storage: 0.5, stock: 0.6, stairs: 0.7, lift: 0.7, court: 0.2, void: 0 };
   var JC_WX_KINDS = ["clear", "cloudy", "drizzle", "rain", "storm", "snow", "wind"];
@@ -105807,7 +105936,7 @@ window.addEventListener("load", function () {
     for (var i = 0; i < weights.length; i++) { x -= weights[i]; if (x < 0) { return i; } }
     return weights.length - 1;
   }
-  function jcLay(plan) {
+  function jcLay(plan, idleF) {
     var T = plan.T, D = jcDaysFor(plan), perSec = T / (D * JC_WORKED);   // work-seconds for each second worked
     var seed = (Math.round(T * 7) ^ Math.round(jcArea(plan) * 13)) >>> 0, rnd = gl3Rand(seed % 100000 + 11);
     var start = new Date(); start.setHours(0, 0, 0, 0);
@@ -105821,6 +105950,7 @@ window.addEventListener("load", function () {
     var segs = [], s = 0, w = 0, worked = 0, wx = "clear", stats = { days: 0, lost: 0, rain: 0, snow: 0, storm: 0, wind: 0, late: 0, broke: 0, short: 0, insp: 0, failed: 0 };
     function push(c0, c1, k, rate, pres, state, extra) {
       if (c1 <= c0) { return; }
+      if (!(rate > 0) && idleF > 1) { k *= idleF; }          // (no work going on: quicker, played fast -- JC_IDLE_AT)
       var ds = (c1 - c0) * perSec / k, dw = rate * (c1 - c0) * perSec;
       segs.push(Object.assign({ s0: s, s1: s + ds, w0: w, w1: w + dw, c0: c0, c1: c1, pres: pres, state: state, wx: wx, day: Math.max(1, stats.days) }, extra || {}));
       s += ds; w += dw;
@@ -105908,9 +106038,28 @@ window.addEventListener("load", function () {
   }
   function jcOf(plan) {
     if (!plan || !plan.done || !(plan.T > 0) || !plan.site) { return null; }
-    if (plan.jc && plan.jc.T === plan.T) { return plan.jc; }
-    try { plan.jc = jcLay(plan); } catch (e) { if (window.console && console.warn) { console.warn("calendar:", e && e.message); } plan.jc = null; }
+    var base = plan.jcBase && plan.jcBase.T === plan.T ? plan.jcBase : null;
+    if (!base) {
+      try { base = plan.jcBase = jcLay(plan, 1); } catch (e) { if (window.console && console.warn) { console.warn("calendar:", e && e.message); } plan.jcBase = null; return null; }
+    }
+    var f = jcIdleFor(plan, base);
+    if (f <= 1) { return base; }
+    if (plan.jc && plan.jc.T === plan.T && plan.jc.idleF === f) { return plan.jc; }
+    try { plan.jc = jcLay(plan, f); plan.jc.idleF = f; } catch (e2) { plan.jc = null; return base; }
     return plan.jc;
+  }
+  function jcIdleFor(plan, base) {
+    var B = plan.bp, rate = WK.rate || (typeof wkRateFor === "function" ? wkRateFor(base.length, B && B.fast) : 32);
+    return Math.max(1, rate / JC_IDLE_AT);
+  }
+  function jcSiteAt(J, c) {
+    var segs = J.segs, lo = 0, hi = segs.length - 1;
+    if (!segs.length) { return 0; }
+    if (c <= segs[0].c0) { return segs[0].s0; }
+    if (c >= segs[hi].c1) { return segs[hi].s1; }
+    while (lo < hi) { var mid = (lo + hi + 1) >> 1; if (segs[mid].c0 <= c) { lo = mid; } else { hi = mid - 1; } }
+    var g = segs[lo];
+    return g.s0 + (g.s1 - g.s0) * Math.max(0, Math.min(1, g.c1 > g.c0 ? (c - g.c0) / (g.c1 - g.c0) : 0));
   }
   function jcAt(J, s) {
     var segs = J.segs, lo = 0, hi = segs.length - 1;
@@ -105929,7 +106078,10 @@ window.addEventListener("load", function () {
         var J = jcOf(plan), a = J && jcAt(J, s);
         return a ? a.seg.w0 + (a.seg.w1 - a.seg.w0) * a.k : s;
       },
-      present: function (s, plan) { var J = jcOf(plan), a = J && jcAt(J, s); return a ? a.seg.pres : 1; }
+      present: function (s, plan) { var J = jcOf(plan), a = J && jcAt(J, s); return a ? a.seg.pres : 1; },
+      base: function (plan) { var J = jcOf(plan); return plan.jcBase ? plan.jcBase.length : J ? J.length : plan.T; },
+      calAt: function (s, plan) { var J = jcOf(plan), a = J && jcAt(J, s); return a ? jcCal(a) : null; },
+      siteAt: function (c, plan) { var J = jcOf(plan); return J ? jcSiteAt(J, c) : c; }
     };
   }
 
@@ -105979,7 +106131,7 @@ window.addEventListener("load", function () {
       var J = jcOf(plan);
       if (J) {
         var now = performance.now(), B = me, L = B.T || J.length;
-        var s = B.start > now ? 0 : Math.max(0, Math.min(1, (now - B.start) / B.ms)) * L;
+        var s = B.start > now ? 0 : Math.max(0, Math.min(1, bpFracOf(B, now))) * L;
         if (Math.abs(L - J.length) > 1e-6 && isFinite(plan.siteNow)) { s = plan.siteNow; }
         var a = jcAt(J, s);
         if (a) {
@@ -106023,13 +106175,14 @@ window.addEventListener("load", function () {
                date.toLocaleTimeString(loc, { hour: "numeric", minute: "2-digit" });
     var says = ended ? jcDone(J) : jcSays(seg, (c % JC_DAY) / 3600);
     var head = ended ? say("jc_done_head", {}) : say("jc_day", { n: day, d: J.D });
-    if (!ended) { card.classList.remove("jc-ended"); }
+    if (!ended && card.classList.contains("jc-ended")) { card.classList.remove("jc-ended"); }
     var text = head + "|" + when + "|" + says + "|" + seg.wx;
     if (text === last.text) { return; }
     last.text = text;
-    el(".jc-day", card).textContent = head;
-    el(".jc-when", card).textContent = ended ? date.toLocaleDateString(loc, { weekday: "short", month: "short", day: "numeric", year: "numeric" }) : when;
-    el(".jc-say", card).textContent = says;
+    function put(sel, words) { var n = el(sel, card); if (n.textContent !== words) { n.textContent = words; } }
+    put(".jc-day", head);
+    put(".jc-when", ended ? date.toLocaleDateString(loc, { weekday: "short", month: "short", day: "numeric", year: "numeric" }) : when);
+    put(".jc-say", says);
     if (last.wx !== seg.wx) {
       last.wx = seg.wx;
       var wx = el(".jc-wx", card);
@@ -120227,7 +120380,7 @@ window.addEventListener("load", function () {
     var plan = wvPlanOf(me);
     return me.wk ? !plan || (!plan.done && plan.ok !== false) : false;
   }
-  function wvFrac(me) { return Math.max(0, Math.min(1, (performance.now() - me.start) / me.ms)); }
+  function wvFrac(me) { return Math.max(0, Math.min(1, bpFracOf(me))); }
   function wvTime(sec) {
     sec = Math.max(0, Math.round(sec));
     var U = String(TXT.wv_units || "d h m s").split(" "), parts = [sec / 86400, (sec % 86400) / 3600, (sec % 3600) / 60, sec % 60].map(Math.floor), out = [];
@@ -120275,7 +120428,7 @@ window.addEventListener("load", function () {
     if (!me || bpSite !== me || wvHeld(me)) { return; }
     f = Math.max(0, Math.min(WV_END, f));
     me.start = performance.now() - f * me.ms;
-    if (W.paused) { W.at = f; }
+    if (W.paused) { W.at = f; me.heldAt = f; }
     if (V3) { V3.dirty = true; }
     wvShow(W, true);
   }
@@ -120285,8 +120438,11 @@ window.addEventListener("load", function () {
     if (W.ended) { wvAgain(0); return; }
     if (!me || bpSite !== me || wvHeld(me)) { return; }
     W.paused = !on;
-    if (W.paused) { W.at = Math.min(WV_END, wvFrac(me)); }
-    else if (W.at >= WV_END - 1e-4) { W.at = 0; me.start = performance.now(); }       // (played from the start again)
+    if (W.paused) { W.at = Math.min(WV_END, wvFrac(me)); me.heldAt = W.at; }
+    else {
+      me.heldAt = undefined; me.start = performance.now() - W.at * me.ms;
+      if (W.at >= WV_END - 1e-4) { W.at = 0; me.start = performance.now(); }       // (played from the start again)
+    }
     wvShow(W, true);
   }
   function wvAgain(f) {
@@ -120329,7 +120485,8 @@ window.addEventListener("load", function () {
         if (bpSite !== me) {
           if ((W.last.f || 0) >= 0.97) { wvEnd(W); } else { wvStop(); return; }
         } else {
-          if (W.paused && !wvHeld(me)) { me.start = performance.now() - W.at * me.ms; }
+          if (W.paused && !wvHeld(me)) { me.start = performance.now() - W.at * me.ms; me.heldAt = W.at; }
+          else if (me.heldAt !== undefined) { me.heldAt = undefined; }
           if (wvPending !== null && !wvHeld(me)) {
             var go = wvPending; wvPending = null; wvSeek(go);
           }
@@ -120427,7 +120584,7 @@ window.addEventListener("load", function () {
       drag = null;
       W.root.classList.remove("wv-drag");
       W.paused = was;
-      if (!was && W.me && bpSite === W.me) { W.me.start = performance.now() - W.at * W.me.ms; }
+      if (!was && W.me && bpSite === W.me) { W.me.start = performance.now() - W.at * W.me.ms; W.me.heldAt = undefined; }
       wvShow(W, true);
       if (ev.pointerType !== "mouse") { W.tip.hidden = true; }
     }

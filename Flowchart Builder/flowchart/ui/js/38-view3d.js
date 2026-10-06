@@ -1996,6 +1996,8 @@
            roof: v3Pref("roof"), labels: v3Pref("labels") };
     v3Words();
     v3Place();
+    // (once it has faded in over it: the paper under it not drawn, v3Behind)
+    setTimeout(function () { if (V3 && V3.box === box && !V3.leaving) { v3Behind(true); } }, 300);
     // In: up off the paper -- the plan as it is drawn, straight down on it,
     // turning to look at it from the side as its walls rise, then the roof
     // settling on and the names coming up.
@@ -2202,6 +2204,14 @@
     V3.dirty = true;
   }
   window.addEventListener("resize", function () { if (V3) { v3Place(); } });
+  // (2026-10-06, "uses the GPU correct and not the CPU") The paper under the view -- a big
+  // drawing's ten thousand shapes -- not drawn while the view covers it: each picture the page
+  // put every one of them into its layers again, some 2 ms of every picture, for nothing seen.
+  // (Still laid out where it was: the view is placed over it, and it is shown again to go back down onto.)
+  function v3Behind(hide) {
+    var st = el("#stage");
+    if (st) { st.style.visibility = hide ? "hidden" : ""; }
+  }
 
   // Flat, like the plan, straight down on it -- or stood up in 3D again,
   // looked at from where it was: the walls go down or come up, the roof
@@ -2256,6 +2266,7 @@
   // Out: back down onto the paper the way it came up off it, then gone.
   function v3Leave() {
     if (!V3 || V3.leaving) { return; }
+    v3Behind(false);
     // still being made: that stopped (40-work.js)
     if (V3.warming) { var job = V3.warming; V3.warming = null; if (typeof workStop === "function") { workStop(job); } }
     if (v3Still() || (V3.scene !== "space" && v3Big())) { v3Close(); return; }
@@ -2289,6 +2300,7 @@
     if (!V3) { return; }
     if (document.pointerLockElement && document.exitPointerLock) { document.exitPointerLock(); }
     if (V3.box.parentNode) { V3.box.parentNode.removeChild(V3.box); }
+    v3Behind(false);
     V3 = null;
     var openBtn = el("#view3d-open");
     if (openBtn) { openBtn.setAttribute("aria-pressed", "false"); }
