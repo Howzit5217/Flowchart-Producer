@@ -25,7 +25,7 @@
   // (40-crew.js draws its hammer from the right hand and its hard hat round
   // the head), only the body round them is new.
   var BD_STEPS = 24;                     // poses to a stride
-  var BD_ARMS = { carry: 1, hammer: 1, shoulder: 1, up: 1, climb: 1, push: 1 };    // what the hands can be doing
+  var BD_ARMS = { carry: 1, hammer: 1, shoulder: 1, up: 1, climb: 1, push: 1, cup: 1 };    // what the hands can be doing
   var BD_ARMQ = 32;                      // heights of a hammer's swing
   var BD_KEPT = new Map(), BD_KEPT_MAX = 3600;     // (a crew moving in, every step of every stride of each: 2026-10-05)
   var BD_ZERO = new Float32Array(2 * 24000);
@@ -87,7 +87,8 @@
   var BD_SKIRTS = ["#2e3846", "#5a3b4a", "#8c3b2f", "#3d5c43", "#c9a24a", "#25303d", "#7a4b30"];
   var BD_MAT = { skin: "plain", lips: "plain", hair: "fabric", eyes: "plastic", top: "fabric", top2: "fabric", bottom: "fabric", skirt: "fabric",
                  shoes: "leather", belt: "leather", white: "fabric", tie: "fabric", hat: "fabric",
-                 band: "plastic", gloves: "leather", harness: "fabric", ring: "metal", glasses: "plastic", muffs: "plastic", lanyard: "fabric" };
+                 band: "plastic", gloves: "leather", harness: "fabric", ring: "metal", glasses: "plastic", muffs: "plastic", lanyard: "fabric",
+                 bag: "leather", paper: "fabric", cup: "plastic", lid: "plastic", strap: "fabric", badge: "plastic" };
   // (2026-10-05: "make the workers wear proper safety gear") On a building site (a look's `ppe`,
   // 40-works.js): the hard hat, a hi-vis vest with its silver bands, long sleeves under it, work
   // gloves, safety glasses, ear defenders while hammering, and above 1.8 m a full-body harness
@@ -410,6 +411,9 @@
       } else if (arms === "up") {
         // both up over the head: a sheet held to the ceiling, a truss guided in
         elbow = [0.1, side * 0.25, 1.68]; wrist = [0.2, side * 0.2, 1.96];
+      } else if (arms === "cup" && side > 0) {
+        // (2026-10-07) a coffee held up in front in the right hand, the left swinging
+        elbow = [0.1, side * 0.24, 1.14]; wrist = [0.32, side * 0.19, 1.21];
       } else if (arms === "climb") {
         // hand over hand up a ladder
         var u = Math.sin(phase + (side > 0 ? 0 : Math.PI)) * 0.14;
@@ -430,7 +434,90 @@
       });
       J.drop = 0.43;
     }
+    var sitH = typeof legs === "string" && legs.slice(0, 3) === "sit" ? (parseFloat(legs.slice(3)) || 46) / 100 : 0;
+    if (sitH) {
+      // (2026-10-07) sat on a seat sitH metres up (39-inside.js): the hips on it, the thighs along it, a
+      // little apart, the shins down to the floor with the feet a little forward -- hanging, from a
+      // stool too high for them -- and the hands in the lap
+      var down = 0.93 - sitH, span = sitH - 0.06, lean = span < 0.42 ? Math.acos(Math.max(0, span) / 0.42) : 0;
+      J.legs.forEach(function (L) {
+        var hy = L.hip[1] * 1.15;
+        L.knee = [0.41, hy, 0.95];
+        L.ankle = [0.41 + 0.42 * Math.sin(lean), hy, 0.95 - 0.42 * Math.cos(lean)];
+      });
+      if (!arms) {
+        J.arms.forEach(function (A) { A.elbow = [0.08, A.side * 0.25, 1.17]; A.wrist = [0.36, A.side * 0.19, 1.03]; });
+      }
+      J.drop = down;
+    }
     return J;
+  }
+  // ---- what they carry, and wear with it (2026-10-07) ---------------------------------------------------
+  // A box, its faces flat: a briefcase, a bag, a badge.
+  function bdBox(G, slot, x0, x1, y0, y1, z0, z1) {
+    var S = G.slot(slot), xf = G.xf;
+    function put(p, n) { if (xf) { p = xf(p); } S.p.push(p[0], p[1], p[2]); S.n.push(n[0], n[1], n[2]); }
+    var c = [[x0, y0, z0], [x1, y0, z0], [x1, y1, z0], [x0, y1, z0], [x0, y0, z1], [x1, y0, z1], [x1, y1, z1], [x0, y1, z1]];
+    [[[0, 3, 2, 1], [0, 0, -1]], [[4, 5, 6, 7], [0, 0, 1]], [[0, 1, 5, 4], [0, -1, 0]], [[2, 3, 7, 6], [0, 1, 0]],
+     [[1, 2, 6, 5], [1, 0, 0]], [[3, 0, 4, 7], [-1, 0, 0]]].forEach(function (f) {
+      var q = f[0], n = f[1];
+      put(c[q[0]], n); put(c[q[1]], n); put(c[q[2]], n); put(c[q[0]], n); put(c[q[2]], n); put(c[q[3]], n);
+    });
+  }
+  var BD_CARRY = { briefcase: 1, handbag: 1, backpack: 1, shopping: 1, cup: 1 };
+  // Where the hand closes: a little along from the wrist, the way the forearm points.
+  function bdGrip(A, along) {
+    var d = bdUnit([A.wrist[0] - A.elbow[0], A.wrist[1] - A.elbow[1], A.wrist[2] - A.elbow[2]]), k = along === undefined ? 0.05 : along;
+    return [A.wrist[0] + d[0] * k, A.wrist[1] + d[1] * k, A.wrist[2] + d[2] * k];
+  }
+  function bdCarry(G, sp, J, T) {
+    var far = G.lod > 1, right = J.arms.filter(function (A) { return A.side > 0; })[0] || J.arms[0];
+    var left = J.arms.filter(function (A) { return A.side < 0; })[0] || J.arms[0];
+    if (sp.carry === "briefcase") {
+      // hanging from the right hand, its long side the way they walk, its handle in the hand
+      var g = bdGrip(right), y = g[1] + 0.035;
+      bdBox(G, "bag", g[0] - 0.2, g[0] + 0.2, y - 0.045, y + 0.045, g[2] - 0.36, g[2] - 0.05);
+      if (!far) { bdCapsule(G, "bag", [g[0] - 0.06, y, g[2] - 0.05], [g[0] + 0.06, y, g[2] - 0.05], 0.012, 0.012, 5); }
+    } else if (sp.carry === "handbag") {
+      // on the right shoulder, at the hip, the strap over the shoulder
+      var hy = T.hip + 0.075, bz = 0.86;
+      bdBox(G, "bag", -0.1, 0.12, hy - 0.04, hy + 0.04, bz, bz + 0.2);
+      if (!far) {
+        bdCapsule(G, "bag", [0.07, hy, bz + 0.2], [0.04, T.shoulder - 0.07, 1.43], 0.008, 0.008, 4);
+        bdCapsule(G, "bag", [-0.05, hy, bz + 0.2], [-0.04, T.shoulder - 0.07, 1.43], 0.008, 0.008, 4);
+      }
+    } else if (sp.carry === "backpack") {
+      // on the back, a strap over each shoulder and down the front
+      bdBox(G, "bag", -0.33, -0.12, -0.15, 0.15, 1.0, 1.4);
+      if (!far) {
+        bdBox(G, "bag", -0.37, -0.32, -0.11, 0.11, 1.04, 1.24);                 // (its front pocket)
+        [-1, 1].forEach(function (s) {
+          var top = [-0.04, s * 0.11, 1.45], front = [bdFront(T.chest, 1.36) + 0.012, s * 0.115, 1.36];
+          bdCapsule(G, "bag", [-0.13, s * 0.11, 1.4], top, 0.017, 0.017, 4);
+          bdCapsule(G, "bag", top, front, 0.017, 0.017, 4);
+          bdCapsule(G, "bag", front, [bdFront(T.chest, 1.12) + 0.01, s * 0.125, 1.1], 0.017, 0.017, 4);
+        });
+      }
+    } else if (sp.carry === "shopping") {
+      // a bag in each hand, by their handles
+      [right, left].forEach(function (A, i) {
+        var g = bdGrip(A), y = g[1] + A.side * 0.05, w = i ? 0.13 : 0.16;
+        bdBox(G, "paper", g[0] - w, g[0] + w, y - 0.06, y + 0.06, g[2] - 0.42, g[2] - 0.08);
+        if (!far) { bdCapsule(G, "paper", [g[0] - 0.05, y, g[2] - 0.08], [g[0], y, g[2] - 0.01], 0.006, 0.006, 4); bdCapsule(G, "paper", [g[0] + 0.05, y, g[2] - 0.08], [g[0], y, g[2] - 0.01], 0.006, 0.006, 4); }
+      });
+    } else if (sp.carry === "cup") {
+      // a coffee in the right hand, held up in front
+      var c = bdGrip(right, 0.06);
+      bdCapsule(G, "cup", [c[0], c[1], c[2] - 0.05], [c[0], c[1], c[2] + 0.06], 0.036, 0.042, 8);
+      if (!far) { bdCapsule(G, "lid", [c[0], c[1], c[2] + 0.07], [c[0], c[1], c[2] + 0.085], 0.043, 0.04, 8); }
+    }
+  }
+  // An ID card on a lanyard round the neck, at the chest.
+  function bdBadge(G, sp, T) {
+    if (G.lod > 1) { return; }
+    var z = 1.2, fx = bdFront(T.chest, z) + 0.012, nz = 1.47;
+    [-1, 1].forEach(function (s) { bdCapsule(G, "strap", [0.03, s * 0.055, nz], [fx, s * 0.012, z + 0.07], 0.006, 0.006, 4); });
+    bdBox(G, "badge", fx, fx + 0.006, -0.032, 0.032, z - 0.045, z + 0.045);
   }
   function bdMake(sp, phase, arms, armK, withHead, scale, legs, lod) {
     var G = bdMaker(lod), O = sp.O, T = BD_TORSO[sp.sex], J = bdJoints(sp, phase, arms, armK, legs);
@@ -448,8 +535,13 @@
         bdCapsule(G, legSlot, hip, L.knee, bare ? 0.068 : 0.078, bare ? 0.055 : 0.063, 7);
         bdCapsule(G, legSlot, L.knee, L.ankle, bare ? 0.052 : 0.059, bare ? 0.038 : 0.047, 6);
       }
-      var shoe = O.shoes, r0 = shoe === "boot" ? 0.053 : shoe === "flat" ? 0.04 : shoe === "shoe" ? 0.046 : 0.05;
+      var shoe = O.shoes, r0 = shoe === "boot" ? 0.053 : shoe === "flat" ? 0.04 : shoe === "shoe" ? 0.046 : shoe === "heel" ? 0.034 : 0.05;
       var heel = [L.ankle[0] - 0.055, L.ankle[1], L.ankle[2] - 0.08 + r0], toe = [L.ankle[0] + (shoe === "flat" ? 0.14 : 0.152), L.ankle[1], L.ankle[2] - 0.08 + r0 * 0.88];
+      if (shoe === "heel") {
+        // (the heel lifted on its post, the toe down: a court shoe)
+        heel = [L.ankle[0] - 0.045, L.ankle[1], L.ankle[2] - 0.02]; toe = [L.ankle[0] + 0.13, L.ankle[1], L.ankle[2] - 0.08 + r0 * 0.8];
+        bdCapsule(G, "shoes", [heel[0] - 0.012, heel[1], heel[2] - 0.01], [heel[0] - 0.01, heel[1], L.ankle[2] - 0.08 + 0.008], 0.011, 0.008, 5);
+      }
       bdCapsule(G, "shoes", heel, toe, r0, r0 * 0.88, 7);
       if (shoe === "boot") { bdCapsule(G, "shoes", [L.ankle[0], L.ankle[1], L.ankle[2] - 0.03], [L.ankle[0] - 0.005, L.ankle[1], L.ankle[2] + 0.07], 0.056, 0.054, 7); }
     });
@@ -505,6 +597,8 @@
       bdCapsule(G, O.ppe ? "gloves" : "skin", A.wrist, [A.wrist[0] + d[0] * 0.075, A.wrist[1] + d[1] * 0.075, A.wrist[2] + d[2] * 0.075], 0.031, 0.026, 6);
       if (O.ppe && !G.lod) { bdCapsule(G, "gloves", [A.wrist[0] - d[0] * 0.035, A.wrist[1] - d[1] * 0.035, A.wrist[2] - d[2] * 0.035], A.wrist, 0.041, 0.038, 7); }   // the cuff
     });
+    if (sp.carry) { bdCarry(G, sp, J, T); }
+    if (sp.badge) { bdBadge(G, sp, T); }
     // the neck, and the head -- a child's bigger for its body
     bdCapsule(G, "skin", [0, 0, 1.43], [0.008, 0, 1.56], 0.05, 0.047, 7);
     var hk = sp.child ? 1.18 : 1, N = [0, 0, 1.53];
@@ -579,6 +673,7 @@
     if (BD_KEPT.size > BD_KEPT_MAX) { BD_KEPT.delete(BD_KEPT.keys().next().value); }
     return got;
   }
+  var BD_SHOES = { sneaker: 1, shoe: 1, boot: 1, flat: 1, heel: 1 };
   function bdSpec(L) {
     var sex = L && L.sex === "f" ? "f" : "m", outfit = L && BD_OUTFITS[L.outfit] ? L.outfit : "tee";
     var hair = L && L.hairStyle ? L.hairStyle : sex === "f" ? "long" : "short";
@@ -586,8 +681,12 @@
     if (L && L.hardhat) { O = Object.assign({}, O, { hat: "hard" }); }        // (on a building site, 40-works.js)
     var ppe = !!(L && L.ppe), hn = ppe && !!L.harness, tied = hn && !!L.tied;
     if (ppe) { O = Object.assign({}, O, { hat: "hard", ppe: true, sleeves: O.vest ? "long" : O.sleeves, harness: hn, tied: tied }); }
-    return { sex: sex, outfit: outfit, O: O, hair: hair, beard: !!(L && L.beard), child: !!(L && L.child),
-             key: [sex, outfit, hair, L && L.beard ? 1 : 0, L && L.child ? 1 : 0, L && L.hardhat ? "hh" : "", ppe ? "ppe" + (hn ? (tied ? "ht" : "h") : "") : ""].join(",") };
+    // (2026-10-07: shod as asked -- a woman's heels at the office, a child's trainers; what is carried; an ID card)
+    var shoe = !ppe && L && BD_SHOES[L.shoeKind] ? L.shoeKind : "", carry = !ppe && L && BD_CARRY[L.carry] ? L.carry : "", badge = !ppe && !!(L && L.badge);
+    if (shoe === "heel" && sex !== "f") { shoe = "shoe"; }
+    if (shoe) { O = Object.assign({}, O, { shoes: shoe }); }
+    return { sex: sex, outfit: outfit, O: O, hair: hair, beard: !!(L && L.beard), child: !!(L && L.child), carry: carry, badge: badge,
+             key: [sex, outfit, hair, L && L.beard ? 1 : 0, L && L.child ? 1 : 0, L && L.hardhat ? "hh" : "", ppe ? "ppe" + (hn ? (tied ? "ht" : "h") : "") : "", shoe, carry, badge ? 1 : 0].join(",") };
   }
   function bdColor(L, slot) {
     switch (slot) {
@@ -610,6 +709,12 @@
       case "glasses": return "#5d8fbf";
       case "muffs": return "#d23a2c";
       case "lanyard": return "#e8b923";
+      case "bag": return L.bagColor || "#3a2a1f";
+      case "paper": return L.bagColor || "#c9a77a";
+      case "cup": return "#f4f2ee";
+      case "lid": return "#2b2623";
+      case "strap": return L.strapColor || "#2f4f8f";
+      case "badge": return "#f4f2ee";
       default: return "#f2f0ea";
     }
   }
@@ -640,7 +745,7 @@
     var L = look || {}, sp = bdSpec(L), P = FLOOR_PX * (k || 1);
     var lod = bdLodFor(x, y, z, P, others, withHead);
     var b = phase ? (((Math.round(phase / (Math.PI * 2) * BD_STEPS)) % BD_STEPS) + BD_STEPS) % BD_STEPS : 0;
-    var arms = withHead && BD_ARMS[L.arms] ? L.arms : "", legs = L.legs === "kneel" ? "kneel" : "";
+    var arms = withHead && BD_ARMS[L.arms] ? L.arms : "", legs = L.legs === "kneel" || /^sit\d+$/.test(L.legs || "") ? L.legs : "";
     // (how tall, in steps of a twenty-fifth: each worker of his own height had a body made for every
     // step of his stride -- some hundreds a second as a crew walked in, 2026-10-05 -- the same few now)
     var aq = arms === "hammer" ? Math.round(Math.max(0, Math.min(1, L.armK || 0)) * BD_ARMQ) : 0, kq = Math.round(P / FLOOR_PX * 25) / 25 * FLOOR_PX;
@@ -706,6 +811,12 @@
         if (W.shoes) { out.shoes = pick2(W.shoes); }
         if (W.hat) { out.hat = pick2(W.hat); }
       }
+      // (and what was handed in for it: a school's skirt, a suit's tie and shirt -- 2026-10-07, worldDress)
+      if (outfit === "skirtsuit") { out.skirt = out.shirt; }           // (a suit: the skirt the jacket's cloth)
+      if (look && look.skirt) { out.skirt = look.skirt; }
+      if (look && look.tie) { out.tie = look.tie; }
+      if (look && look.shirtFront) { out.top2 = look.shirtFront; }
+      if (look && look.shoes) { out.shoes = look.shoes; }
       if (outfit === "dress") { out.skirt = out.shirt; }
       var U = BD_UNIFORM[kind];
       if (U) { out.shirt = U.shirt; out.pants = U.pants; out.hat = U.hat; out.shoes = "#1d1d1f"; }
@@ -719,6 +830,7 @@
       }
       if (look && look.arms) { out.arms = look.arms; out.armK = look.armK || 0; }
       if (look && look.legs) { out.legs = look.legs; }
+      if (look) { ["carry", "bagColor", "badge", "strapColor", "shoeKind"].forEach(function (k) { if (look[k] !== undefined) { out[k] = look[k]; } }); }
       if (look && look.hardhat) { out.hardhat = true; out.hardhatColor = look.hardhatColor; }
       if (look && look.ppe) {
         out.ppe = true; out.harness = !!look.harness; out.tied = !!look.tied;
@@ -760,5 +872,141 @@
       var f0 = faces.length, id = n && n.id ? n.id : 1;
       bdDraw(faces, x, y, z, head, phase, peopleLook(n, look, id), true, peopleSize(n && n.kind) * (0.97 + ((id * 37) % 7) / 100), true, fade);
       for (var i = f0; i < faces.length; i++) { faces[i].person = true; }
+    };
+  }
+
+  // ---- dressed for the place ------------------------------------------------------------------------
+  // (asked for, 2026-10-07: "if you do like a building like with offices there will be men and women in
+  // proper attire for the place you are building" -- and "don't forget about shoes they are wearing a
+  // long with other things for the outfits and they could be carrying things too depending on the
+  // environment")  Those out walking past what was built (39-world.js's worldFolk) dressed as the people
+  // there are, shod for it, carrying what they would:
+  //  - by an office, or a skyscraper of offices: men and women at work -- a suit and tie, a woman's
+  //    skirt suit or trouser suit, a shirt and tie, a blouse, a dress, an overcoat; leather shoes, a
+  //    woman's heels as often as not; a briefcase, a handbag, a coffee; an ID card on a lanyard --
+  //    hardly a child; the cars the greys, blacks and whites of a business district;
+  //  - by a school: children in its uniform -- a white or pale blue shirt, a navy skirt or trousers,
+  //    trainers -- each with a backpack, and their teachers, a lanyard and a bag;
+  //  - by a shop, a mall: shopping bags; by a cafe, a coffee in hand;
+  //  - anywhere else, as anyone dresses: a bag now and then.
+  var DRESS_BUSINESS = {
+    m: [["suit", 5], ["shirt", 3], ["coat", 2]],
+    f: [["skirtsuit", 3], ["suit", 3], ["blouse", 3], ["dress", 1], ["coat", 1]],
+    shirt: ["#f4f2ee", "#dfe6ef", "#e8eef4", "#f1e6e6", "#d6dee8"],
+    blouse: ["#f4f2ee", "#efe3dc", "#dfe6ef", "#e9e4f0", "#2f3236"],
+    dress: ["#25303d", "#5a2f38", "#2f3236", "#2f4a3f", "#3f3a5a"],
+    coat: ["#b39a78", "#2f3236", "#3d4552", "#5a4a3c", "#25303d"],
+    trousers: ["#25303d", "#2f3236", "#3d3f44", "#4a4d52"],
+    ties: ["#8c2f3a", "#2f4f8f", "#1f2a33", "#6a4c93", "#3d5c43"],
+    shoes: ["#1d1d1f", "#3a2a1f", "#1d1d1f"],
+    heels: ["#1d1d1f", "#5a2f38", "#c9b49a", "#1d1d1f"],
+    bags: ["#2b2623", "#3a2a1f", "#1d1d1f", "#6b4a32"],
+    handbags: ["#2b2623", "#7a4b30", "#c9b49a", "#5a2f38", "#1d1d1f"],
+    straps: ["#2f4f8f", "#1f2a33", "#8c2f3a", "#3d5c43"],
+    cars: ["#1d1f22", "#2f3437", "#c9ced3", "#f2efe8", "#5d6166", "#25303d", "#9aa0a6"]
+  };
+  var DRESS_SCHOOL = { top: ["#f4f2ee", "#dfe6ef"], bottom: ["#25303d", "#2f3a52"], skirt: ["#25303d", "#3a2f52", "#2f4a3f"],
+                       shoes: ["#1d1d1f", "#f2f0ea", "#25303d"], packs: ["#2f4f8f", "#8c2f3a", "#3d5c43", "#c9a227", "#6a4c93", "#d9822b", "#25303d"],
+                       teach: { m: [["shirt", 3], ["jacket", 1], ["suit", 1]], f: [["blouse", 3], ["dress", 1], ["skirt", 1]] } };
+  var DRESS_SHOPPING = ["#c9a77a", "#f2efe8", "#b03a48", "#2f4a6a", "#3d5c43", "#1d1d1f"];
+  var DRESS_PACKS = ["#2f4f8f", "#3d3f44", "#8c2f3a", "#3d5c43", "#5a4a3c"];
+  // What was built, last: what kind of place it is.
+  var dressKept = { n: -1, next: -1, what: null };
+  function dressPlace() {
+    if (dressKept.n === hand.nodes.length && dressKept.next === hand.next) { return dressKept.what; }
+    var made = null;
+    hand.nodes.forEach(function (n) { if (n.madeWith && (!made || n.id > made.id)) { made = n; } });
+    var w = made ? made.madeWith : null, type = w ? w.type || "house" : "house", what = "home";
+    if (type === "office" || (type === "tower" && (w.towerUse || "offices") === "offices")) { what = "business"; }
+    else if (type === "tower" && w.towerUse === "mixed") { what = "mixed"; }
+    else if (type === "school") { what = "school"; }
+    else if (type === "shop" || type === "boutique" || type === "mall") { what = "shops"; }
+    else if (type === "cafe") { what = "cafe"; }
+    dressKept = { n: hand.nodes.length, next: hand.next, what: what };
+    return what;
+  }
+  function dressPick(list, rnd) {
+    var all = list.reduce(function (s, x) { return s + x[1]; }, 0), at = rnd() * all;
+    for (var i = 0; i < list.length; i++) { at -= list[i][1]; if (at < 0) { return list[i][0]; } }
+    return list[0][0];
+  }
+  function dressOne(list, rnd) { return list[Math.floor(rnd() * list.length) % list.length]; }
+  // For worldFolk: how each of those out walking is dressed, and what they carry.
+  function worldDress() {
+    var what = dressPlace(), B = DRESS_BUSINESS, ink = simInk();
+    function sexOf(kind, rnd) { return kind === "i_woman" ? "f" : kind === "i_man" ? "m" : rnd() < 0.5 ? "f" : "m"; }
+    // what anyone carries, here
+    function carry(look, sex, child, rnd, place) {
+      var u = rnd();
+      if (child) { if (u < (place === "school" ? 0.9 : 0.35)) { look.carry = "backpack"; look.bagColor = dressOne(DRESS_SCHOOL.packs, rnd); } return; }
+      if (place === "shops") {
+        if (u < 0.5) { look.carry = "shopping"; look.bagColor = dressOne(DRESS_SHOPPING, rnd); }
+        else if (sex === "f" && u < 0.75) { look.carry = "handbag"; look.bagColor = dressOne(B.handbags, rnd); }
+        return;
+      }
+      if (place === "cafe") {
+        if (u < 0.4) { look.carry = "cup"; look.arms = "cup"; }
+        else if (sex === "f" && u < 0.65) { look.carry = "handbag"; look.bagColor = dressOne(B.handbags, rnd); }
+        return;
+      }
+      if (u < 0.1) { look.carry = "shopping"; look.bagColor = dressOne(DRESS_SHOPPING, rnd); }
+      else if (u < 0.2) { look.carry = "backpack"; look.bagColor = dressOne(DRESS_PACKS, rnd); }
+      else if (u < 0.27) { look.carry = "cup"; look.arms = "cup"; }
+      else if (sex === "f" && u < 0.52) { look.carry = "handbag"; look.bagColor = dressOne(B.handbags, rnd); }
+    }
+    function business(kind, rnd) {
+      // (a man or a woman at work: a child here and there only)
+      if (kind === "i_child" && rnd() < 0.85) { kind = rnd() < 0.5 ? "i_man" : "i_woman"; }
+      if (kind === "i_person") { kind = rnd() < 0.5 ? "i_man" : "i_woman"; }
+      if (kind === "i_child") { return null; }
+      var sex = sexOf(kind, rnd), outfit = dressPick(B[sex], rnd);
+      var look = { outfit: outfit, sex: sex, line: ink, shoes: dressOne(B.shoes, rnd), shoeKind: "shoe" };
+      if (outfit === "suit" || outfit === "skirtsuit") { look.tie = dressOne(B.ties, rnd); look.shirtFront = dressOne(B.shirt, rnd); }
+      else if (outfit === "shirt") { look.own = true; look.fill = dressOne(B.shirt, rnd); look.line = dressOne(B.trousers, rnd); look.tie = dressOne(B.ties, rnd); }
+      else if (outfit === "blouse") { look.own = true; look.fill = dressOne(B.blouse, rnd); look.line = dressOne(B.trousers, rnd); }
+      else if (outfit === "dress") { look.own = true; look.fill = dressOne(B.dress, rnd); }
+      else if (outfit === "coat") { look.own = true; look.fill = dressOne(B.coat, rnd); look.line = dressOne(B.trousers, rnd); look.shirtFront = dressOne(B.shirt, rnd); }
+      // (shod for it: a man's leather shoes; a woman's heels, with a skirt or a dress most often, or flats)
+      if (sex === "f") {
+        var skirted = outfit === "skirtsuit" || outfit === "dress";
+        look.shoeKind = rnd() < (skirted ? 0.7 : 0.4) ? "heel" : "flat";
+        if (look.shoeKind === "heel") { look.shoes = dressOne(B.heels, rnd); }
+      }
+      // (at work: an ID card on a lanyard; a briefcase, a handbag, a coffee)
+      if (rnd() < 0.45) { look.badge = true; look.strapColor = dressOne(B.straps, rnd); }
+      var u = rnd();
+      if (u < (sex === "m" ? 0.42 : 0.15)) { look.carry = "briefcase"; look.bagColor = dressOne(B.bags, rnd); }
+      else if (sex === "f" && u < 0.6) { look.carry = "handbag"; look.bagColor = dressOne(B.handbags, rnd); }
+      else if (u < 0.75) { look.carry = "cup"; look.arms = "cup"; }
+      return { kind: kind, look: look };
+    }
+    function school(kind, rnd) {
+      var S = DRESS_SCHOOL;
+      if (kind !== "i_child" && rnd() < 0.6) { kind = "i_child"; }
+      if (kind === "i_child") {
+        var girl = rnd() < 0.5;
+        var look = { sex: girl ? "f" : "m", outfit: girl && rnd() < 0.7 ? "skirt" : "polo", own: true, fill: dressOne(S.top, rnd), line: dressOne(S.bottom, rnd),
+                     shoeKind: "sneaker", shoes: dressOne(S.shoes, rnd) };
+        if (look.outfit === "skirt") { look.skirt = dressOne(S.skirt, rnd); }
+        carry(look, look.sex, true, rnd, "school");
+        return { kind: kind, look: look };
+      }
+      if (kind === "i_person") { kind = rnd() < 0.5 ? "i_man" : "i_woman"; }
+      var sex = sexOf(kind, rnd), t = { sex: sex, outfit: dressPick(S.teach[sex], rnd), line: ink, shoeKind: sex === "f" ? "flat" : "shoe" };
+      if (rnd() < 0.5) { t.badge = true; t.strapColor = dressOne(B.straps, rnd); }
+      if (rnd() < 0.45) { t.carry = sex === "f" ? "handbag" : "briefcase"; t.bagColor = dressOne(sex === "f" ? B.handbags : B.bags, rnd); }
+      return { kind: kind, look: t };
+    }
+    return {
+      cars: what === "business" || what === "mixed" ? B.cars : null,
+      // `look`: as they would have been, to keep where nothing here says otherwise
+      dress: function (kind, rnd, look) {
+        if (what === "school") { return school(kind, rnd); }
+        if (what === "business" || (what === "mixed" && rnd() < 0.65)) { var b = business(kind, rnd); if (b) { return b; } }
+        // (as anyone dresses -- carrying what is carried here)
+        var mine = Object.assign({}, look || {});
+        carry(mine, kind === "i_woman" ? "f" : kind === "i_man" ? "m" : null, kind === "i_child", rnd, what);
+        return { kind: kind, look: mine };
+      }
     };
   }

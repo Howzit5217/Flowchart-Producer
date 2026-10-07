@@ -535,6 +535,20 @@
   .view3d .o3-tip .o3-what { opacity: .68; overflow: hidden; text-overflow: ellipsis; }
   .view3d .o3-tip.far, .view3d .o3-tip:has(kbd:empty) { padding-left: 11px; }
   @keyframes o3-tip { from { opacity: 0; transform: translate(-50%, 4px); } }
+  /* the piece looked at, framed by four corner marks (40-open3d.js o3Frame): bright in reach, faint further */
+  .view3d .o3-frame { position: absolute; left: 0; top: 0; z-index: 4; pointer-events: none; will-change: transform; }
+  .view3d .o3-frame[hidden] { display: none; }
+  .view3d .o3-frame:not([hidden]) { animation: o3-frame .16s var(--ease, ease) both; }
+  .view3d .o3-frame i {
+    position: absolute; width: min(16px, 30%); height: min(16px, 30%); border: 0 solid #fff;
+    filter: drop-shadow(0 0 1.5px rgba(0, 0, 0, .6)); transition: border-color .16s ease;
+  }
+  .view3d .o3-frame i:nth-child(1) { left: 0; top: 0; border-left-width: 2px; border-top-width: 2px; border-top-left-radius: 6px; }
+  .view3d .o3-frame i:nth-child(2) { right: 0; top: 0; border-right-width: 2px; border-top-width: 2px; border-top-right-radius: 6px; }
+  .view3d .o3-frame i:nth-child(3) { right: 0; bottom: 0; border-right-width: 2px; border-bottom-width: 2px; border-bottom-right-radius: 6px; }
+  .view3d .o3-frame i:nth-child(4) { left: 0; bottom: 0; border-left-width: 2px; border-bottom-width: 2px; border-bottom-left-radius: 6px; }
+  .view3d .o3-frame.far i { border-color: rgba(255, 255, 255, .5); }
+  @keyframes o3-frame { from { opacity: 0; } }
   /* the cursor: a hand where a click uses something, the move arrows over what can be carried */
   body .view3d > canvas:first-child.o3-can-move { cursor: move; }
   body .view3d > canvas:first-child.o3-can-use { cursor: pointer; }
@@ -543,8 +557,8 @@
   .view3d .v3-hint { transition: opacity .8s var(--ease-soft, ease); }
   .view3d .v3-hint.o3-gone { opacity: 0 !important; }
   @media (prefers-reduced-motion: reduce) {
-    .view3d .o3-aim, .view3d .v3-hint { transition: none; }
-    .view3d .o3-tip { animation: none; }
+    .view3d .o3-aim, .view3d .v3-hint, .view3d .o3-frame i { transition: none; }
+    .view3d .o3-tip, .view3d .o3-frame:not([hidden]) { animation: none; }
   }
 
 

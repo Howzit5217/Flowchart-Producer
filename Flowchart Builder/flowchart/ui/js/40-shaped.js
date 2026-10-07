@@ -141,9 +141,141 @@
       // (in toward the room)
       var mx = (p[0] + q[0]) / 2, my = (p[1] + q[1]) / 2;
       if (!shpHolds(n.shape, mx + nx * 1.5, my + ny * 1.5, 0)) { nx = -nx; ny = -ny; }
-      var pts = [p, q, [q[0] + nx * T, q[1] + ny * T], [p[0] + nx * T, p[1] + ny * T]].map(function (r) { return v3Local(n, r[0], r[1]); });
-      v3Prism(faces, pts, 0, tall, how);
+      var ux = (q[0] - p[0]) / L, uy = (q[1] - p[1]) / L;
+      // a piece of it: `a` to `b` along it, `d0` to `d1` in from its outside face, `z0` to `z1` up
+      function part(a, b, z0, z1, h, d0, d1) {
+        if (b - a < 0.5 || z1 - z0 < 0.5) { return; }
+        d0 = d0 === undefined ? 0 : d0; d1 = d1 === undefined ? T : d1;
+        var pts = [[a, d0], [b, d0], [b, d1], [a, d1]].map(function (c) {
+          return v3Local(n, p[0] + ux * c[0] + nx * c[1], p[1] + uy * c[0] + ny * c[1]);
+        });
+        v3Prism(faces, pts, z0, z1, h || how);
+      }
+      // (2026-10-07) the outside wall a cut makes -- a house's rounded corner, its front swept round --
+      // with its windows in it as the straight walls have theirs: one every two and a half metres
+      var wins = low || L < 1.9 * P ? 0 : Math.max(1, Math.floor((L - 0.6 * P) / (2.5 * P)));
+      if (!wins) { part(0, L, 0, tall); return; }
+      var ww = Math.min(1.2 * P, L / wins - 0.6 * P), sill = SILL * P, top = Math.min(DOOR_TALL * P, ceil - 0.1 * P), at = 0;
+      var trimC = typeof styleTrim === "function" ? styleTrim("#f4f2ed") : "#f4f2ed", F = 1.6;
+      var trim = { piece: true, color: trimC, edge: v3Mix(trimC, "#000000", 0.35) };
+      for (var i = 0; i < wins; i++) {
+        var c = L * (i + 0.5) / wins, a = c - ww / 2, b = c + ww / 2;
+        part(at, a, 0, tall);
+        part(a, b, 0, Math.min(tall, sill));
+        part(a, b, top, tall);
+        part(a - 2, b + 2, sill - 0.04 * P, sill + 0.4, trim, -2.5, T + 1);
+        part(a, a + F, sill, top, trim, -0.4, T + 0.4);
+        part(b - F, b, sill, top, trim, -0.4, T + 0.4);
+        part(a, b, top - F, top, trim, -0.4, T + 0.4);
+        part(a, b, sill, sill + F, trim, -0.4, T + 0.4);
+        part(a + F, b - F, sill + F, top - F, { glass: true }, T / 2 - 0.3, T / 2 + 0.3);
+        at = b;
+      }
+      part(at, L, 0, tall);
     });
+  }
+  // ---- its roof, cut to it ---------------------------------------------------------------------
+  // (2026-10-07) A roof is made over a rectangle of rooms (roofPlan, 38-view3d.js, and the styles'
+  // and the house's own ways of it): where a room under it is cut to a shape -- a house's corners
+  // rounded or angled, its front swept round -- the roof is cut along the same lines, and the gap
+  // between the top of the wall and the slope over it closed, as a gable is.  (Every footprint asked
+  // for is convex, so the rooms under a rectangle are, all together, the round of their corners.)
+  if (typeof roofPlan === "function") {
+    var roofPlanShaped = roofPlan;
+    roofPlan = function (floors, upTo, wallTop) {
+      var rects = roofPlanShaped.apply(this, arguments);
+      try { shpRoofHulls(rects, floors); } catch (e) { /* the roofs as they were */ }
+      return rects;
+    };
+  }
+  function shpRoofHulls(rects, floors) {
+    if (!hand.nodes.some(function (n) { return n.kind === "i_room" && n.shape && !n.skin; })) { return; }
+    var rooms = hand.nodes.filter(function (n) { return n.kind === "i_room" && !((n.turn || 0) % 360); }).map(function (r) {
+      var f = floors && floors.length ? floorAt(floors, r.x, r.y) : null;
+      return { r: r, level: f ? f.level : 0, x: r.x + (f ? f.dx : 0), y: r.y + (f ? f.dy : 0) };
+    });
+    rects.forEach(function (R) {
+      if (R.turn) { return; }
+      var mine = rooms.filter(function (o) { return o.level === R.level && o.x > R.x0 - 1 && o.x < R.x1 + 1 && o.y > R.y0 - 1 && o.y < R.y1 + 1; });
+      if (!mine.some(function (o) { return o.r.shape && !o.r.skin; })) { return; }
+      var pts = [];
+      mine.forEach(function (o) {
+        var r = o.r, sh = r.shape || [[-r.w / 2, -r.h / 2], [r.w / 2, -r.h / 2], [r.w / 2, r.h / 2], [-r.w / 2, r.h / 2]];
+        sh.forEach(function (q) { pts.push([o.x + q[0], o.y + q[1]]); });
+      });
+      var hull = shpHull(pts);
+      if (hull.length >= 3) { R.hull = hull; }
+    });
+  }
+  // The convex hull of points (Andrew's way), round anticlockwise as the page is drawn (y down).
+  function shpHull(pts) {
+    var P = pts.slice().sort(function (a, b) { return a[0] - b[0] || a[1] - b[1]; });
+    if (P.length < 3) { return P; }
+    function cross(o, a, b) { return (a[0] - o[0]) * (b[1] - o[1]) - (a[1] - o[1]) * (b[0] - o[0]); }
+    var lo = [], hi = [];
+    P.forEach(function (p) { while (lo.length >= 2 && cross(lo[lo.length - 2], lo[lo.length - 1], p) <= 0) { lo.pop(); } lo.push(p); });
+    for (var i = P.length - 1; i >= 0; i--) { var p = P[i]; while (hi.length >= 2 && cross(hi[hi.length - 2], hi[hi.length - 1], p) <= 0) { hi.pop(); } hi.push(p); }
+    hi.pop(); lo.pop();
+    return lo.concat(hi);
+  }
+  // The part of a face (points x, y, z) where a.x + b.y <= c -- and where it met that line, kept in `seg`.
+  function shpCutFace(pts, a, b, c, seg) {
+    var out = [];
+    for (var i = 0; i < pts.length; i++) {
+      var p = pts[i], q = pts[(i + 1) % pts.length], dp = a * p[0] + b * p[1] - c, dq = a * q[0] + b * q[1] - c;
+      if (dp <= 1e-6) { out.push(p); }
+      if ((dp < -1e-6 && dq > 1e-6) || (dp > 1e-6 && dq < -1e-6)) {
+        var t = dp / (dp - dq), m = [p[0] + (q[0] - p[0]) * t, p[1] + (q[1] - p[1]) * t, p[2] + (q[2] - p[2]) * t];
+        out.push(m);
+        if (seg) { seg.push(m); }
+      }
+    }
+    return out.length >= 3 ? out : null;
+  }
+  if (typeof roofFaces === "function") {
+    var roofFacesShaped = roofFaces;
+    roofFaces = function (faces, R, lift, how) {
+      if (!R || !R.hull) { return roofFacesShaped.apply(this, arguments); }
+      var from = faces.length, out = roofFacesShaped.apply(this, arguments);
+      try { shpRoofCut(faces, from, R, lift || 0, how); } catch (e) { /* the roof as it was */ }
+      return out;
+    };
+  }
+  function shpRoofCut(faces, from, R, lift, how) {
+    var H = R.hull, zw = R.z + lift + (R.bias || 0), lines = [];
+    // (the hull's sides that cut across the rectangle -- not those along its own sides, where its eaves hang out)
+    for (var i = 0; i < H.length; i++) {
+      var p = H[i], q = H[(i + 1) % H.length];
+      var onSide = (Math.abs(p[0] - q[0]) < 1 && (Math.abs(p[0] - R.x0) < 2 || Math.abs(p[0] - R.x1) < 2)) ||
+                   (Math.abs(p[1] - q[1]) < 1 && (Math.abs(p[1] - R.y0) < 2 || Math.abs(p[1] - R.y1) < 2));
+      if (onSide || Math.hypot(q[0] - p[0], q[1] - p[1]) < 1) { continue; }
+      // (outward: the hull runs round with the inside on one side -- the side its middle is)
+      var a = q[1] - p[1], b = -(q[0] - p[0]), L = Math.hypot(a, b), cx = 0, cy = 0;
+      H.forEach(function (h) { cx += h[0] / H.length; cy += h[1] / H.length; });
+      a /= L; b /= L;
+      var c = a * p[0] + b * p[1];
+      if (a * cx + b * cy > c) { a = -a; b = -b; c = -c; }
+      lines.push([a, b, c]);
+    }
+    if (!lines.length) { return; }
+    var wallHow = { wall: true, color: how && how.color, edge: how && how.edge, alpha: how && how.alpha, late: how && how.late };
+    var kept = [], walls = [];
+    for (var k = from; k < faces.length; k++) {
+      var F = faces[k], pts = F.pts;
+      for (var j = 0; j < lines.length && pts; j++) {
+        var seg = [];
+        pts = shpCutFace(pts, lines[j][0], lines[j][1], lines[j][2], seg);
+        // (where a slope was cut: the wall carried up under it to meet it)
+        if (pts && F.roof && seg.length === 2 && Math.max(seg[0][2], seg[1][2]) > zw + 1) {
+          var s0 = seg[0], s1 = seg[1];
+          walls.push({ pts: [[s0[0], s0[1], zw], [s1[0], s1[1], zw], [s1[0], s1[1], Math.max(zw, s1[2])], [s0[0], s0[1], Math.max(zw, s0[2])]],
+                       n: [lines[j][0], lines[j][1], 0], how: wallHow, side: true, node: R.room });
+        }
+      }
+      if (pts) { F.pts = pts; kept.push(F); }
+    }
+    faces.length = from;
+    kept.concat(walls).forEach(function (F) { faces.push(F); });
   }
   // A door drawn by the building itself where it stands -- a skyscraper's way in through its glass,
   // its revolving door (40-towers.js): not a door of the room's of its own as well.
@@ -276,20 +408,24 @@
   // before the floors are boxed, furnished, lit.)  `ctx`: flip (the plan drawn mirrored), X (metres
   // to the paper's numbers), fronts (the doors out to the street).
   function starterCut(plan, floors, made, ctx) {
-    if (!plan || !plan.floors || !plan.floors.some(function (fp) { return fp && fp.clip; })) { return; }
+    // (or, any other building, the footprint asked for: its corners rounded, angled, its front swept round)
+    var want = ctx.want || {}, foot = want.type !== "tower" && SHP_FOOTS.indexOf(want.footprint) > 0 ? want.footprint : null;
+    if (!plan || !plan.floors || (!foot && !plan.floors.some(function (fp) { return fp && fp.clip; }))) { return; }
     var X = ctx.X, P = FLOOR_PX, gone = new Set(), byId = {};
     made.forEach(function (r) { byId[r.id] = r; });
     floors.forEach(function (f, i) {
-      var fp = plan.floors[i];
-      if (!fp || !fp.clip || fp.clip.length < 3) { return; }
-      var poly = fp.clip.map(function (p) { return [ctx.flip ? -X(p[0]) : X(p[0]), X(p[1])]; });
+      var fp = plan.floors[i] || {};
+      var poly = fp.clip && fp.clip.length >= 3 ? fp.clip.map(function (p) { return [ctx.flip ? -X(p[0]) : X(p[0]), X(p[1])]; })
+               : foot ? shpFootOf(f, foot, ctx.fronts) : null;
+      if (!poly) { return; }
       f.clipPx = poly;
       f.nodes.forEach(function (r) {
         if (r.kind !== "i_room" || !r.local) { return; }
         var L = r.local, A = (L[2] - L[0]) * (L[3] - L[1]);
         if (fp.skin) { r.skin = true; }
-        // (the stairs, the lifts and the rest of the core stand over each other floor on floor: as they are)
-        if (SHP_KEEP[r.starter]) { return; }
+        // (the stairs, the lifts and the rest of the core stand over each other floor on floor: as they are;
+        // and a room a way in from outside would be cut from, or a garage: its corner kept square)
+        if (SHP_KEEP[r.starter] || r.shpKeep) { delete r.shpKeep; return; }
         var cut = shpClipRect(poly, L[0], L[1], L[2], L[3]), a = cut.length >= 3 ? shpArea(cut) : 0;
         var thick = a > 0 ? 2 * a / shpLength(cut) : 0;
         if (a < Math.max(2.5 * P * P, A * 0.08) || thick < 0.75 * P) { gone.add(r); return; }
@@ -355,6 +491,148 @@
       hand.links = hand.links.filter(function (k) { return k !== l; });
     });
   }
+  // ---- a footprint not a box, for any building -------------------------------------------------
+  // (2026-10-07, the same for a house or any building but a skyscraper, which has its forms: "this
+  // should also be allowed for houses and other buildings too")  Start building asks how its corners
+  // are -- square, rounded, angled, or its front swept round -- and each floor is cut to that outline
+  // over the rooms it has.  All of them convex: the roof over them cut to the same (below).
+  var SHP_FOOTS = ["box", "rounded", "angled", "curved"];
+  var SHP_FOOT_KEEP = { garage: 1, carport: 1, porch: 1 };
+  // The outline, round the box l, t, r, b (the paper's numbers: y down the page, the front at b),
+  // its corners `size` across (or as each shape has them).
+  function shpFootSize(kind, l, t, r, b) {
+    var W = r - l, D = b - t, m = Math.min(W, D);
+    return kind === "rounded" ? 0.22 * m : kind === "angled" ? 0.2 * m : kind === "curved" ? Math.min(0.45 * W / 2, 0.7 * D) : 0;
+  }
+  function shpFootPoly(kind, l, t, r, b, size) {
+    var out = [], q = size === undefined ? shpFootSize(kind, l, t, r, b) : size;
+    function arc(cx, cy, rad, a0, a1, n) {
+      for (var i = 0; i <= n; i++) { var a = a0 + (a1 - a0) * i / n; out.push([cx + Math.cos(a) * rad, cy + Math.sin(a) * rad]); }
+    }
+    if (!(q > 0)) { return null; }
+    if (kind === "rounded") {
+      arc(r - q, b - q, q, 0, Math.PI / 2, 6); arc(l + q, b - q, q, Math.PI / 2, Math.PI, 6);
+      arc(l + q, t + q, q, Math.PI, 1.5 * Math.PI, 6); arc(r - q, t + q, q, 1.5 * Math.PI, 2 * Math.PI, 6);
+      return out;
+    }
+    if (kind === "angled") {
+      return [[l + q, t], [r - q, t], [r, t + q], [r, b - q], [r - q, b], [l + q, b], [l, b - q], [l, t + q]];
+    }
+    if (kind === "curved") {
+      // (the front's corners swept round, its middle straight for the way in; the back square)
+      out.push([l, t], [r, t]);
+      arc(r - q, b - q, q, 0, Math.PI / 2, 10); arc(l + q, b - q, q, Math.PI / 2, Math.PI, 10);
+      return out;
+    }
+    return null;
+  }
+  // A floor's outline, round its rooms but a garage's (or a carport's, a porch's: a wing of its own,
+  // square, beside it) -- its corners no bigger than leaves each way in from outside on a straight
+  // stretch of wall, the same either side.  Too small for that to be worth it: a room whose way in
+  // would be cut keeps its corner square instead.
+  function shpFootOf(f, kind, fronts) {
+    var P = FLOOR_PX, rooms = f.nodes.filter(function (r) { return r.kind === "i_room" && r.local; });
+    var main = rooms.filter(function (r) { return !SHP_FOOT_KEEP[r.starter]; });
+    if (!main.length) { return null; }
+    var l = Infinity, t = Infinity, r = -Infinity, b = -Infinity;
+    main.forEach(function (n) { l = Math.min(l, n.local[0]); t = Math.min(t, n.local[1]); r = Math.max(r, n.local[2]); b = Math.max(b, n.local[3]); });
+    if (r - l < 4 * P || b - t < 4 * P) { return null; }
+    rooms.forEach(function (n) { if (SHP_FOOT_KEEP[n.starter]) { n.shpKeep = true; } });
+    var mine = {};
+    rooms.forEach(function (n) { mine[n.id] = n; });
+    // each way in from outside: the room it is from, and where it is on the outline's box
+    var ways = [];
+    (fronts || []).forEach(function (d) {
+      hand.links.forEach(function (k) {
+        var n = k.to === d.id ? mine[k.from] : k.from === d.id ? mine[k.to] : null;
+        if (!n || SHP_FOOT_KEEP[n.starter]) { return; }
+        // (where it is in its room's wall: a door out is drawn a step out past it on the paper)
+        var x = (n.local[0] + n.local[2]) / 2 + (d.x - n.x), y = (n.local[1] + n.local[3]) / 2 + (d.y - n.y);
+        ways.push({ n: n, x: Math.max(n.local[0], Math.min(n.local[2], x)), y: Math.max(n.local[1], Math.min(n.local[3], y)) });
+      });
+    });
+    var size = shpFootSize(kind, l, t, r, b), room = 0.8 * P;
+    ways.forEach(function (w) {
+      var side = [["b", Math.abs(w.y - b)], ["t", Math.abs(w.y - t)], ["l", Math.abs(w.x - l)], ["r", Math.abs(w.x - r)]]
+        .sort(function (p, q) { return p[1] - q[1]; })[0];
+      if (side[1] > 1.2 * P) { return; }                     // (not out in the outline's own walls)
+      var along = side[0] === "b" || side[0] === "t" ? Math.min(w.x - l, r - w.x) : kind === "curved" ? b - w.y : Math.min(w.y - t, b - w.y);
+      if (kind === "curved" && side[0] === "t") { return; }   // (its back is square)
+      size = Math.min(size, along - room);
+    });
+    if (size < 1.2 * P) {
+      // (too small to be worth it: the full size, those rooms square)
+      size = shpFootSize(kind, l, t, r, b);
+      var poly0 = shpFootPoly(kind, l, t, r, b, size);
+      ways.forEach(function (w) { if (!shpHolds(poly0, w.x, w.y - 8, 0) && !shpHolds(poly0, w.x, w.y + 8, 0)) { w.n.shpKeep = true; } });
+      return poly0;
+    }
+    return shpFootPoly(kind, l, t, r, b, size);
+  }
+  // Asked on Start building's sheet, beside what it has: for a house before its extra rooms, for any
+  // other building (a skyscraper has its forms instead) before what goes round it.
+  function shpFootAsk(ui, want) {
+    if (!ui || !want || want.type === "tower" || !ui.tiles || !ui.tile) { return; }
+    ui.head(TXT.shp_head);
+    ui.tiles();
+    SHP_FOOTS.forEach(function (k) {
+      ui.tile(TXT["shp_" + k], "shp_" + k, function () { return (want.footprint || "box") === k; }, function () { want.footprint = k; }, true);
+    });
+  }
+  if (typeof roomsAsk === "function") {
+    var roomsAskShaped = roomsAsk;
+    roomsAsk = function (ui, want) { try { shpFootAsk(ui, want); } catch (e) { /* not asked */ } return roomsAskShaped.apply(this, arguments); };
+  }
+  if (typeof groundsAsk === "function") {
+    var groundsAskShaped = groundsAsk;
+    groundsAsk = function (ui, want) { try { shpFootAsk(ui, want); } catch (e) { /* not asked */ } return groundsAskShaped.apply(this, arguments); };
+  }
+  // The sheet's sketch of it (39-starter.js) cut the same: each floor's rooms to its outline -- a
+  // skyscraper's form at that height, or the footprint asked for -- what is left of each drawn as it is.
+  var shpSketchPlan = null;
+  if (typeof starterPlan === "function") {
+    var starterPlanShaped = starterPlan;
+    starterPlan = function () { var plan = starterPlanShaped.apply(this, arguments); shpSketchPlan = plan; return plan; };
+  }
+  if (typeof starterSketch === "function") {
+    var starterSketchShaped = starterSketch;
+    starterSketch = function (want) {
+      shpSketchPlan = null;
+      var out = starterSketchShaped.apply(this, arguments), plan = shpSketchPlan;
+      try { (out || []).forEach(function (f) { shpSketchCut(f, plan, want || {}); }); } catch (e) { /* drawn as boxes */ }
+      return out;
+    };
+  }
+  function shpSketchCut(f, plan, want) {
+    if (!f || !f.rooms || !f.rooms.length) { return; }
+    var fp = plan && (plan.floors || []).filter(function (q) { return q && q.level === f.level; })[0], outline = null;
+    var flipped = f.rooms.every(function (m) { return m.x1 <= 0.01; });
+    if (fp && fp.clip && fp.clip.length >= 3) {
+      outline = fp.clip.map(function (p) { return [flipped ? -p[0] : p[0], p[1]]; });
+    } else if (want.type !== "tower" && SHP_FOOTS.indexOf(want.footprint) > 0) {
+      var main = f.rooms.filter(function (m) { return !SHP_FOOT_KEEP[m.kind]; }), l = Infinity, t = Infinity, r = -Infinity, b = -Infinity;
+      main.forEach(function (m) { l = Math.min(l, m.x0); t = Math.min(t, m.y0); r = Math.max(r, m.x1); b = Math.max(b, m.y1); });
+      if (main.length && r - l >= 4 && b - t >= 4) { outline = shpFootPoly(want.footprint, l, t, r, b); }
+    }
+    if (!outline) { return; }
+    f.rooms.forEach(function (m) {
+      if (SHP_KEEP[m.kind] || SHP_FOOT_KEEP[m.kind]) { return; }
+      // (in the paper's numbers, as the building is cut: shpTidy's tolerances are those)
+      var K = FLOOR_PX, big = outline.map(function (p) { return [p[0] * K, p[1] * K]; });
+      var cut = shpClipRect(big, m.x0 * K, m.y0 * K, m.x1 * K, m.y1 * K).map(function (p) { return [p[0] / K, p[1] / K]; });
+      var A = (m.x1 - m.x0) * (m.y1 - m.y0), a = cut.length >= 3 ? shpArea(cut) : 0;
+      if (a < Math.max(2.5, A * 0.08)) { m.gone = true; return; }
+      if (a < A * 0.995) { m.poly = cut; }
+    });
+  }
+  if (typeof HOUSE_ICONS === "object") {
+    Object.assign(HOUSE_ICONS, {
+      shp_box: '<path d="M3.5 4.5h13v11h-13z"/>',
+      shp_rounded: '<path d="M7 4.5h6a3.5 3.5 0 0 1 3.5 3.5v4a3.5 3.5 0 0 1-3.5 3.5H7A3.5 3.5 0 0 1 3.5 12V8A3.5 3.5 0 0 1 7 4.5z"/>',
+      shp_angled: '<path d="M6.5 4.5h7l3 3v5l-3 3h-7l-3-3v-5z"/>',
+      shp_curved: '<path d="M3.5 4.5h13v6.5a4.5 4.5 0 0 1-4.5 4.5H8a4.5 4.5 0 0 1-4.5-4.5z"/>'
+    });
+  }
   // the rooms that stand over each other floor on floor, never cut away
   var SHP_KEEP = { stairs: 1, lift: 1, landing: 1, shaft: 1, core: 1, liftlobby: 1, riser: 1, restroom: 0 };
   // Whether two rooms (made, not yet put together: their own numbers on the floor, `local`) still
@@ -418,6 +696,58 @@
     hand.links = hand.links.filter(function (l) { var a = nodeById(l.from), b = nodeById(l.to); return a && b; });
     return gone.size;
   }
+  // (2026-10-07) And what stands in a shaped room with a corner of it past the shape -- a bed put
+  // against a wall as boxes are, the corner of the room rounded off under it: slid in toward the
+  // middle of the room, a hand at a time, to where all of it is in and nothing else is; nowhere in
+  // two metres, taken out.  (Not what is in a wall or on one: those go with their wall.)
+  function shpSettle() {
+    var P = FLOOR_PX, rooms = hand.nodes.filter(function (n) { return n.kind === "i_room"; });
+    var shaped = rooms.filter(function (r) { return r.shape && !((r.turn || 0) % 360); });
+    if (!shaped.length) { return 0; }
+    var near = rooms.length > 40 && typeof listNear === "function" ? listNear(rooms) : null, moved = 0, gone = new Set();
+    var pieces = hand.nodes.filter(function (n) {
+      return n.kind !== "i_room" && n.kind !== "i_floor" && n.kind !== "i_lot" && n.kind !== "i_zone" && !(typeof isArea === "function" && isArea(n.kind)) &&
+             !n.skinDoor && !BETWEEN_FLOORS[n.kind] && !WALK_DOORS[n.kind] && n.kind !== "i_window" && !SNAP_IN_WALL[n.kind] && !ON_THE_WALL[n.kind];
+    });
+    var byRoom = new Map();
+    pieces.forEach(function (n) {
+      var by = (near ? near.around(n.x - 2, n.y - 2, n.x + 2, n.y + 2) : rooms).filter(function (r) { return insideArea(r, n.x, n.y); })
+        .sort(function (p, q) { return p.w * p.h - q.w * q.h; })[0];
+      if (!by) { return; }
+      if (!byRoom.has(by)) { byRoom.set(by, []); }
+      byRoom.get(by).push(n);
+    });
+    function corners(n, x, y) {
+      var t = turned(n), hw = t.w / 2, hh = t.h / 2;
+      return [[x - hw, y - hh], [x + hw, y - hh], [x + hw, y + hh], [x - hw, y + hh]];
+    }
+    shaped.forEach(function (r) {
+      var mine = byRoom.get(r) || [];
+      if (!mine.length) { return; }
+      var cx = 0, cy = 0;
+      r.shape.forEach(function (q) { cx += q[0] / r.shape.length; cy += q[1] / r.shape.length; });
+      cx += r.x; cy += r.y;
+      mine.forEach(function (n) {
+        var fits = function (x, y) { return corners(n, x, y).every(function (q) { return insideArea(r, q[0], q[1], -3); }); };
+        if (fits(n.x, n.y)) { return; }
+        var dx = cx - n.x, dy = cy - n.y, d = Math.hypot(dx, dy) || 1;
+        for (var k = 1; k <= 20; k++) {
+          var x = n.x + dx / d * k * 0.1 * P, y = n.y + dy / d * k * 0.1 * P;
+          if (!fits(x, y)) { continue; }
+          var spot = { x: x, y: y, w: n.w, h: n.h, turn: n.turn || 0 };
+          if (mine.some(function (o) { return o !== n && !gone.has(o) && boxesTouch(spot, o, 1); })) { continue; }
+          n.x = Math.round(x); n.y = Math.round(y); moved++;
+          return;
+        }
+        gone.add(n);
+      });
+    });
+    if (gone.size) {
+      hand.nodes = hand.nodes.filter(function (n) { return !gone.has(n); });
+      hand.links = hand.links.filter(function (l) { var a = nodeById(l.from), b = nodeById(l.to); return a && b; });
+    }
+    return moved + gone.size;
+  }
   // (last of all of Start building's steps -- after every part has put in what it puts in)
   if (typeof starterSteps === "function") {
     var starterStepsShaped = starterSteps;
@@ -425,7 +755,7 @@
       var inner = starterStepsShaped.apply(this, arguments);
       return (function* () {
         var out = yield* inner;
-        try { shpPrune(); } catch (e) { if (window.console && console.warn) { console.warn("shaped:", e && e.message); } }
+        try { shpPrune(); shpSettle(); } catch (e) { if (window.console && console.warn) { console.warn("shaped:", e && e.message); } }
         return out;
       })();
     };

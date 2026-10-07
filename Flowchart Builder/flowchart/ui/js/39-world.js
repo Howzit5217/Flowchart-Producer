@@ -715,6 +715,12 @@
     lanes.forEach(function (ln) { ln.pace = (1.05 + rnd() * 0.3) * P; ln.from = rnd(); ln.n = 0; });
     for (var q = 0; q < many; q++) { lanes[q % lanes.length].n++; }
     var bodies = typeof peopleBody === "function";
+    // (2026-10-07) on the land, 40-land.js lifts all of this onto it once it is made: not here as well --
+    // those walking stood sunk to the waist on any ground not level, by as much again
+    var landLifts = typeof terrBegin === "function" && !!terrBegin();
+    function groundAt(x, y) { return landLifts ? 0 : worldGroundAt(x, y); }
+    // (dressed for the place: by an office, people at work -- 40-bodies.js)
+    var dress = typeof worldDress === "function" ? worldDress() : null;
     for (var i = 0; i < many; i++) {
       var lane = lanes[i % lanes.length], nth = Math.floor(i / lanes.length), apart = 2 * span / Math.max(1, lane.n);
       var give = (rnd() - 0.5) * Math.max(0, apart - 2.4 * P) * 0.5;
@@ -722,8 +728,10 @@
       var fadeP = Math.max(0, Math.min(1, (span - Math.abs(x)) / (4 * P)));
       if (fadeP <= 0.02) { continue; }
       var kind = WORLD_FOLK[i % WORLD_FOLK.length], look = { fill: WORLD_CLOTHES[Math.floor(rnd() * WORLD_CLOTHES.length)], line: ink, own: true };
+      var dressed = dress ? dress.dress(kind, gl3Rand(1009 + i * 31), look) : null;
+      if (dressed) { kind = dressed.kind || kind; if (dressed.look) { look = dressed.look; } }
       var tall = (kind === "i_child" ? 1.15 : kind === "i_elder" ? 1.62 : 1.7 + rnd() * 0.12) * P;
-      var p = W(x, lane.y), ground = worldGroundAt(p[0], p[1]);
+      var p = W(x, lane.y), ground = groundAt(p[0], p[1]);
       if (bodies) {
         var headP = Math.atan2(sn * lane.dir, c * lane.dir), phaseP = still ? 0 : (t * lane.pace) / (0.36 * P) + i * 1.7;
         peopleBody(passing.faces, { kind: kind, id: 101 + i }, p[0], p[1], ground, headP, phaseP, look, fadeP);
@@ -747,8 +755,11 @@
       var pos = ((way.from * 2 * roadSpan + Math.floor(k / 2) * apart + give + t * speed) % (2 * roadSpan) + 2 * roadSpan) % (2 * roadSpan) - roadSpan, cx = dir * pos;
       var fade = Math.max(0, Math.min(1, (roadSpan - Math.abs(cx)) / (12 * P)));
       if (fade <= 0.02) { continue; }
-      var col = WORLD_CAR_COLORS[Math.floor(rnd() * WORLD_CAR_COLORS.length)], at = W(cx, laneY), carGround = worldGroundAt(at[0], at[1]);
+      var palette = dress && dress.cars ? dress.cars : WORLD_CAR_COLORS;
+      var col = palette[Math.floor(rnd() * palette.length)], at = W(cx, laneY), carGround = groundAt(at[0], at[1]);
       var f = [e[0] * dir, e[1] * dir];
+      // (each a car of its kind -- a sedan, an SUV, a pickup -- as those parked are: 40-cars.js)
+      if (typeof worldCarModel === "function" && worldCarModel(passing.faces, at, f, k, col, fade)) { continue; }
       worldCarParts(at, f, d, gl3Rgb(col)).forEach(function (b) {
         var pts = [[-1, -1], [1, -1], [1, 1], [-1, 1]].map(function (q) {
           return [b.c[0] + b.e[0] * b.hx * q[0] + b.d[0] * b.hy * q[1], b.c[1] + b.e[1] * b.hx * q[0] + b.d[1] * b.hy * q[1]];

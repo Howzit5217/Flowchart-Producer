@@ -178,8 +178,13 @@
     J.rooms = rooms;
     rooms.forEach(function (r) { J.boxes[r.id] = tieBox(r); J.delta[r.id] = [0, 0]; });
     if (!hand.links.length || !rooms.length) { return J; }
-    var floors = floorsOf();
-    function storey(n) { var f = floorAt(floors, n.x, n.y); return f ? f.n.id : 0; }
+    var floors = floorsOf(), storeys = new Map();
+    // (2026-10-07: asked of each room for each other room -- a tower's thousand rooms, a million times)
+    function storey(n) {
+      var s = storeys.get(n);
+      if (s === undefined) { var f = floorAt(floors, n.x, n.y); s = f ? f.n.id : 0; storeys.set(n, s); }
+      return s;
+    }
     function storeyNode(id) { return id ? nodeById(id) : null; }
     var isRoom = {};
     rooms.forEach(function (r) { isRoom[r.id] = r; });
@@ -195,14 +200,17 @@
         if (storey(a) === storey(b) && tieOver(J.boxes[a.id], J.boxes[b.id], -TIE_TOUCH)) { up[top(a.id)] = top(b.id); }
       }
     }
-    // What goes with each room: what stands in it, and what is set in its walls.
+    // What goes with each room: what stands in it, and what is set in its walls.  (2026-10-07: the
+    // rooms each piece might be in or in the wall of, from a grid of where the rooms are -- in their
+    // order still -- not every room asked of every piece: a tower's eleven thousand pieces)
+    var roomsAround = tieRoomGrid(rooms, 14);
     var owner = {};
     hand.nodes.forEach(function (n) {
       if (n.kind === "i_room" || n.kind === "i_floor" || n.kind === "i_lot") { return; }
-      var best = null;
-      if (SNAP_IN_WALL[n.kind]) { rooms.forEach(function (r) { if (!best && tieWalled(n, r)) { best = r; } }); }
+      var best = null, around = roomsAround(tieBox(n));
+      if (SNAP_IN_WALL[n.kind]) { around.forEach(function (r) { if (!best && tieWalled(n, r)) { best = r; } }); }
       if (!best) {
-        rooms.forEach(function (r) {
+        around.forEach(function (r) {
           if (insideArea(r, n.x, n.y) && (!best || r.w * r.h < best.w * best.h)) { best = r; }
         });
       }
@@ -787,11 +795,32 @@
   // Which doors join which rooms, as a change begins: a room pulled away
   // from the room it met at a door is joined to it by an arrow instead.
   var tieWas = null;
+  // (2026-10-07) Rooms by where they are: a grid of them, each cell those whose box (and `pad` round
+  // it) reaches into it.  Asked with a box: the rooms that might be in it or a wall's width from it,
+  // in their order still.
+  var TIE_CELL = 400;
+  function tieRoomGrid(rooms, pad) {
+    var grid = new Map();
+    function each(b, p, f) {
+      var x0 = Math.floor((b.l - p) / TIE_CELL), x1 = Math.floor((b.r + p) / TIE_CELL);
+      var y0 = Math.floor((b.t - p) / TIE_CELL), y1 = Math.floor((b.b + p) / TIE_CELL);
+      for (var cx = x0; cx <= x1; cx++) { for (var cy = y0; cy <= y1; cy++) { f(cx * 1048576 + cy); } }
+    }
+    rooms.forEach(function (r, i) {
+      each(tieBox(r), pad, function (k) { var l = grid.get(k); if (!l) { l = []; grid.set(k, l); } l.push(i); });
+    });
+    return function (b) {
+      var seen = {}, out = [];
+      each(b, 0, function (k) { (grid.get(k) || []).forEach(function (i) { if (!seen[i]) { seen[i] = 1; out.push(i); } }); });
+      return out.sort(function (p, q) { return p - q; }).map(function (i) { return rooms[i]; });
+    };
+  }
   function tieDoors() {
-    var rooms = hand.nodes.filter(function (n) { return n.kind === "i_room"; }), out = [];
+    // (asked each step kept to undo: a tower's two thousand doors each of every room, a second a time)
+    var rooms = hand.nodes.filter(function (n) { return n.kind === "i_room"; }), out = [], around = tieRoomGrid(rooms, 14);
     hand.nodes.forEach(function (d) {
       if (!WALK_DOORS[d.kind]) { return; }
-      var by = rooms.filter(function (r) { return tieWalled(d, r); });
+      var by = around(tieBox(d)).filter(function (r) { return tieWalled(d, r); });
       if (by.length === 2) { out.push([d.id, by[0].id, by[1].id]); }
     });
     return out;

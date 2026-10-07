@@ -1493,10 +1493,16 @@
     return t0;
   }
   var o3Boxes = typeof WeakMap === "function" ? new WeakMap() : null;
+  // (2026-10-07, "make it so the selector works better when interacting with things") What is looked at
+  // is the piece whose own faces the ray meets first (40-drag.js pickFacesT), not the nearest box round
+  // a piece: a chair under a table, a lamp on a nightstand, a sofa at a slant. A small thing -- a switch,
+  // a plug, a cup -- is still had from a little way off it; and the ray just beside something, meeting
+  // nothing, is tried O3_ASSIST to each side.
+  var O3_ASSIST = 0.018, O3_SMALL = 0.45;      // (radians, about a degree; metres across, at most, to be "small")
   function o3Look(R, far) {
     var model = V3 && V3.dragModel;
     if (!model || !model.faces || !R) { return null; }
-    var o = R.o, boxes = {}, list = [], wall = Infinity, reach = far + 3 * FLOOR_PX, small = O3_MIN * FLOOR_PX;
+    var o = R.o, boxes = {}, list = [], walls = [], reach = far + 3 * FLOOR_PX, small = O3_MIN * FLOOR_PX;
     model.faces.forEach(function (f) {
       var P = f.pts;
       // (nor what is on its way -- carried in, going up: 40-movein.js)
@@ -1521,13 +1527,13 @@
       if (ex * ex + ey * ey + ez * ez > reach * reach) { return; }
       if (fixed) {
         if (how.ghost || f.floor) { return; }
-        var t = f.mesh ? o3RayBox(o, R.d, [x0, x1, y0, y1, z0, z1], 0) : dragHitFace(R, P, f.n || [0, 0, 1]);
-        if (t < wall) { wall = t; }
+        walls.push([f, bx]);
         return;
       }
       var b = boxes[n.id];
-      if (!b) { b = boxes[n.id] = { n: n, box: null, leaf: null, mf: null }; list.push(b); }
+      if (!b) { b = boxes[n.id] = { n: n, box: null, leaf: null, mf: null, faces: [], leafFaces: [] }; list.push(b); }
       var into = WALK_DOORS[n.kind] && how.leaf ? "leaf" : "box", B = b[into];
+      (into === "leaf" ? b.leafFaces : b.faces).push(f);
       if (!B) { b[into] = [x0, x1, y0, y1, z0, z1]; }
       else {
         if (x0 < B[0]) { B[0] = x0; } if (x1 > B[1]) { B[1] = x1; }
@@ -1536,7 +1542,30 @@
       }
       if (f.mesh && !b.mf && !how.shade) { b.mf = f; }
     });
-    var best = null;
+    var hit = o3Cast(R, list, walls, small, far);
+    if (!hit) {
+      // (a hair to each side: up, down, left and right of the ray)
+      var d = R.d, up = Math.abs(d[2]) < 0.9 ? [0, 0, 1] : [1, 0, 0];
+      var u = [d[1] * up[2] - d[2] * up[1], d[2] * up[0] - d[0] * up[2], d[0] * up[1] - d[1] * up[0]], ul = Math.hypot(u[0], u[1], u[2]) || 1;
+      u = [u[0] / ul, u[1] / ul, u[2] / ul];
+      var v = [d[1] * u[2] - d[2] * u[1], d[2] * u[0] - d[0] * u[2], d[0] * u[1] - d[1] * u[0]];
+      [[1, 0], [-1, 0], [0, 1], [0, -1]].forEach(function (q) {
+        var dd = [0, 1, 2].map(function (i) { return d[i] + (u[i] * q[0] + v[i] * q[1]) * O3_ASSIST; }), dl = Math.hypot(dd[0], dd[1], dd[2]);
+        var h = o3Cast({ o: o, d: [dd[0] / dl, dd[1] / dl, dd[2] / dl] }, list, walls, small, far);
+        if (h && (!hit || h.t < hit.t)) { hit = h; }
+      });
+    }
+    return hit;
+  }
+  // One ray among the pieces near enough (o3Look): the walls, floors and windows it meets first stop it;
+  // of the pieces, the one whose faces it meets first -- or, meeting none, a small one it passes close to.
+  function o3Cast(R, list, walls, small, far) {
+    var o = R.o, wall = Infinity, cands = [];
+    walls.forEach(function (w) {
+      if (pickBoxT(o, R.d, w[1], 0.5) >= wall) { return; }
+      var t = pickFaceT(R, w[0]);
+      if (t < wall) { wall = t; }
+    });
     list.forEach(function (b) {
       var box = b.leaf || b.box;                   // a door: its leaf, not the doorway it stands in
       if (!box) { return; }
@@ -1546,11 +1575,20 @@
         var pad = Math.max(0.3, (small - (box[k * 2 + 1] - box[k * 2])) / 2);
         pb[k * 2] -= pad; pb[k * 2 + 1] += pad;
       }
-      var t = o3RayBox(o, R.d, pb, 0);
-      if (t < Infinity && (!best || t < best.t)) { best = { n: b.n, t: t, mf: b.mf, box: box }; }
+      var tb = o3RayBox(o, R.d, pb, 0);
+      if (tb < Infinity && tb <= wall + 1) { cands.push({ b: b, box: box, tb: tb }); }
     });
-    if (!best || best.t > wall + 1 || best.t > far) { return null; }
-    return best;
+    cands.sort(function (p, q) { return p.tb - q.tb; });
+    var best = null, loose = null, tiny = O3_SMALL * FLOOR_PX;
+    cands.forEach(function (c) {
+      if (best && c.tb > best.t) { return; }
+      var b = c.b, te = pickFacesT(R, b.leaf ? b.leafFaces : b.faces), box = c.box;
+      if (te < Infinity) { if (!best || te < best.t) { best = { n: b.n, t: te, mf: b.mf, box: box }; } return; }
+      if (!loose && Math.max(box[1] - box[0], box[3] - box[2], box[5] - box[4]) <= tiny) { loose = { n: b.n, t: c.tb, mf: b.mf, box: box, loose: true }; }
+    });
+    var pick = best || loose;
+    if (!pick || pick.t > wall + 1 || pick.t > far) { return null; }
+    return pick;
   }
   // What is looked at along a ray, and what it would do: used near enough, or "move closer".
   function o3Aim(R) {
@@ -1560,7 +1598,11 @@
     var n = hit.n, door = !!WALK_DOORS[n.kind], kind = door ? null : useKind(n);
     var fr = !door && modelsOn() ? modelFronts[n.id] : null;
     var reach = (door ? O3_REACH_DOOR : FROM_CEILING[n.kind] ? O3_REACH_UP : O3_REACH) * FLOOR_PX;
-    var aim = { n: n, t: hit.t, near: hit.t <= reach, door: door, kind: kind, front: -1, R: R,
+    // (sat down, a screen across the room is had as by its remote, 2026-10-07)
+    if (kind === "screen" && V3.sitting && !V3.sitting.up) { reach = Math.max(reach, 6 * FLOOR_PX); }
+    // (in reach by its nearest part, not by the spot looked at: a bed's headboard looked at from its foot, 2026-10-07)
+    var b = hit.box, o = R.o, gap = b ? Math.hypot(Math.max(b[0] - o[0], 0, o[0] - b[1]), Math.max(b[2] - o[1], 0, o[1] - b[3]), Math.max(b[4] - o[2], 0, o[2] - b[5])) : hit.t;
+    var aim = { n: n, t: hit.t, near: Math.min(hit.t, gap) <= reach, door: door, kind: kind, front: -1, R: R, box: hit.box,
                 usable: door || !!kind || !!(fr && fr.length) };
     if (fr && fr.length) { aim.front = o3FrontAt(n, R, hit, fr, kind); }
     return aim;
@@ -1718,7 +1760,15 @@
   // drawer  Kitchen counter"); too far, a faint ring and "Move closer".
   function o3Bits() {
     if (!V3 || !V3.box) { return null; }
-    var aim = el(".o3-aim", V3.box), tip = el(".o3-tip", V3.box);
+    var aim = el(".o3-aim", V3.box), tip = el(".o3-tip", V3.box), frame = el(".o3-frame", V3.box);
+    if (!frame) {
+      frame = document.createElement("div");
+      frame.className = "o3-frame";
+      frame.setAttribute("aria-hidden", "true");
+      frame.hidden = true;
+      frame.innerHTML = "<i></i><i></i><i></i><i></i>";
+      V3.box.appendChild(frame);
+    }
     if (!aim) {
       aim = document.createElement("div");
       aim.className = "o3-aim";
@@ -1734,7 +1784,7 @@
       tip.innerHTML = '<kbd></kbd><span class="o3-do"></span><span class="o3-what"></span>';
       V3.box.appendChild(tip);
     }
-    return { aim: aim, tip: tip };
+    return { aim: aim, tip: tip, frame: frame };
   }
   function o3Show(a) {
     var B = o3Bits();
@@ -1769,6 +1819,53 @@
   // at again when the camera has moved -- the camera itself, which eases
   // after the eye (at most every 70 ms, the last look taken as it settles).
   function o3AfterDraw() {
+    o3AfterDrawAim();
+    try { o3Frame(); } catch (e) { /* the mark alone */ }
+  }
+  // (2026-10-07, "make it so the selector works better when interacting with things") Corner marks round
+  // what E would use -- the very piece, turned as it stands -- put again each picture as the view moves:
+  // bright near enough to reach, faint further off. Only the dot and a line of words said it before.
+  function o3Frame() {
+    var B = o3Bits();
+    if (!B) { return; }
+    var a = V3.o3Aim, G = V3.gl, m = G && G.mvp, fr = B.frame;
+    var rect = V3.mode === "walk" && m && V3.scene !== "space" && a && a.usable ? o3FrameRect(a, m) : null;
+    if (!rect) { if (!fr.hidden) { fr.hidden = true; } return; }
+    var cls = "o3-frame " + (a.near ? "on" : "far");
+    if (fr.className !== cls) { fr.className = cls; }
+    fr.style.transform = "translate(" + rect[0].toFixed(1) + "px," + rect[1].toFixed(1) + "px)";
+    fr.style.width = rect[2].toFixed(1) + "px";
+    fr.style.height = rect[3].toFixed(1) + "px";
+    if (fr.hidden) { fr.hidden = false; }
+  }
+  // Where the piece is in the view: its turned footprint, up its height, each corner as the camera sees it
+  // (x, y, width, height in the view's pixels; null if it is behind you or too near to frame)
+  function o3FrameRect(a, m) {
+    var n = a.n, box = a.box, W = V3.w, H = V3.h, cx = (box[0] + box[1]) / 2, cy = (box[2] + box[3]) / 2, pts = [];
+    if (!a.door && n.w && n.h) {
+      var t = (n.turn || 0) * Math.PI / 180, c = Math.cos(t), s = Math.sin(t), hw = n.w / 2, hd = n.h / 2;
+      [[-1, -1], [1, -1], [1, 1], [-1, 1]].forEach(function (q) {
+        pts.push([cx + c * q[0] * hw - s * q[1] * hd, cy + s * q[0] * hw + c * q[1] * hd]);
+      });
+    } else {
+      pts = [[box[0], box[2]], [box[1], box[2]], [box[1], box[3]], [box[0], box[3]]];
+    }
+    var x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity, behind = 0;
+    pts.forEach(function (p) {
+      [box[4], box[5]].forEach(function (z) {
+        var w = m[3] * p[0] + m[7] * p[1] + m[11] * z + m[15];
+        if (w < 1e-3) { behind++; return; }
+        var sx = ((m[0] * p[0] + m[4] * p[1] + m[8] * z + m[12]) / w + 1) / 2 * W, sy = (1 - (m[1] * p[0] + m[5] * p[1] + m[9] * z + m[13]) / w) / 2 * H;
+        if (sx < x0) { x0 = sx; } if (sx > x1) { x1 = sx; } if (sy < y0) { y0 = sy; } if (sy > y1) { y1 = sy; }
+      });
+    });
+    if (behind || x0 === Infinity) { return null; }
+    var pad = 6;
+    x0 = Math.max(4, x0 - pad); y0 = Math.max(4, y0 - pad); x1 = Math.min(W - 4, x1 + pad); y1 = Math.min(H - 4, y1 + pad);
+    if (x1 - x0 < 12 || y1 - y0 < 12 || (x1 - x0 > W * 0.96 && y1 - y0 > H * 0.96)) { return null; }
+    return [x0, y0, x1 - x0, y1 - y0];
+  }
+  function o3AfterDrawAim() {
     if (!V3 || !V3.box) { return; }
     if (V3.mode !== "walk" || !V3.gl || !V3.gl.mvp || V3.scene === "space" || !V3.me) {
       if (V3.o3Aim !== null) { V3.o3Aim = null; o3Show(null); }

@@ -65,9 +65,14 @@
   if (typeof v3Door === "function") {
     var v3DoorGp = v3Door;
     v3Door = function (faces, n, open) {
-      if (n && n.kind === "i_slide") { try { return gpSlider(faces, n, open); } catch (e) { /* as it was */ } }
+      if (n && n.kind === "i_slide" && !gpLiftDoor(n)) { try { return gpSlider(faces, n, open); } catch (e) { /* as it was */ } }
       return v3DoorGp.apply(this, arguments);
     };
+  }
+  // (2026-10-07) a lift's doors are sliding ones too -- drawn as a lift's, two steel leaves parting
+  // (40-climb.js), not a patio's glass: every lift of a tower had a garden door
+  function gpLiftDoor(n) {
+    try { return typeof liftCarOf === "function" && !!V3 && V3.scene !== "space" && !!liftCarOf(v3Ground(), n); } catch (e) { return false; }
   }
 
   // ---- a gate, open: walked through ------------------------------------------------------------------

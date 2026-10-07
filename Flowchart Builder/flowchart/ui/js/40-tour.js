@@ -250,12 +250,17 @@
             V3.dirty = true;
           }
           // (the eye as v3Draw put it, even if a picture is built twice)
-          var eye = V3.eye.me || V3.eye, feet = eye.z - (V3.sitting ? 1.12 : EYE_TALL) * P;
+          var eye = V3.eye.me || V3.eye, feet = eye.z - (V3.sitting && typeof useSitEye === "function" ? useSitEye() : V3.sitting ? 1.12 : EYE_TALL) * P;
           // looked down at through your own eyes, your legs and feet under
           // you; from behind, all of you
           var back = behind ? 0 : -0.06 * P;
-          tourBody(model.faces, eye.x + Math.cos(me.head) * back, eye.y + Math.sin(me.head) * back, feet,
-                   me.head, V3.tourPhase, tourLook(), behind);
+          // (sat down, sat down -- legs bent over the seat; lying on a bed, no body of your own: 39-inside.js)
+          var sitLegs = typeof useSitPose === "function" ? useSitPose() : null, lying = typeof useLying === "function" && useLying();
+          if (lying) { V3.meBody = null; }
+          else {
+            tourBody(model.faces, eye.x + Math.cos(me.head) * back, eye.y + Math.sin(me.head) * back, feet,
+                     me.head, V3.tourPhase, sitLegs ? Object.assign({}, tourLook(), { legs: sitLegs }) : tourLook(), behind);
+          }
           if (behind) { var cam = tourStandBack(v3Ground(), me, eye); cam.me = eye; V3.eye = cam; }
         }
       } catch (e) { /* walking unseen, as before */ }

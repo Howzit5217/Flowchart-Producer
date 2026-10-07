@@ -1399,7 +1399,7 @@
       // (sitting down, 39-inside.js: lower; out of doors, on the land as it
       // rises and falls, 40-land.js)
       V3.eye = { x: V3.me.x + (here ? here.dx : 0), y: V3.me.y + (here ? here.dy : 0),
-                 z: (V3.sitting ? 1.12 : EYE_TALL) * FLOOR_PX + (here ? here.z : 0) + climb + (V3.stairZ || 0) +
+                 z: (V3.sitting && typeof useSitEye === "function" ? useSitEye() : V3.sitting ? 1.12 : EYE_TALL) * FLOOR_PX + (here ? here.z : 0) + climb + (V3.stairZ || 0) +
                     (typeof terrEye === "function" ? terrEye(here) : 0) };
       eye = [V3.eye.x, V3.eye.y, V3.eye.z];
       V3.inRoom = roomAt(plan, V3.me.x, V3.me.y) || null;   // under a ceiling, or out under the sky

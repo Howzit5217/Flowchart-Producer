@@ -378,7 +378,8 @@
       var hall = halls.filter(function (o) { return kindOf(o) === "hall"; })[0] || halls[0];
       var at = hall || r;
       if (!seen[at.id]) { seen[at.id] = true; spots.push({ room: at, near: hall ? null : r }); }
-      if (hand.nodes.some(function (n) { return (n.kind === "i_fireplace" || n.kind === "i_stove") && mpGas(n) && insideArea(r, n.x, n.y); }) && !seen[r.id]) {
+      // (in the room first, then whether it burns gas: a tower of flats asked every stove of every bedroom)
+      if (!seen[r.id] && hand.nodes.some(function (n) { return (n.kind === "i_fireplace" || n.kind === "i_stove") && insideArea(r, n.x, n.y) && mpGas(n); })) {
         seen[r.id] = true; spots.push({ room: r });
       }
     });
@@ -443,7 +444,8 @@
     rooms.forEach(function (r) {
       var k = r.use || r.starter, f = MP_LOAD[k];
       if (!f) { return; }
-      occ += (r.w * r.h) / (P * P) / f;
+      // (a room cut to a shape, 40-shaped.js: its floor as cut -- a tower's open plan's box was half outside its glass)
+      occ += (r.shape && typeof shpArea === "function" ? shpArea(r.shape) : r.w * r.h) / (P * P) / f;
     });
     return Math.ceil(occ);
   }
@@ -471,7 +473,7 @@
     var haveLav = count(["i_sink", "i_vanity"], isRest);
     var haveDf = count(["i_fountain"]), haveSs = count(["i_utilitysink"]);
     var words = { people: people };
-    if (haveWc < wc) { out.push({ key: "mp_need_wc", text: say("mp_need_wc", Object.assign({ need: wc, have: haveWc }, words)), id: rest[0] ? rest[0].id : null, fix: function () { mpAddInto(rest, "i_toilet", wc - haveWc); } }); }
+    if (haveWc < wc) { out.push({ key: "mp_need_wc", text: say("mp_need_wc", Object.assign({ need: wc, have: haveWc }, words)), id: rest[0] ? rest[0].id : null, fix: function () { mpAddInto(rest, function (r) { return (r.use || r.starter) === "washroom" && ICONS.i_toiletstall ? "i_toiletstall" : "i_toilet"; }, wc - haveWc); } }); }
     if (haveLav < lav) { out.push({ key: "mp_need_lav", text: say("mp_need_lav", Object.assign({ need: lav, have: haveLav }, words)), id: rest[0] ? rest[0].id : null, fix: function () { mpAddInto(rest, "i_sink", lav - haveLav); } }); }
     if (haveDf < df) {
       var hall = publicRooms.filter(function (r) { var k = r.use || r.starter; return k === "lobby" || k === "landing" || k === "staff" || k === "reception" || kindOf(r) === "hall"; });
@@ -490,7 +492,8 @@
       var r = rooms[tries % Math.max(1, rooms.length)];
       tries++;
       if (!r) { break; }
-      if (mpAlong(r, kind, null)) { put++; }
+      // (what goes in may be the room's to say: a washroom's toilets in stalls)
+      if (mpAlong(r, typeof kind === "function" ? kind(r) : kind, null)) { put++; }
     }
     return put;
   }

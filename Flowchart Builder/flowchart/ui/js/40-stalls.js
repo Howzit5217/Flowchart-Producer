@@ -56,9 +56,11 @@
   }
   function slToilets(kind, people) {
     var each = people / 2, n;
-    if (kind === "school") { n = each / 30; }
+    // (2026-10-07: "for schools and big building to have bigger bathrooms for males and females" -- a
+    // school one for every 25 of each, as most are built; a mall's, its food court in it, every 100)
+    if (kind === "school") { n = each / 25; }
     else if (kind === "work") { n = each <= 50 ? each / 25 : 2 + (each - 50) / 50; }
-    else { n = each / 150; }
+    else { n = each / 100; }
     return Math.max(2, Math.min(9, Math.ceil(n)));
   }
   function slPlan(plan, t, want) {

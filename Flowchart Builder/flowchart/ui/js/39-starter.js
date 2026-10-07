@@ -683,6 +683,8 @@
       // own home's rather than the hall, be a way in from the street, or be
       // a stairwell's bay -- a flight up or down in it, or none)
       if (spec) { n.starterId = spec.id; n.starterVia = spec.via; n.starterEntry = spec.entry; n.starterGo = spec.go; n.starterBay = spec.bay; n.starterNook = spec.nook; n.starterCalm = spec.calm; }
+      // (a washroom's toilets, as many as the floor's people need, and whose it is: 40-stalls.js)
+      if (spec && spec.slToilets) { n.slToilets = spec.slToilets; n.slBoys = !!spec.slBoys; }
       n.home = [(x0 + x1) / 2, (y0 + y1) / 2];           // where it is put together
       n.x = n.home[0] + sx; n.y = n.home[1] + sy;        // and where on the paper
       made.push(n);
@@ -920,7 +922,7 @@
     links.forEach(function (l) { hand.links.push(l); });
     // (a building whose floors are not rectangles -- a skyscraper's following its glass round a
     // curve, a wing at an angle: each floor's rooms cut to its outline, what is outside it gone, 40-shaped.js)
-    if (typeof starterCut === "function") { starterCut(plan, floors, made, { flip: flip, X: X, fronts: fronts }); }
+    if (typeof starterCut === "function") { starterCut(plan, floors, made, { flip: flip, X: X, fronts: fronts, want: want }); }
     var LEVEL_NAME = { "-1": TXT.fl_basement, "0": TXT.fl_ground, "1": TXT.fl_up_name };
     // (every floor named, its storey kept on it: the floors over the first
     // had no name, and a block of five drawn in two rows was stacked in the
@@ -1482,10 +1484,28 @@
 
   // A room's walls taken out (39-inside.js), side by side: the stretches of
   // each from its start, in the house as it will stand.
+  // (2026-10-07: a room no wall of which is out asks nothing; and the house as it will stand worked
+  // out again only when a room has moved -- not for every piece put in: a tower's check, each piece
+  // the advice put in its open plan, worked out the whole tower anew, a hundred seconds)
+  var starterGoneKept = { key: null, J: null };
+  function starterGoneLayout() {
+    if (tieHeld || typeof tieLayout !== "function") { return tieHeld; }
+    var h = 0, k = 0, N = hand.nodes;
+    for (var i = 0; i < N.length; i++) {
+      var o = N[i];
+      if (o.kind !== "i_room") { continue; }
+      k++;
+      h = (h * 31 + o.id * 7 + o.x * 13 + o.y * 17 + o.w * 3 + o.h * 5 + (o.turn || 0) * 11) % 1000000007;
+    }
+    var key = k + "|" + hand.links.length + "|" + h;
+    if (!starterGoneKept || starterGoneKept.key !== key) { starterGoneKept = { key: key, J: tieLayout() }; }
+    return starterGoneKept.J;
+  }
   function starterGone(r) {
     var gone = {};
-    if (typeof wallOpenRuns === "function" && typeof wallAnyOpen === "function" && wallAnyOpen() && !((r.turn || 0) % 90)) {
-      var Jo = tieHeld || (typeof tieLayout === "function" ? tieLayout() : null);
+    if (typeof wallOpenRuns === "function" && typeof wallAnyOpen === "function" && wallAnyOpen() && !((r.turn || 0) % 90) &&
+        (typeof wallOpenSome !== "function" || wallOpenSome(r))) {
+      var Jo = starterGoneLayout();
       var boxOpen = function (n) { return (Jo && Jo.boxes && Jo.boxes[n.id]) || tieBox(n); };
       ["top", "foot", "left", "right"].forEach(function (name) { gone[name] = wallOpenRuns(r, name, boxOpen); });
     }
@@ -1832,8 +1852,14 @@
       parts.push('<text class="sk-floor" x="' + cx.toFixed(2) + '" y="' + (cy + 0.9).toFixed(2) + '">' + escaped(sketch.length > 1 ? name : "") + "</text>");
       f.rooms.forEach(function (m) {
         var w = m.x1 - m.x0, h = m.y1 - m.y0, zone = STARTER_ZONE[m.kind] || "day";
-        parts.push('<rect class="sk-room sk-' + zone + '" x="' + (ox + m.x0).toFixed(2) + '" y="' + (oy + m.y0).toFixed(2) +
-                   '" width="' + w.toFixed(2) + '" height="' + h.toFixed(2) + '"/>');
+        // (a room cut to the building's outline, 40-shaped.js: drawn as cut, or not at all)
+        if (m.gone) { return; }
+        if (m.poly && m.poly.length >= 3) {
+          parts.push('<polygon class="sk-room sk-' + zone + '" points="' + m.poly.map(function (q) { return (ox + q[0]).toFixed(2) + "," + (oy + q[1]).toFixed(2); }).join(" ") + '"/>');
+        } else {
+          parts.push('<rect class="sk-room sk-' + zone + '" x="' + (ox + m.x0).toFixed(2) + '" y="' + (oy + m.y0).toFixed(2) +
+                     '" width="' + w.toFixed(2) + '" height="' + h.toFixed(2) + '"/>');
+        }
         var said = m.label || TXT[STARTER_LABEL[m.kind]] || "";
         if (said && w >= 2.2 && h >= 1.3) {
           var size = Math.min(0.62, w / Math.max(4, said.length) * 1.7);
@@ -1930,6 +1956,7 @@
       var b = document.createElement("button");
       b.type = "button";
       b.className = "hs-tile st-tile";
+      b.dataset.tile = iconName || "";      // (which it is, for 40-sheetflow.js)
       if (role) { b.setAttribute("role", "radio"); b.setAttribute("aria-checked", on() ? "true" : "false"); }
       else { b.setAttribute("aria-pressed", on() ? "true" : "false"); }
       b.innerHTML = icon(iconName) + '<span class="hs-tile-name"></span><span class="hs-tile-tick" aria-hidden="true">' +
@@ -2058,9 +2085,13 @@
       if (typeof typeStyleRow === "function") { typeStyleRow(pick, want, function () { redraw(); }); }
       // where it stands, and what is out of doors -- the 3D view's, asked now (40-street.js)
       if (typeof siteAsk === "function") { siteAsk({ head: head, tiles: tiles, tile: tile }, want); }
+      // (2026-10-07) the questions put in an order that reads, 40-sheetflow.js
+      if (typeof starterFlowBuilt === "function") { try { starterFlowBuilt(pick, want, T); } catch (e) { /* as asked */ } }
     }
     // the house, drawn as it will be made
     function redraw() {
+      // (and those the answers so far make no difference to switched off, 40-sheetflow.js)
+      if (typeof starterFlowNow === "function") { try { starterFlowNow(pick, want); } catch (e) { /* all on */ } }
       var sketch = starterSketch(want), area = 0, count = 0;
       sketch.forEach(function (f) {
         f.rooms.forEach(function (m) { area += (m.x1 - m.x0) * (m.y1 - m.y0); count++; });

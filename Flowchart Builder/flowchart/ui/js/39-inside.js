@@ -105,7 +105,8 @@
       return;
     }
     if (kind === "seat") {
-      V3.sitting = true;
+      if (V3.sitting && V3.sitting.id === n.id && !V3.sitting.up) { useStandUp(); return; }
+      useSitOn(n, false);
       v3Say(TXT.us_sit);
       return;
     }
@@ -116,7 +117,7 @@
         V3.tod = 0; v3Fade(700); v3Words();
         v3Say(TXT.us_sleep);
       } else {
-        V3.sitting = true;
+        useSitOn(n, true);
         v3Say(TXT.us_rest);
       }
       return;
@@ -215,16 +216,123 @@
     });
     return out;
   }, 1);
-  // Sitting, you are lower; a step and you are up again.
+  // ---- sat down on it --------------------------------------------------------------------------
+  // (2026-10-07, "when you sit on something you actually turn around and sit on the thing you are
+  // sitting on") Sitting used to lower the eyes where you stood, facing whichever way you were.
+  // Now, over a moment, you step onto the seat (on a sofa, the place along it nearest you), turn round
+  // to face the way it faces, and sit down to its height. Lying down on a bed in the day, you lie
+  // along it, your head at the pillow end, looking toward its foot.
+  // A step stands you up again in front of it (beside the bed), facing the way you sat. Turning the
+  // view and looking about still work, sat down.
+  // (V3.sitting: the seat's id, its height, where you came from and where you go, and when. 40-bodies.js
+  // sits your body down; 38-view3d.js and 40-tour.js put your eyes at useSitEye().)
+  var USE_SEAT_H = { i_sofa: 0.46, i_loveseat: 0.46, i_sectional: 0.46, i_armchair: 0.45, i_recliner: 0.47, i_chair: 0.47,
+                     i_officechair: 0.49, i_stool: 0.66, i_bench: 0.45, i_gardenbench: 0.45, i_rocker: 0.44, i_chaise: 0.4,
+                     i_beanbag: 0.3, i_ottoman: 0.42, i_lounger: 0.36, i_schooldesk: 0.45, i_highchair: 0.6, i_swing: 0.5 };
+  var USE_SIT_MS = 900, USE_UP_MS = 380, USE_SIT_EYE = 0.68, USE_BED_H = 0.55;   // (eyes this far over the seat, sat up)
+  function useEase(k) { k = Math.max(0, Math.min(1, k)); return k * k * (3 - 2 * k); }
+  function useSitOn(n, bed) {
+    var me = V3.me, P = FLOOR_PX, t = (n.turn || 0) * Math.PI / 180;
+    var ux = Math.cos(t), uy = Math.sin(t), fx = -Math.sin(t), fy = Math.cos(t);       // across it; the way it faces
+    var dx = me.x - n.x, dy = me.y - n.y, a = dx * ux + dy * uy, b = dx * fx + dy * fy, hw = n.w / 2, hd = n.h / 2;
+    var to, stand, eye, pitch = null, head = Math.atan2(fy, fx);
+    if (bed) {
+      // along it, head at the pillows (its back), looking toward its foot
+      var mid = Math.max(-hw + 0.3 * P, Math.min(hw - 0.3 * P, a)), side = a >= 0 ? 1 : -1;
+      var by = Math.max(-hd + 0.4 * P, Math.min(hd - 0.4 * P, b));
+      to = { x: n.x + ux * mid - fx * (hd - 0.45 * P), y: n.y + uy * mid - fy * (hd - 0.45 * P) };
+      eye = USE_BED_H + 0.16;
+      pitch = 0.15;
+      stand = { x: n.x + ux * side * (hw + 0.42 * P) + fx * by, y: n.y + uy * side * (hw + 0.42 * P) + fy * by };
+    } else {
+      // the place along it nearest you, a little in front of its back
+      var room = Math.max(0, hw - 0.3 * P), across = Math.max(-room, Math.min(room, a)), into = Math.min(0.08 * P, hd * 0.2);
+      to = { x: n.x + ux * across + fx * into, y: n.y + uy * across + fy * into };
+      eye = (USE_SEAT_H[n.kind] || 0.46) + USE_SIT_EYE;
+      pitch = Math.max(-0.1, Math.min(0.1, me.pitch || 0));        // (looking out across the room, not down at the seat)
+      stand = { x: n.x + ux * across + fx * (hd + 0.38 * P), y: n.y + uy * across + fy * (hd + 0.38 * P) };
+    }
+    var was = V3.sitting && V3.sitting !== true && !V3.sitting.up ? V3.sitting : null;
+    V3.sitting = { id: n.id, kind: n.kind, bed: !!bed, seat: bed ? USE_BED_H : (USE_SEAT_H[n.kind] || 0.46), eye: eye,
+                   from: { x: me.x, y: me.y, head: me.head, pitch: me.pitch || 0, eye: was ? useSitEye() : EYE_TALL },
+                   back: was ? was.back : { x: me.x, y: me.y }, to: to, head: head, pitch: pitch, stand: stand, t0: performance.now() };
+    V3.dirty = true;
+  }
+  // How far down you are: 0 standing, 1 sat (or, getting up, back again)
+  function useSitK() {
+    var S = V3 && V3.sitting;
+    if (!S) { return 0; }
+    if (S === true) { return 1; }
+    var now = performance.now();
+    if (S.up) { return 1 - useEase((now - S.up) / USE_UP_MS); }
+    return useEase((now - S.t0) / USE_SIT_MS * 1.6 - 0.6);         // (down once mostly round and there)
+  }
+  // The eyes' height, in metres over the floor
+  function useSitEye() {
+    var S = V3 && V3.sitting;
+    if (!S) { return EYE_TALL; }
+    if (S === true) { return 1.12; }
+    var from = S.up ? EYE_TALL : S.from.eye, k = useSitK();
+    return from + (S.eye - from) * k;
+  }
+  // Legs sat on a seat ("sit46": 46 cm up) once you are down, for 40-bodies.js; null otherwise.
+  // Lying on a bed, no body of your own is drawn (40-tour.js).
+  function useSitPose() {
+    var S = V3 && V3.sitting;
+    if (!S || S === true || S.up || S.bed || useSitK() < 0.45) { return null; }
+    return "sit" + Math.round(S.seat * 100);
+  }
+  function useLying() { var S = V3 && V3.sitting; return !!(S && S !== true && S.bed && !S.up && useSitK() > 0.3); }
+  // Each picture while sitting down or getting up: on the way there, and turned round (true: more to come)
+  function useSitTick() {
+    var S = V3 && V3.sitting;
+    if (!S || S === true || !V3.me || V3.mode !== "walk") { return false; }
+    var now = performance.now(), me = V3.me;
+    if (S.up) {
+      if (now - S.up >= USE_UP_MS) { V3.sitting = false; }
+      return true;
+    }
+    if (!S.done) {
+      var k = useEase((now - S.t0) / (USE_SIT_MS * 0.75));
+      me.x = S.from.x + (S.to.x - S.from.x) * k;
+      me.y = S.from.y + (S.to.y - S.from.y) * k;
+      me.head = S.from.head + Math.atan2(Math.sin(S.head - S.from.head), Math.cos(S.head - S.from.head)) * k;
+      if (S.pitch !== null) { me.pitch = S.from.pitch + (S.pitch - S.from.pitch) * k; }
+      if (k >= 1) { S.done = true; }
+    }
+    return now - S.t0 < USE_SIT_MS + 50;
+  }
+  // Up again: in front of the seat (beside the bed), or else back where you were, facing the way you sat
+  function useStandUp() {
+    var S = V3 && V3.sitting, me = V3 && V3.me;
+    if (!S || !me) { return; }
+    if (S === true) { V3.sitting = false; V3.dirty = true; return; }
+    if (S.up) { return; }
+    var spot = [S.stand, S.back].filter(function (q) { return q && !v3Blocked(q.x, q.y); })[0] || S.back;
+    me.x = spot.x; me.y = spot.y;
+    if (S.bed) { me.head = Math.atan2(spot.y - S.to.y, spot.x - S.to.x); }
+    if (S.bed) { me.pitch = 0; }
+    S.done = true;
+    S.up = performance.now();
+    V3.dirty = true;
+  }
+  // A step stands you up (turning the view and looking about do not)
   if (typeof v3Stride === "function") {
     var v3StrideUse = v3Stride;
     v3Stride = function () {
-      var moved = v3StrideUse.apply(this, arguments);
-      if (moved && V3 && V3.sitting) {
-        var k = V3.keys || {};
-        if (k.w || k.a || k.s || k.d || k.padup || k.paddown) { V3.sitting = false; V3.dirty = true; }
-      }
-      return moved;
+      var S = V3 && V3.sitting, k = (V3 && V3.keys) || {};
+      if (S && !S.up && (k.w || k.a || k.s || k.d || k.padup || k.paddown)) { useStandUp(); return true; }
+      return v3StrideUse.apply(this, arguments);
+    };
+  }
+  if (typeof v3Draw === "function") {
+    var v3DrawSit = v3Draw;
+    v3Draw = function () {
+      var more = false;
+      try { more = useSitTick(); } catch (e) { if (V3) { V3.sitting = false; } }
+      var out = v3DrawSit.apply(this, arguments);
+      if (more && V3) { V3.dirty = true; }      // (after the picture, which says it is done)
+      return out;
     };
   }
 
@@ -329,13 +437,50 @@
   }
   // The rooms across one of a room's walls, on its floor, and the stretch
   // of the wall each shares -- in the house as it stands (`boxOf`).
+  // (2026-10-07) The floors and the square rooms on each, kept while a picture is made or a walk is
+  // planned (`wallFloorsBatch`): each wall of a tower's thousand rooms asked every room which floor
+  // it was on, two minutes of it.
+  var wallFloorsKept = { at: null, F: null }, wallFloorsBatch = null;
+  function wallFloorsNow() {
+    var at = wallFloorsBatch || (typeof V3 !== "undefined" && V3 ? V3.picture || null : null);
+    if (!wallFloorsKept) { wallFloorsKept = { at: null, F: null }; }
+    if (at && wallFloorsKept.at === at) { return wallFloorsKept.F; }
+    // (else while no room or floor on the paper has moved: where each room is is all it asks)
+    var key = at ? null : wallRoomsKey();
+    if (key && wallFloorsKept.key === key && wallFloorsKept.H === hand) { return wallFloorsKept.F; }
+    var floors = typeof floorsOf === "function" ? floorsOf() : [], on = new Map(), of = new Map();
+    hand.nodes.forEach(function (o) {
+      if (o.kind !== "i_room" || ((o.turn || 0) % 90)) { return; }
+      var f = floors.length ? floorAt(floors, o.x, o.y) : null;
+      of.set(o, f);
+      if (!on.has(f)) { on.set(f, []); }
+      on.get(f).push(o);
+    });
+    var F = { floors: floors, on: on, of: of };
+    wallFloorsKept = { at: at, key: key, H: hand, F: F };
+    return F;
+  }
+  // The rooms and floors drawn, kept while nothing is added or taken away; and where they are, as a number.
+  var wallRoomsList = null;
+  function wallRoomsKey() {
+    var N = hand.nodes, k = wallRoomsList;
+    if (!k || k.H !== hand || k.N !== N || k.n !== N.length || k.next !== hand.next || k.first !== N[0] || k.last !== N[N.length - 1]) {
+      k = wallRoomsList = { H: hand, N: N, n: N.length, next: hand.next, first: N[0], last: N[N.length - 1],
+                            list: N.filter(function (o) { return o.kind === "i_room" || o.kind === "i_floor"; }) };
+    }
+    var h = 0, R = k.list;
+    for (var i = 0; i < R.length; i++) {
+      var o = R[i];
+      h = (h * 31 + o.id * 7 + o.x * 13 + o.y * 17 + o.w * 3 + o.h * 5 + (o.turn || 0) * 11) % 1000000007;
+    }
+    return R.length + "|" + h;
+  }
   function wallAcross(room, edge, boxOf) {
     if ((room.turn || 0) % 90) { return []; }
     var B = boxOf(room), d = wallOut(room, edge), out = [], horiz = Math.abs(d[1]) > 0.5;
-    var floors = typeof floorsOf === "function" ? floorsOf() : [], f0 = floors.length ? floorAt(floors, room.x, room.y) : null;
-    hand.nodes.forEach(function (o) {
-      if (o === room || o.kind !== "i_room" || ((o.turn || 0) % 90)) { return; }
-      if (floors.length && floorAt(floors, o.x, o.y) !== f0) { return; }
+    var F = wallFloorsNow(), floors = F.floors, f0 = F.of.has(room) ? F.of.get(room) : floors.length ? floorAt(floors, room.x, room.y) : null;
+    (F.on.get(f0) || []).forEach(function (o) {
+      if (o === room) { return; }
       var Q = boxOf(o);
       var gap = horiz ? (d[1] < 0 ? B.t - Q.b : Q.t - B.b) : (d[0] < 0 ? B.l - Q.r : Q.l - B.r);
       if (Math.abs(gap) > 10) { return; }
@@ -377,9 +522,37 @@
     return any;
   }
   // The stretches of a room's wall taken out, from the wall's start.
+  // (2026-10-07) The rooms that are open to any other, by id -- or every room, where some room is open
+  // a whole side (`open`): asked of each wall of a tower's thousand rooms, where a few stand open.
+  var wallOpenIx = { at: null, all: false, ids: null };
+  function wallOpenSome(room) {
+    var at = (typeof wallFloorsBatch !== "undefined" && wallFloorsBatch) || (typeof V3 !== "undefined" && V3 ? V3.picture || null : null);
+    if (!wallOpenIx) { wallOpenIx = { at: null, all: false, ids: null }; }
+    if (!at) {
+      // (not while a picture is made: asked as it stands, nothing kept)
+      var N = hand.nodes;
+      for (var i = 0; i < N.length; i++) {
+        var q = N[i];
+        if (q.kind !== "i_room") { continue; }
+        if (q.open && q.open.length) { return true; }
+        if (q.openTo && q.openTo.length && (q === room || q.openTo.indexOf(room.id) >= 0)) { return true; }
+      }
+      return false;
+    }
+    if (wallOpenIx.at !== at || !wallOpenIx.ids) {
+      var ids = new Set(), all = false;
+      hand.nodes.forEach(function (o) {
+        if (o.kind !== "i_room") { return; }
+        if (o.open && o.open.length) { all = true; }
+        if (o.openTo && o.openTo.length) { ids.add(o.id); o.openTo.forEach(function (id) { ids.add(id); }); }
+      });
+      wallOpenIx = { at: at, all: all, ids: ids };
+    }
+    return wallOpenIx.all || wallOpenIx.ids.has(room.id);
+  }
   function wallOpenRuns(room, edge, boxOf) {
     var runs = [];
-    if (!wallAnyOpen()) { return runs; }
+    if (!wallAnyOpen() || !wallOpenSome(room)) { return runs; }
     boxOf = boxOf || function (n) { return tieBox(n); };
     var B = boxOf(room), ox = room.x - (B.l + B.r) / 2, oy = room.y - (B.t + B.b) / 2;
     wallAcross(room, edge, boxOf).forEach(function (it) {
@@ -597,14 +770,24 @@
   }
   function wallOpenCells(plan) {
     if (!plan.cells || !wallAnyOpen()) { return; }
+    var was = wallFloorsBatch;
+    wallFloorsBatch = wallFloorsBatch || {};
+    try { wallOpenCellsAll(plan); } finally { wallFloorsBatch = was; }
+  }
+  function wallOpenCellsAll(plan) {
     plan.rooms.forEach(function (room) {
       WALL_EDGES.forEach(function (edge) {
         var runs = wallOpenRuns(room, edge);
         if (!runs.length) { return; }
-        var t = turned(room), reach = Math.max(t.w, t.h) / 2 + 12;
-        var c0 = Math.max(0, Math.floor((room.x - reach - plan.x0) / WALK_CELL)), c1 = Math.min(plan.cols - 1, Math.ceil((room.x + reach - plan.x0) / WALK_CELL));
-        var r0 = Math.max(0, Math.floor((room.y - reach - plan.y0) / WALK_CELL)), r1 = Math.min(plan.rows - 1, Math.ceil((room.y + reach - plan.y0) / WALK_CELL));
+        var t = turned(room);
         var out = wallOut(room, edge), half = Math.abs(out[1]) > 0.5 ? t.h / 2 : t.w / 2;
+        // (only the strip along that wall: a tower's corridor sixty metres long was every cell of a
+        // square sixty metres across, four times)
+        var lo = half - 14, hi = half + 12, ax = Math.abs(out[1]) > 0.5;
+        var xa = ax ? room.x - t.w / 2 - 12 : room.x + out[0] * (out[0] > 0 ? lo : hi), xb = ax ? room.x + t.w / 2 + 12 : room.x + out[0] * (out[0] > 0 ? hi : lo);
+        var ya = ax ? room.y + out[1] * (out[1] > 0 ? lo : hi) : room.y - t.h / 2 - 12, yb = ax ? room.y + out[1] * (out[1] > 0 ? hi : lo) : room.y + t.h / 2 + 12;
+        var c0 = Math.max(0, Math.floor((xa - plan.x0) / WALK_CELL) - 1), c1 = Math.min(plan.cols - 1, Math.ceil((xb - plan.x0) / WALK_CELL) + 1);
+        var r0 = Math.max(0, Math.floor((ya - plan.y0) / WALK_CELL) - 1), r1 = Math.min(plan.rows - 1, Math.ceil((yb - plan.y0) / WALK_CELL) + 1);
         for (var row = r0; row <= r1; row++) {
           for (var col = c0; col <= c1; col++) {
             var i = row * plan.cols + col;
@@ -801,8 +984,10 @@
     var homeAdviceWalls = homeAdvice;
     homeAdvice = function () {
       var tips = homeAdviceWalls.apply(this, arguments);
+      var was = wallFloorsBatch;
       try {
         if (!wallAnyOpen()) { return tips; }
+        wallFloorsBatch = wallFloorsBatch || {};
         var W = wallJoined(), done = {}, px = FLOOR_PX;
         hand.nodes.forEach(function (room) {
           if (!wallSomeOpen(room)) { return; }
@@ -829,7 +1014,7 @@
             });
           });
         });
-      } catch (e) { /* the advice as it was */ }
+      } catch (e) { /* the advice as it was */ } finally { wallFloorsBatch = was; }
       return tips;
     };
   }

@@ -55,18 +55,21 @@
     for (var x = 60; x < w - 1; x += 60) { d += "M" + itN(x) + " 0 V" + itN(h) + " "; }
     return ["o " + itR(0, 0, w, h, 0), "t " + (d.trim() || "M0 0")];
   }, { wall: [0, 4.2] }, function (M, W, D, H, C) {
-    C = mPick(C, "#d8d2c6", "#2b2622");
-    var stone = M.mat("stone", C.main), joint = M.mat("stone", "#b9b2a5"), glow = M.mat("glow", "#ffe9c2");
+    // (a dark granite against the lobby's pale walls -- the travertine it was went unseen on them)
+    C = mPick(C, "#46413c", "#9a8f80");
+    var stone = M.mat("stone", C.main), joint = M.mat("stone", "#2a2623"), glow = M.mat("glow", "#ffe9c2");
     var n = Math.max(2, Math.round(W / (60 * cmT)));
+    // (its back, -D/2, against the wall, as every piece hung on one: its face, the stone, out in the
+    // room at +D/2 -- 2026-10-07, it was built facing into the wall it stood on, and not seen)
     for (var i = 0; i < n; i++) {
       var x0 = -W / 2 + i * W / n, x1 = x0 + W / n - 0.6 * cmT;
-      M.box(x0, x1, -D / 2, -D / 2 + 6 * cmT + (i % 2) * 1.2 * cmT, 6 * cmT, H - 8 * cmT, stone);
-      M.box(x1, x1 + 0.6 * cmT, -D / 2, -D / 2 + 4 * cmT, 6 * cmT, H - 8 * cmT, joint);
+      M.box(x0, x1, -D / 2, D / 2 - 3 * cmT + (i % 2) * 1.2 * cmT, 6 * cmT, H - 8 * cmT, stone);
+      M.box(x1, x1 + 0.6 * cmT, -D / 2, D / 2 - 5 * cmT, 6 * cmT, H - 8 * cmT, joint);
     }
-    M.box(-W / 2, W / 2, -D / 2, -D / 2 + 9 * cmT, H - 8 * cmT, H, M.mat("metal", C.frame));
-    M.box(-W / 2 + 4 * cmT, W / 2 - 4 * cmT, -D / 2 + 9 * cmT, -D / 2 + 9.4 * cmT, H - 7 * cmT, H - 3 * cmT, glow);
-    M.box(-W / 2, W / 2, -D / 2, -D / 2 + 9 * cmT, 0, 6 * cmT, M.mat("metal", C.frame));
-    M.box(-W / 2 + 4 * cmT, W / 2 - 4 * cmT, -D / 2 + 9 * cmT, -D / 2 + 9.4 * cmT, 2 * cmT, 5 * cmT, glow);
+    M.box(-W / 2, W / 2, -D / 2, D / 2, H - 8 * cmT, H, M.mat("metal", C.frame));
+    M.box(-W / 2 + 4 * cmT, W / 2 - 4 * cmT, D / 2, D / 2 + 0.4 * cmT, H - 7 * cmT, H - 3 * cmT, glow);
+    M.box(-W / 2, W / 2, -D / 2, D / 2, 0, 6 * cmT, M.mat("metal", C.frame));
+    M.box(-W / 2 + 4 * cmT, W / 2 - 4 * cmT, D / 2, D / 2 + 0.4 * cmT, 2 * cmT, 5 * cmT, glow);
   });
 
   // ---- the office floors ------------------------------------------------------------------------------

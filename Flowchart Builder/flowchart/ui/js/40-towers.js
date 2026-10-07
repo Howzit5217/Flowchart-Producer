@@ -336,7 +336,8 @@
     for (var i = 0; i < west; i++) { core.push(["lift", 2.3]); }
     core.push(["liftlobby", 3.4]);
     for (var j = 0; j < east; j++) { core.push(["lift", 2.3]); }
-    if (!homes) { core.push(["restroom", 2.6], ["restroom", 2.6]); }
+    // (a women's and a men's washroom, wide enough for the basins across from the stalls: 40-stalls.js)
+    if (!homes) { core.push(["restroom", 3.6], ["restroom", 3.6]); }
     core.push(["lift", 2.3, "service"], ["stairs", 1.4, "B"]);
     var Wc = core.reduce(function (s, c) { return s + c[1]; }, 0), Dm = TOWER_CORE_D, H = TOWER_HALL;
     var lease = homes ? 9.5 : use === "mixed" ? 11 : 12.5;
@@ -470,19 +471,35 @@
       return towerStretch(G, k, role, name, "west", side, rnd).concat(towerStretch(G, k, role, name, "mid", G.Wc, rnd), towerStretch(G, k, role, name, "east", side, rnd));
     }
     // the core: the same rooms, the same places, every floor
-    var ll = "ll" + k, core = G.core.map(function (c) {
+    var ll = "ll" + k, rr = 0, core = G.core.map(function (c) {
       if (c[0] === "stairs") {
         var go = c[2] === "A" ? (A ? (up ? "up" : "none") : (down ? "down" : "none")) : (A ? (down ? "down" : "none") : (up ? "up" : "none"));
         return R("stairs", c[1], { bay: c[2], go: go, label: TXT.st_stairs, fixed: true });
       }
       if (c[0] === "lift") { return R("lift", c[1], { via: ll, fixed: true, label: c[2] === "service" ? TXT.sk_service : TXT.tr_lift }); }
       if (c[0] === "liftlobby") { return R("liftlobby", c[1], { id: ll, cross: true, fixed: true, label: TXT.sk_liftlobby }); }
-      if (c[0] === "restroom") { return R("restroom", c[1], { fixed: true, label: TXT.tr_restroom }); }
+      if (c[0] === "restroom") {
+        // (2026-10-07: "for schools and big building to have bigger bathrooms for males and females")
+        // the women's then the men's, as many toilets each as the floor's people need -- a person to
+        // fourteen square metres of an office floor, the plumbing code's count (40-stalls.js)
+        var boys = rr++ > 0, n = towerToilets(G, k, role);
+        if (!n) { return R("restroom", c[1], { fixed: true, label: TXT.tr_restroom }); }
+        return R("washroom", c[1], { fixed: true, label: boys ? TXT.sl_men : TXT.sl_women, slBoys: boys, slToilets: n });
+      }
       return R(c[0], c[1], { fixed: true, label: TXT["sk_" + c[0]] || "" });
     });
     var midRow = towerStretch(G, k, role, "mid", "west", side, rnd).concat(core, towerStretch(G, k, role, "mid", "east", side, rnd));
     var clip = towerPlate(G, k, TOWER_SKIN, 72).map(function (p) { return [p[0] + G.Ax, p[1] + G.Ay]; });
     return { level: k, back: band("back"), mid: [midRow], front: band("front"), H: G.H, Db: depth, Dm: G.Dm, Df: depth, clip: clip, skin: true, towerRole: role };
+  }
+  // The toilets each of a floor's washrooms needs (none: a plain restroom), by the people it holds.
+  function towerToilets(G, k, role) {
+    if (typeof slToilets !== "function" || !STARTER_ROOMS || !STARTER_ROOMS.washroom) { return 0; }
+    var area = shpArea(towerPlate(G, k, TOWER_SKIN, 48)), per = role === "lobby" || role === "podium" ? 5 : role === "plant" ? 60 : 14;
+    if (role === "skylobby" || role === "top") { per = 5; }
+    // (on a podium of shops or a lobby: as a store's, a person to five square metres, a toilet a hundred and fifty)
+    var kind = per === 5 ? "shop" : "work";
+    return slToilets(kind, area / per);
   }
   if (typeof BUILDING_TYPES === "object") {
     BUILDING_TYPES.tower = {
@@ -568,12 +585,92 @@
   if (typeof typeFurnish === "function") {
     var typeFurnishTower = typeFurnish;
     typeFurnish = function (made, rnd, want) {
+      // (its walls taken out before anything is hung on them)
+      if (want && want.type === "tower") { towerOpen(made); }
       var out = typeFurnishTower.apply(this, arguments);
       if (want && want.type === "tower") {
         try { towerFurnish(made, rnd || starterRand(7), want); } catch (e) { if (window.console && console.warn) { console.warn("tower rooms:", e && e.message); } }
       }
       return out;
     };
+  }
+  // What stands open to what on a tower's floors (2026-10-07: "a really tall looking house"): the
+  // lifts' lobby open to the corridors each side of it, the lobby to the corridor behind it and its
+  // cafe; an office floor's open plan one floor-wide space round the core -- open to the corridor and
+  // to the open plan beside it; a sky lounge the same.  The core's own walls stand, the meeting
+  // rooms', the homes', the plant's.
+  var TOWER_OPEN = { liftlobby: { hall: 1 }, grandlobby: { hall: 1, cafe: 1 }, openplan: { hall: 1, openplan: 1 },
+                     skylounge: { hall: 1, skylounge: 1, cafe: 1 }, cafe: { cafe: 1 } };
+  function towerOpen(made) {
+    var P = FLOOR_PX, e = 12;
+    function box(n) { return { l: n.x - n.w / 2, r: n.x + n.w / 2, t: n.y - n.h / 2, b: n.y + n.h / 2 }; }
+    function touch(A, B) {
+      if (Math.abs(A.b - B.t) < e || Math.abs(B.b - A.t) < e) { return Math.min(A.r, B.r) - Math.max(A.l, B.l) >= 0.9 * P; }
+      if (Math.abs(A.r - B.l) < e || Math.abs(B.r - A.l) < e) { return Math.min(A.b, B.b) - Math.max(A.t, B.t) >= 0.9 * P; }
+      return false;
+    }
+    var rooms = made.filter(function (r) { return r.kind === "i_room" && !((r.turn || 0) % 90); });
+    rooms.forEach(function (a) {
+      var to = TOWER_OPEN[a.starter];
+      if (!to) { return; }
+      var A = box(a);
+      rooms.forEach(function (b) {
+        if (b === a || !to[b.starter] || (b.openTo || []).indexOf(a.id) >= 0) { return; }
+        if (!touch(A, box(b))) { return; }
+        a.openTo = (a.openTo || []).concat([b.id]);
+      });
+    });
+  }
+  // (what holds a tower's floors up is its frame -- the core, the columns at the glass, the slab
+  // spanning between: a wall taken out between its rooms carried nothing, wants no beam put in or
+  // posts under it, 39-inside.js)
+  if (typeof wallStructure === "function") {
+    var wallStructureTower = wallStructure;
+    wallStructure = function (room, run) {
+      if (room && room.skin && run && run.other && run.other.skin) {
+        var span = (run.b - run.a) / FLOOR_PX;
+        return { span: span, bearing: false, floorOver: false, spine: false, steel: true, depth: 0, plies: 0, middle: false, frame: true };
+      }
+      return wallStructureTower.apply(this, arguments);
+    };
+  }
+  // A room's own reach: the box round its shape (a shaped room's box is the room as planned, before
+  // its floor was cut to the tower's outline -- much of it past the glass).
+  function towerReach(r) {
+    if (!r.shape || !r.shape.length) { return { l: r.x - r.w / 2, r: r.x + r.w / 2, t: r.y - r.h / 2, b: r.y + r.h / 2 }; }
+    var b = { l: 1e9, r: -1e9, t: 1e9, b: -1e9 };
+    r.shape.forEach(function (p) { b.l = Math.min(b.l, r.x + p[0]); b.r = Math.max(b.r, r.x + p[0]); b.t = Math.min(b.t, r.y + p[1]); b.b = Math.max(b.b, r.y + p[1]); });
+    return b;
+  }
+  // Pieces in rows and columns, `sx` by `sy` apart, over as much of a room as they will go in: the
+  // grid slid the way that fits the most (a shaped room's corners and curves leave some out whichever
+  // way), then put down.  `kindAt(i, j)`: the piece for a place in the grid.
+  function towerGrid(r, b, kindAt, sx, sy, pad, turn) {
+    var w = b.r - b.l, h = b.b - b.t, best = null;
+    [0, 0.5].forEach(function (fx) {
+      [0, 0.5].forEach(function (fy) {
+        var nx = Math.max(1, Math.floor(w / sx + 1e-6) + (fx ? 1 : 0)), ny = Math.max(1, Math.floor(h / sy + 1e-6) + (fy ? 1 : 0));
+        var x0 = (b.l + b.r) / 2 - (nx - 1) * sx / 2, y0 = (b.t + b.b) / 2 - (ny - 1) * sy / 2, spots = [];
+        for (var i = 0; i < nx; i++) {
+          for (var j = 0; j < ny; j++) {
+            var kind = kindAt(i, j), x = x0 + i * sx, y = y0 + j * sy;
+            if (kind && towerFits(r, kind, x, y, turn, pad)) { spots.push([kind, x, y]); }
+          }
+        }
+        if (!best || spots.length > best.length) { best = spots; }
+      });
+    });
+    return best.filter(function (s) { return towerPut(r, s[0], s[1], s[2], turn, pad); });
+  }
+  // Whether a piece would go down there (towerPut's own test, nothing put).
+  function towerFits(r, kind, x, y, turn, pad) {
+    var P = FLOOR_PX, icon = ICONS[kind];
+    if (!icon) { return false; }
+    var w = icon.box[0], h = icon.box[1], t = ((turn || 0) % 180 + 180) % 180 === 90, hw = (t ? h : w) / 2, hh = (t ? w : h) / 2;
+    var margin = (pad === undefined ? 0.15 : pad) * P;
+    var corners = [[x - hw, y - hh], [x + hw, y - hh], [x + hw, y + hh], [x - hw, y + hh], [x, y]];
+    if (!corners.every(function (q) { return insideArea(r, q[0], q[1], margin); })) { return false; }
+    return typeof typeClear !== "function" || !!typeClear({ kind: kind, x: Math.round(x), y: Math.round(y), w: w, h: h, turn: turn || 0 }, 3);
   }
   // A piece put down in a tower's room where it fits: inside the room's shape (with `pad` metres
   // round it), clear of the rest -- or nothing.
@@ -599,7 +696,7 @@
       if (typeof typeRoom !== "undefined") { typeRoom = r; }
       // (no outlets in a lift's shaft, a stairwell, a riser: 39-xray.js)
       if (kind === "lift" || kind === "stairs" || kind === "riser") { r.noWire = true; }
-      var b = { l: r.x - r.w / 2, r: r.x + r.w / 2, t: r.y - r.h / 2, b: r.y + r.h / 2 };
+      var b = towerReach(r);
       if (kind === "grandlobby") { towerLobby(r, b, rnd); }
       else if (kind === "openplan") { r.use = "openoffice"; towerOpenPlan(r, b, rnd); }
       else if (kind === "liftlobby") {
@@ -617,74 +714,85 @@
   // what a tower's rooms are fitted with (the tower's own things where there are such, 40-towerkit below)
   var TOWER_ITEM = { desk: "i_counter", gates: null, lockers: "i_filing", ahu: "i_furnace", chiller: "i_generator", tank: "i_waterheater",
                      switchgear: "i_filing", directory: null, feature: null, planter: "i_plant", bench: "i_bench" };
-  // The lobby: the security desk facing the way in, the speed gates across the way to the lifts, a
-  // sofa and chairs each side, planters, the building's directory by the door.
+  // Which side of a room the core is, from where it is got into: its door's side ("t", "b", "l", "r").
+  function towerCoreSide(r, b) {
+    var P = FLOOR_PX;
+    var door = hand.nodes.filter(function (d) { return WALK_DOORS[d.kind] && !d.skinDoor && insideArea(r, d.x, d.y, -0.6 * P); })[0];
+    if (!door) { return "t"; }
+    return Math.abs(door.y - b.t) < 0.8 * P ? "t" : Math.abs(door.y - b.b) < 0.8 * P ? "b" : Math.abs(door.x - b.l) < 0.8 * P ? "l" : "r";
+  }
+  // The lobby: the security desk facing the way in, the speed gates across the way through to the
+  // lifts, the stone wall of the building's name down one side, a sofa and chairs each side,
+  // planters, the building's directory by the door.
   function towerLobby(r, b, rnd) {
-    var P = FLOOR_PX, cx = r.x, w = b.r - b.l, h = b.b - b.t;
-    // the way to the lifts: the gates across its back, a lane every metre, the desk in front of them
+    var P = FLOOR_PX, cx = (b.l + b.r) / 2, cy = (b.t + b.b) / 2, w = b.r - b.l, h = b.b - b.t;
+    // the way to the lifts: the gates across its back (open to the corridor round the core), a lane every metre
     if (TOWER_ITEM.gates) {
-      var lanes = Math.max(3, Math.min(8, Math.floor(w / P / 3))), gy = b.t + 2.2 * P;
+      var lanes = Math.max(3, Math.min(8, Math.floor(w / P / 3))), gy = b.t + 2.6 * P;     // (clear of the doors' swing)
       for (var g = 0; g < lanes; g++) { towerPut(r, TOWER_ITEM.gates, cx + (g - (lanes - 1) / 2) * 0.95 * P, gy, 0, 0.05); }
     }
-    towerPut(r, TOWER_ITEM.desk, cx, b.t + Math.min(h * 0.45, 5.2 * P), 0, 0.3);
-    if (TOWER_ITEM.feature) { towerPut(r, TOWER_ITEM.feature, cx, b.t + 0.15 * P, 0, 0); }
+    towerPut(r, TOWER_ITEM.desk, cx, b.t + Math.min(h * 0.45, 5.6 * P), 0, 0.3);
+    // (down the side where a wall still stands -- the shop's, not the cafe's open side)
+    if (TOWER_ITEM.feature) {
+      var shut = function (side) {
+        var x = side > 0 ? b.r + 0.3 * P : b.l - 0.3 * P;
+        return !hand.nodes.some(function (o) { return o.kind === "i_room" && o !== r && insideArea(o, x, cy, 0) && ((r.openTo || []).indexOf(o.id) >= 0 || (o.openTo || []).indexOf(r.id) >= 0); });
+      };
+      var side = shut(1) ? 1 : shut(-1) ? -1 : 0;
+      if (side) { towerPut(r, TOWER_ITEM.feature, side > 0 ? b.r - 0.15 * P : b.l + 0.15 * P, cy + 0.6 * P, side > 0 ? 90 : 270, 0); }
+    }
     [-1, 1].forEach(function (s) {
-      var sx = cx + s * Math.min(w * 0.3, 7 * P), sy = r.y + h * 0.12;
+      var sx = cx + s * Math.min(w * 0.28, 6.5 * P), sy = cy + h * 0.12;
       towerPut(r, "i_sofa", sx, sy + 1.1 * P, 180, 0.2);
       towerPut(r, "i_armchair", sx - 1.4 * P, sy - 0.4 * P, 90, 0.2);
       towerPut(r, "i_armchair", sx + 1.4 * P, sy - 0.4 * P, 270, 0.2);
       towerPut(r, "i_coffee", sx, sy, 0, 0.2);
-      towerPut(r, TOWER_ITEM.planter, cx + s * (w / 2 - 1.2 * P), b.t + 1.2 * P, 0, 0.1);
-      towerPut(r, TOWER_ITEM.planter, cx + s * (w / 2 - 1.2 * P), r.y + h * 0.3, 0, 0.1);
+      towerPut(r, TOWER_ITEM.planter, cx + s * (w / 2 - 1.2 * P), b.b - 1.4 * P, 0, 0.1);
+      towerPut(r, TOWER_ITEM.planter, cx + s * (w / 2 - 1.2 * P), cy - h * 0.1, 0, 0.1);
     });
     if (TOWER_ITEM.directory) { towerPut(r, TOWER_ITEM.directory, cx + Math.min(w * 0.2, 4 * P), b.b - 3 * P, 0, 0.3); }
   }
   // An office floor's open plan: benches of desks in rows across it, a way between each and round
   // them all; by the core (the side it opens off) the booths for a call; a light every five metres.
   function towerOpenPlan(r, b, rnd) {
-    var P = FLOOR_PX, bench = TOWER_ITEM.bench, w = b.r - b.l, h = b.b - b.t;
-    // which side the core is: its door's
-    var door = hand.nodes.filter(function (d) { return WALK_DOORS[d.kind] && insideArea(r, d.x, d.y, -0.6 * P); })[0];
-    var coreSide = door ? (Math.abs(door.y - b.t) < 0.8 * P ? "t" : Math.abs(door.y - b.b) < 0.8 * P ? "b" : Math.abs(door.x - b.l) < 0.8 * P ? "l" : "r") : "t";
-    if (bench) {
-      var sx = 4.4 * P, sy = 4.2 * P, nx = Math.max(1, Math.floor((w - 1.2 * P) / sx)), ny = Math.max(1, Math.floor((h - 1.2 * P) / sy));
-      var x0 = r.x - (nx - 1) * sx / 2, y0 = r.y - (ny - 1) * sy / 2;
-      for (var i = 0; i < nx; i++) {
-        for (var j = 0; j < ny; j++) { towerPut(r, bench, x0 + i * sx, y0 + j * sy, 0, 0.5); }
-      }
-    }
+    var P = FLOOR_PX, bench = TOWER_ITEM.bench, cx = (b.l + b.r) / 2, cy = (b.t + b.b) / 2;
+    var coreSide = towerCoreSide(r, b);
+    // (the booths first, by the core, the benches round them)
     if (TOWER_ITEM.booth) {
       [-1.2, 1.2].forEach(function (u) {
-        var at = coreSide === "t" ? [r.x + u * P, b.t + 0.75 * P, 180] : coreSide === "b" ? [r.x + u * P, b.b - 0.75 * P, 0] :
-                 coreSide === "l" ? [b.l + 0.75 * P, r.y + u * P, 90] : [b.r - 0.75 * P, r.y + u * P, 270];
+        // (backs to the core's wall, doors out into the room: a piece's back is to the top wall at nought)
+        var at = coreSide === "t" ? [cx + u * P, b.t + 0.75 * P, 0] : coreSide === "b" ? [cx + u * P, b.b - 0.75 * P, 180] :
+                 coreSide === "l" ? [b.l + 0.75 * P, cy + u * P, 270] : [b.r - 0.75 * P, cy + u * P, 90];
         towerPut(r, TOWER_ITEM.booth, at[0] + (coreSide === "t" || coreSide === "b" ? 2.2 * P : 0), at[1] + (coreSide === "l" || coreSide === "r" ? 2.2 * P : 0), at[2], 0.1);
       });
     }
+    if (bench) { towerGrid(r, b, function () { return bench; }, 4.4 * P, 4.2 * P, 0.5, 0); }
     for (var lx = b.l + 2.5 * P; lx < b.r - 1 * P; lx += 5 * P) {
       for (var ly = b.t + 2.5 * P; ly < b.b - 1 * P; ly += 5 * P) { if (insideArea(r, lx, ly, 0.5 * P)) { adviceAdd("i_pendant", Math.round(lx), Math.round(ly)); } }
     }
   }
-  // A sky lounge: sofas and low tables out by the glass, a bar on the core's side.
+  // A sky lounge: sofas and low tables out by the glass, in groups a way apart.
   function towerLounge(r, b, rnd) {
-    var P = FLOOR_PX, w = b.r - b.l, h = b.b - b.t;
-    for (var x = b.l + 2.6 * P; x < b.r - 2.6 * P; x += 5.2 * P) {
-      for (var y = b.t + 2.6 * P; y < b.b - 2.2 * P; y += 4.6 * P) {
-        if (!towerPut(r, "i_coffee", x, y, 0, 1.0)) { continue; }
-        towerPut(r, "i_sofa", x, y + 1.1 * P, 180, 0.1);
-        towerPut(r, "i_armchair", x - 1.3 * P, y - 0.3 * P, 90, 0.1);
-        towerPut(r, "i_armchair", x + 1.3 * P, y - 0.3 * P, 270, 0.1);
-      }
-    }
-    void w; void h;
+    var P = FLOOR_PX;
+    towerGrid(r, b, function () { return "i_coffee"; }, 5.2 * P, 4.6 * P, 1.2, 0).forEach(function (s) {
+      var x = s[1], y = s[2];
+      towerPut(r, "i_sofa", x, y + 1.1 * P, 180, 0.1);
+      towerPut(r, "i_armchair", x - 1.3 * P, y - 0.3 * P, 90, 0.1);
+      towerPut(r, "i_armchair", x + 1.3 * P, y - 0.3 * P, 270, 0.1);
+    });
   }
-  // A floor of plant: the air handlers in a row down the room, the chillers, the water tanks, the
-  // switchboards along the wall -- a way between them all.
+  // A floor of plant: the switchboards along the wall by the core, the air handlers, the chillers and
+  // the water tanks in rows over the rest of it -- a way round each to get at it.
   function towerPlant(r, b, rnd) {
-    var P = FLOOR_PX, list = [TOWER_ITEM.ahu, TOWER_ITEM.chiller, TOWER_ITEM.tank];
-    for (var y = b.t + 2.2 * P, row = 0; y < b.b - 1.5 * P; y += 3.6 * P, row++) {
-      for (var x = b.l + 2.4 * P; x < b.r - 2 * P; x += 4.6 * P) { towerPut(r, list[(row + Math.floor((x - b.l) / (4.6 * P))) % list.length], x, y, 0, 0.6); }
+    var P = FLOOR_PX, list = [TOWER_ITEM.ahu, TOWER_ITEM.chiller, TOWER_ITEM.tank], side = towerCoreSide(r, b);
+    var along = side === "t" || side === "b", from = along ? b.l : b.t, to = along ? b.r : b.b;
+    for (var u = from + 1.6 * P; u < to - 1.6 * P; u += 3.2 * P) {
+      var at = side === "t" ? [u, b.t + 0.45 * P, 0] : side === "b" ? [u, b.b - 0.45 * P, 180] : side === "l" ? [b.l + 0.45 * P, u, 270] : [b.r - 0.45 * P, u, 90];
+      // (not across the door)
+      var door = hand.nodes.some(function (d) { return WALK_DOORS[d.kind] && Math.abs(d.x - at[0]) < 2.2 * P && Math.abs(d.y - at[1]) < 2.2 * P; });
+      if (!door) { towerPut(r, TOWER_ITEM.switchgear, at[0], at[1], at[2], 0.05); }
     }
-    for (var sx = b.l + 1.6 * P; sx < b.r - 1.6 * P; sx += 3.2 * P) { towerPut(r, TOWER_ITEM.switchgear, sx, b.t + 0.45 * P, 0, 0.05); }
+    towerGrid(r, b, function (i, j) { return list[(i + j) % list.length]; }, 5.4 * P, 4.2 * P, 0.7, 0);
   }
 
   // ---- in 3D: its skin ------------------------------------------------------------------------------

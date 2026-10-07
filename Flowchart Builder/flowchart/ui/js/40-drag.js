@@ -219,6 +219,87 @@
     }
     return t;
   }
+  // ---- where a ray meets a piece itself --------------------------------------------------------------
+  // (2026-10-07, "make it so the selector works better when interacting with things") Picked by the
+  // box round each piece, the nearest box won: the room under a table took the chair tucked under it,
+  // a nightstand's box took the lamp on it, and a sofa set at a slant was had from the empty corners of
+  // its box. These say where a ray meets the piece's own faces -- its model's very triangles, turned and
+  // put where it stands -- or Infinity, and the nearest of those is the one looked at.
+  function pickBoxT(o, d, b, pad) {
+    var t0 = 0, t1 = Infinity;
+    for (var k = 0; k < 3; k++) {
+      var lo = b[k * 2] - pad, hi = b[k * 2 + 1] + pad;
+      if (Math.abs(d[k]) < 1e-9) { if (o[k] < lo || o[k] > hi) { return Infinity; } continue; }
+      var u = (lo - o[k]) / d[k], v = (hi - o[k]) / d[k];
+      if (u > v) { var w = u; u = v; v = w; }
+      if (u > t0) { t0 = u; }
+      if (v < t1) { t1 = v; }
+      if (t0 > t1) { return Infinity; }
+    }
+    return t0;
+  }
+  // one triangle of a model's points, from p[i] (Moller-Trumbore)
+  function pickTri(o, d, p, i) {
+    var ax = p[i], ay = p[i + 1], az = p[i + 2];
+    var e1x = p[i + 3] - ax, e1y = p[i + 4] - ay, e1z = p[i + 5] - az, e2x = p[i + 6] - ax, e2y = p[i + 7] - ay, e2z = p[i + 8] - az;
+    var px = d[1] * e2z - d[2] * e2y, py = d[2] * e2x - d[0] * e2z, pz = d[0] * e2y - d[1] * e2x;
+    var det = e1x * px + e1y * py + e1z * pz;
+    if (det > -1e-12 && det < 1e-12) { return Infinity; }
+    var inv = 1 / det, tx = o[0] - ax, ty = o[1] - ay, tz = o[2] - az;
+    var u = (tx * px + ty * py + tz * pz) * inv;
+    if (u < 0 || u > 1) { return Infinity; }
+    var qx = ty * e1z - tz * e1y, qy = tz * e1x - tx * e1z, qz = tx * e1y - ty * e1x;
+    var v = (d[0] * qx + d[1] * qy + d[2] * qz) * inv;
+    if (v < 0 || u + v > 1) { return Infinity; }
+    var t = (e2x * qx + e2y * qy + e2z * qz) * inv;
+    return t > 0 ? t : Infinity;
+  }
+  // a model's own box, round its points (kept with them)
+  var pickMeshBoxes = typeof WeakMap === "function" ? new WeakMap() : null;
+  function pickMeshT(R, f) {
+    var m = f.mesh, p = m.p, xf = m.xf || [0, 0, 1, 0, 0], base = m.base || [0, 0, 0], P0 = f.pts[0];
+    if (!p || p.length < 9) { return Infinity; }
+    // (into the model's own frame: it is turned about its upright by xf's cos and sin, then put where it stands -- gl3Mesh)
+    var c = xf[2], s = xf[3], ox = xf[0] + P0[0] - base[0], oy = xf[1] + P0[1] - base[1], oz = xf[4] + P0[2] - base[2];
+    var dx = R.o[0] - ox, dy = R.o[1] - oy;
+    var o = [dx * c + dy * s, -dx * s + dy * c, R.o[2] - oz], d = [R.d[0] * c + R.d[1] * s, -R.d[0] * s + R.d[1] * c, R.d[2]];
+    var bx = pickMeshBoxes ? pickMeshBoxes.get(p) : null;
+    if (!bx) {
+      bx = [Infinity, -Infinity, Infinity, -Infinity, Infinity, -Infinity];
+      for (var j = 0; j < p.length; j += 3) {
+        if (p[j] < bx[0]) { bx[0] = p[j]; } if (p[j] > bx[1]) { bx[1] = p[j]; }
+        if (p[j + 1] < bx[2]) { bx[2] = p[j + 1]; } if (p[j + 1] > bx[3]) { bx[3] = p[j + 1]; }
+        if (p[j + 2] < bx[4]) { bx[4] = p[j + 2]; } if (p[j + 2] > bx[5]) { bx[5] = p[j + 2]; }
+      }
+      if (pickMeshBoxes) { pickMeshBoxes.set(p, bx); }
+    }
+    if (pickBoxT(o, d, bx, 0.5) === Infinity) { return Infinity; }
+    var best = Infinity;
+    for (var i = 0; i + 8 < p.length; i += 9) { var t = pickTri(o, d, p, i); if (t < best) { best = t; } }
+    return best;
+  }
+  // a flat face, its own way out worked out where it does not say (any number of corners, Newell's way)
+  function pickPolyT(R, f) {
+    var P = f.pts, n = f.n;
+    if (!n || (!n[0] && !n[1] && !n[2])) {
+      var nx = 0, ny = 0, nz = 0;
+      for (var i = 0; i < P.length; i++) {
+        var a = P[i], b = P[(i + 1) % P.length];
+        nx += (a[1] - b[1]) * ((a[2] || 0) + (b[2] || 0)); ny += ((a[2] || 0) - (b[2] || 0)) * (a[0] + b[0]); nz += (a[0] - b[0]) * (a[1] + b[1]);
+      }
+      var l = Math.hypot(nx, ny, nz);
+      if (!l) { return Infinity; }
+      n = [nx / l, ny / l, nz / l];
+    }
+    return dragHitFace(R, P, n);
+  }
+  function pickFaceT(R, f) { return f.mesh ? pickMeshT(R, f) : f.pts && f.pts.length >= 3 ? pickPolyT(R, f) : Infinity; }
+  function pickFacesT(R, list) {
+    var best = Infinity;
+    for (var i = 0; i < list.length; i++) { var t = pickFaceT(R, list[i]); if (t < best) { best = t; } }
+    return best;
+  }
+
   function dragPick(ev) {
     var model = V3 && V3.dragModel, R = dragRay(ev);
     if (!model || !R) { return null; }
@@ -229,27 +310,33 @@
       // a wall, a floor, the roof: what is behind it is not to be had
       if (!n || DRAG_FIXED[n.kind] || WALK_DOORS[n.kind] || BETWEEN_FLOORS[n.kind]) {
         if ((f.how && f.how.ghost) || f.floor) { return; }
-        var t = dragHitFace(R, f.pts, f.n);
+        var t = pickFaceT(R, f);
         if (t < wall) { wall = t; }
         return;
       }
-      var b = boxes[n.id] || (boxes[n.id] = { node: n, x0: Infinity, x1: -Infinity, y0: Infinity, y1: -Infinity, z0: Infinity, z1: -Infinity });
+      var b = boxes[n.id] || (boxes[n.id] = { node: n, faces: [], x0: Infinity, x1: -Infinity, y0: Infinity, y1: -Infinity, z0: Infinity, z1: -Infinity });
+      b.faces.push(f);
       f.pts.forEach(function (p) {
         b.x0 = Math.min(b.x0, p[0]); b.x1 = Math.max(b.x1, p[0]); b.y0 = Math.min(b.y0, p[1]); b.y1 = Math.max(b.y1, p[1]);
         b.z0 = Math.min(b.z0, p[2]); b.z1 = Math.max(b.z1, p[2]);
       });
     });
-    var best = null, near = Infinity;
+    // the pieces whose boxes the ray goes into, nearest first; of them, the one whose own faces it
+    // meets first -- or, meeting none, a small thing (a switch, a cup) it passed close enough to
+    var cands = [], best = null, near = Infinity, loose = null, looseT = Infinity;
     Object.keys(boxes).forEach(function (id) {
-      var b = boxes[id], lo = 0, hi = Infinity;
-      [["x0", "x1", 0], ["y0", "y1", 1], ["z0", "z1", 2]].forEach(function (ax) {
-        var o = R.o[ax[2]], d = R.d[ax[2]], a = b[ax[0]] - 1, c = b[ax[1]] + 1;
-        if (Math.abs(d) < 1e-9) { if (o < a || o > c) { lo = Infinity; } return; }
-        var t1 = (a - o) / d, t2 = (c - o) / d;
-        lo = Math.max(lo, Math.min(t1, t2)); hi = Math.min(hi, Math.max(t1, t2));
-      });
-      if (lo <= hi && lo < near) { near = lo; best = b; }
+      var b = boxes[id], tb = pickBoxT(R.o, R.d, [b.x0, b.x1, b.y0, b.y1, b.z0, b.z1], 1);
+      if (tb < Infinity) { cands.push({ b: b, tb: tb }); }
     });
+    cands.sort(function (p, q) { return p.tb - q.tb; });
+    cands.forEach(function (c) {
+      var b = c.b;
+      if (c.tb > near) { return; }
+      var te = pickFacesT(R, b.faces);
+      if (te < near) { near = te; best = b; }
+      else if (te === Infinity && c.tb < looseT && Math.max(b.x1 - b.x0, b.y1 - b.y0, b.z1 - b.z0) < 0.45 * FLOOR_PX) { looseT = c.tb; loose = b; }
+    });
+    if (!best && loose) { best = loose; near = looseT; }
     if (!best || near > wall + 2) { return null; }
     return { box: best, ray: R };
   }

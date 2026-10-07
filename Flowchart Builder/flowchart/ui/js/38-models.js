@@ -613,7 +613,7 @@
     var key = [n.kind, modelOwn[n.kind] ? n.id : "", Math.round(n.w * 10), Math.round(n.h * 10), Math.round(H * 10),
                Math.round((extra.cord || 0) * 10), JSON.stringify(C), n.fin ? JSON.stringify(n.fin) : "",
                extra.onTop ? 1 : 0, extra.hung ? 1 : 0, extra.onWall ? 1 : 0, state ? state.key : "",
-               n.sp || ""].join("|");          // (what kind of tree, shrub or bed it is: 40-flora.js)
+               n.sp || "", n.car || ""].join("|");          // (what kind of tree, shrub or bed it is: 40-flora.js; which car: 40-cars.js)
     var made = modelKept.get(key);
     if (!made) {
       var M = modelMaker(0, 0, 0, 0), wasOwn = !!modelOwn[n.kind];
