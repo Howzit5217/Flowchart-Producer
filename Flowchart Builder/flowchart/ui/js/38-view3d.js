@@ -814,7 +814,8 @@
       }
       if (n.kind === "i_room") {
         var T = Math.max(1, Math.min(6, Math.min(n.w, n.h) * 0.06)), walls = { how: wallsOf(n) };
-        var corners = [[-n.w / 2, -n.h / 2], [n.w / 2, -n.h / 2], [n.w / 2, n.h / 2], [-n.w / 2, n.h / 2]];
+        // (or the room's own shape, cut to it -- a tower's floor round a curve: 40-shaped.js)
+        var corners = n.shape || [[-n.w / 2, -n.h / 2], [n.w / 2, -n.h / 2], [n.w / 2, n.h / 2], [-n.w / 2, n.h / 2]];
         // (every room's floor, roofed or not: one face, and where anything
         // was ever seen into a room without one, it was a black hole)
         var wellUp = wellIn(n, "high");
@@ -871,6 +872,8 @@
           v3Wall(faces, n, edge, T, holes, walls.how, low, wallsUp, keepHere, [wallGoesOn(n, edge, T, 0), wallGoesOn(n, edge, T, 1)]);
           if (!low && typeof wallBeams === "function") { wallBeams(faces, n, edge); }
         });
+        // (a shaped room's edges off its box: a wall along each, or the building's glass -- 40-shaped.js)
+        if (n.shape && typeof shpWalls === "function") { shpWalls(faces, n, T, walls.how, low, wallsUp); }
       } else if (n.kind === "i_wall") {
         // (a wall as tall as it was made: a desk's screen, 40-kinds.js)
         v3Box(faces, n, -n.w / 2, n.w / 2, -n.h / 2, n.h / 2, 0,

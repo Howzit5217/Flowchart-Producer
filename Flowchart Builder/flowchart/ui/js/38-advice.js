@@ -242,7 +242,11 @@
   function alongWall(plan, room, kind, near) {
     var icon = ICONS[kind], w = icon.box[0], h = icon.box[1], T = roomWallOf(room), spots = [];
     var hanging = !!ON_THE_WALL[kind];
+    // (only what is near the room: every spot along every wall was tried against every piece in the
+    // drawing -- a tower's eleven thousand, a minute and a half, 2026-10-07)
+    var rb = tieBox(room), reach = Math.max(w, h) + 6 * FLOOR_PX;
     var others = hand.nodes.filter(function (n) {
+      if (n.x < rb.l - reach || n.x > rb.r + reach || n.y < rb.t - reach || n.y > rb.b + reach) { return false; }
       return n !== room && n.kind !== "i_rug" && n.kind !== "i_window" && !isArea(n.kind) &&
              (hanging ? ON_THE_WALL[n.kind] || WALK_DOORS[n.kind] : !ON_THE_WALL[n.kind]);
     });

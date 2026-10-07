@@ -1129,6 +1129,13 @@
       var a = nodeById(link.from), b = nodeById(link.to);
       if (!a || !b) { return; }
       var i = PORT_SIDES.indexOf(link.fromSide), j = PORT_SIDES.indexOf(link.toSide);
+      // (a flight of stairs or a lift to the one on the floor over it, another floor drawn
+      // elsewhere on the paper: across to it as it lies, not a way found round every room
+      // between -- a tower's three hundred of them took most of two minutes, 2026-10-07)
+      if (typeof BETWEEN_FLOORS === "object" && BETWEEN_FLOORS[a.kind] && BETWEEN_FLOORS[b.kind] && !link.pin && i < 0 && j < 0) {
+        routes[li] = floorRoute(a, b);
+        return;
+      }
       var lean = link.pin ? null : { from: i, to: j };
       // Its own sides are not another arrow's to keep off.
       if (lean && i >= 0) { note(link.from, i, -1); }
@@ -1140,6 +1147,19 @@
       routes[li] = pts;
     });
     return slantEnds(spreadEnds(routes));   // on a turned shape's own edge
+  }
+
+  // From one floor's stairs (or lift) to the next floor's: out of the side that faces it, along and
+  // across at right angles, in at the side facing back.
+  function floorRoute(a, b) {
+    var outs = ports(a), ins = ports(b), dx = b.x - a.x, dy = b.y - a.y, i, j;
+    if (Math.abs(dx) >= Math.abs(dy)) { i = dx > 0 ? 3 : 2; j = dx > 0 ? 2 : 3; }
+    else { i = dy > 0 ? 1 : 0; j = dy > 0 ? 0 : 1; }
+    var p = outs[i], q = ins[j], pts;
+    if (i >= 2) { var mx = (p.x + q.x) / 2; pts = [[p.x, p.y], [mx, p.y], [mx, q.y], [q.x, q.y]]; }
+    else { var my = (p.y + q.y) / 2; pts = [[p.x, p.y], [p.x, my], [q.x, my], [q.x, q.y]]; }
+    pts.sides = [i, j];
+    return pts;
   }
 
   // ---- the arrows Tidy up laid --------------------------------------------

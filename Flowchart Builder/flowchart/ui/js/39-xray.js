@@ -63,7 +63,7 @@
     var standingIn = wireStanding;
     var wireRoom = function (r) {
       var kind = wireKindOf(plan, r), b = tieBox(r);
-      if (WIRE_SKIP[kind] || WIRE_SKIP[r.use] || Math.min(r.w, r.h) < 1.2 * P) { return; }
+      if (r.noWire || WIRE_SKIP[kind] || WIRE_SKIP[r.use] || Math.min(r.w, r.h) < 1.2 * P) { return; }
       // a switch inside each door into it -- the doors as the house stands
       // (rooms drawn apart have theirs only where their arrows meet, 39-join.js)
       var d0 = J && J.delta[r.id] ? J.delta[r.id] : [0, 0], rb = J && J.boxes[r.id] ? J.boxes[r.id] : tieBox(r);
@@ -88,6 +88,29 @@
       var byBasin = basin ? put(r, "i_outlet", { x: basin.x, y: basin.y }, 1.05) : null;
       // round the walls, every 3.6 m (a bathroom's one is the one by its basin, where it has one)
       var per = 2 * ((b.r - b.l) + (b.b - b.t)), count = kind === "bath" && byBasin ? 0 : kind === "hall" || kind === "bath" ? 1 : Math.max(1, Math.round(per / (3.6 * P)));
+      // (a room cut to a shape, 40-shaped.js: round the walls it has -- its glass has none)
+      if (r.shape && typeof shpSideRuns === "function") {
+        var runs = [];
+        ["top", "right", "foot", "left"].forEach(function (edge) { shpSideRuns(r, edge).forEach(function (s) { runs.push({ edge: edge, a: s[0], b: s[1] }); }); });
+        var walls = runs.reduce(function (s, q) { return s + q.b - q.a; }, 0);
+        if (count && kind !== "hall" && kind !== "bath") { count = Math.max(walls > 2 * P ? 1 : 0, Math.round(walls / (3.6 * P))); }
+        for (var si = 0, done = 0; si < count; si++) {
+          var tt = (si + 0.5) / count * walls, sx = 0, sy = 0;
+          for (var ri = 0, acc = 0; ri < runs.length; ri++) {
+            var q = runs[ri], len = q.b - q.a;
+            if (tt <= acc + len || ri === runs.length - 1) {
+              var u = q.a + Math.min(len, tt - acc);
+              if (q.edge === "top") { sx = b.l + u; sy = b.t; } else if (q.edge === "foot") { sx = b.l + u; sy = b.b; }
+              else if (q.edge === "left") { sx = b.l; sy = b.t + u; } else { sx = b.r; sy = b.t + u; }
+              break;
+            }
+            acc += len;
+          }
+          put(r, "i_outlet", { x: sx, y: sy }, undefined, true);
+          done++;
+        }
+        return;
+      }
       for (var i = 0; i < count; i++) {
         var t = (i + 0.5) / count * per, x, y;
         if (t < b.r - b.l) { x = b.l + t; y = b.t; }
@@ -134,10 +157,30 @@
       doors.push(m ? Object.assign({}, d, m) : d);
     });
     if (J && J.made) { J.made.forEach(function (one) { if (one.node && WALK_DOORS[one.node.kind]) { doors.push(one.node); } }); }
+    // (each room's furniture once, and the rooms near each outlet by their places: a tower's thousand
+    // outlets each went through every piece in it, half a minute, 2026-10-06)
+    var near = rooms.length > 40 && typeof listNear === "function" ? listNear(rooms) : null, standingOf = new Map();
+    var pieces = null;
+    function standingIn(r) {
+      var got = standingOf.get(r);
+      if (got) { return got; }
+      if (!pieces) {
+        pieces = hand.nodes.filter(function (o) {
+          return ICONS[o.kind] && !isArea(o.kind) && o.kind !== "i_room" && o.kind !== "i_floor" && o.kind !== "i_lot" &&
+                 !ON_THE_WALL[o.kind] && !WALK_DOORS[o.kind] && o.kind !== "i_window" && !LIES_FLAT[o.kind] && !FROM_CEILING[o.kind] && o.kind !== "i_rug";
+        });
+        pieces.idx = typeof listNear === "function" && pieces.length > 200 ? listNear(pieces) : null;
+      }
+      var pad = 0.2 * FLOOR_PX * 2, b = tieBox(r);
+      got = (pieces.idx ? pieces.idx.around(b.l, b.t, b.r, b.b) : pieces).filter(function (o) { return o !== r && insideArea(r, o.x, o.y); })
+        .map(function (o) { return Object.assign({}, o, { w: o.w + pad, h: o.h + pad }); });
+      standingOf.set(r, got);
+      return got;
+    }
     hand.nodes.filter(function (n) { return n.kind === "i_outlet" && n.wired && !(n.lift > 0.5); }).forEach(function (n) {
-      var r = rooms.filter(function (o) { return insideArea(o, n.x, n.y, 4); }).sort(function (a, b) { return a.w * a.h - b.w * b.h; })[0];
+      var r = (near ? near.around(n.x - 6, n.y - 6, n.x + 6, n.y + 6) : rooms).filter(function (o) { return insideArea(o, n.x, n.y, 4); }).sort(function (a, b) { return a.w * a.h - b.w * b.h; })[0];
       if (!r) { return; }
-      var standing = wireStanding(r);
+      var standing = standingIn(r);
       if (!standing.some(function (o) { return boxesTouch(n, o, 3); })) { return; }
       var d0 = J && J.delta[r.id] ? J.delta[r.id] : [0, 0], rb = J && J.boxes[r.id] ? J.boxes[r.id] : tieBox(r);
       var mine = doors.filter(function (d) { return d.x >= rb.l - 40 && d.x <= rb.r + 40 && d.y >= rb.t - 40 && d.y <= rb.b + 40; })

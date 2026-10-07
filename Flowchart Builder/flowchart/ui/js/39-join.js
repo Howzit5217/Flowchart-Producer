@@ -45,7 +45,8 @@
   function tieSquare(n) { return !((n.turn || 0) % 90); }
   function tieBox(n, dx, dy) {
     var t = turned(n), x = n.x + (dx || 0), y = n.y + (dy || 0);
-    return { l: x - t.w / 2, r: x + t.w / 2, t: y - t.h / 2, b: y + t.h / 2, x: x, y: y };
+    // (a room cut to a shape carries it: the wall it shares only where both shapes reach -- 40-shaped.js)
+    return { l: x - t.w / 2, r: x + t.w / 2, t: y - t.h / 2, b: y + t.h / 2, x: x, y: y, shape: n.shape || null };
   }
   // Whether two boxes cover more than `gap` of each other both ways (a
   // gap under nought: whether they come within that much).
@@ -488,6 +489,9 @@
     }
     var finalRooms = rooms.map(function (r) { return { r: r, b: J.boxes[r.id] }; });
     function walledOff(r, x, y) {
+      // (or where a room cut to a shape does not reach its box's side: no wall there to put a door in, 40-shaped.js)
+      var rb = J.boxes[r.id];
+      if (r.shape && rb && !shpHolds(r.shape, x - rb.x, y - rb.y, -2)) { return true; }
       return finalRooms.some(function (o) { return o.r !== r && storey(o.r) === storey(r) && tieIn(o.b, x, y); });
     }
     // A door from one to the other, in the wall they share: the one an

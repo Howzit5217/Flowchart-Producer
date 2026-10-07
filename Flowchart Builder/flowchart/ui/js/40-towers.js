@@ -73,7 +73,7 @@
         }
         return r;
       }
-      case "twist": return 0.86 + 0.14 * Math.cos(3 * a);
+      case "twist": return 0.86 + 0.14 * Math.cos(3 * (a - Math.PI / 2));
       case "diagrid": return 1;
       case "star": return Math.max(Math.max(towerSq(a), towerSq(a - Math.PI / 4)) / Math.SQRT2, 0.82);
       case "chamfer": return Math.min((1 - 0.28 * t) * towerSq(a), (1.414 - 0.74 * t) * towerSq(a - Math.PI / 4)) * 0.72;
@@ -286,46 +286,213 @@
   }
 
   // ---- your own: Start building's skyscraper ------------------------------------------------------
-  // Its floors: the core in the middle of the back -- two stairs and two
-  // lifts, the restrooms -- the same place on every floor; offices round it,
-  // or homes, or offices below and homes over; a lobby and a cafe on the
-  // ground floor, a sky lounge at the top.
+  // (2026-10-06: "their floor layout is still the square for whatever the smallest floor is rather
+  // then the actual structurally designed skyscraper ... I appear inside of the framing and what
+  // appears to just be a really tall looking house with a normal house entrance ... make sure it can
+  // fill the giant bases and for it to be able to properly narrow as it gets closer to the top and
+  // follow the building design that has been chosen")
+  //
+  // Every floor planned over the whole of the building's foot -- the same rows on each, so the core
+  // stands on the core under it -- and then cut to its own outline (40-shaped.js): the form's at its
+  // height, or the podium's round the foot of a tower that stands on one.  Wide at the foot, narrowing
+  // as it rises, the rooms out to the glass all round.  As towers are laid out:
+  //   the core in the middle -- a stair at each end of it (as far apart as they can be, for two ways
+  //   out), the lifts each side of their lobby, the restrooms, a riser for the pipes and the wires, a
+  //   service lift -- the same on every floor, about a fifth of a floor;
+  //   a corridor along each side of it, the lifts' lobby across between them;
+  //   round that, out to the glass, what the floor is for: offices twelve or thirteen metres deep, the
+  //   open plan out by the glass, meeting rooms and the kitchen by the core; or homes, each a living
+  //   room on the glass with its bedrooms and bathroom beside it;
+  //   the ground floor a lobby two storeys high, its front the way in through a revolving door, the
+  //   security desk, the speed gates to the lifts, a cafe, the shops; the mail room, the loading bay
+  //   and security behind; the floors of the podium shops and halls;
+  //   every fifteenth floor or so up a tall one, a floor of plant -- the air handlers, the chillers,
+  //   the water tanks, the switchboards -- and a refuge for when there is a fire; over a tall tower's
+  //   plant a sky lobby; at the top a sky lounge looking out.
+  var TOWER_PODIUM = { spire: 1, pagoda: 1, star: 1, taper: 1, twist: 1, deco: 1 };
+  var TOWER_SKIN = 0.35;                 // metres: the glass and its frame outside the rooms
+  var TOWER_CORE_D = 7.2, TOWER_HALL = 2.4;
+  function towerT(k, S, podium) { var n = S - podium; return n > 1 ? Math.max(0, Math.min(1, (k - podium) / (n - 1))) : 0; }
+  // A rounded oblong (half extents hx, hy, corners r) as points round it from the middle.
+  function towerOblong(hx, hy, r, n) {
+    var out = [], q = Math.max(2, Math.round((n || 48) / 4));
+    r = Math.max(0.5, Math.min(r, hx - 0.5, hy - 0.5));
+    [[hx - r, hy - r, 0], [-(hx - r), hy - r, 1], [-(hx - r), -(hy - r), 2], [hx - r, -(hy - r), 3]].forEach(function (c) {
+      for (var i = 0; i <= q; i++) { var a = (c[2] + i / q) * Math.PI / 2; out.push([c[0] + Math.cos(a) * r, c[1] + Math.sin(a) * r]); }
+    });
+    return out;
+  }
+  // The tower worked out from what was asked: its storeys, what for, how big, its form -- its core, how
+  // wide the form is at its widest (R, metres), the podium, and how far the plan reaches (Ax, Ay: half
+  // its width and depth, round the core's middle).  The same every time it is asked (40-towers.js's
+  // skin, and the plan) for the same want.
+  function towerGeom(want) {
+    var S = Math.max(3, Math.min(TOWER_MOST, want.storeys || 30)), use = want.towerUse || "offices";
+    var size = Math.max(1, Math.min(3, want.size || 2)), form = TOWER_FORMS[want.towerForm] ? want.towerForm : "spire";
+    var homes = use === "homes", podium = TOWER_PODIUM[form] && S >= 12 ? Math.max(1, Math.min(5, Math.round(S / 14))) : 0;
+    // the core, west to east: a stair, the riser, the lifts, their lobby, the lifts, the restrooms, the service lift, a stair
+    var nl = Math.max(2, Math.min(10, 2 + Math.round(S / 12))), west = Math.ceil(nl / 2), east = nl - west;
+    var core = [["stairs", 1.4, "A"], ["riser", 1.8]];
+    for (var i = 0; i < west; i++) { core.push(["lift", 2.3]); }
+    core.push(["liftlobby", 3.4]);
+    for (var j = 0; j < east; j++) { core.push(["lift", 2.3]); }
+    if (!homes) { core.push(["restroom", 2.6], ["restroom", 2.6]); }
+    core.push(["lift", 2.3, "service"], ["stairs", 1.4, "B"]);
+    var Wc = core.reduce(function (s, c) { return s + c[1]; }, 0), Dm = TOWER_CORE_D, H = TOWER_HALL;
+    var lease = homes ? 9.5 : use === "mixed" ? 11 : 12.5;
+    var R = (Dm / 2 + H + lease) * [0.92, 1, 1.18][size - 1] + TOWER_SKIN;
+    // (as wide at its foot as every floor up it needs to hold the core and its corridors, and a room's
+    // depth past them: a form that narrows or turns as it rises is that much wider at its foot)
+    var hx = Wc / 2 + 2.0, hy = Dm / 2 + H + 3.5, ring = [];
+    for (var u = -1; u <= 1.0001; u += 0.125) { ring.push([u * hx, -hy], [u * hx, hy], [-hx, u * hy], [hx, u * hy]); }
+    for (var k = podium; k < S; k++) {
+      var t = towerT(k, S, podium), turn = towerTurn(form, t), pw = towerP(form, t);
+      ring.forEach(function (q) {
+        var a = Math.atan2(q[1], q[0]), need = Math.hypot(q[0], q[1]) / Math.max(0.05, towerR(form, a - turn, t) * pw);
+        R = Math.max(R, need + TOWER_SKIN);
+      });
+    }
+    R = Math.ceil(R * 2) / 2;
+    // the podium round the foot: a rounded oblong out past the tower's own foot
+    var foot = towerOutline(form, [0, 0], R, 0, 72), fx = 0, fy = 0;
+    foot.forEach(function (p) { fx = Math.max(fx, Math.abs(p[0])); fy = Math.max(fy, Math.abs(p[1])); });
+    var pod = podium ? { hx: Math.ceil(fx * 1.2 + 2), hy: Math.ceil(fy * 1.12 + 1), r: 6 } : null;
+    var G = { S: S, use: use, size: size, form: form, homes: homes, podium: podium, core: core, Wc: Wc, Dm: Dm, H: H, R: R, pod: pod };
+    // how far any floor reaches each way: the plan as wide and as deep as that, the core in its middle
+    var Ax = 0, Ay = 0;
+    for (var m = 0; m < S; m++) {
+      towerPlate(G, m, 0, 48).forEach(function (p) { Ax = Math.max(Ax, Math.abs(p[0])); Ay = Math.max(Ay, Math.abs(p[1])); });
+    }
+    G.Ax = Math.ceil(Math.max(Ax, Wc / 2 + 2.5) + 0.3); G.Ay = Math.ceil(Math.max(Ay, Dm / 2 + H + 3) + 0.3);
+    return G;
+  }
+  // A floor's outline (metres from the core's middle, `inset` in from the glass): the podium's, or the form's at its height.
+  function towerPlate(G, k, inset, n) {
+    if (G.pod && k < G.podium) { return towerOblong(G.pod.hx - inset, G.pod.hy - inset, G.pod.r, n); }
+    return towerOutline(G.form, [0, 0], G.R - inset, towerT(k, G.S, G.podium), n || 48);
+  }
+  // What a floor is for.
+  function towerRole(G, k) {
+    if (k === 0) { return "lobby"; }
+    if (k === G.S - 1 && G.S > 3) { return "top"; }
+    if (k < G.podium) { return "podium"; }
+    // (a floor of plant every fifteenth or so up a tall tower, never right at the top; the floor over it a sky lobby)
+    if (G.S >= 30 && k % 15 === 0 && k < G.S - 3) { return "plant"; }
+    if (G.S >= 45 && k % 15 === 1 && k > 15 && k < G.S - 3) { return "skylobby"; }
+    if (G.use === "homes" || (G.use === "mixed" && k >= Math.ceil(G.S / 2))) { return "homes"; }
+    return "office";
+  }
+  // The rooms of one stretch of a band, `w` metres wide, for what the floor is for -- `where` its place
+  // ("west", "east": out at the ends, the corners; "mid": along the core).
+  function towerStretch(G, k, role, band, where, w, rnd) {
+    var out = [], tag = "k" + k + band.charAt(0) + where.charAt(0);
+    function put(kind, width, more) {
+      var m = Object.assign({ fixed: true }, more || {});
+      if (!m.label && STARTER_LABEL[kind] && TXT[STARTER_LABEL[kind]]) { m.label = TXT[STARTER_LABEL[kind]]; }
+      out.push(R(kind, width, m));
+    }
+    // (cut in two or three where one would be too long a room)
+    function spread(kind, total, most, more) {
+      var n = Math.max(1, Math.ceil(total / most));
+      for (var i = 0; i < n; i++) { put(kind, total / n, more); }
+    }
+    if (w < 0.6) { return out; }
+    if (role === "office") {
+      if (where !== "mid") { spread("openplan", w, 24, { label: TXT.tr_openoffice }); return out; }
+      // along the core: meeting rooms, the kitchen, the open plan between
+      var meet = Math.min(5.4, w * 0.3), kit = w - meet > 9 ? 3.6 : 0;
+      if (band === "back") { put("meeting", meet, { label: TXT.tr_meeting }); spread("openplan", w - meet - kit, 24, { label: TXT.tr_openoffice }); if (kit) { put("kitchenette", kit, { label: TXT.tr_kitchenette }); } }
+      else { spread("openplan", w - meet, 24, { label: TXT.tr_openoffice }); put("meeting", meet, { label: TXT.tr_meeting }); }
+      return out;
+    }
+    if (role === "homes") {
+      // homes side by side, each its living room, a bedroom (two where there is room) and its bathroom
+      var unit = 12.2, n = Math.max(1, Math.floor(w / unit + 0.25)), each = w / n;
+      for (var i = 0; i < n; i++) {
+        var id = tag + i, label = say("ty_flat_n", { n: (k + 1) + String.fromCharCode(65 + (out.length % 26)) });
+        if (each >= 15.5) {
+          var liv = each - 3.8 - 3.4 - 2.4;
+          put("flat", liv, { id: id, label: label }); put("flatbed", 3.8, { id: id + "b", via: id }); put("flatbath", 2.4, { via: id + "b" }); put("flatbed", 3.4, { via: id });
+        } else if (each >= 9.4) {
+          put("flat", each - 3.8 - 2.4, { id: id, label: label }); put("flatbed", 3.8, { id: id + "b", via: id }); put("flatbath", 2.4, { via: id + "b" });
+        } else if (each >= 5.2) {
+          put("flat", each - 2.4, { id: id, label: label }); put("flatbath", 2.4, { via: id });
+        } else {
+          put("flat", each, { id: id, label: label });
+        }
+      }
+      return out;
+    }
+    if (role === "lobby") {
+      if (band === "front") {
+        // the lobby in the middle of the front, the way in; a cafe and shops each side of it
+        if (where === "mid") {
+          var lob = Math.min(w, Math.max(14, w * 0.6)), side = (w - lob) / 2;
+          if (side >= 2.5) { put("cafe", side, { label: TXT.tr_cafe }); }
+          put("grandlobby", side >= 2.5 ? lob : w, { entry: true, label: TXT.sk_lobby });
+          if (side >= 2.5) { put("boutique", side, { label: TXT.tr_boutique }); }
+        } else { spread(where === "west" ? "cafe" : "boutique", w, 20, { label: where === "west" ? TXT.tr_cafe : TXT.tr_boutique }); }
+        return out;
+      }
+      if (band === "back") {
+        if (where === "mid") {
+          var bits = [["mailroom", 0.3], ["security", 0.3], ["stock", 0.4]];
+          bits.forEach(function (b) { put(b[0], w * b[1], { label: TXT["sk_" + b[0]] || "" }); });
+        } else { spread(where === "west" ? "loading" : "stock", w, 18, { label: where === "west" ? TXT.sk_loading : TXT.tr_stock }); }
+        return out;
+      }
+      spread(where === "west" ? "cafe" : "skylounge", w, 20, { label: where === "west" ? TXT.tr_cafe : TXT.sk_lounge });
+      return out;
+    }
+    if (role === "podium") {
+      var podKinds = G.homes ? ["staff", "skylounge"] : ["boutique", "cafe", "sales"];
+      spread(podKinds[(k + (band === "back" ? 1 : 0) + (where === "east" ? 1 : 0)) % podKinds.length], w, 18, {});
+      return out;
+    }
+    if (role === "plant") {
+      if (where === "mid" && band === "front") { put("refuge", w, { label: TXT.sk_refuge }); return out; }
+      spread("plant", w, 18, { label: TXT.sk_plant });
+      return out;
+    }
+    if (role === "skylobby" || role === "top") {
+      if (where === "mid") { put(band === "front" ? "cafe" : "skylounge", w, { label: band === "front" ? TXT.tr_cafe : role === "top" ? TXT.sk_sky : TXT.sk_skylobby }); }
+      else { spread("skylounge", w, 20, { label: role === "top" ? TXT.sk_sky : TXT.sk_skylobby }); }
+      return out;
+    }
+    spread("openplan", w, 24, { label: TXT.tr_openoffice });
+    return out;
+  }
+  // One floor of it, as Start building plans a floor: its back band, the core's row, its front band.
+  function towerFloor(G, k, rnd) {
+    var W = 2 * G.Ax, side = G.Ax - G.Wc / 2, depth = G.Ay - G.H - G.Dm / 2, role = towerRole(G, k);
+    var A = k % 2 === 0, up = k < G.S - 1, down = k > 0;
+    function band(name) {
+      return towerStretch(G, k, role, name, "west", side, rnd).concat(towerStretch(G, k, role, name, "mid", G.Wc, rnd), towerStretch(G, k, role, name, "east", side, rnd));
+    }
+    // the core: the same rooms, the same places, every floor
+    var ll = "ll" + k, core = G.core.map(function (c) {
+      if (c[0] === "stairs") {
+        var go = c[2] === "A" ? (A ? (up ? "up" : "none") : (down ? "down" : "none")) : (A ? (down ? "down" : "none") : (up ? "up" : "none"));
+        return R("stairs", c[1], { bay: c[2], go: go, label: TXT.st_stairs, fixed: true });
+      }
+      if (c[0] === "lift") { return R("lift", c[1], { via: ll, fixed: true, label: c[2] === "service" ? TXT.sk_service : TXT.tr_lift }); }
+      if (c[0] === "liftlobby") { return R("liftlobby", c[1], { id: ll, cross: true, fixed: true, label: TXT.sk_liftlobby }); }
+      if (c[0] === "restroom") { return R("restroom", c[1], { fixed: true, label: TXT.tr_restroom }); }
+      return R(c[0], c[1], { fixed: true, label: TXT["sk_" + c[0]] || "" });
+    });
+    var midRow = towerStretch(G, k, role, "mid", "west", side, rnd).concat(core, towerStretch(G, k, role, "mid", "east", side, rnd));
+    var clip = towerPlate(G, k, TOWER_SKIN, 72).map(function (p) { return [p[0] + G.Ax, p[1] + G.Ay]; });
+    return { level: k, back: band("back"), mid: [midRow], front: band("front"), H: G.H, Db: depth, Dm: G.Dm, Df: depth, clip: clip, skin: true, towerRole: role };
+  }
   if (typeof BUILDING_TYPES === "object") {
     BUILDING_TYPES.tower = {
       icon: "tower", ceil: 3.3,
-      plan: function (want) {
-        var S = Math.max(3, Math.min(TOWER_MOST, want.storeys || 30)), use = want.towerUse || "offices", s = Math.max(1, Math.min(3, want.size || 2));
-        var W = [18, 21.6, 26][s - 1], Df = [6.4, 7.6, 9][s - 1], floors = [];
-        for (var k = 0; k < S; k++) {
-          var core = typeCore(k, S - 1, true).concat([R("lift", 2.0)]);
-          var ground = k === 0, top = k === S - 1, homes = !ground && !top && (use === "homes" || (use === "mixed" && k >= Math.ceil(S / 2)));
-          var back, front, grow;
-          if (ground) {
-            back = [R("stock", 4.0)].concat(core, [R("restroom", 2.2), R("restroom", 2.2), R("staff", 3.0)]);
-            front = [R("lobby", 8.0, { entry: true, label: TXT.sk_lobby }), R("cafe", W - 8.0)];
-            grow = ["staff"];
-          } else if (top) {
-            back = [R("office", 4.0, { label: TXT.tr_office })].concat(core, [R("restroom", 2.2), R("restroom", 2.2), R("kitchenette", 3.0)]);
-            front = [R("lobby", W, { label: TXT.sk_sky })];
-            grow = ["kitchenette"];
-          } else if (homes) {
-            var id = "h" + k;
-            back = [R("flat", 4.0, { id: id + "s", label: say("ty_flat_n", { n: (k + 1) + "A" }) })].concat(core, [R("landing", 2.4), R("flat", 4.0, { id: id + "t", label: say("ty_flat_n", { n: (k + 1) + "D" }) })]);
-            var half = W / 2;
-            front = [R("flat", half - 6.0, { id: id + "a", label: say("ty_flat_n", { n: (k + 1) + "B" }) }), R("flatbed", 3.8, { id: id + "ab", via: id + "a" }), R("flatbath", 2.2, { via: id + "ab" }),
-                     R("flatbath", 2.2, { via: id + "bb" }), R("flatbed", 3.8, { id: id + "bb", via: id + "b" }), R("flat", half - 6.0, { id: id + "b", label: say("ty_flat_n", { n: (k + 1) + "C" }) })];
-            grow = ["landing"];
-          } else {
-            back = [R("office", 4.0, { label: TXT.tr_office })].concat(core, [R("restroom", 2.2), R("restroom", 2.2), R("meeting", 3.4)]);
-            front = [R("openoffice", W)];
-            grow = ["meeting"];
-          }
-          // (only the last room in the back grows: the first the same on every floor, the core over the core under it)
-          back[back.length - 1].w += Math.max(0, W - typeWidth(back));
-          typeFill(front, W, ["openoffice", "cafe", "flat", "lobby"]);
-          floors.push({ level: k, back: back, front: front, H: 1.8, Db: 6.0, Df: Df });
-        }
-        return { floors: floors, W: W, two: true, noGarage: true };
+      // (its two stairs at the core's two ends its ways out: 40-exits.js adds none, to stand out past the glass)
+      exWays: true,
+      plan: function (want, rnd) {
+        var G = towerGeom(want), floors = [];
+        for (var k = 0; k < G.S; k++) { floors.push(towerFloor(G, k, rnd)); }
+        return { floors: floors, W: 2 * G.Ax, two: true, noGarage: true, noFlip: true, tower: G };
       },
       ask: function (ui) {
         if (!ui.want.storeys || ui.want.storeys < 3) { ui.want.storeys = 40; }
@@ -350,6 +517,176 @@
     if (typeof GROUNDS_OF === "object") { GROUNDS_OF.tower = "office"; }
   }
 
+  // ---- its own rooms ----------------------------------------------------------------------------------
+  // (what a skyscraper has that no house or office block of Start building's had: its lobby two storeys
+  // high, the lifts' lobby in the core, the riser, the mail room, security, the loading bay, the floors
+  // of plant, the refuge, the sky lounge -- each what it is furnished with, lit by, floored in)
+  if (typeof STARTER_ROOMS === "object") {
+    Object.assign(STARTER_ROOMS, {
+      grandlobby: { w: 14, h: 10, bw: 14, max: 80, wall: [], mid: [] },
+      liftlobby: { w: 3.4, h: 7, bw: 3.4, max: 8, wall: [], mid: [] },
+      riser: { w: 1.8, h: 4, bw: 1.8, max: 4, wall: [], mid: [] },
+      mailroom: { w: 4, h: 5, bw: 4, max: 20, wall: [], mid: [] },
+      security: { w: 4, h: 5, bw: 4, max: 20, wall: ["i_desk", "i_filing", "i_desk"], mid: ["i_officechair"] },
+      loading: { w: 8, h: 8, bw: 8, max: 40, wall: ["i_shelving", "i_shelving"], mid: [] },
+      skylounge: { w: 8, h: 8, bw: 8, max: 60, wall: [], mid: [] },
+      refuge: { w: 8, h: 6, bw: 8, max: 60, wall: [], mid: [] },
+      plant: { w: 10, h: 8, bw: 10, max: 60, wall: [], mid: [] },
+      // (an office floor's open plan, fitted out a bench of desks at a time -- one piece to four desks,
+      // their chairs and screens: forty floors of them, a desk, a chair and a monitor each, were a
+      // hundred thousand pieces)
+      openplan: { w: 12, h: 8, bw: 12, max: 80, wall: [], mid: [] }
+    });
+    Object.assign(STARTER_LABEL, { openplan: "tr_openoffice" });
+    Object.assign(STARTER_ZONE, { grandlobby: "hall", liftlobby: "hall", riser: "car", mailroom: "day", security: "day", loading: "car",
+                                  skylounge: "day", refuge: "day", plant: "car", openplan: "day" });
+    Object.assign(STARTER_CEILING, { grandlobby: "i_chandelier", liftlobby: "i_pendant", mailroom: "i_pendant", security: "i_pendant",
+                                     loading: "i_pendant", skylounge: "i_pendant", refuge: "i_pendant", plant: "i_pendant" });
+    Object.assign(STARTER_VENTED, { grandlobby: 1, liftlobby: 1, mailroom: 1, security: 1, skylounge: 1, refuge: 1, openplan: 1 });
+  }
+  if (typeof TYPE_DARK === "object") { Object.assign(TYPE_DARK, { riser: 1, plant: 1, liftlobby: 1, loading: 1, mailroom: 1, security: 1, refuge: 1 }); }
+  // (its floors as they stand, not drawn apart on the paper: each cut to its outline, 40-shaped.js)
+  if (typeof STARTER_WRAPS === "object") {
+    STARTER_WRAPS.unshift(function* (inner, want) {
+      if (want && want.type === "tower" && want.spread) { want = Object.assign({}, want, { spread: false }); }
+      return yield* inner(want);
+    });
+  }
+  // What each room of a tower is floored, walled and ceilinged in -- and, a room of its own kinds, what is put in it.
+  var TOWER_FINISH = {
+    grandlobby: { floor: "terrazzo", floorC: "#e6e1d7", wall: "paint", wallC: "#ece7de", ceil: 6.2 },
+    liftlobby: { floor: "terrazzo", floorC: "#d9d4ca", wall: "paint", wallC: "#e4ded3" },
+    riser: { floor: "concrete", floorC: "#9c9c98", wall: "paint", wallC: "#c9c7c2" },
+    mailroom: { floor: "tiles", floorC: "#dfe2e4", wall: "paint", wallC: "#efece6" },
+    security: { floor: "carpet", floorC: "#6f7782", wall: "paint", wallC: "#e9e6df" },
+    loading: { floor: "concrete", floorC: "#a8a8a4", wall: "paint", wallC: "#cfcdc7", ceil: 4.6 },
+    skylounge: { floor: "herringbone", floorC: "#a98058", wall: "paint", wallC: "#efe9df" },
+    refuge: { floor: "concrete", floorC: "#b3b1ab", wall: "paint", wallC: "#dcd8cf", ceil: 4.6 },
+    plant: { floor: "concrete", floorC: "#9c9c98", wall: "paint", wallC: "#c9c7c2", ceil: 4.6 },
+    openplan: { floor: "carpet", floorC: "#7f8794", wall: "paint", wallC: "#f2efe8" }
+  };
+  if (typeof typeFurnish === "function") {
+    var typeFurnishTower = typeFurnish;
+    typeFurnish = function (made, rnd, want) {
+      var out = typeFurnishTower.apply(this, arguments);
+      if (want && want.type === "tower") {
+        try { towerFurnish(made, rnd || starterRand(7), want); } catch (e) { if (window.console && console.warn) { console.warn("tower rooms:", e && e.message); } }
+      }
+      return out;
+    };
+  }
+  // A piece put down in a tower's room where it fits: inside the room's shape (with `pad` metres
+  // round it), clear of the rest -- or nothing.
+  function towerPut(r, kind, x, y, turn, pad) {
+    var P = FLOOR_PX, icon = ICONS[kind];
+    if (!icon) { return null; }
+    var w = icon.box[0], h = icon.box[1], t = ((turn || 0) % 180 + 180) % 180 === 90, hw = (t ? h : w) / 2, hh = (t ? w : h) / 2;
+    var margin = (pad === undefined ? 0.15 : pad) * P;
+    var corners = [[x - hw, y - hh], [x + hw, y - hh], [x + hw, y + hh], [x - hw, y + hh], [x, y]];
+    if (!corners.every(function (q) { return insideArea(r, q[0], q[1], margin); })) { return null; }
+    var spot = { kind: kind, x: Math.round(x), y: Math.round(y), w: w, h: h, turn: turn || 0 };
+    if (typeof typeClear === "function" && !typeClear(spot, 3)) { return null; }
+    return adviceAdd(kind, spot.x, spot.y, spot.turn);
+  }
+  function towerFurnish(made, rnd, want) {
+    var P = FLOOR_PX;
+    made.forEach(function (r) {
+      var kind = r.starter, fin = TOWER_FINISH[kind];
+      if (fin) {
+        r.mat = Object.assign({}, r.mat || {}, { floor: fin.floor, floorC: fin.floorC, wall: fin.wall, wallC: fin.wallC });
+        if (fin.ceil) { r.ceil = fin.ceil; }
+      }
+      if (typeof typeRoom !== "undefined") { typeRoom = r; }
+      // (no outlets in a lift's shaft, a stairwell, a riser: 39-xray.js)
+      if (kind === "lift" || kind === "stairs" || kind === "riser") { r.noWire = true; }
+      var b = { l: r.x - r.w / 2, r: r.x + r.w / 2, t: r.y - r.h / 2, b: r.y + r.h / 2 };
+      if (kind === "grandlobby") { towerLobby(r, b, rnd); }
+      else if (kind === "openplan") { r.use = "openoffice"; towerOpenPlan(r, b, rnd); }
+      else if (kind === "liftlobby") {
+        towerPut(r, "i_plant", r.x, b.t + 0.6 * P, 0, 0.1); towerPut(r, "i_plant", r.x, b.b - 0.6 * P, 0, 0.1);
+      } else if (kind === "skylounge") { towerLounge(r, b, rnd); }
+      else if (kind === "plant") { towerPlant(r, b, rnd); }
+      else if (kind === "refuge") {
+        for (var x = b.l + 1.5 * P; x < b.r - 1.5 * P; x += 2.4 * P) { towerPut(r, "i_bench", x, b.t + 0.6 * P, 0, 0.1); }
+      } else if (kind === "mailroom") {
+        for (var mx = b.l + 1.2 * P; mx < b.r - 1.2 * P; mx += 1.3 * P) { towerPut(r, TOWER_ITEM.lockers, mx, b.t + 0.45 * P, 0, 0.05); }
+      }
+    });
+    if (typeof typeRoom !== "undefined") { typeRoom = null; }
+  }
+  // what a tower's rooms are fitted with (the tower's own things where there are such, 40-towerkit below)
+  var TOWER_ITEM = { desk: "i_counter", gates: null, lockers: "i_filing", ahu: "i_furnace", chiller: "i_generator", tank: "i_waterheater",
+                     switchgear: "i_filing", directory: null, feature: null, planter: "i_plant", bench: "i_bench" };
+  // The lobby: the security desk facing the way in, the speed gates across the way to the lifts, a
+  // sofa and chairs each side, planters, the building's directory by the door.
+  function towerLobby(r, b, rnd) {
+    var P = FLOOR_PX, cx = r.x, w = b.r - b.l, h = b.b - b.t;
+    // the way to the lifts: the gates across its back, a lane every metre, the desk in front of them
+    if (TOWER_ITEM.gates) {
+      var lanes = Math.max(3, Math.min(8, Math.floor(w / P / 3))), gy = b.t + 2.2 * P;
+      for (var g = 0; g < lanes; g++) { towerPut(r, TOWER_ITEM.gates, cx + (g - (lanes - 1) / 2) * 0.95 * P, gy, 0, 0.05); }
+    }
+    towerPut(r, TOWER_ITEM.desk, cx, b.t + Math.min(h * 0.45, 5.2 * P), 0, 0.3);
+    if (TOWER_ITEM.feature) { towerPut(r, TOWER_ITEM.feature, cx, b.t + 0.15 * P, 0, 0); }
+    [-1, 1].forEach(function (s) {
+      var sx = cx + s * Math.min(w * 0.3, 7 * P), sy = r.y + h * 0.12;
+      towerPut(r, "i_sofa", sx, sy + 1.1 * P, 180, 0.2);
+      towerPut(r, "i_armchair", sx - 1.4 * P, sy - 0.4 * P, 90, 0.2);
+      towerPut(r, "i_armchair", sx + 1.4 * P, sy - 0.4 * P, 270, 0.2);
+      towerPut(r, "i_coffee", sx, sy, 0, 0.2);
+      towerPut(r, TOWER_ITEM.planter, cx + s * (w / 2 - 1.2 * P), b.t + 1.2 * P, 0, 0.1);
+      towerPut(r, TOWER_ITEM.planter, cx + s * (w / 2 - 1.2 * P), r.y + h * 0.3, 0, 0.1);
+    });
+    if (TOWER_ITEM.directory) { towerPut(r, TOWER_ITEM.directory, cx + Math.min(w * 0.2, 4 * P), b.b - 3 * P, 0, 0.3); }
+  }
+  // An office floor's open plan: benches of desks in rows across it, a way between each and round
+  // them all; by the core (the side it opens off) the booths for a call; a light every five metres.
+  function towerOpenPlan(r, b, rnd) {
+    var P = FLOOR_PX, bench = TOWER_ITEM.bench, w = b.r - b.l, h = b.b - b.t;
+    // which side the core is: its door's
+    var door = hand.nodes.filter(function (d) { return WALK_DOORS[d.kind] && insideArea(r, d.x, d.y, -0.6 * P); })[0];
+    var coreSide = door ? (Math.abs(door.y - b.t) < 0.8 * P ? "t" : Math.abs(door.y - b.b) < 0.8 * P ? "b" : Math.abs(door.x - b.l) < 0.8 * P ? "l" : "r") : "t";
+    if (bench) {
+      var sx = 4.4 * P, sy = 4.2 * P, nx = Math.max(1, Math.floor((w - 1.2 * P) / sx)), ny = Math.max(1, Math.floor((h - 1.2 * P) / sy));
+      var x0 = r.x - (nx - 1) * sx / 2, y0 = r.y - (ny - 1) * sy / 2;
+      for (var i = 0; i < nx; i++) {
+        for (var j = 0; j < ny; j++) { towerPut(r, bench, x0 + i * sx, y0 + j * sy, 0, 0.5); }
+      }
+    }
+    if (TOWER_ITEM.booth) {
+      [-1.2, 1.2].forEach(function (u) {
+        var at = coreSide === "t" ? [r.x + u * P, b.t + 0.75 * P, 180] : coreSide === "b" ? [r.x + u * P, b.b - 0.75 * P, 0] :
+                 coreSide === "l" ? [b.l + 0.75 * P, r.y + u * P, 90] : [b.r - 0.75 * P, r.y + u * P, 270];
+        towerPut(r, TOWER_ITEM.booth, at[0] + (coreSide === "t" || coreSide === "b" ? 2.2 * P : 0), at[1] + (coreSide === "l" || coreSide === "r" ? 2.2 * P : 0), at[2], 0.1);
+      });
+    }
+    for (var lx = b.l + 2.5 * P; lx < b.r - 1 * P; lx += 5 * P) {
+      for (var ly = b.t + 2.5 * P; ly < b.b - 1 * P; ly += 5 * P) { if (insideArea(r, lx, ly, 0.5 * P)) { adviceAdd("i_pendant", Math.round(lx), Math.round(ly)); } }
+    }
+  }
+  // A sky lounge: sofas and low tables out by the glass, a bar on the core's side.
+  function towerLounge(r, b, rnd) {
+    var P = FLOOR_PX, w = b.r - b.l, h = b.b - b.t;
+    for (var x = b.l + 2.6 * P; x < b.r - 2.6 * P; x += 5.2 * P) {
+      for (var y = b.t + 2.6 * P; y < b.b - 2.2 * P; y += 4.6 * P) {
+        if (!towerPut(r, "i_coffee", x, y, 0, 1.0)) { continue; }
+        towerPut(r, "i_sofa", x, y + 1.1 * P, 180, 0.1);
+        towerPut(r, "i_armchair", x - 1.3 * P, y - 0.3 * P, 90, 0.1);
+        towerPut(r, "i_armchair", x + 1.3 * P, y - 0.3 * P, 270, 0.1);
+      }
+    }
+    void w; void h;
+  }
+  // A floor of plant: the air handlers in a row down the room, the chillers, the water tanks, the
+  // switchboards along the wall -- a way between them all.
+  function towerPlant(r, b, rnd) {
+    var P = FLOOR_PX, list = [TOWER_ITEM.ahu, TOWER_ITEM.chiller, TOWER_ITEM.tank];
+    for (var y = b.t + 2.2 * P, row = 0; y < b.b - 1.5 * P; y += 3.6 * P, row++) {
+      for (var x = b.l + 2.4 * P; x < b.r - 2 * P; x += 4.6 * P) { towerPut(r, list[(row + Math.floor((x - b.l) / (4.6 * P))) % list.length], x, y, 0, 0.6); }
+    }
+    for (var sx = b.l + 1.6 * P; sx < b.r - 1.6 * P; sx += 3.2 * P) { towerPut(r, TOWER_ITEM.switchgear, sx, b.t + 0.45 * P, 0, 0.05); }
+  }
+
   // ---- in 3D: its skin ------------------------------------------------------------------------------
   // Round each floor, the form's outline at that height, as big as it must
   // be to hold the floor at the narrowest -- and so bigger lower down; a
@@ -363,7 +700,7 @@
       if (m.kind === "i_floor") { var f0 = floors.filter(function (f) { return f.n === m; })[0]; if (f0) { mine = f0.bldg; } }
       else { floors.some(function (f) { if (f.level === 0 && insideArea(m, f.n.x, f.n.y)) { mine = f.bldg; return true; } return false; }); }
       if (mine === null) { return; }
-      out.push({ form: TOWER_FORMS[m.madeWith.towerForm] ? m.madeWith.towerForm : "spire", floors: floors.filter(function (f) { return f.bldg === mine && f.level >= 0; }) });
+      out.push({ form: TOWER_FORMS[m.madeWith.towerForm] ? m.madeWith.towerForm : "spire", want: m.madeWith, floors: floors.filter(function (f) { return f.bldg === mine && f.level >= 0; }) });
     });
     return out;
   }
@@ -393,15 +730,17 @@
       plates.forEach(function (p, i) {
         if (!shown(p)) { return; }
         var t0 = plates.length > 1 ? i / (plates.length - 1) : 0, t1 = plates.length > 1 ? Math.min(1, (i + 1) / (plates.length - 1)) : 0;
-        var lo = towerOutline(b.form, c, S, t0, n), hi = lo, ledge = false;
+        var lo = towerRing(sk, i, n), hi = lo, ledge = false;
         // (2026-10-03: "make sure ... the ceiling and walls properly get
         // aligned too rather than being jank" -- each floor stood straight
         // up, the next turned or narrowed on it, a step at every slab.  Now
         // the skin runs on from one floor's outline to the next, as the
         // towers it is after do; only a setback steps, its ledge roofed.)
         if (i + 1 < plates.length) {
-          var nx = towerOutline(b.form, c, S, t1, n);
-          if (towerFlows(b.form, lo, nx, c, S)) { hi = nx; } else { ledge = true; }
+          var nx = towerRing(sk, i + 1, n);
+          // (the podium's roof where the tower stands back from it: a ledge, whatever the form)
+          var onPodium = sk.G && sk.G.podium > 0 && plates[i + 1].f.level === sk.G.podium;
+          if (!onPodium && towerFlows(b.form, lo, nx, c, S)) { hi = nx; } else { ledge = true; }
         }
         var zb = p.z0 - 0.3 * P, zt = p.z1 - 0.3 * P + (ledge ? 0.08 * P : 0), ways = [];
         if (i === 0) {
@@ -412,8 +751,8 @@
           // (2026-10-03: "the skin stops short ... a gap that shows the
           // interior and grass")
           ways = towerEntries(b, sk, rooms);
-          var fine = towerOutline(b.form, c, S, t0, 160);
-          var fineHi = hi === lo ? fine : towerOutline(b.form, c, S, t1, 160);
+          var fine = towerRing(sk, 0, 160);
+          var fineHi = hi === lo ? fine : towerRing(sk, 1, 160);
           var zh = Math.min(zt, p.z0 + 3.75 * P), kh = (zh - zb) / Math.max(1, zt - zb), fineMid = towerMix(fine, fineHi, kh);
           towerBand(function (pts, nn, col, pat) {
             var mx = (pts[0][0] + pts[1][0]) / 2, my = (pts[0][1] + pts[1][1]) / 2;
@@ -442,7 +781,7 @@
         put(lo.slice().reverse().map(function (q) { return [q[0], q[1], towerUnder(plates[i - 1], p, b, rooms)]; }), [0, 0, -1], "#e6e4df", 10);
         if (b.form === "forest") {
           // balconies stepping out and back, a tree on each now and then
-          var out = towerOutline(b.form, c, S + (i % 2 ? 1.6 : 0.8) * P, t0, n);
+          var out = towerGrow(lo, c, (S + (i % 2 ? 1.6 : 0.8) * P) / S);
           towerBand(put, out, out, p.z0 - 0.3 * P, p.z0 - 0.05 * P, "#d8d4cc", 10, c);
           put(out.map(function (q) { return [q[0], q[1], p.z0 - 0.05 * P]; }), [0, 0, 1], "#c9c4ba", 10);
           // and on the balconies, planters of shrubs and small trees, every other one
@@ -568,6 +907,18 @@
   // how big round the outline must be to hold every floor (S).
   function towerSkin(b, rooms) {
     var P = FLOOR_PX, levels = b.floors.slice().sort(function (p, q) { return p.level - q.level; });
+    // (2026-10-06) a tower made to its form, its floors cut to it (40-shaped.js: their rooms `skin`):
+    // its skin the form's own, as big as its plan made it, round the core's middle -- the ground
+    // floor's middle, as every floor's is
+    var made = b.want && rooms.some(function (r) { return r.skin && b.floors.indexOf(floorAt(b.floors, r.x, r.y)) >= 0; });
+    if (made) {
+      var G = towerGeom(b.want), base = levels.filter(function (f) { return f.level === 0; })[0] || levels[0];
+      var platesG = levels.map(function (f, i) {
+        var next = levels[i + 1];
+        return { f: f, bb: null, z0: f.z, z1: next ? next.z : f.z + 3.6 * P };
+      });
+      return { plates: platesG, c: [base.n.x + base.dx, base.n.y + base.dy], S: G.R * P, form: b.form, G: G };
+    }
     var plates = levels.map(function (f, i) {
       var bb = { l: Infinity, r: -Infinity, t: Infinity, b: -Infinity };
       rooms.forEach(function (r) {
@@ -595,9 +946,17 @@
     S = S * 1.04 + 0.5 * P;
     return { plates: plates, c: c, S: S, form: b.form };
   }
+  // A plate's outline (the `i`th of the skin's), `n` points round: the podium's, or the form's at its height.
+  function towerRing(sk, i, n) {
+    var P = FLOOR_PX, p = sk.plates[Math.max(0, Math.min(sk.plates.length - 1, i))];
+    if (sk.G) { return towerPlate(sk.G, p.f.level, 0, n).map(function (q) { return [sk.c[0] + q[0] * P, sk.c[1] + q[1] * P]; }); }
+    return towerOutline(sk.form, sk.c, sk.S, sk.plates.length > 1 ? Math.min(1, i / (sk.plates.length - 1)) : 0, n);
+  }
+  // An outline grown (or shrunk) by `k` about `c`.
+  function towerGrow(ring, c, k) { return ring.map(function (q) { return [c[0] + (q[0] - c[0]) * k, c[1] + (q[1] - c[1]) * k]; }); }
   // How far out the skin is at its foot, every way round: its box.
   function towerFoot(sk) {
-    var pts = towerOutline(sk.form, sk.c, sk.S, 0, 72), bx = { l: Infinity, r: -Infinity, t: Infinity, b: -Infinity };
+    var pts = towerRing(sk, 0, 72), bx = { l: Infinity, r: -Infinity, t: Infinity, b: -Infinity };
     pts.forEach(function (q) { bx.l = Math.min(bx.l, q[0]); bx.r = Math.max(bx.r, q[0]); bx.t = Math.min(bx.t, q[1]); bx.b = Math.max(bx.b, q[1]); });
     return bx;
   }
@@ -631,6 +990,7 @@
   }
   // Where a line out from `from` the way `d` crosses the skin at its foot.
   function towerMeet(sk, from, d) {
+    if (sk.G) { return towerMeetFine(towerRing(sk, 0, 160), from, d); }
     var P = FLOOR_PX, t0 = towerTurn(sk.form, 0), pw = towerP(sk.form, 0);
     function outside(s) {
       var x = from[0] + d[0] * s - sk.c[0], y = from[1] + d[1] * s - sk.c[1], a = Math.atan2(y, x);
@@ -725,7 +1085,7 @@
         var made = (starterLast || []).map(function (o) { return o.room; }), floors = floorsOf(), P = FLOOR_PX;
         var f0 = made.length ? floorAt(floors, made[0].x, made[0].y) : null;
         if (!f0) { return out; }
-        var b = { form: TOWER_FORMS[want.towerForm] ? want.towerForm : "spire", floors: floors.filter(function (f) { return f.bldg === f0.bldg && f.level >= 0; }) };
+        var b = { form: TOWER_FORMS[want.towerForm] ? want.towerForm : "spire", want: want, floors: floors.filter(function (f) { return f.bldg === f0.bldg && f.level >= 0; }) };
         var sk = towerSkin(b, hand.nodes.filter(function (n) { return n.kind === "i_room"; }));
         var lot = sk && hand.nodes.filter(function (n) { return n.kind === "i_lot" && !(n.turn || 0) && insideArea(n, sk.c[0], sk.c[1]); })[0];
         if (!lot) { return out; }

@@ -395,6 +395,8 @@
     }
     rooms.forEach(function (room) {
       var wall = Math.max(1, Math.min(6, Math.min(room.w, room.h) * 0.06));
+      // (a room cut to a shape, 40-shaped.js: its walls traced along its edges, not every square in it tried)
+      if (room.shape && typeof shpWallCells === "function") { shpWallCells(plan, room, wall, function (i) { cells[i] = 1; }); return; }
       each(room, 6, function (i, x, y) {
         if (wallAt(room, x, y, wall)) { cells[i] = 1; }
       });

@@ -668,6 +668,7 @@
     var plan = starterPlan(want, rnd), W = plan.W, H = STARTER_HALL;
     var D = starterPick(rnd, [STARTER_BAND, STARTER_BAND + 0.2, STARTER_BAND + 0.4]) * starterDeep(want);   // its rooms this deep
     var flip = rnd() < 0.5;                                         // mirrored: the garage on the other side
+    if (plan.noFlip) { flip = false; }                              // (a skyscraper's floors under its own skin, 40-towers.js)
     function X(m) { return Math.round(m * P); }
     var floors = [];
     function room(f, kind, label, x0, y0, x1, y1, sx, sy, spec) {
@@ -917,6 +918,9 @@
       f.nodes.forEach(function (n) { hand.nodes.push(n); });
     });
     links.forEach(function (l) { hand.links.push(l); });
+    // (a building whose floors are not rectangles -- a skyscraper's following its glass round a
+    // curve, a wing at an angle: each floor's rooms cut to its outline, what is outside it gone, 40-shaped.js)
+    if (typeof starterCut === "function") { starterCut(plan, floors, made, { flip: flip, X: X, fronts: fronts }); }
     var LEVEL_NAME = { "-1": TXT.fl_basement, "0": TXT.fl_ground, "1": TXT.fl_up_name };
     // (every floor named, its storey kept on it: the floors over the first
     // had no name, and a block of five drawn in two rows was stacked in the

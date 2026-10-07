@@ -579,12 +579,30 @@
     return mine.fill || kindColors("i_room").fill || paper;
   }
 
-  // Whether the point x, y is inside an area's box, turned as it is turned.
+  // Whether the point x, y is inside an area's box, turned as it is turned
+  // -- and, a room cut to a shape (40-shaped.js: a skyscraper's floor
+  // following its glass round a curve), inside the shape too.
   function insideArea(area, x, y, inset) {
     var a = -(area.turn || 0) * Math.PI / 180, c = Math.cos(a), s = Math.sin(a);
     var dx = x - area.x, dy = y - area.y;
     var ux = dx * c - dy * s, uy = dx * s + dy * c, pad = inset || 0;
-    return Math.abs(ux) <= area.w / 2 - pad && Math.abs(uy) <= area.h / 2 - pad;
+    if (!(Math.abs(ux) <= area.w / 2 - pad && Math.abs(uy) <= area.h / 2 - pad)) { return false; }
+    return !area.shape || shpHolds(area.shape, ux, uy, pad);
+  }
+  // Whether a shape (points round it, from its middle) holds x, y -- `pad`
+  // in from its edge, or (under nought) that far out past it still.
+  function shpHolds(poly, x, y, pad) {
+    var inside = false, near = Infinity;
+    for (var i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+      var a = poly[i], b = poly[j];
+      if ((a[1] > y) !== (b[1] > y) && x < (b[0] - a[0]) * (y - a[1]) / (b[1] - a[1]) + a[0]) { inside = !inside; }
+      if (pad) {
+        var ex = b[0] - a[0], ey = b[1] - a[1], L = ex * ex + ey * ey, t = L ? Math.max(0, Math.min(1, ((x - a[0]) * ex + (y - a[1]) * ey) / L)) : 0;
+        near = Math.min(near, Math.hypot(x - a[0] - ex * t, y - a[1] - ey * t));
+      }
+    }
+    if (!pad) { return inside; }
+    return pad > 0 ? inside && near >= pad : inside || near <= -pad;
   }
 
   // What stands in a room or a container: every shape whose middle is

@@ -1095,13 +1095,63 @@
   function gl3Vert(v, p, n, c, a, uv, pat) {
     v.push(p[0], p[1], p[2], n[0], n[1], n[2], c[0], c[1], c[2], a, uv[0], uv[1], pat);
   }
-  // A flat many-sided face, as a fan of triangles from its first corner.
+  // A flat many-sided face, as a fan of triangles from its first corner --
+  // or, one with a corner turned in (a tower's floor that is a Y, a star, a
+  // room cut round a curve: 40-shaped.js), cut into triangles ear by ear.
   function gl3Poly(v, pts, n, c, a, uvs, pat) {
+    if (pts.length > 4) {
+      var tris = gl3Ears(pts, n);
+      if (tris) {
+        for (var e = 0; e < tris.length; e += 3) {
+          for (var k = 0; k < 3; k++) { var q = tris[e + k]; gl3Vert(v, pts[q], n, c, a, uvs ? uvs[q] : [0, 0], pat); }
+        }
+        return;
+      }
+    }
     for (var i = 1; i + 1 < pts.length; i++) {
       gl3Vert(v, pts[0], n, c, a, uvs ? uvs[0] : [0, 0], pat);
       gl3Vert(v, pts[i], n, c, a, uvs ? uvs[i] : [0, 0], pat);
       gl3Vert(v, pts[i + 1], n, c, a, uvs ? uvs[i + 1] : [0, 0], pat);
     }
+  }
+  // A face's triangles (corner numbers, three to each) where it has a corner
+  // turned in; null where every corner turns the same way (a fan will do).
+  function gl3Ears(pts, n) {
+    // (seen along its own normal: the two of x, y, z it lies most across)
+    var ax = Math.abs(n[0]), ay = Math.abs(n[1]), az = Math.abs(n[2]);
+    var d = az >= ax && az >= ay ? 2 : ax >= ay ? 0 : 1, i0 = d === 0 ? 1 : 0, i1 = d === 2 ? 1 : 2;
+    var m = pts.length, area = 0, k;
+    for (k = 0; k < m; k++) { var p = pts[k], q = pts[(k + 1) % m]; area += p[i0] * q[i1] - q[i0] * p[i1]; }
+    var sign = area >= 0 ? 1 : -1, bent = false;
+    function turn(a, b, c2) { return ((b[i0] - a[i0]) * (c2[i1] - a[i1]) - (b[i1] - a[i1]) * (c2[i0] - a[i0])) * sign; }
+    for (k = 0; k < m && !bent; k++) { if (turn(pts[(k + m - 1) % m], pts[k], pts[(k + 1) % m]) < -1e-6) { bent = true; } }
+    if (!bent) { return null; }
+    var left = [], out = [];
+    for (k = 0; k < m; k++) { left.push(k); }
+    function holds(a, b, c2, p) { return turn(a, b, p) >= 0 && turn(b, c2, p) >= 0 && turn(c2, a, p) >= 0; }
+    for (var guard = 0; left.length > 3 && guard < m * 2; guard++) {
+      var cut = false, L = left.length, reflex = [];
+      // (only a corner turned in can stand inside an ear: those, once a round)
+      for (var r = 0; r < L; r++) { if (turn(pts[left[(r + L - 1) % L]], pts[left[r]], pts[left[(r + 1) % L]]) <= 1e-9) { reflex.push(left[r]); } }
+      for (var j = 0; j < L; j++) {
+        var ia = left[(j + L - 1) % L], ib = left[j], ic = left[(j + 1) % L];
+        var A = pts[ia], B = pts[ib], C = pts[ic];
+        if (turn(A, B, C) <= 1e-9) { continue; }
+        var clear = true;
+        for (var t = 0; t < reflex.length && clear; t++) {
+          var it = reflex[t];
+          if (it !== ia && it !== ib && it !== ic && holds(A, B, C, pts[it])) { clear = false; }
+        }
+        if (!clear) { continue; }
+        out.push(ia, ib, ic);
+        left.splice(j, 1);
+        cut = true;
+        break;
+      }
+      if (!cut) { break; }             // (a face that crosses itself: what is left, as a fan)
+    }
+    for (var f = 1; f + 1 < left.length; f++) { out.push(left[0], left[f], left[f + 1]); }
+    return out;
   }
   function gl3Lines(v, pts, c, a) {
     for (var i = 0; i < pts.length; i++) {
