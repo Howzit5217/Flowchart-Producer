@@ -91,7 +91,10 @@
   }
 
   // What the view shows, names and all, as a picture file named for the
-  // drawing.
+  // drawing -- into the folder picked in Files > Where saves go, as every
+  // other save goes (19-folder.js), or the downloads when none is picked.
+  // (2026-10-06: "the save picture in the 3d also goes to the saved folder
+  // too" -- it had gone to the downloads, whatever was picked.)
   function v3SavePicture() {
     if (!V3 || !V3.canvas) { return; }
     v3Draw();                            // fresh: a WebGL picture is gone once shown
@@ -100,16 +103,20 @@
     name = String(name).replace(/[\\/:*?"<>|]+/g, " ").replace(/\s+/g, " ").trim() || "3D";
     function keep(blob) {
       if (!blob) { v3Say(TXT.v3_save_failed); return; }
-      var a = document.createElement("a");
-      a.href = URL.createObjectURL(blob);
-      a.download = name + " (3D).png";
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      setTimeout(function () { URL.revokeObjectURL(a.href); }, 4000);
+      save(blob, name + " (3D).png");
       v3Say(TXT.v3_saved);
     }
     try { V3.canvas.toBlob(keep, "image/png"); } catch (e) { keep(null); }
+  }
+  // (and where it went said in the view itself when that fills the screen: the
+  // note at the foot of the page is not shown over something full screen)
+  if (typeof savedSay === "function") {
+    var savedSayFlat = savedSay;
+    savedSay = function (what) {
+      savedSayFlat.apply(this, arguments);
+      var full = document.fullscreenElement, foot = el("#saved-to");
+      if (full && foot && !full.contains(foot) && typeof V3 !== "undefined" && V3 && V3.box && full.contains(V3.box)) { v3Say(what); }
+    };
   }
 
   // The 3D button pressed again while the view is still going back down

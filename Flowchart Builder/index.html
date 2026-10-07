@@ -69657,16 +69657,18 @@ window.addEventListener("load", function () {
     name = String(name).replace(/[\\/:*?"<>|]+/g, " ").replace(/\s+/g, " ").trim() || "3D";
     function keep(blob) {
       if (!blob) { v3Say(TXT.v3_save_failed); return; }
-      var a = document.createElement("a");
-      a.href = URL.createObjectURL(blob);
-      a.download = name + " (3D).png";
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      setTimeout(function () { URL.revokeObjectURL(a.href); }, 4000);
+      save(blob, name + " (3D).png");
       v3Say(TXT.v3_saved);
     }
     try { V3.canvas.toBlob(keep, "image/png"); } catch (e) { keep(null); }
+  }
+  if (typeof savedSay === "function") {
+    var savedSayFlat = savedSay;
+    savedSay = function (what) {
+      savedSayFlat.apply(this, arguments);
+      var full = document.fullscreenElement, foot = el("#saved-to");
+      if (full && foot && !full.contains(foot) && typeof V3 !== "undefined" && V3 && V3.box && full.contains(V3.box)) { v3Say(what); }
+    };
   }
 
   if (el("#view3d-open") && typeof v3Close === "function") {
