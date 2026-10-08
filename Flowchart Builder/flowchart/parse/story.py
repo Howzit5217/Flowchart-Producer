@@ -25,7 +25,7 @@ so running the chart lights the sentence that is running.
 """
 import re
 
-from ..parse.clean import split_indent, tidy
+from ..parse.clean import said_long, split_indent, tidy
 from ..parse.keywords import (
     R_CALL, R_CASE, R_DECL, R_DO, R_ELSE, R_ELSEIF, R_END, R_ENDANY,
     R_ENDIF, R_ENDLOOP, R_ENDMOD, R_ENDSEL, R_EXIT, R_EXIT_MOD, R_FOR, R_FOR_C, R_FOR_TO, R_IF,
@@ -50,7 +50,7 @@ TOLD = [""]
 R_TOKEN = re.compile(r'\s*(?:"[^"]*"|\'[^\']*\'|\d+(?:\.\d+)?|[A-Za-z_][\w.]*|'
                      r'\.[A-Za-z_][\w.]*|'
                      r'<=|>=|<>|!=|==|&&|\|\||[-+*/^%&=<>(),\[\]{}:])')
-WORD_OPS = {"and", "or", "mod", "div"}
+WORD_OPS = {"and", "or", "mod", "div", "in"}
 BIN_OPS = {"+", "-", "*", "/", "^", "%", "&", "=", "==", "!=", "<>", "<", ">",
            "<=", ">=", "&&", "||"}
 TYPES = r"(?:integer|int|real|float|double|string|str|char|boolean|bool|number|" \
@@ -65,12 +65,12 @@ R_NAME_LIST = re.compile(r'^(?:"[^"]*"\s*,\s*)?' + PLACE +
                          r'(?:\s*,\s*' + PLACE + r')*$')
 R_SIGNATURE = re.compile(r"^(?:[\w\[\]]+\s+)?\w+\s*(?:\(.*\))?"
                          r"(?:\s*(?:as|returns?|->|:)\s*[\w\[\]]+)?$", re.I)
-R_BARE_CALL = re.compile(r"^[A-Za-z_]\w*\s*\(.*\)$")
+R_BARE_CALL = re.compile(r"^[A-Za-z_]\w*(?:\s*\[[^\]]*\])*(?:\.[A-Za-z_]\w*)*\s*\(.*\)$")
 
 
 def sum_reads(text):
     """Is this a sum the runner can read -- operands with operators between?"""
-    text = text.strip()
+    text = re.sub(r"\bnot\s+in\b", "in", text.strip(), flags=re.I)     # x not in xs
     if not text:
         return False
     at, toks = 0, []
@@ -83,7 +83,10 @@ def sum_reads(text):
     want, prev, deep = True, "", 0         # want: an operand comes next
     for tok in toks:
         low = tok.lower()
-        is_name = bool(re.match(r"[A-Za-z_]", tok)) and low not in WORD_OPS and low != "not"
+        # `in` is a test between two things, and a name where a thing is
+        # wanted: Display class, in, str
+        is_name = (bool(re.match(r"[A-Za-z_]", tok)) and low != "not" and
+                   (low not in WORD_OPS or (low == "in" and want)))
         operand = is_name or tok[0] in "\"'" or tok[0].isdigit()
         if want:
             if tok in ("(", "[", "{") or tok in ("-", "+") or low == "not":
@@ -123,7 +126,7 @@ def sum_reads(text):
 
 def reads_as_pseudocode(line):
     """One cleaned line: pseudocode (or nothing at all), or words?"""
-    s = tidy(line)
+    s = said_long(tidy(line))
     if not s:
         return True
     low = s.lower()
@@ -180,7 +183,14 @@ def reads_as_pseudocode(line):
         m = R_DECL_LINE.match(s)
         if not m:
             return False
-        for one in split_top(m.group(1)):
+        parts = split_top(m.group(1))
+        name, _, value = parts[0].partition("=")
+        # Declare Integer days[12] = 31, 28, 31: an array, and the values
+        # it starts out holding, the textbook's way
+        if len(parts) > 1 and value.strip() and re.match(r"^[A-Za-z_]\w*(?:\s*\[[^\]]*\])+$", name.strip()) \
+                and not any("=" in re.sub(r'"[^"]*"|\'[^\']*\'', "", one) for one in parts[1:]):
+            return all(sum_reads(one) for one in [value] + parts[1:])
+        for one in parts:
             name, _, value = one.partition("=")
             if not re.match(r"^[A-Za-z_]\w*(?:\s*\[[^\]]*\])*$", name.strip()):
                 return False

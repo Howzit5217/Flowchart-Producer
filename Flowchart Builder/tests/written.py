@@ -44,6 +44,13 @@ NOT_MEANT_TO_BUILD = ("wrong number",)
 # file, so the checking would simply stop running and say nothing.
 MUST_COME_APART = ("cut into parts", "cut part that can end")
 
+# Programs not cut into a file each.  The racing series with its Python
+# pasted in under it says falconTimes twice over -- once above the modules,
+# the Python's, and once again inside Module main -- which one file holds
+# as main's own name standing in front of the other, and files of their
+# own cannot: the page says to take the Python out (w_code_tail).
+NOT_CUT = ("with its Python pasted in under it",)
+
 # (what it is about, the pseudocode, what gets typed into it)
 SHELF = [
     ("undeclared names", """
@@ -1000,6 +1007,988 @@ Display "Got ", word
 Display "Goodbye"
 End
 """, ["2", "3", "0", "hello"]),
+
+    # Written the textbook's way (Gaddis) and the messier ways people write
+    # it -- Python pasted under the pseudocode, a C for, += -- each one
+    # really compiled and run in every language (2026-10-07).
+    ('the racing series, the way the textbook writes it', """
+// Racing series -- Falcons vs Vipers, eight races.
+
+Constant Integer NUM_RACES = 8
+
+Module main()
+    Declare Real falconTimes[NUM_RACES]
+    Declare Real viperTimes[NUM_RACES]
+    Declare Real time
+    Declare Integer index
+    Declare Integer raceNumber
+    Declare Integer falconWins
+    Declare Integer viperWins
+
+    // Part 1: Gather the input
+    For index = 0 To NUM_RACES - 1
+        Set raceNumber = index + 1
+
+        Display "Enter Falcons time for race ", raceNumber
+        Input time
+        Set falconTimes[index] = time
+
+        Display "Enter Vipers time for race ", raceNumber
+        Input time
+        Set viperTimes[index] = time
+    End For
+
+    // Print both arrays to check the input
+    For index = 0 To NUM_RACES - 1
+        Set raceNumber = index + 1
+        Display "Race ", raceNumber, " Falcons: ", falconTimes[index], " Vipers: ", viperTimes[index]
+    End For
+
+    // Part 2: Winner of each race
+    Set falconWins = 0
+    Set viperWins = 0
+
+    For index = 0 To NUM_RACES - 1
+        Set raceNumber = index + 1
+
+        If falconTimes[index] < viperTimes[index] Then
+            Set falconWins = falconWins + 1
+            Display "Falcons win race ", raceNumber
+        Else If viperTimes[index] < falconTimes[index] Then
+            Set viperWins = viperWins + 1
+            Display "Vipers win race ", raceNumber
+        Else
+            Display "Race ", raceNumber, " is a tie!"
+        End If
+    End For
+
+    // Part 3: Overall winner
+    Display "Falcons race wins: ", falconWins
+    Display "Vipers race wins: ", viperWins
+
+    If falconWins > viperWins Then
+        Display "The Falcons win the series!"
+    Else If viperWins > falconWins Then
+        Display "The Vipers win the series!"
+    Else
+        Display "The series ends in a tie!"
+    End If
+End Module
+""", ['12.5', '13.1', '14', '13.2', '11.9', '11.9', '15.25', '15.5', '13', '12', '10.5', '10.75', '16', '16', '14.4', '14.1']),
+    ("the racing series, written Python's way", """
+# Racing Series
+
+NUM_RACES = 8
+falconTimes = [0] * NUM_RACES
+viperTimes = [0] * NUM_RACES
+time_ = 0
+index = 0
+raceNumber = 0
+falconWins = 0
+viperWins = 0
+for index in range(0, NUM_RACES):
+    raceNumber = index + 1
+    print("Enter Falcons time for race " + str(raceNumber))
+    time_ = float(input())
+    falconTimes[index] = time_
+    print("Enter Vipers time for race " + str(raceNumber))
+    time_ = float(input())
+    viperTimes[index] = time_
+for index in range(0, NUM_RACES):
+    raceNumber = index + 1
+    print("Race " + str(raceNumber) + " Falcons: " + str(falconTimes[index]) + " Vipers: " + str(viperTimes[index]))
+falconWins = 0
+viperWins = 0
+for index in range(0, NUM_RACES):
+    raceNumber = index + 1
+    if falconTimes[index] < viperTimes[index]:
+        falconWins = falconWins + 1
+        print("Falcons win race " + str(raceNumber))
+    elif viperTimes[index] < falconTimes[index]:
+        viperWins = viperWins + 1
+        print("Vipers win race " + str(raceNumber))
+    else:
+        print("Race " + str(raceNumber) + " is a tie!")
+print("Falcons race wins: " + str(falconWins))
+print("Vipers race wins: " + str(viperWins))
+if falconWins > viperWins:
+    print("The Falcons win the series!")
+elif viperWins > falconWins:
+    print("The Vipers win the series!")
+else:
+    print("The series ends in a tie!")
+""", ['12.5', '13.1', '14', '13.2', '11.9', '11.9', '15.25', '15.5', '13', '12', '10.5', '10.75', '16', '16', '14.4', '14.1']),
+    ('the racing series, with its Python pasted in under it', """
+// Racing series -- Falcons vs Vipers, eight races.
+
+Constant Integer NUM_RACES = 8
+
+Module main()
+    Declare Real falconTimes[NUM_RACES]
+    Declare Real viperTimes[NUM_RACES]
+    Declare Real time
+    Declare Integer index
+    Declare Integer raceNumber
+    Declare Integer falconWins
+    Declare Integer viperWins
+
+    // Part 1: Gather the input
+    For index = 0 To NUM_RACES - 1
+        Set raceNumber = index + 1
+
+        Display "Enter Falcons time for race ", raceNumber
+        Input time
+        Set falconTimes[index] = time
+
+        Display "Enter Vipers time for race ", raceNumber
+        Input time
+        Set viperTimes[index] = time
+    End For
+
+    // Print both arrays to check the input
+    For index = 0 To NUM_RACES - 1
+        Set raceNumber = index + 1
+        Display "Race ", raceNumber, " Falcons: ", falconTimes[index], " Vipers: ", viperTimes[index]
+    End For
+
+    // Part 2: Winner of each race
+    Set falconWins = 0
+    Set viperWins = 0
+
+    For index = 0 To NUM_RACES - 1
+        Set raceNumber = index + 1
+
+        If falconTimes[index] < viperTimes[index] Then
+            Set falconWins = falconWins + 1
+            Display "Falcons win race ", raceNumber
+        Else If viperTimes[index] < falconTimes[index] Then
+            Set viperWins = viperWins + 1
+            Display "Vipers win race ", raceNumber
+        Else
+            Display "Race ", raceNumber, " is a tie!"
+        End If
+    End For
+
+    // Part 3: Overall winner
+    Display "Falcons race wins: ", falconWins
+    Display "Vipers race wins: ", viperWins
+
+    If falconWins > viperWins Then
+        Display "The Falcons win the series!"
+    Else If viperWins > falconWins Then
+        Display "The Vipers win the series!"
+    Else
+        Display "The series ends in a tie!"
+    End If
+End Module# Racing Series
+
+NUM_RACES = 8
+falconTimes = [0] * NUM_RACES
+viperTimes = [0] * NUM_RACES
+time_ = 0
+index = 0
+raceNumber = 0
+falconWins = 0
+viperWins = 0
+for index in range(0, NUM_RACES):
+    raceNumber = index + 1
+    print("Enter Falcons time for race " + str(raceNumber))
+    time_ = float(input())
+    falconTimes[index] = time_
+    print("Enter Vipers time for race " + str(raceNumber))
+    time_ = float(input())
+    viperTimes[index] = time_
+for index in range(0, NUM_RACES):
+    raceNumber = index + 1
+    print("Race " + str(raceNumber) + " Falcons: " + str(falconTimes[index]) + " Vipers: " + str(viperTimes[index]))
+falconWins = 0
+viperWins = 0
+for index in range(0, NUM_RACES):
+    raceNumber = index + 1
+    if falconTimes[index] < viperTimes[index]:
+        falconWins = falconWins + 1
+        print("Falcons win race " + str(raceNumber))
+    elif viperTimes[index] < falconTimes[index]:
+        viperWins = viperWins + 1
+        print("Vipers win race " + str(raceNumber))
+    else:
+        print("Race " + str(raceNumber) + " is a tie!")
+print("Falcons race wins: " + str(falconWins))
+print("Vipers race wins: " + str(viperWins))
+if falconWins > viperWins:
+    print("The Falcons win the series!")
+elif viperWins > falconWins:
+    print("The Vipers win the series!")
+else:
+    print("The series ends in a tie!")
+""", ['12.5', '13.1', '14', '13.2', '11.9', '11.9', '15.25', '15.5', '13', '12', '10.5', '10.75', '16', '16', '14.4', '14.1', '12.5', '13.1', '14', '13.2', '11.9', '11.9', '15.25', '15.5', '13', '12', '10.5', '10.75', '16', '16', '14.4', '14.1']),
+    ('an array typed into and averaged', """
+// Average of five test scores
+Constant Integer SIZE = 5
+
+Module main()
+    Declare Integer scores[SIZE]
+    Declare Integer index
+    Declare Integer total = 0
+    Declare Real average
+
+    For index = 0 To SIZE - 1
+        Display "Enter score ", index + 1, ":"
+        Input scores[index]
+    End For
+
+    For index = 0 To SIZE - 1
+        Set total = total + scores[index]
+    End For
+
+    Set average = total / SIZE
+    Display "The total is ", total
+    Display "The average is ", average
+End Module
+""", ['90', '85', '77', '64', '100']),
+    ('parallel arrays', """
+Module main()
+    Constant Integer SIZE = 4
+    Declare String names[SIZE]
+    Declare Real hours[SIZE]
+    Declare Real payRate = 15.5
+    Declare Integer i
+    Declare Integer best = 0
+
+    For i = 0 To SIZE - 1
+        Display "Enter the name of employee ", i + 1
+        Input names[i]
+        Display "Enter the hours worked by ", names[i]
+        Input hours[i]
+    End For
+
+    For i = 1 To SIZE - 1
+        If hours[i] > hours[best] Then
+            Set best = i
+        End If
+    End For
+
+    Display "Pay for each employee:"
+    For i = 0 To SIZE - 1
+        Display names[i], ": $", hours[i] * payRate
+    End For
+    Display "Most hours: ", names[best], " with ", hours[best]
+End Module
+""", ['Ann Lee', '40', 'Bob', '35.5', 'Cy', '42.25', 'Di', '10']),
+    ('a two-dimensional array', """
+Constant Integer ROWS = 3
+Constant Integer COLS = 4
+
+Module main()
+    Declare Integer values[ROWS][COLS]
+    Declare Integer row, col
+    Declare Integer total
+
+    For row = 0 To ROWS - 1
+        For col = 0 To COLS - 1
+            Set values[row][col] = (row + 1) * (col + 2)
+        End For
+    End For
+
+    For row = 0 To ROWS - 1
+        Set total = 0
+        For col = 0 To COLS - 1
+            Set total = total + values[row][col]
+            Display values[row][col], " "
+        End For
+        Display "Row ", row, " total: ", total
+    End For
+End Module
+""", []),
+    ('a bubble sort swapping places in an array by reference', """
+Module main()
+    Constant Integer SIZE = 6
+    Declare Integer numbers[SIZE] = 42, 7, 19, 73, 3, 25
+    Declare Integer index
+
+    Display "Before:"
+    For index = 0 To SIZE - 1
+        Display numbers[index]
+    End For
+
+    Call bubbleSort(numbers, SIZE)
+
+    Display "After:"
+    For index = 0 To SIZE - 1
+        Display numbers[index]
+    End For
+End Module
+
+Module bubbleSort(Integer Ref array[], Integer arraySize)
+    Declare Integer maxElement
+    Declare Integer index
+
+    For maxElement = arraySize - 1 To 0 Step -1
+        For index = 0 To maxElement - 1
+            If array[index] > array[index + 1] Then
+                Call swap(array[index], array[index + 1])
+            End If
+        End For
+    End For
+End Module
+
+Module swap(Integer Ref a, Integer Ref b)
+    Declare Integer temp
+    Set temp = a
+    Set a = b
+    Set b = temp
+End Module
+""", []),
+    ('a selection sort of words', """
+Module main()
+    Constant Integer SIZE = 5
+    Declare String names[SIZE] = "Mia", "Zoe", "Abe", "Liv", "Ed"
+    Declare Integer i
+    Call selectionSort(names, SIZE)
+    For i = 0 To SIZE - 1
+        Display names[i]
+    End For
+End Module
+
+Module selectionSort(String Ref array[], Integer arraySize)
+    Declare Integer startScan
+    Declare Integer minIndex
+    Declare String minValue
+    Declare Integer index
+    Declare String temp
+
+    For startScan = 0 To arraySize - 2
+        Set minIndex = startScan
+        Set minValue = array[startScan]
+        For index = startScan + 1 To arraySize - 1
+            If array[index] < minValue Then
+                Set minValue = array[index]
+                Set minIndex = index
+            End If
+        End For
+        Set temp = array[minIndex]
+        Set array[minIndex] = array[startScan]
+        Set array[startScan] = temp
+    End For
+End Module
+""", []),
+    ('a binary search, its middle a whole number', """
+Module main()
+    Constant Integer SIZE = 8
+    Declare Integer values[SIZE] = 2, 5, 9, 14, 21, 30, 44, 57
+    Declare Integer target
+    Declare Integer position
+
+    Display "Enter a value to search for:"
+    Input target
+    Set position = binarySearch(values, target, SIZE)
+    If position == -1 Then
+        Display target, " was not found."
+    Else
+        Display target, " was found at position ", position
+    End If
+
+    Set position = binarySearch(values, 22, SIZE)
+    Display "22 is at ", position
+End Module
+
+Function Integer binarySearch(Integer array[], Integer value, Integer arraySize)
+    Declare Integer first = 0
+    Declare Integer last = arraySize - 1
+    Declare Integer position = -1
+    Declare Boolean found = False
+    Declare Integer middle
+
+    While (NOT found) AND (first <= last)
+        Set middle = (first + last) / 2
+        If array[middle] == value Then
+            Set found = True
+            Set position = middle
+        Else If array[middle] > value Then
+            Set last = middle - 1
+        Else
+            Set first = middle + 1
+        End If
+    End While
+    Return position
+End Function
+""", ['30']),
+    ('functions handed Reals', """
+// Payroll with overtime
+Constant Real BASE_HOURS = 40
+Constant Real OT_MULTIPLIER = 1.5
+
+Module main()
+    Declare String name
+    Declare Real hoursWorked, payRate, grossPay
+
+    Display "Enter the employee's name."
+    Input name
+    Display "Enter the number of hours worked."
+    Input hoursWorked
+    Display "Enter the hourly pay rate."
+    Input payRate
+
+    If hoursWorked > BASE_HOURS Then
+        Set grossPay = calcPayWithOT(hoursWorked, payRate)
+    Else
+        Set grossPay = calcRegularPay(hoursWorked, payRate)
+    End If
+
+    Display "The gross pay for ", name, " is $", grossPay
+End Module
+
+Function Real calcPayWithOT(Real hours, Real rate)
+    Declare Real overtimeHours, overtimePay
+    Set overtimeHours = hours - BASE_HOURS
+    Set overtimePay = overtimeHours * rate * OT_MULTIPLIER
+    Return BASE_HOURS * rate + overtimePay
+End Function
+
+Function Real calcRegularPay(Real hours, Real rate)
+    Return hours * rate
+End Function
+""", ['Pat Kim', '45', '20.5']),
+    ('input checked in three kinds of loop', """
+Module main()
+    Declare Integer score
+    Declare Real price
+    Declare String answer
+
+    Display "Enter a test score (0-100):"
+    Input score
+    While score < 0 OR score > 100
+        Display "ERROR: The score must be 0 to 100. Try again:"
+        Input score
+    End While
+    Display "Score accepted: ", score
+
+    Do
+        Display "Enter a price above zero:"
+        Input price
+    While price <= 0
+    Display "Price: ", price
+
+    Do
+        Display "Type yes or no:"
+        Input answer
+    Until answer == "yes" OR answer == "no"
+    Display "You said ", answer
+End Module
+""", ['-5', '150', '88', '0', '-2', '9.99', 'maybe', 'yes']),
+    ('a select on numbers and on words', """
+Module main()
+    Declare Integer month
+    Declare String grade
+    Declare Integer i
+
+    For i = 1 To 4
+        Display "Enter a month number:"
+        Input month
+        Select month
+            Case 1:
+                Display "January"
+            Case 2:
+                Display "February"
+            Case 3:
+                Display "March"
+            Default:
+                Display "Some other month"
+        End Select
+    End For
+
+    Set grade = "B"
+    Select grade
+        Case "A":
+            Display "Excellent"
+        Case "B":
+            Display "Good"
+        Default:
+            Display "Keep trying"
+    End Select
+End Module
+""", ['1', '3', '12', '2']),
+    ("the textbook's words functions", """
+Module main()
+    Declare String first, last, full
+    Declare Integer count
+    Declare Integer i
+
+    Display "First name?"
+    Input first
+    Display "Last name?"
+    Input last
+    Set full = first & " " & last
+    Display "Full name: ", full
+    Display "Length: ", length(full)
+    Display "Upper: ", toUpper(full)
+    Display "Lower: ", toLower(full)
+    Display "First three: ", substring(full, 0, 3)
+    If contains(full, "an") Then
+        Display "It contains an"
+    End If
+    Set count = 0
+    For i = 0 To length(full) - 1
+        If full[i] == "a" OR full[i] == "A" Then
+            Set count = count + 1
+        End If
+    End For
+    Display "Number of a's: ", count
+End Module
+""", ['Ana', 'Nolan']),
+    ('Ref parameters of three kinds', """
+Module main()
+    Declare Integer x = 5
+    Declare Integer y = 9
+    Declare Real total = 0
+    Display "Before: ", x, " ", y
+    Call swap(x, y)
+    Display "After: ", x, " ", y
+    Call addTo(total, 2.5)
+    Call addTo(total, 4)
+    Display "Total: ", total
+    Call getNumber(x)
+    Display "You typed ", x
+End Module
+
+Module swap(Integer Ref a, Integer Ref b)
+    Declare Integer temp
+    Set temp = a
+    Set a = b
+    Set b = temp
+End Module
+
+Module addTo(Real Ref sum, Real amount)
+    Set sum = sum + amount
+End Module
+
+Module getNumber(Integer Ref num)
+    Display "Enter a number:"
+    Input num
+End Module
+""", ['42']),
+    ('counting down, by threes and by a quarter', """
+Module main()
+    Declare Integer i
+    Declare Real x
+    For i = 10 To 0 Step -2
+        Display i
+    End For
+    For i = 1 To 9 Step 3
+        Display "i = ", i
+    End For
+    For x = 0 To 1 Step 0.25
+        Display x
+    End For
+    Display "After the loop i is ", i
+End Module
+""", []),
+    ('arrays given their values, handed to functions', """
+Constant Integer MONTHS = 12
+
+Module main()
+    Declare Integer days[MONTHS] = 31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31
+    Declare String names[MONTHS] = "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"
+    Declare Integer index
+    For index = 0 To MONTHS - 1
+        Display names[index], " has ", days[index], " days."
+    End For
+    Display "Total days: ", getTotal(days, MONTHS)
+    Display "Longest month index: ", findMax(days, MONTHS)
+End Module
+
+Function Integer getTotal(Integer array[], Integer arraySize)
+    Declare Integer total = 0
+    Declare Integer i
+    For i = 0 To arraySize - 1
+        Set total = total + array[i]
+    End For
+    Return total
+End Function
+
+Function Integer findMax(Integer array[], Integer size)
+    Declare Integer best = 0
+    Declare Integer i
+    For i = 1 To size - 1
+        If array[i] > array[best] Then
+            Set best = i
+        End If
+    End For
+    Return best
+End Function
+""", []),
+    ('recursion', """
+Module main()
+    Declare Integer n
+    For n = 0 To 6
+        Display n, "! = ", factorial(n), "  fib = ", fib(n)
+    End For
+    Call countdown(3)
+End Module
+
+Function Integer factorial(Integer n)
+    If n == 0 Then
+        Return 1
+    Else
+        Return n * factorial(n - 1)
+    End If
+End Function
+
+Function Integer fib(Integer n)
+    If n < 2 Then
+        Return n
+    End If
+    Return fib(n - 1) + fib(n - 2)
+End Function
+
+Module countdown(Integer n)
+    If n > 0 Then
+        Display n
+        Call countdown(n - 1)
+    Else
+        Display "Liftoff!"
+    End If
+End Module
+""", []),
+    ("a program written Python's way", """
+total = 0
+count = int(input())
+for i in range(count):
+    n = float(input())
+    total = total + n
+    if n > 10:
+        print("big one")
+    elif n > 5:
+        print("medium one")
+    else:
+        print("small one")
+print("total", total)
+avg = total / count
+print("average", avg)
+word = input()
+if word == "yes":
+    print("ok")
+""", ['3', '12.5', '7', '1', 'yes']),
+    ('a Python loop inside a module that ends with End Module', """
+Module main()
+    Declare Integer i
+    Declare Integer total = 0
+    for i in range(1, 4):
+        total = total + i
+        print(i)
+    Display "Total is ", total
+    If total > 5 Then
+        Display "more than five"
+    End If
+End Module
+""", []),
+    ("money said the textbook's way, and a tab", """
+Module main()
+    Declare Real amounts[3] = 3.5, 10, 2.257
+    Declare Integer i
+    Declare Real sum = 0
+    For i = 0 To 2
+        Set sum = sum + amounts[i]
+        Display i, Tab, amounts[i]
+    End For
+    Display "Sum: ", sum
+    Display "Formatted: ", currencyFormat(sum)
+End Module
+""", []),
+    ('words to numbers and back', """
+Module main()
+    Declare String text = "123"
+    Declare Integer n
+    Declare Real r
+    Declare String back
+    Set n = stringToInteger(text)
+    Set r = stringToReal("4.5")
+    Set back = integerToString(n + 1)
+    Display n + 1
+    Display r * 2
+    Display back, "!"
+    If isInteger("77") Then
+        Display "77 is an integer"
+    End If
+End Module
+""", []),
+    ('an insertion sort', """
+Module main()
+    Constant Integer SIZE = 7
+    Declare Integer values[SIZE] = 9, 4, 7, 1, 8, 2, 6
+    Declare Integer i
+    Call insertionSort(values, SIZE)
+    For i = 0 To SIZE - 1
+        Display values[i]
+    End For
+End Module
+
+Module insertionSort(Integer Ref array[], Integer arraySize)
+    Declare Integer unsortedValue
+    Declare Integer scan
+    Declare Integer index
+    For index = 1 To arraySize - 1
+        Set unsortedValue = array[index]
+        Set scan = index
+        While scan > 0 AND array[scan - 1] > unsortedValue
+            Set array[scan] = array[scan - 1]
+            Set scan = scan - 1
+        End While
+        Set array[scan] = unsortedValue
+    End For
+End Module
+""", []),
+    ('adding on with +=, -= and Next', """
+Declare Integer total = 0
+Declare Integer i
+For i = 1 To 4
+    total += i
+Next i
+Display total
+Set total -= 3
+Display total
+""", []),
+    ('a for written the C way', """
+Declare Integer sum = 0
+for (i = 0; i < 5; i++)
+    sum = sum + i
+end for
+print sum
+""", []),
+    ('a list appended to the Python way', """
+scores = []
+for i in range(4):
+    s = int(input())
+    scores.append(s)
+total = 0
+for s in scores:
+    total = total + s
+print("Total:", total)
+print("Average:", total / len(scores))
+best = max(scores)
+print("Best:", best)
+if 100 in scores:
+    print("someone got 100")
+""", ['70', '100', '85', '91']),
+    ('a two-dimensional array given its values in a row', """
+Constant Integer ROWS = 2
+Constant Integer COLS = 3
+
+Module main()
+    Declare Integer grid[ROWS][COLS] = 1, 2, 3, 4, 5, 6
+    Declare Integer r, c
+    Declare Integer total = 0
+    For r = 0 To ROWS - 1
+        For c = 0 To COLS - 1
+            Set total = total + grid[r][c]
+        End For
+    End For
+    Display "Total: ", total
+    Display "Middle of the second row: ", grid[1][1]
+End Module
+""", []),
+    ('append joining two words', """
+Module main()
+    Declare String first = "Grace"
+    Declare String last = "Hopper"
+    Declare String full
+    Set full = append(first, " ")
+    Set full = append(full, last)
+    Display full
+    Display toUpper(full)
+    Display "Starts with G: ", substring(full, 0, 1) == "G"
+End Module
+""", []),
+    ('a password checked letter by letter', """
+Module main()
+    Declare String password
+    Declare Integer upper = 0
+    Declare Integer lower = 0
+    Declare Integer digits = 0
+    Declare Integer i
+    Display "Enter a password:"
+    Input password
+    For i = 0 To length(password) - 1
+        If isUpper(password[i]) Then
+            Set upper = upper + 1
+        Else If isLower(password[i]) Then
+            Set lower = lower + 1
+        Else If isDigit(password[i]) Then
+            Set digits = digits + 1
+        End If
+    End For
+    Display "Uppercase: ", upper
+    Display "Lowercase: ", lower
+    Display "Digits: ", digits
+    If length(password) >= 8 AND upper > 0 AND lower > 0 AND digits > 0 Then
+        Display "Valid password"
+    Else
+        Display "Invalid password"
+    End If
+End Module
+""", ['Secret123']),
+    ('words compared letting capitals go, and exactly', """
+Module main()
+    Declare String answer
+    Declare Integer k
+    For k = 1 To 3
+        Display "Continue?"
+        Input answer
+        If answer = "yes" Then
+            Display "Going on"
+        Else If answer == "NO" Then
+            Display "Exactly NO"
+        Else
+            Display "Stopping"
+        End If
+    End For
+End Module
+""", ['YES', 'NO', 'no']),
+    ('an array of flags', """
+Module main()
+    Constant Integer SIZE = 10
+    Declare Boolean isPrime[SIZE]
+    Declare Integer i, j
+    For i = 2 To SIZE - 1
+        Set isPrime[i] = True
+    End For
+    For i = 2 To SIZE - 1
+        If isPrime[i] Then
+            For j = i * 2 To SIZE - 1 Step i
+                Set isPrime[j] = False
+            End For
+        End If
+    End For
+    For i = 0 To SIZE - 1
+        If isPrime[i] Then
+            Display i, " is prime"
+        End If
+    End For
+End Module
+""", []),
+    ('a board of words, in rows', """
+Module main()
+    Declare String board[3][3] = "X", "O", "X", " ", "X", "O", "O", " ", "X"
+    Declare Integer r, c
+    Declare String line
+    For r = 0 To 2
+        Set line = ""
+        For c = 0 To 2
+            Set line = line + board[r][c]
+            If c < 2 Then
+                Set line = line + "|"
+            End If
+        End For
+        Display line
+    End For
+    If board[0][0] == board[1][1] AND board[1][1] == board[2][2] Then
+        Display board[0][0], " wins on the diagonal"
+    End If
+End Module
+""", []),
+    ('a two-dimensional array handed to functions', """
+Constant Integer ROWS = 3
+Constant Integer COLS = 2
+
+Module main()
+    Declare Real sales[ROWS][COLS] = 1.5, 2.5, 3, 4, 5.25, 6
+    Display "Total sales: ", total(sales)
+    Call showRow(sales, 1)
+End Module
+
+Function Real total(Real table[][])
+    Declare Real sum = 0
+    Declare Integer r, c
+    For r = 0 To ROWS - 1
+        For c = 0 To COLS - 1
+            Set sum = sum + table[r][c]
+        End For
+    End For
+    Return sum
+End Function
+
+Module showRow(Real table[][], Integer row)
+    Declare Integer c
+    For c = 0 To COLS - 1
+        Display "Row ", row, " col ", c, ": ", table[row][c]
+    End For
+End Module
+""", []),
+    ('whole numbers divided into a whole number', """
+Module main()
+    Declare Integer a = 7, b = 2
+    Declare Integer q
+    Declare Real r
+    Set q = a / b
+    Set r = a / b
+    Display "q = ", q
+    Display "r = ", r
+    Set q = (a + b) / 2
+    Display "midpoint = ", q
+    Set q = -7 / 2
+    Display "minus = ", q
+End Module
+""", []),
+    ('an array the whole program shares', """
+Constant Integer SIZE = 4
+Declare Integer counts[SIZE]
+
+Module main()
+    Call tally(2)
+    Call tally(2)
+    Call tally(0)
+    Call show()
+End Module
+
+Module tally(Integer which)
+    Set counts[which] = counts[which] + 1
+End Module
+
+Module show()
+    Declare Integer i
+    For i = 0 To SIZE - 1
+        Display i, ": ", counts[i]
+    End For
+End Module
+""", []),
+    ('words changed by reference', """
+Module main()
+    Declare String name = "ada"
+    Call capitalize(name)
+    Display name
+    Display greeting(name, 3)
+End Module
+
+Module capitalize(String Ref word)
+    Set word = toUpper(substring(word, 0, 1)) + substring(word, 1, length(word))
+End Module
+
+Function String greeting(String who, Integer times)
+    Declare String out = ""
+    Declare Integer i
+    For i = 1 To times
+        Set out = out + "Hi " + who + "! "
+    End For
+    Return out
+End Function
+""", []),
+    ('words put in order', """
+Module main()
+    Declare String a, b, temp
+    Display "Two words:"
+    Input a
+    Input b
+    If a > b Then
+        Set temp = a
+        Set a = b
+        Set b = temp
+    End If
+    Display "In order: ", a, ", ", b
+    If a < "m" Then
+        Display a, " comes before m"
+    End If
+End Module
+""", ['pear', 'apple'])
 ]
 
 
@@ -1010,8 +1999,44 @@ def said_alike(line):
         value = round(float(found.group(0)), 6)
         return str(int(value)) if value == int(value) else repr(value)
     line = re.sub(r"\d+\.\d+(?:[eE][-+]?\d+)?", plainly, line)
+    # -0 is nought: Python, Java and JavaScript print the sign the runner
+    # leaves off (a "-" before a nought is let go on both sides, so that the
+    # words "Kiwi -" before a 0 still match)
+    line = re.sub(r"-(?=0(?![\d.]))", "", line)
     line = re.sub(r"(?i)\b(true|false)\b", lambda m: m.group(0).title(), line)
     return line.rstrip()
+
+
+R_A_NUMBER = re.compile(r"\d+(?:\.\d+)?(?:[eE][-+]?\d+)?")
+
+
+def lines_alike(got, wanted):
+    """The same lines, said one way (said_alike) -- and where the words are
+    the same and only a number differs, the same number to a millionth of
+    it: 3323293056960.100098 in C++ is 3323293056960.1006 to the runner,
+    the one double written out to more places, and C# on .NET Framework
+    prints fifteen figures where the runner prints all of them."""
+    if len(got) != len(wanted):
+        return False
+    return all(said_alike(a) == said_alike(b) or numbers_alike(said_alike(a), said_alike(b)) or
+               numbers_alike(a, b) for a, b in zip(got, wanted))
+
+
+def numbers_alike(a, b):
+    """The same words, and numbers the same to a millionth of them (and a
+    whole number exactly): 2.25179981368525E+15 is 2251799813685248."""
+    if R_A_NUMBER.sub("#", a) != R_A_NUMBER.sub("#", b):
+        return False
+    for x, y in zip(R_A_NUMBER.findall(a), R_A_NUMBER.findall(b)):
+        if x == y:
+            continue
+        # two whole numbers are the same number or they are not
+        if not any(c in x + y for c in ".eE"):
+            return False
+        x, y = float(x), float(y)
+        if abs(x - y) > 1e-6 * max(1.0, abs(x), abs(y)):
+            return False
+    return True
 
 
 def found(*names):
@@ -1040,6 +2065,7 @@ def compilers():
         beside = os.path.join(os.path.dirname(javac),
                               "java.exe" if javac.endswith(".exe") else "java")
         java = beside if os.path.exists(beside) else found("java")
+    cpp = found("g++", "clang++")
     return {
         "python": sys.executable,
         "javascript": found("node"),
@@ -1047,8 +2073,45 @@ def compilers():
         "csc": found("csc", "mcs",
                      r"C:\Windows\Microsoft.NET\Framework64\v4*\csc.exe"),
         "mono": found("mono"),
-        "cpp": found("g++", "clang++"),
+        "powershell": found("powershell") if os.name == "nt" else "",
+        "cpp": cpp or ("zig" if zig_there() else ""),
+        # the command that compiles C++: g++ or clang++, or -- where neither
+        # is -- the clang inside the ziglang package (pip install ziglang)
+        "cppcmd": [cpp] if cpp else [sys.executable, "-m", "ziglang", "c++"],
     }
+
+
+def zig_there():
+    """Is the ziglang package, a C++ compiler in a pip package, installed?"""
+    try:
+        import importlib.util
+        return importlib.util.find_spec("ziglang") is not None
+    except (ImportError, ValueError):
+        return False
+
+
+# The C++ the page writes leans on C++14 (a lambda taking auto), which every
+# compiler of the last ten years takes, and is checked against C++17.
+CPP_STD = "-std=c++17"
+
+# A C# program compiled as a library, run without an .exe: PowerShell loads
+# it and calls its Main, with what is typed handed to it as PowerShell's
+# own input.  Nothing new is started for Windows to stop.
+CS_RUN = ("$a=[Reflection.Assembly]::LoadFile('{dll}'); "
+          "$t=$a.GetTypes() | Where-Object {{ $_.GetMethod('Main',[Reflection.BindingFlags]'Static,Public,NonPublic') }} "
+          "| Select-Object -First 1; "
+          "$m=$t.GetMethod('Main',[Reflection.BindingFlags]'Static,Public,NonPublic'); "
+          "try {{ if ($m.GetParameters().Length) {{ [void]$m.Invoke($null, @(,[string[]]@())) }} "
+          "else {{ [void]$m.Invoke($null, $null) }} }} "
+          "catch {{ [Console]::Error.WriteLine($_.Exception.InnerException); exit 3 }}")
+
+
+def cs_ran(have, dll, typed, folder):
+    """The library just built, run by PowerShell -- or "built" with nothing to run it."""
+    if not have.get("powershell"):
+        return "built", ""
+    return typed_into([have["powershell"], "-NoProfile", "-NonInteractive", "-Command",
+                       CS_RUN.format(dll=dll)], typed, folder)
 
 
 def typed_into(command, typed, folder):
@@ -1129,7 +2192,7 @@ def carried_out(lang, made, typed, folder, have):
                                    capture_output=True, text=True, cwd=folder)
             if built.returncode:
                 return None, "does not compile: " + first_error(built.stdout + built.stderr)
-            return "built", ""
+            return cs_ran(have, os.path.join(folder, "program.dll"), typed, folder)
         exe = os.path.join(folder, "program.exe")
         built = subprocess.run([have["csc"], "-nologo", "-out:" + exe,
                                 write(made["file"] + ".cs")],
@@ -1141,15 +2204,9 @@ def carried_out(lang, made, typed, folder, have):
     if lang == "cpp":
         if not have["cpp"]:
             return "skip", ""
-        if os.name == "nt":                          # read, and not built: see above
-            built = subprocess.run([have["cpp"], "-std=c++11", "-fsyntax-only",
-                                    write("program.cpp")],
-                                   capture_output=True, text=True, cwd=folder)
-            if built.returncode:
-                return None, "does not compile: " + first_error(built.stderr)
-            return "built", ""
-        exe = os.path.join(folder, "program-cpp")
-        built = subprocess.run([have["cpp"], "-std=c++11", "-o", exe, write("program.cpp")],
+        # built and run: a native program starts on Windows without a word
+        exe = os.path.join(folder, "program-cpp" + (".exe" if os.name == "nt" else ""))
+        built = subprocess.run(have["cppcmd"] + [CPP_STD, "-w", "-o", exe, write("program.cpp")],
                                capture_output=True, text=True, cwd=folder)
         if built.returncode:
             return None, "does not compile: " + first_error(built.stderr)
@@ -1203,7 +2260,7 @@ def spread_out(lang, files, typed, folder, have):
                                    capture_output=True, text=True, cwd=folder)
             if built.returncode:
                 return None, "does not compile: " + first_error(built.stdout + built.stderr)
-            return "built", ""
+            return cs_ran(have, os.path.join(folder, "program.dll"), typed, folder)
         exe = os.path.join(folder, "program.exe")
         built = subprocess.run([have["csc"], "-nologo", "-out:" + exe] + ending(".cs"),
                                capture_output=True, text=True, cwd=folder)
@@ -1213,15 +2270,8 @@ def spread_out(lang, files, typed, folder, have):
     if lang == "cpp":
         if not have["cpp"]:
             return "skip", ""
-        if os.name == "nt":                          # read, and not built
-            built = subprocess.run([have["cpp"], "-std=c++11", "-fsyntax-only"]
-                                   + ending(".cpp"),
-                                   capture_output=True, text=True, cwd=folder)
-            if built.returncode:
-                return None, "does not compile: " + first_error(built.stderr)
-            return "built", ""
-        exe = os.path.join(folder, "program-cpp")
-        built = subprocess.run([have["cpp"], "-std=c++11", "-o", exe] + ending(".cpp"),
+        exe = os.path.join(folder, "program-cpp" + (".exe" if os.name == "nt" else ""))
+        built = subprocess.run(have["cppcmd"] + [CPP_STD, "-w", "-o", exe] + ending(".cpp"),
                                capture_output=True, text=True, cwd=folder)
         if built.returncode:
             return None, "does not compile: " + first_error(built.stderr)
@@ -1302,14 +2352,41 @@ def marked(cases, results, folder):
                 count["right"] += 1
         elif lines is None:
             wrong.append("%s, as %s: %s" % (name, lang, trouble))
-        elif [said_alike(l) for l in lines] != [said_alike(l) for l in as_listed(result["said"], case, lang)]:
+        elif not lines_alike(lines, as_listed(result["said"], case, lang)):
             wrong.append("%s, as %s:\n      the runner %r\n      the code   %r"
                          % (name, lang, result["said"], lines))
         else:
             count["right"] += 1
 
-    for number, (case, result) in enumerate(zip(cases, results)):
-        for lang in sorted(result["code"]):
+    # Compiling is most of the time this takes, and every program waits on
+    # its own compiler and nothing else, so they are run several at a time;
+    # what each came to is then marked in order, as it always was.
+    import concurrent.futures
+
+    def both(number, case, result, lang):
+        made = result["code"][lang]
+        if "error" in made:
+            return None, None
+        where = os.path.join(folder, "%02d-%s" % (number, lang))
+        os.makedirs(where)
+        one = carried_out(lang, made, case["typed"], where, have)
+        # And the same program cut into a file for each of its charts.
+        # One chart comes back as the one file that has just been run, so
+        # there is nothing more to do with that one.
+        spread = (result.get("apart") or {}).get(lang)
+        if isinstance(spread, dict) or not spread or len(spread) < 2 or \
+                any(bit in case["name"] for bit in NOT_CUT):
+            return one, None
+        apart = os.path.join(folder, "%02d-%s-apart" % (number, lang))
+        os.makedirs(apart)
+        return one, spread_out(lang, spread, case["typed"], apart, have)
+
+    jobs = []
+    with concurrent.futures.ThreadPoolExecutor(max_workers=8) as pool:
+        for number, (case, result) in enumerate(zip(cases, results)):
+            for lang in sorted(result["code"]):
+                jobs.append((case, result, lang, pool.submit(both, number, case, result, lang)))
+        for case, result, lang, job in jobs:
             made = result["code"][lang]
             count = tally.setdefault(lang, {"right": 0, "built": 0, "skip": 0,
                                             "apart": 0})
@@ -1317,29 +2394,20 @@ def marked(cases, results, folder):
                 wrong.append("%s, as %s: the writer threw %s"
                              % (case["name"], lang, made["error"][:160]))
                 continue
-            where = os.path.join(folder, "%02d-%s" % (number, lang))
-            os.makedirs(where)
-            lines, trouble = carried_out(lang, made, case["typed"], where, have)
-            judged(case, lang, "", lines, trouble, result, count)
-
-            # And the same program cut into a file for each of its charts.
-            # One chart comes back as the one file that has just been run,
-            # so there is nothing more to do with that one.
+            one, other = job.result()
+            judged(case, lang, "", one[0], one[1], result, count)
             spread = (result.get("apart") or {}).get(lang)
             if isinstance(spread, dict):
                 wrong.append("%s, as %s in a file each: the writer threw %s"
                              % (case["name"], lang, spread.get("error", "")[:160]))
                 continue
-            if not spread or len(spread) < 2:
+            if not spread or len(spread) < 2 or any(bit in case["name"] for bit in NOT_CUT):
                 if any(bit in case["name"] for bit in MUST_COME_APART):
                     wrong.append("%s, as %s: asked for a file each and came "
                                  "out as one" % (case["name"], lang))
                 continue
-            apart = os.path.join(folder, "%02d-%s-apart" % (number, lang))
-            os.makedirs(apart)
-            lines, trouble = spread_out(lang, spread, case["typed"], apart, have)
             many = {"right": 0, "built": 0, "skip": 0}
-            judged(case, lang, "apart", lines, trouble, result, many)
+            judged(case, lang, "apart", other[0], other[1], result, many)
             if many["right"] or many["built"]:
                 count["apart"] += 1
     return wrong, tally

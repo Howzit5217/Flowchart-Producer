@@ -76,6 +76,21 @@ def plain_set(s):
     return bool(m) and re.split(r"\W", s, 1)[0].lower() not in STRUCTURE
 
 
+def pasted_code(raw, pythonish, ended):
+    """Python pasted in under a program written in pseudocode -- the program
+    and then the Python the page wrote for it, say, which is the same
+    program twice over and does everything twice.  Both are read, and run;
+    this says so, and offers to take the Python out again: every line from
+    the first after the last End Module down to the foot of the page, where
+    a block in there opens Python's way (for x in xs:, if x > 3:)."""
+    if not ended or not any(at > ended for at in pythonish):
+        return
+    said = [no for no, line in enumerate(raw, 1) if line.strip() and no > ended]
+    if said:
+        trouble("w_code_tail", said[0], fix={"how": "drop", "at": said[0], "to": said[-1]},
+                last=said[-1])
+
+
 def parse_program(text, story=True):
     """Pseudocode text -> [Chart, ...] with the main chart first.
 
@@ -110,6 +125,37 @@ def parse_program(text, story=True):
 
     def cur():
         return stack[-1]
+
+    pythonish = []                      # top-level blocks opened Python's way, by line
+    ended = [0]                         # the last End Module (or End) on its own
+
+    def opened(frame, idx, raw):
+        """A block opened on line idx, as `frame`: closed by indentation
+        when the whole program is, and otherwise when it was opened the
+        Python way -- "for index in range(8):", a colon on the end and the
+        lines under it set further in.  Pseudocode and Python pasted into
+        one box keep their own ways of closing a block each, rather than
+        the Python's loops swallowing everything under them for want of
+        an End For nobody was ever going to write."""
+        frame.by_indent = indent_mode or (raw.rstrip().endswith(":") and indented_under(idx))
+        if frame.by_indent and not indent_mode and len(stack) == 1:
+            pythonish.append(lines[idx][2])
+        stack.append(frame)
+
+    def indented_under(idx):
+        """Is the next line that says anything set further in than this one?"""
+        for ind, t, _ in lines[idx + 1:]:
+            if t.strip():
+                return ind > lines[idx][0]
+        return False
+
+    def shut_by(frame, indent, s):
+        """Does a line at this indent, saying s, close this block?"""
+        if not frame.by_indent or indent > frame.indent:
+            return False
+        if indent == frame.indent and (R_ELSE.match(s) or R_ELSEIF.match(s) or R_CASE.match(s)):
+            return False                       # the same If, going on
+        return indent_mode or not R_CLOSER.match(s)   # an End closes its own
 
     def flush():
         """Empty whichever run of same-kind statements is still open.
@@ -241,6 +287,8 @@ def parse_program(text, story=True):
         if indent_mode:
             return
         for frame in stack[1:]:
+            if frame.by_indent:
+                continue                       # closed by where the lines stop
             key = OPEN_TROUBLE.get(getattr(frame.owner, "kind", ""), "")
             if key:
                 at = getattr(frame.owner, "line", 0)
@@ -274,6 +322,22 @@ def parse_program(text, story=True):
 
     def is_any(o):
         return not isinstance(o, Module)
+
+    indented = any(ind > 0 for ind, _, _ in lines)
+
+    def closes_do(idx, indent):
+        """Is this While the end of the Do open around it?  Where the
+        program is set out in indents they say: a While lined up with its
+        Do ends it, one set further in is a loop inside it.  Looking ahead
+        for an End While is the guess for a program written flush left --
+        and only a guess: the End While of a loop round the Do answers it
+        as readily as one of its own."""
+        do_at = stack[find(is_post)].indent
+        if indented and indent == do_at:
+            return True
+        if indented and indent > do_at:
+            return False
+        return while_closes_do(idx)
 
     def while_closes_do(idx):
         """Inside a Do: is this 'While cond' the end of the Do, or a nested
@@ -310,10 +374,9 @@ def parse_program(text, story=True):
                 flush()       # a blank line between two Displays keeps them
             continue          #   apart: the spacing is the author's to set
 
-        if indent_mode and len(stack) > 1 and indent <= cur().indent \
-                and not (R_ELSE.match(s) or R_ELSEIF.match(s) or R_CASE.match(s)):
+        if len(stack) > 1 and shut_by(cur(), indent, s):
             flush()                                # dedent: close open blocks
-            while len(stack) > 1 and indent <= cur().indent:
+            while len(stack) > 1 and shut_by(cur(), indent, s):
                 stack.pop()
 
         # A record laid out field by field -- Cambridge's TYPE ... ENDTYPE,
@@ -404,7 +467,7 @@ def parse_program(text, story=True):
             mod = make_module(m.group(1), m.group(2), s)
             mod.line = at_line
             modules.append(mod)
-            stack.append(Frame(mod, mod.items, indent))
+            opened(Frame(mod, mod.items, indent), idx, raw)
             continue
         if R_END.match(s):
             add(Node("oval", word("end"), terminal=True))
@@ -430,6 +493,7 @@ def parse_program(text, story=True):
             continue
         if R_ENDMOD.match(s):
             del stack[1:]
+            ended[0] = at_line
             continue
         if R_ENDIF.match(s):
             if not close(is_if):
@@ -489,7 +553,7 @@ def parse_program(text, story=True):
             # along would not scroll to it, and an error in its test had no
             # line to point at.
             cur().owner.orelse.append(stamp(node))
-            stack.append(Frame(node, node.then, cur().indent))
+            opened(Frame(node, node.then, cur().indent), idx, raw)
             continue
         if m:
             s = "If " + m.group(2)                 # stray Else If: treat as an If
@@ -509,7 +573,7 @@ def parse_program(text, story=True):
             node = Select(unwrap(m.group(2)))
             node.text = s
             add(node)
-            stack.append(Frame(node, node.pre, indent))
+            opened(Frame(node, node.pre, indent), idx, raw)
             continue
         m = R_CASE.match(s)
         if m and find(is_sel) >= 0:
@@ -534,18 +598,18 @@ def parse_program(text, story=True):
                 if len(halves) > 1 and halves[1].strip():
                     node.orelse.append(simple_node(halves[1]))
             else:
-                stack.append(Frame(node, node.then, indent))
+                opened(Frame(node, node.then, indent), idx, raw)
             continue
         m = R_WHILE.match(s)
         if m:
             cond = unwrap(re.sub(r"\s+do$", "", m.group(1), flags=re.I))
-            if find(is_post) >= 0 and while_closes_do(idx):
+            if find(is_post) >= 0 and closes_do(idx, indent):
                 close(is_post, cond=cond, until=False)
                 continue
             node = Loop("pre", cond)
             node.text = s
             add(node)
-            stack.append(Frame(node, node.body, indent))
+            opened(Frame(node, node.body, indent), idx, raw)
             continue
         m = R_DO.match(s)
         if m:
@@ -556,19 +620,19 @@ def parse_program(text, story=True):
                 node = Loop("post")
             node.text = s
             add(node)
-            stack.append(Frame(node, node.body, indent))
+            opened(Frame(node, node.body, indent), idx, raw)
             continue
         if R_REPEAT.match(s):
             node = Loop("post")
             node.text = s
             add(node)
-            stack.append(Frame(node, node.body, indent))
+            opened(Frame(node, node.body, indent), idx, raw)
             continue
         m = R_FOR.match(s)
         if m:
             node = parse_for(m.group(1).strip(), s)
             add(node)
-            stack.append(Frame(node, node.body, indent))
+            opened(Frame(node, node.body, indent), idx, raw)
             continue
 
         add(simple_node(s))
@@ -576,6 +640,7 @@ def parse_program(text, story=True):
     flush()
     still_open()
     del stack[1:]
+    pasted_code(text.splitlines(), pythonish, ended[0])
 
     # ----- one chart per module; globals and main() share the first chart
     main = next((mod for mod in modules if mod.name.lower() == "main"), None)
@@ -585,8 +650,8 @@ def parse_program(text, story=True):
     # way, with no Call in front -- is the program doing something, and
     # was being thrown away with it.
     if main is not None:
-        top = [it for it in top if not (isinstance(it, Node) and             # "main()"
-               re.match(r"^\w+\(\s*\)$", it.text) and it.text.split("(")[0].lower() == "main")]
+        top = [it for it in top if not (isinstance(it, Node) and             # "main()", "Call main()"
+               re.match(r"^(?:call\s+main\s*(?:\(\s*\))?|main\s*\(\s*\))$", it.text.strip(), re.I))]
     # What is written outside every module is the program's own.  A Constant
     # at the top of the page is put there to be read from inside the modules
     # under it -- that is the whole reason for putting it there -- so the

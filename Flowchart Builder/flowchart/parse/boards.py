@@ -248,6 +248,20 @@ def call(name, args, own=()):
         return "(%s MOD %s)" % (_par(a[0]), _par(a[1]))
     if low == "is_num" and n == 1:
         return "isNumber(%s)" % a[0]
+    # The textbook's library (Gaddis): stringToInteger("42"), toReal(n),
+    # integerToString(n), isReal("4.5"), isLetter(ch), isWhitespace(ch)
+    if low in ("stringtointeger", "tointeger") and n == 1:
+        return "int(%s)" % a[0]
+    if low in ("stringtoreal", "toreal") and n == 1:
+        return "real(%s)" % a[0]
+    if low in ("integertostring", "realtostring") and n == 1:
+        return "toString(%s)" % a[0]
+    if low == "isreal" and n == 1:
+        return "isNumber(%s)" % a[0]
+    if low == "isletter" and n == 1:
+        return "isAlpha(%s)" % a[0]
+    if low == "iswhitespace" and n == 1:
+        return "isSpace(%s)" % a[0]
     if name in RECORDS or low in (r.lower() for r in RECORDS):
         # AQA makes a record by naming it: Car("Ford", 1.8)
         return "New %s(%s)" % (name, ", ".join(args))
@@ -308,8 +322,12 @@ def plain(expr, own=()):
 # name = input("Name?") -- with int(...) or float(...) round it, which is
 # what a number typed in comes to here anyway.
 R_ASKED = re.compile(r"^(?:set\s+)?([A-Za-z_]\w*(?:\s*\[[^\]]*\])*)\s*(?:=|:=|<-|" + ARROW +
-                     r")\s*(?:(?:int|float|real|str|integer|string_to_int|string_to_real|str_to_num)\s*\(\s*)?"
+                     r")\s*(?:(int|float|real|str|integer|string_to_int|string_to_real|str_to_num)\s*\(\s*)?"
                      r"(?:userinput|input\s*\((.*?)\))\s*\)?\s*$", re.I)
+# ... and what the number round it says it is: float(input()) a Real
+ASKED_AS = {"int": "int", "integer": "int", "string_to_int": "int",
+            "float": "real", "real": "real", "string_to_real": "real", "str_to_num": "real",
+            "str": "text"}
 # A record, laid out: TYPE Student ... ENDTYPE, RECORD Car ... ENDRECORD
 R_RECORD = re.compile(r"^(type|record|structure|struct)\s+([A-Za-z_]\w*)\s*(?:=\s*)?$", re.I)
 R_END_RECORD = re.compile(r"^end[ -]?(type|record|structure|struct)$", re.I)
@@ -395,6 +413,7 @@ def case_choice(raw):
 
 
 R_ONE_NAME = re.compile("^\\s*[A-Za-z_]\\w*(?:\\s*\\[[^\\]]*\\])*\\s*(?:(?:=|:=|<-|" + ARROW + ").*)?$", re.S)
+R_SIZED_SET = re.compile("^\\s*[A-Za-z_]\\w*(?:\\s*\\[[^\\]]*\\])+\\s*(?:=|:=|<-|" + ARROW + ")", re.S)
 
 
 def split_declare(text):
@@ -411,6 +430,11 @@ def split_declare(text):
     kind, names = (t.group(1) + " ", t.group(2)) if t else ("", rest)
     parts = split_top(names)
     if len(parts) < 2 or not all(R_ONE_NAME.match(p) for p in parts):
+        return [text]
+    # Declare Integer nums[3] = x, y, z: an array and what it starts out
+    # holding, the textbook's way -- not three names declared at once
+    if R_SIZED_SET.match(parts[0]) and not any(re.search(r"[=\[]|:=|<-|" + ARROW, re.sub(r'"[^"]*"|\'[^\']*\'', "", p))
+                                               for p in parts[1:]):
         return [text]
     return ["%s %s%s" % (word, kind, p.strip()) for p in parts]
 

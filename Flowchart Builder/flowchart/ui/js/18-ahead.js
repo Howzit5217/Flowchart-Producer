@@ -156,9 +156,11 @@
       while (peek()) {
         var tok = peek();
         var op = tok.t === "op" ? tok.v : tok.t === "name" ? String(tok.v).toLowerCase() : "";
+        if (op === "not" && ts[at + 1] && ts[at + 1].t === "name" && String(ts[at + 1].v).toLowerCase() === "in") { op = "not in"; }
         var rank = RANK[op];
         if (!rank || rank < least) { break; }
         take();
+        if (op === "not in") { take(); }
         left = { op: op, left: left, right: expr(rank + 1) };
       }
       return left;
@@ -312,8 +314,12 @@
         var both = elemOf(a);
         kinds.slice(1).forEach(function (k) { both = both === elemOf(k) ? both : "any"; });
         return "list:list:" + (both || "any");
-      case "append": case "insert": case "remove": case "extend": case "clear": case "shuffle":
+      case "append":                     // append("Ann", "Lee"): two words joined
+        return a === "text" ? "text" : "";
+      case "insert": case "remove": case "extend": case "clear": case "shuffle":
         return "";
+      case "isinteger": return "bool";
+      case "currencyformat": return "text";
     }
     return null;
   }
@@ -520,7 +526,11 @@
         kind = kind || kindOfWord(bit);
         cash = cash || R_CASH_TYPE.test(bit);
       });
-      return { name: p.name, kind: kind, cash: cash, ref: p.ref, dflt: p.dflt };
+      // Integer array[]: a list of whole numbers, not a whole number
+      for (var d = 0; d < (p.dims || 0) && kind; d++) { kind = "list:" + kind; }
+      if (p.dims && !kind) { kind = "list:"; }
+      return { name: p.name, kind: kind, cash: cash && !p.dims, ref: p.ref && !p.dims, dflt: p.dflt,
+               dims: p.dims || 0 };
     });
   }
 
@@ -618,6 +628,9 @@
         targetsOf(item, prog).forEach(function (name) {
           var known = lookUp(scope, name) || named(home, name);
           if (item.op === "input") { known.asked = true; }
+          // a Constant something sets again is not one any compiler will
+          // let it be: it is written as a plain name
+          known.setAgain = true;
         });
       });
     });
@@ -673,7 +686,7 @@
         });
         prog.mods.forEach(function (one) { if (one.gives) { one.gives = settled(one.gives); } });
       },
-      function () { placeNames(prog); markChanged(prog); }
+      function () { localNames(prog); placeNames(prog); tightNames(prog); markChanged(prog); fixedArrays(prog); signsOf(prog); wideNames(prog); }
     ] };
   }
 
@@ -718,6 +731,13 @@
             call.args.forEach(function (arg, i) {
               var hit2 = arg && arg.name && !arg.field && !arg.index ? mine(arg.name) : null;
               if (hit2 && to.params[i]) { passes.push([hit2, to.params[i].entry]); }
+              // swap(array[i], array[i + 1]) into Ref parameters changes the list
+              if (arg && (arg.index || arg.field) && to.params[i] && to.params[i].ref) {
+                var root = arg;
+                while (root.index || root.field) { root = root.index || root.field; }
+                var hit3 = root.name && !root.call ? mine(root.name) : null;
+                if (hit3) { hit3.changed = true; }
+              }
             });
           }
         });
@@ -738,6 +758,320 @@
       });
       if (!more) { break; }
     }
+  }
+
+  // ---- what can never be less than nought --------------------------------
+  // -7 MOD 2 is -1 to the runner, and to Java, C#, C++ and JavaScript; to
+  // Python's % it is 1.  Whole numbers divided go toward nought the same
+  // way, where Python's // goes down.  Where neither side can ever be less
+  // than nought the two agree, and Python can say it its own short way:
+  // n % 2, (first + last) // 2.  So: which names never hold anything less
+  // than nought -- every value ever put in them is not -- worked out by
+  // believing it of every number and taking it back from each one that is
+  // given something that might be, until nothing more changes.  Lists the
+  // same, by what is put in each place of them.
+  function signsOf(prog) {
+    var all = [];
+    prog.scopes.concat([prog.shared]).forEach(function (scope) {
+      Object.keys(scope.names).forEach(function (low) {
+        var e = scope.names[low];
+        e.nonNeg = /^(int|real)$/.test(e.kind);
+        e.elemsNonNeg = isListKind(e.kind) && /^(int|real)$/.test(elemOfAll(e.kind));
+        all.push(e);
+      });
+    });
+    prog.mods.forEach(function (one) { one.nonNeg = /^(int|real)$/.test(one.gives || ""); });
+    function root(node) {
+      while (node && (node.index || node.group)) { node = node.index || node.group; }
+      return node;
+    }
+    var changed = true, rounds = 0;
+    while (changed && rounds++ < 50) {
+      changed = false;
+      prog.scopes.forEach(function (scope) {
+        function into(target, ok) {
+          if (ok) { return; }
+          if (R_JUST_A_NAME.test(target || "")) { drop(lookUp(scope, bareName(target)), false); return; }
+          var r = root(tree(target));
+          if (r && r.name && !r.field) { drop(lookUp(scope, r.name), true); }
+        }
+        eachStep(scope.items, function (item) {
+          var home = globalItem(item, prog) ? prog.shared : scope;
+          if (item.op === "declare") {
+            var e = home.names[lowered(item["var"])];
+            if (!item.expr) { return; }
+            var given = tree(item.expr);
+            if (e && isListKind(e.kind)) {
+              var ok = given.list ? given.list.every(function f(n) { return n.list ? n.list.every(f) : nonNegIn(n, scope, prog); })
+                                  : nonNegIn(given, scope, prog);
+              if (!ok) { drop(e, true); }
+            } else if (!nonNegIn(given, scope, prog)) { drop(e, false); }
+          } else if (item.op === "set") {
+            into(item["var"], nonNegIn(tree(item.expr), scope, prog));
+          } else if (item.op === "input") {
+            into(item["var"], false);                 // what is typed can be anything
+          } else if (item.op === "for") {
+            var set = statementOf(item.init || ""), step = statementOf(item.step || "");
+            var by = step.op === "set" ? tree(step.expr) : null;
+            var up = by && by.op === "+" && by.right && by.right.lit !== undefined && Number(by.right.lit) > 0;
+            if (set.op === "set") { into(set["var"], up && nonNegIn(tree(set.expr), scope, prog)); }
+          } else if (item.op === "foreach") {
+            var over = tree(item.over), from = over.name && !over.field ? lookUp(scope, over.name) : null;
+            into(item["var"], !!(from && from.elemsNonNeg));
+          } else if (item.op === "call") {
+            var to = prog.byName[lowered(item.name)], given2 = pieces(item.args || "");
+            if (to) { to.params.forEach(function (p, i) { if (p.ref && given2[i]) { into(given2[i], p.entry.nonNeg); } }); }
+            var made = callOf(item);
+            if (made && lowered(made.call) === "append" && made.args[0] && made.args[1] &&
+                !nonNegIn(made.args[1], scope, prog)) {
+              var r2 = root(made.args[0]);
+              if (r2 && r2.name) { drop(lookUp(scope, r2.name), true); }
+            }
+          } else if (item.op === "return" && scope.mod && item.expr && !nonNegIn(tree(item.expr), scope, prog)) {
+            if (scope.mod.nonNeg) { scope.mod.nonNeg = false; changed = true; }
+          }
+          // a module handed something that might be less than nought
+          sumsOf(item).forEach(function (src) {
+            eachCall(tree(src), function (call) { handedTo(call, scope); });
+          });
+          if (item.op === "call") { handedTo(callOf(item), scope); }
+        });
+      });
+      prog.mods.forEach(function (one) {
+        one.params.forEach(function (p) {
+          if (p.dflt && !nonNegIn(tree(p.dflt), one.scope, prog)) { drop(p.entry, false); drop(p.entry, true); }
+        });
+      });
+    }
+    function handedTo(call, scope) {
+      var to = prog.byName[lowered(call.call)];
+      if (!to) { return; }
+      (call.args || []).forEach(function (arg, i) {
+        var p = to.params[i];
+        if (!p) { return; }
+        if (!nonNegIn(arg, scope, prog)) { drop(p.entry, false); }
+        var r = root(arg), from = r && r.name ? lookUp(scope, r.name) : null;
+        if (isListKind(p.entry.kind) && !(from && from.elemsNonNeg)) { drop(p.entry, true); }
+      });
+    }
+    function drop(e, elems) {
+      if (!e) { return; }
+      if (elems ? e.elemsNonNeg : e.nonNeg) { changed = true; }
+      if (elems) { e.elemsNonNeg = false; } else { e.nonNeg = false; }
+    }
+  }
+  // Is this sure never to come to less than nought?
+  function nonNegIn(node, scope, prog) {
+    if (!node) { return false; }
+    if (node.lit !== undefined) { return Number(node.lit) >= 0; }
+    if (node.group) { return nonNegIn(node.group, scope, prog); }
+    if (node.str !== undefined || node.bool !== undefined) { return true; }
+    if (node.name && !node.field) {
+      var e = lookUp(scope, node.name);
+      return !!(e && e.nonNeg);
+    }
+    if (node.index) {
+      var at = node.index;
+      while (at.index) { at = at.index; }
+      var held = at.name && !at.field ? lookUp(scope, at.name) : null;
+      return !!(held && held.elemsNonNeg);
+    }
+    if (node.unary) { return node.unary === "+" && nonNegIn(node.of, scope, prog); }
+    if (node.call) {
+      var low = lowered(node.call), a = node.args || [];
+      var own = prog.byName[low];
+      if (own && !lookUp(scope, node.call)) { return !!own.nonNeg; }
+      if (/^(abs|length|len|sqrt|count|ord|hypot)$/.test(low)) { return true; }
+      if (/^(round|int|integer|floor|ceiling|ceil|trunc|real)$/.test(low)) { return nonNegIn(a[0], scope, prog); }
+      if (low === "max") { return a.some(function (x) { return nonNegIn(x, scope, prog); }); }
+      if (low === "min") { return a.length > 0 && a.every(function (x) { return nonNegIn(x, scope, prog); }); }
+      return false;
+    }
+    switch (node.op) {
+      case "+": case "*": case "/": case "div":
+        return nonNegIn(node.left, scope, prog) && nonNegIn(node.right, scope, prog);
+      case "mod": case "%":
+        return nonNegIn(node.left, scope, prog);
+      case "^":
+        return nonNegIn(node.left, scope, prog) ||
+               (node.right && node.right.lit !== undefined && Number(node.right.lit) % 2 === 0);
+      default:
+        return false;
+    }
+  }
+
+  // ---- arrays, the textbook's kind --------------------------------------
+  // Declare Real times[8], times[i] = t, a module handed Real array[]: the
+  // fixed-size arrays the textbook uses (Gaddis), and nothing else of a
+  // list's -- nothing added on or taken off, no whole list set or shown or
+  // handed to a built-in.  A program whose lists are all of that kind is
+  // written with real arrays where the language has them (Java's double[],
+  // C#'s), the way a teacher would write it, rather than with lists.
+  // Marks prog.arrays, and prog.arrayDims as the most an array nests.
+  function fixedArrays(prog) {
+    var ok = true, any = false, dims = 0;
+    function simple(k) {
+      var n = 0;
+      while (isListKind(k)) { k = elemOf(k); n++; }
+      dims = Math.max(dims, n);
+      return /^(int|real|text|bool)$/.test(k);
+    }
+    function walk(node, scope, how) {
+      if (!ok || !node) { return; }
+      var k = kindIn(node, scope, prog);
+      if (isTableKind(k) || isRecKind(k) || k === "fn" || k === "any" || node.table || node.record) { ok = false; return; }
+      if (isListKind(k)) {
+        any = true;
+        if (!simple(k) || !(how === "holder" || how === "param" || how === "length" || how === "over" ||
+                           (how === "init" && node.list))) { ok = false; return; }
+      }
+      if (node.index) { walk(node.index, scope, "holder"); walk(node.at, scope, ""); return; }
+      if (node.list) { node.list.forEach(function (one) { walk(one, scope, how === "init" ? "init" : ""); }); return; }
+      if (node.call) {
+        var low = lowered(node.call);
+        var own = prog.byName[low] && !lookUp(scope, node.call);
+        (node.args || []).forEach(function (one) { walk(one, scope, own ? "param" : low === "length" ? "length" : ""); });
+        return;
+      }
+      kidsOf(node).forEach(function (one) { walk(one, scope, ""); });
+    }
+    function zeroish(src) { return /^(0|0\.0+|false|""|'')$/i.test(String(src || "").trim()); }
+    prog.scopes.forEach(function (scope) {
+      eachStep(scope.items, function (item) {
+        if (!ok) { return; }
+        var home = globalItem(item, prog) ? prog.shared : scope;
+        if (item.op === "declare") {
+          var entry = home.names[lowered(item["var"])];
+          var sized = (item.dims || []).length && (item.dims || []).every(function (d) { return String(d).trim(); });
+          var listed = item.expr && tree(item.expr).list;
+          if (entry && isListKind(entry.kind)) {
+            if (!(item.dims || []).length || (!sized && !listed) || (item.expr && !listed && !zeroish(item.expr))) { ok = false; return; }
+            (item.dims || []).forEach(function (d) { if (String(d).trim()) { walk(tree(d), scope, ""); } });
+            if (listed) { walk(tree(item.expr), scope, "init"); }
+            if (sized && !listed && elemOfAll(entry.kind) === "text" && listDepth(entry.kind) > 1) { ok = false; }
+            return;
+          }
+        }
+        if ((item.op === "set" || item.op === "input") && R_JUST_A_NAME.test(item["var"] || "")) {
+          var one = lookUp(scope, bareName(item["var"]));
+          if (one && isListKind(one.kind)) { ok = false; return; }
+        }
+        if (item.op === "foreach") { walk(tree(item.over), scope, "over"); }
+        else if (item.op === "call") { walk(callOf(item), scope, ""); }
+        else { sumsOf(item).forEach(function (src) { walk(tree(src), scope, ""); }); }
+      });
+    });
+    prog.mods.forEach(function (one) { if (one.gives && compoundKind(one.gives)) { ok = false; } });
+    prog.scopes.concat([prog.shared]).forEach(function (scope) {
+      Object.keys(scope.names).forEach(function (low) {
+        var entry = scope.names[low];
+        if (isTableKind(entry.kind) || isRecKind(entry.kind) || entry.kind === "fn" || entry.kind === "any") { ok = false; }
+        if (isListKind(entry.kind) && (!simple(entry.kind) || entry.nullable || entry.elemNullable)) { ok = false; }
+      });
+    });
+    prog.arrays = ok && any;
+    prog.arrayDims = dims;
+  }
+  function elemOfAll(k) { while (isListKind(k)) { k = elemOf(k); } return k; }
+  function listDepth(k) { var n = 0; while (isListKind(k)) { k = elemOf(k); n++; } return n; }
+
+  // ---- is a loop's counter read once the loop is done? --------------------
+  // Python's `for i in range(...)` leaves i on the last number it reached,
+  // where the chart's For leaves it one past; and a For Each over range()
+  // written as a counted `for` leaves it one past where the For Each did.
+  // Neither matters unless a line goes on to read the counter before
+  // anything sets it again -- and a loop whose counter nobody reads
+  // afterwards can be written the way anybody would write it.  So: after
+  // this loop, is the first thing done to `low` reading it?
+  function readsName(src, low) {
+    return tokens(src || "").some(function (tok) { return tok.t === "name" && lowered(tok.v) === low; });
+  }
+  // What one statement does first with the name: "read", "write" (sets it
+  // without reading it, every time it runs), or "" (neither, for certain).
+  function firstUse(item, low, prog) {
+    function anyRead(srcs) { return srcs.some(function (src) { return readsName(src, low); }); }
+    function along(items) {
+      for (var i = 0; i < (items || []).length; i++) {
+        var got = firstUse(items[i], low, prog);
+        if (got) { return got; }
+      }
+      return "";
+    }
+    var plain = R_JUST_A_NAME.test(item["var"] || "") && lowered(bareName(item["var"])) === low;
+    switch (item.op) {
+      case "set": case "input": case "declare":
+        if (anyRead(sumsOf(item))) { return "read"; }
+        return plain || (item.op === "declare" && lowered(item["var"] || "") === low) ? "write" : "";
+      case "if":
+        if (anyRead(sumsOf(item))) { return "read"; }
+        var a = along(item.then), b = along(item["else"]);
+        return a === "read" || b === "read" ? "read" : a === "write" && b === "write" ? "write" : "";
+      case "select":
+        if (anyRead(sumsOf(item))) { return "read"; }
+        var all = item.cases.map(function (one) { return along(one.body); });
+        if (all.indexOf("read") >= 0) { return "read"; }
+        var otherwise = item.cases.some(function (one) { return OTHERWISE.test(String(one.match || "").trim()); });
+        return otherwise && all.every(function (k) { return k === "write"; }) ? "write" : "";
+      case "while":
+        return anyRead(sumsOf(item)) || along(item.body) === "read" ? "read" : "";
+      case "dowhile":
+        var first = along(item.body);
+        return first || (anyRead(sumsOf(item)) ? "read" : "");
+      case "for":
+        var set = statementOf(item.init || "");
+        if (set.op === "set" && readsName(set.expr, low)) { return "read"; }
+        if (set.op === "set" && lowered(set.var) === low) { return "write"; }
+        return anyRead(sumsOf(item)) || along(item.body) === "read" ? "read" : "";
+      case "foreach":
+        // going round it sets it before the body reads it; going round
+        // nothing leaves it as it was, for whatever comes after
+        if (readsName(item.over, low)) { return "read"; }
+        if (lowered(item["var"]) === low) { return ""; }
+        return along(item.body) === "read" ? "read" : "";
+      default:
+        return anyRead(sumsOf(item)) || targetsOf(item, prog).some(function (n) { return lowered(n) === low; })
+             ? "read" : "";
+    }
+  }
+  var LOOP_OP = { "while": 1, dowhile: 1, "for": 1, foreach: 1 };
+  function counterReadAfter(prog, loop, name) {
+    var low = lowered(name), cache = prog.readAfter || (prog.readAfter = []);
+    for (var c = 0; c < cache.length; c++) {
+      if (cache[c][0] === loop && cache[c][1] === low) { return cache[c][2]; }
+    }
+    var said = readAfterNow(prog, loop, low);
+    cache.push([loop, low, said]);
+    return said;
+  }
+  function readAfterNow(prog, loop, low) {
+    // where the loop is: the chain of blocks round it, innermost first
+    var path = null, scopeOf = null;
+    prog.scopes.some(function (scope) {
+      (function find(items, up) {
+        for (var i = 0; i < items.length && !path; i++) {
+          var here = { items: items, at: i, item: items[i], up: up };
+          if (items[i] === loop) { path = here; return; }
+          blocksOf(items[i]).forEach(function (block) { if (!path) { find(block, here); } });
+        }
+      })(scope.items, null);
+      if (path) { scopeOf = scope; }
+      return !!path;
+    });
+    if (!path) { return true; }
+    for (var spot = path; spot; spot = spot.up) {
+      // round again: anything else in a loop around it that touches the
+      // name might read what this one left
+      if (spot !== path && LOOP_OP[spot.item.op] &&
+          mentionsIn([spot.item], low, prog) > mentionsIn([path.item], low, prog)) { return true; }
+      for (var i = spot.at + 1; i < spot.items.length; i++) {
+        var got = firstUse(spot.items[i], low, prog);
+        if (got === "read") { return true; }
+        if (got === "write") { return false; }
+      }
+    }
+    // the end of the chart: read there only if somebody else can see it
+    var entry = lookUp(scopeOf, low);
+    return !entry || entry.shared || (entry.param && entry.ref) || scopeOf.names[low] !== entry;
   }
 
   // A sum with a number in it past what a 32-bit whole number holds.
@@ -867,6 +1201,12 @@
           if (item.op === "set") {
             if (R_JUST_A_NAME.test(item["var"] || "")) { learn(lookUp(scope, bareName(item.var)), kind(item.expr)); }
             else { learnPlace(scope, item["var"], kind(item.expr)); }
+          }
+          // n = float(input()), age = int(input("Age? ")): what is typed in
+          // is said to be a number with a point, or a whole one
+          if (item.op === "input" && (item.as === "real" || item.as === "int")) {
+            if (R_JUST_A_NAME.test(item["var"] || "")) { learn(lookUp(scope, bareName(item.var)), item.as); }
+            else { learnPlace(scope, item["var"], item.as); }
           }
           // Set r = "" or Set r = find(xs, 3) where find can hand back "":
           // a number that is sometimes nothing yet
@@ -1114,4 +1454,502 @@
       });
       entry.loopOnly = inFors + entry.spots.length === total;
     });
+  }
+
+  // ---- whole numbers past what an int holds --------------------------------
+  // The runner's numbers are JavaScript's, and a factorial of 20, the 75th
+  // Fibonacci number or 2 ^ 40 are all still exact there.  An int in Java,
+  // C# or C++ stops at 2147483647 and wraps round to a negative -- or, in
+  // C++, need not even do that.  So a whole number that can grow past it is
+  // a long instead: one multiplied by itself round a loop, or added to from
+  // two of the names that go round with it (a + b, as Fibonacci is); what a
+  // recursion hands back when it multiplies by itself or adds two of itself;
+  // 2 ^ n; a total that the loops it is in add up to past it; a sum of
+  // numbers written down that comes to more.  And then whatever any of those
+  // is handed on to: the names set from it, the parameters it is handed
+  // to, the functions that hand it back.
+  var INT_TOP = 2147483647;
+  var R_SUM_OPS = /^(\+|-|\*|\/|div|mod|%)$/;
+  var R_SAME_SIZE = /^(abs|min|max|int|integer|round|floor|ceiling|ceil|trunc|pow)$/;
+
+  // How big it can be, from the numbers written down, the constants and the
+  // counters of the Fors round it (`ranges`) -- or null, where that rests on
+  // something only the run knows.
+  function sizeOf(node, scope, prog, ranges) {
+    if (!node) { return null; }
+    if (node.group) { return sizeOf(node.group, scope, prog, ranges); }
+    if (node.lit !== undefined) { var n = Number(node.lit); return isFinite(n) ? Math.abs(n) : null; }
+    if (node.name && !node.field && !node.call && !node.index) {
+      var low = lowered(node.name);
+      if (ranges && ranges[low] !== undefined) { return ranges[low]; }
+      var e = lookUp(scope, node.name);
+      return e && e.constValue !== undefined ? Math.abs(e.constValue) : null;
+    }
+    if (node.unary === "-") { return sizeOf(node.of, scope, prog, ranges); }
+    if (node.call && lowered(node.call) === "abs" && node.args && node.args.length === 1) {
+      return sizeOf(node.args[0], scope, prog, ranges);
+    }
+    if (node.op) {
+      var a = sizeOf(node.left, scope, prog, ranges), b = sizeOf(node.right, scope, prog, ranges);
+      if ((node.op === "mod" || node.op === "%") && b !== null) { return a === null ? b : Math.min(a, b); }
+      if (a === null || b === null) { return null; }
+      switch (node.op) {
+        case "+": case "-": return a + b;
+        case "*": return a * b;
+        case "/": case "div": return a;
+        case "^": return Math.pow(a, b);
+      }
+    }
+    return null;
+  }
+  // 2 ^ n: as big as n says, which only the run knows
+  function powWide(base, exp, scope, prog) {
+    var b = sizeOf(base, scope, prog), e = sizeOf(exp, scope, prog);
+    if (b !== null && e !== null) { return Math.pow(b, e) > INT_TOP; }
+    if (b !== null && b <= 1) { return false; }
+    return e === null || e >= 6;
+  }
+  // Is what this comes to a long?
+  function wideIn(node, scope, prog) {
+    if (!node) { return false; }
+    if (node.group) { return wideIn(node.group, scope, prog); }
+    if (node.lit !== undefined) { return /^-?\d+$/.test(String(node.lit)) && Math.abs(Number(node.lit)) > INT_TOP; }
+    if (node.index) {
+      var at = node.index;
+      while (at.index) { at = at.index; }
+      var held = at.name && !at.field && !at.call ? lookUp(scope, at.name) : null;
+      return !!(held && held.elemWide);
+    }
+    if (node.field) { return false; }
+    if (node.call) {
+      var low = lowered(node.call), mod = prog.byName[low];
+      if (mod && !lookUp(scope, node.call)) { return !!mod.wide; }
+      if (R_SAME_SIZE.test(low)) {
+        return (node.args || []).some(function (a) { return wideIn(a, scope, prog); }) ||
+               (low === "pow" && (node.args || []).length === 2 && powWide(node.args[0], node.args[1], scope, prog));
+      }
+      return false;
+    }
+    if (node.name) { var e = lookUp(scope, node.name); return !!(e && e.wide); }
+    if (node.unary) { return node.unary === "-" && wideIn(node.of, scope, prog); }
+    if (node.op === "^") {
+      return wideIn(node.left, scope, prog) || wideIn(node.right, scope, prog) ||
+             powWide(node.left, node.right, scope, prog);
+    }
+    if (R_SUM_OPS.test(node.op || "")) {
+      if (wideIn(node.left, scope, prog) || wideIn(node.right, scope, prog)) { return true; }
+      // 2000 * 2000 * 2000: past it by the numbers alone
+      var size = sizeOf(node, scope, prog);
+      return size !== null && size > INT_TOP;
+    }
+    return false;
+  }
+  // a + b - c: the things added and taken away, at the top
+  function termsOf(node, out) {
+    while (node && node.group) { node = node.group; }
+    out = out || [];
+    if (node && (node.op === "+" || node.op === "-")) { termsOf(node.left, out); termsOf(node.right, out); }
+    else if (node) { out.push(node); }
+    return out;
+  }
+  function namesIn(node, out) {
+    out = out || [];
+    if (!node) { return out; }
+    if (node.name && !node.field && !node.call && !node.index) { out.push(lowered(node.name)); }
+    kidsOf(node).forEach(function (kid) { namesIn(kid, out); });
+    return out;
+  }
+  // A product, anywhere in it outside a MOD, one of whose sides holds one of
+  // these names (and whose other side is more than 1)
+  function productWith(node, hit, scope, prog) {
+    if (!node) { return false; }
+    if (node.group) { return productWith(node.group, hit, scope, prog); }
+    if (node.op === "mod" || node.op === "%" || node.op === "/" || node.op === "div") { return false; }
+    // what a call is handed, or a place picked out by, is not what it comes to
+    if (node.index || (node.call && !R_SAME_SIZE.test(lowered(node.call)))) { return false; }
+    if (node.op === "*") {
+      var l = hit(node.left), r = hit(node.right);
+      var ls = sizeOf(node.left, scope, prog), rs = sizeOf(node.right, scope, prog);
+      if ((l && !(rs !== null && rs <= 1)) || (r && !(ls !== null && ls <= 1))) { return true; }
+    }
+    if (node.op === "^" && hit(node.left)) { return true; }
+    return kidsOf(node).some(function (kid) { return productWith(kid, hit, scope, prog); });
+  }
+  function topOf(node) { while (node && node.group) { node = node.group; } return node; }
+  // memo[n]: the list of whole numbers it is a place in, or null
+  function intListOf(node, scope) {
+    if (!node || !node.index || node.index.index) { return null; }
+    var at = node.index;
+    var e = at.name && !at.field && !at.call ? lookUp(scope, at.name) : null;
+    return e && e.kind === "list:int" ? e : null;
+  }
+  // ...or the table of them -- a table whose values are whole numbers
+  function intTableOf(node, scope) {
+    if (!node || !node.index || node.index.index) { return null; }
+    var at = node.index;
+    var e = at.name && !at.field && !at.call ? lookUp(scope, at.name) : null;
+    return e && isTableKind(e.kind) && tableValue(e.kind) === "int" ? e : null;
+  }
+
+  function wideNames(prog) {
+    prog.scopes.concat([prog.shared]).forEach(function (scope) {
+      Object.keys(scope.names).forEach(function (low) {
+        var e = scope.names[low];
+        e.wide = e.kind === "int" && !!e.big;
+        e.elemWide = false;
+      });
+    });
+    prog.mods.forEach(function (one) { one.wide = false; });
+    // the constants, by what they are
+    prog.scopes.forEach(function (scope) {
+      eachStep(scope.items, function (item) {
+        if (item.op !== "declare" || !item["const"] || !item.expr) { return; }
+        var home = globalItem(item, prog) ? prog.shared : scope, e = home.names[lowered(item["var"])];
+        var n = sizeOf(tree(item.expr), scope, prog);
+        if (e && n !== null && e.kind === "int") { e.constValue = n; }
+      });
+    });
+    function widen(e) { if (e && !e.wide && e.kind === "int") { e.wide = true; return true; } return false; }
+
+    prog.scopes.forEach(function (scope) {
+      // round a loop: multiplied by itself, or added to from two that go
+      // round with it
+      eachStep(scope.items, function (loop) {
+        if (!LOOP_OP[loop.op]) { return; }
+        var sets = [], from = Object.create(null);
+        eachStep(loop.body || [], function (st) {
+          if (st.op !== "set" || !R_JUST_A_NAME.test(st["var"] || "")) { return; }
+          var e = lookUp(scope, bareName(st["var"]));
+          if (!e || e.kind !== "int") { return; }
+          var low = lowered(bareName(st["var"])), node = tree(st.expr);
+          sets.push({ low: low, entry: e, node: node });
+          from[low] = (from[low] || []).concat(namesIn(node));
+        });
+        function reaches(a, b) {
+          var seen = Object.create(null), todo = (from[a] || []).slice();
+          while (todo.length) {
+            var x = todo.pop();
+            if (x === b) { return true; }
+            if (seen[x]) { continue; }
+            seen[x] = true;
+            todo.push.apply(todo, from[x] || []);
+          }
+          return false;
+        }
+        sets.forEach(function (s) {
+          var top = topOf(s.node);
+          if (s.entry.wide || !top || top.op === "mod" || top.op === "%") { return; }
+          var round = function (u) { return u === s.low ? reaches(s.low, s.low) : reaches(s.low, u) && reaches(u, s.low); };
+          var hit = function (node) { return namesIn(node).some(round); };
+          var feeding = termsOf(s.node).filter(function (t) {
+            return t.name && !t.field && !t.call && !t.index && round(lowered(t.name));
+          }).length;
+          if (productWith(s.node, hit, scope, prog) || feeding >= 2) { widen(s.entry); }
+        });
+        eachStep(loop.body || [], function (st) {
+          if (st.op !== "set" || R_JUST_A_NAME.test(st["var"] || "")) { return; }
+          var target = tree(st["var"]), list = intListOf(target, scope), node = tree(st.expr);
+          if (!list || list.elemWide || topOf(node).op === "mod" || topOf(node).op === "%") { return; }
+          // another place in the same list: memo[i - 1], not xs[i] itself
+          var here = JSON.stringify(target.at);
+          var mine = function (n) {
+            var got = false;
+            (function look(x) {
+              if (!x || got) { return; }
+              if (intListOf(x, scope) === list && JSON.stringify(x.at) !== here) { got = true; }
+              kidsOf(x).forEach(look);
+            })(n);
+            return got;
+          };
+          if (termsOf(node).filter(mine).length >= 2 || productWith(node, mine, scope, prog)) { list.elemWide = true; }
+        });
+      });
+      // past it by what the Fors round it count to
+      (function walk(items, trips, ranges) {
+        (items || []).forEach(function (item) {
+          var plain = R_JUST_A_NAME.test(item["var"] || "");
+          if ((item.op === "set" || item.op === "declare") && plain && item.expr) {
+            var home = item.op === "declare" && globalItem(item, prog) ? prog.shared : scope;
+            var e = item.op === "declare" ? home.names[lowered(item["var"])] : lookUp(scope, bareName(item["var"]));
+            if (e && e.kind === "int" && !e.wide) {
+              var low = lowered(bareName(item["var"])), node = tree(item.expr), terms = termsOf(node);
+              var mine = terms.filter(function (t) { return t.name && !t.field && !t.call && !t.index && lowered(t.name) === low; });
+              var size;
+              if (mine.length === 1 && namesIn(node).filter(function (n) { return n === low; }).length === 1) {
+                var rest = terms.filter(function (t) { return t !== mine[0]; });
+                var each = rest.reduce(function (sum, t) {
+                  var one = sizeOf(t, scope, prog, ranges);
+                  return sum === null || one === null ? null : sum + one;
+                }, 0);
+                size = each === null || trips === null ? null : each * trips;
+              } else if (namesIn(node).indexOf(low) < 0) {
+                size = sizeOf(node, scope, prog, ranges);
+              }
+              if (size !== null && size !== undefined && size > INT_TOP) { widen(e); }
+            }
+          }
+          if (item.op === "for") {
+            var set = statementOf(item.init || ""), test = /^\s*[A-Za-z_]\w*\s*(<=|<|>=|>)\s*(.+)$/.exec(String(item.cond || ""));
+            var a = set.op === "set" ? sizeOf(tree(set.expr), scope, prog, ranges) : null;
+            var b = test ? sizeOf(tree(test[2]), scope, prog, ranges) : null;
+            var inner = Object.assign(Object.create(null), ranges);
+            if (set.op === "set") { inner[lowered(set["var"])] = a === null || b === null ? undefined : Math.max(a, b) + 1; }
+            walk(item.body, trips === null || a === null || b === null ? null : trips * (a + b + 1), inner);
+            return;
+          }
+          blocksOf(item).forEach(function (block) { walk(block, LOOP_OP[item.op] ? null : trips, ranges); });
+        });
+      })(scope.items, 1, Object.create(null));
+    });
+    // a recursion that multiplies by itself, or adds two of itself
+    prog.mods.forEach(function (one) {
+      if (one.gives !== "int") { return; }
+      var me = lowered(one.name);
+      var hit = function (node) { var got = false; eachCall(node, function (c) { if (lowered(c.call) === me) { got = true; } }); return got; };
+      eachStep(one.body, function (item) {
+        if (!((item.op === "return" || item.op === "set") && item.expr)) { return; }
+        var node = tree(item.expr);
+        var selves = termsOf(node).filter(hit).length;
+        if (selves >= 2 || productWith(node, hit, one.scope, prog)) { one.wide = true; }
+      });
+    });
+
+    // and on to whatever any of it is handed to, until nothing more changes
+    var moved = true, rounds = 0;
+    while (moved && rounds++ < 40) {
+      moved = false;
+      prog.scopes.forEach(function (scope) {
+        var mod = scope.mod;
+        eachStep(scope.items, function (item) {
+          var plain = R_JUST_A_NAME.test(item["var"] || "");
+          if ((item.op === "set" || item.op === "declare") && item.expr && plain) {
+            var home = item.op === "declare" && globalItem(item, prog) ? prog.shared : scope;
+            var e = item.op === "declare" ? home.names[lowered(item["var"])] : lookUp(scope, bareName(item["var"]));
+            if (wideIn(tree(item.expr), scope, prog) && widen(e)) { moved = true; }
+          }
+          if (item.op === "for") {
+            var set = statementOf(item.init || "");
+            if (set.op === "set" && wideIn(tree(set.expr), scope, prog) && widen(lookUp(scope, set["var"]))) { moved = true; }
+          }
+          // For Each n In memo: n is as long as what memo holds
+          if (item.op === "foreach") {
+            var over = tree(item.over || "");
+            var from = over.name && !over.field && !over.index && !over.call ? lookUp(scope, over.name) : null;
+            if (from && from.elemWide && from.kind === "list:int" && widen(lookUp(scope, String(item["var"] || "").trim()))) { moved = true; }
+          }
+          if (item.op === "set" && plain && item.expr) {
+            var whole = lookUp(scope, bareName(item["var"]));
+            if (whole && whole.kind === "list:int") {
+              namesIn(tree(item.expr)).forEach(function (n) {
+                var other = lookUp(scope, n);
+                if (other && other !== whole && other.kind === "list:int" && !!other.elemWide !== !!whole.elemWide) {
+                  other.elemWide = whole.elemWide = true;
+                  moved = true;
+                }
+              });
+            }
+          }
+          if (item.op === "set" && !plain && item.expr) {
+            var into = intListOf(tree(item["var"]), scope) || intTableOf(tree(item["var"]), scope);
+            if (into && !into.elemWide && wideIn(tree(item.expr), scope, prog)) { into.elemWide = true; moved = true; }
+          }
+          if (item.op === "return" && mod && item.expr && mod.gives === "int" && !mod.wide &&
+              wideIn(tree(item.expr), scope, prog)) { mod.wide = true; moved = true; }
+          var calls = [];
+          sumsOf(item).forEach(function (src) { eachCall(tree(src), function (c) { calls.push(c); }); });
+          if (item.op === "call") { calls.push(callOf(item)); }
+          calls.forEach(function (c) {
+            var m = prog.byName[lowered(c.call)];
+            // append(memo, big): a list of longs
+            if (!m && /^(append|insert)$/.test(lowered(c.call)) && c.args && c.args.length >= 2) {
+              var onto = c.args[0], last = c.args[c.args.length - 1];
+              var held = onto.name && !onto.field && !onto.index && !onto.call ? lookUp(scope, onto.name) : null;
+              if (held && held.kind === "list:int" && !held.elemWide && wideIn(last, scope, prog)) { held.elemWide = true; moved = true; }
+              return;
+            }
+            if (!m || lookUp(scope, c.call)) { return; }
+            (c.args || []).forEach(function (arg, i) {
+              var p = m.params[i];
+              var ints = p && p.entry && (p.entry.kind === "list:int" ||
+                                          (isTableKind(p.entry.kind) && tableValue(p.entry.kind) === "int"));
+              if (ints && arg.name && !arg.field && !arg.index && !arg.call) {
+                var given = lookUp(scope, arg.name);
+                if (given && given.kind === p.entry.kind && !!given.elemWide !== !!p.entry.elemWide) {
+                  given.elemWide = p.entry.elemWide = true;
+                  moved = true;
+                }
+              }
+              if (!p || !p.entry || p.entry.kind !== "int") { return; }
+              if (wideIn(arg, scope, prog) && widen(p.entry)) { moved = true; }
+              // handed by reference: what comes back is as wide as where it went
+              if (p.ref && p.entry.wide && arg.name && !arg.field && !arg.index && !arg.call &&
+                  widen(lookUp(scope, arg.name))) { moved = true; }
+            });
+          });
+        });
+      });
+    }
+  }
+
+  // ---- main's own names ------------------------------------------------------
+  // A Declare in the program's own flow, outside every module, is the
+  // program's: any module can read it.  One that no module so much as
+  // mentions is main's, and is declared as main's own -- a local of main,
+  // where it was a field of the class or a global of the file, and given its
+  // value where it is first given one.  prog.localItems holds its Declares.
+  function globalItem(item, prog) {
+    return item.scope === "global" && !(prog && prog.localItems && prog.localItems.has(item));
+  }
+  function localNames(prog) {
+    prog.localItems = new Set();
+    Object.keys(prog.shared.names).forEach(function (low) {
+      var e = prog.shared.names[low];
+      if (prog.main.names[low] || !e.spots.length || e.spots.some(function (s) { return s.item["const"]; })) { return; }
+      if (prog.mods.some(function (m) {
+        return mentionsIn(m.scope.items, low, prog) > 0 ||
+               m.params.some(function (p) { return lowered(p.name) === low; });
+      })) { return; }
+      var mine = [];
+      eachStep(prog.main.items, function (item) { mine.push(item); });
+      if (!e.spots.every(function (s) { return mine.indexOf(s.item) >= 0; })) { return; }
+      delete prog.shared.names[low];
+      e.shared = false;
+      prog.main.names[low] = e;
+      e.spots.forEach(function (s) { prog.localItems.add(s.item); });
+    });
+  }
+
+  // ---- declared where it is first given something -------------------------
+  // Declare Integer index at the top, then three Fors that count with it:
+  // one name to the runner, but nothing ever reads the nought it starts as,
+  // so each For declares its own -- and a name set first thing inside a
+  // loop is declared there, inside the loop.  It is how anybody would write
+  // it, and a line shorter for every one.  Where the nought could be read,
+  // or a use is somewhere the declaring line would not reach, the name
+  // stays declared where it was.  prog.declares holds, for each statement
+  // that declares names this way, the names it declares.
+  function tightNames(prog) {
+    prog.declares = new Map();
+    prog.before = new Map();             // statement -> names declared just before it
+    prog.scopes.forEach(function (scope) {
+      // how many statements give each name a whole new value: none, and
+      // JavaScript can call it a const
+      Object.keys(scope.names).forEach(function (low) {
+        var entry = scope.names[low];
+        entry.writes = 0;
+        eachStep(scope.items, function (item) { if (writesWhole(item, low, entry.kind, prog)) { entry.writes++; } });
+      });
+      Object.keys(scope.names).forEach(function (low) {
+        var entry = scope.names[low], items = null;
+        if (entry.param || entry.shared || entry.born || entry.perLoop || !entry.kind ||
+            entry.kind === "any" || entry.kind === "none" || prog.shared.names[low]) { return; }
+        if (entry.spots.length === 1) {
+          var spot = entry.spots[0], at = spot.block.indexOf(spot.item);
+          if (entry.hoist || spot.item.expr || (spot.item.dims || []).length || spot.item["const"] ||
+              globalItem(spot.item, prog) || spot.inCase || at < 0 ||
+              !/^(int|real|text|bool)$/.test(entry.kind)) { return; }
+          items = spot.block.slice(at + 1);
+          if (mentionsIn(items, low, prog) + 1 !== mentionsIn(scope.items, low, prog)) { return; }
+        } else if (!entry.spots.length && entry.hoist) {
+          items = scope.items;
+        } else { return; }
+        // a module that reads a name of main's without one of its own: in
+        // Python that is main's, left at the top of the file
+        if (prog.scopes.some(function (other) {
+          return other !== scope && !other.names[low] && mentionsIn(other.items, low, prog) > 0;
+        })) { return; }
+        var found = [];
+        if (!placesIn(items, low, prog, found)) {
+          // A name nobody declared: declared just before the first line of
+          // the chart that uses it, rather than at the very top
+          if (!entry.spots.length) {
+            for (var at0 = 0; at0 < items.length && !mentionsIn([items[at0]], low, prog); at0++) { /* to it */ }
+            if (at0 < items.length) {
+              items = items.slice(at0);
+              entry.hoist = false;
+              var here = prog.before.get(scope.items[at0]) || [];
+              here.push(entry);
+              prog.before.set(scope.items[at0], here);
+            }
+          }
+          // given something on every way through before anything reads it:
+          // the nought is never seen, so it is declared without one
+          if (firstUseIn(items, low, prog) === "write") { entry.bare = true; }
+          return;
+        }
+        // declared, and never used again: nothing to write at all
+        entry.tight = true;
+        entry.hoist = false;
+        found.forEach(function (item) {
+          var list = prog.declares.get(item) || [];
+          list.push(entry);
+          prog.declares.set(item, list);
+        });
+        // given something nowhere but where it is declared: JavaScript's const
+        entry.once = entry.writes === found.length &&
+                     found.every(function (item) { return item.op === "set" || item.op === "input"; });
+      });
+    });
+  }
+  // Where among these statements `low` can be declared, with the statements
+  // that declare it put in `found`: every use inside the braces of one of
+  // them, and nothing reading the name before it is given something.  The
+  // first statement to use it gives it something (Set, Input) and declares
+  // it for the rest; or every statement that uses it keeps it to itself --
+  // a For that counts with it, or an If or a loop inside which the same
+  // holds -- and gives it something before anything reads it.
+  function placesIn(items, low, prog, found) {
+    var users = (items || []).filter(function (st) { return mentionsIn([st], low, prog) > 0; });
+    if (!users.length) { return true; }
+    if (givesFirst(users[0], low) && firstUse(users[0], low, prog) === "write") {
+      found.push(users[0]);
+      return true;
+    }
+    return users.every(function (st) {
+      if (givesFirst(st, low)) { return false; }
+      if (countsWith(st, low)) {
+        if (st.op === "for" && firstUse(st, low, prog) !== "write") { return false; }
+        var again = false;
+        eachStep(st.body, function (inner) { if (countsWith(inner, low)) { again = true; } });
+        if (again) { return false; }
+        found.push(st);
+        return true;
+      }
+      // inside, it is declared before anything reads it, or this fails
+      if (firstUse(st, low, prog) === "read") { return false; }
+      // a Select's cases share one pair of braces when it is a switch
+      if (st.op === "select" || !blocksOf(st).length || wordsOf(st, prog).indexOf(low) >= 0) { return false; }
+      return blocksOf(st).every(function (block) { return placesIn(block, low, prog, found); });
+    });
+  }
+  // Does this statement give the name a whole new value?  A place in a
+  // list, a table or a record put into is the same list, table or record;
+  // a letter of some words put back is the words made again.
+  function writesWhole(item, low, kind, prog) {
+    if ((item.op === "set" || item.op === "input") && !R_JUST_A_NAME.test(item["var"] || "")) {
+      return lowered(bareName(item["var"])) === low && !isListKind(kind) && !isTableKind(kind) && !isRecKind(kind);
+    }
+    if (item.op === "call" && CHANGES_ITS_FIRST[lowered(item.name || "")] && !isListKind(kind) && !isTableKind(kind)) {
+      var first = pieces(item.args || "")[0];
+      if (first && lowered(String(first).trim()) === low) { return true; }
+    }
+    return targetsOf(item, prog).some(function (n) { return lowered(String(n).trim()) === low; });
+  }
+  function firstUseIn(items, low, prog) {
+    for (var i = 0; i < (items || []).length; i++) {
+      var got = firstUse(items[i], low, prog);
+      if (got) { return got; }
+    }
+    return "";
+  }
+  function givesFirst(st, low) {         // Set low = ..., Input low
+    return (st.op === "set" || st.op === "input") && R_JUST_A_NAME.test(st["var"] || "") &&
+           lowered(bareName(st["var"])) === low;
+  }
+  function countsWith(st, low) {         // For low = ..., For Each low In ...
+    if (st.op === "for") {
+      var set = statementOf(st.init || "");
+      return set.op === "set" && lowered(set["var"] || "") === low;
+    }
+    return st.op === "foreach" && lowered(String(st["var"] || "").trim()) === low && !readsName(st.over, low);
   }

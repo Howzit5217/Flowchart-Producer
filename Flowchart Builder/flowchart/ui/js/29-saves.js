@@ -333,7 +333,7 @@
     return { path: path, phase: trail[trail.length - 1].phase || "",
              main: packVars(runWhere ? runWhere.vars : {}, seen),
              globals: packVars(GLOBALS, seen),
-             cash: Object.keys(CASH), numeric: Object.keys(NUMERIC),
+             cash: Object.keys(CASH), numeric: Object.keys(NUMERIC), textual: Object.keys(TEXTUAL),
              tape: tapeNow() };
   }
 
@@ -392,7 +392,7 @@
       path: path,
       at: 0, phase: snap.phase || "",
       main: unpackVars(snap.main, made), globals: unpackVars(snap.globals, made),
-      cash: nameSet(snap.cash), numeric: nameSet(snap.numeric),
+      cash: nameSet(snap.cash), numeric: nameSet(snap.numeric), textual: nameSet(snap.textual || []),
       start: function (where) {
         putTape(snap.tape);
         if (noted) { talk(TXT.sv_back, "note").classList.add("back-here"); }

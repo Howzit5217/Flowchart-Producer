@@ -132,13 +132,15 @@
 
     if (fix.how === "drop") {
       if (!here) { return null; }
+      // Down to fix.to, where it says to take a run of lines out at once
+      var end = (fix.to && fix.to > at && lineEnds(text, fix.to)) || here;
       // The line and the newline that ends it, so there is no blank left
       // standing where it was.  The last line of all has no newline after
       // it, so the one in front of it goes instead.
-      if (here.last && here.from > 0) {
-        return { from: here.from - 1, to: here.to, text: "", back: Math.max(1, at - 1) };
+      if (end.last && here.from > 0) {
+        return { from: here.from - 1, to: end.to, text: "", back: Math.max(1, at - 1) };
       }
-      return { from: here.from, to: Math.min(here.to + 1, text.length), text: "",
+      return { from: here.from, to: Math.min(end.to + 1, text.length), text: "",
                back: Math.max(1, at - 1) };
     }
 
@@ -249,6 +251,9 @@
     if (!fix) { return ""; }
     if (fix.how === "change" && fix.word && fix.instead) {
       return say("w_mend_change", { word: fix.word, instead: fix.instead });
+    }
+    if (fix.how === "drop" && fix.at && fix.to && fix.to > fix.at) {
+      return say("w_mend_drop_lines", { line: fix.at, last: fix.to });
     }
     if (fix.how === "drop" && (fix.at || line)) {
       return say("w_mend_drop", { line: fix.at || line });

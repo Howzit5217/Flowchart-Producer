@@ -68,10 +68,11 @@
                      LLONG_MAX: "9223372036854775807", LLONG_MIN: "-9223372036854775808", RAND_MAX: "2147483647",
                      SHRT_MAX: "32767", CHAR_BIT: "8", EXIT_SUCCESS: "0", EXIT_FAILURE: "1" };
     var PAGE_HELPERS = {
-      python: { class_of: /isinstance/, is_number: /float/, copied: /vars/, to_base: /digits/ },
+      python: { class_of: /isinstance/, is_number: /float/, copied: /vars/, to_base: /digits/,
+                is_integer: /lstrip/, currency_format: /abs/ },
       javascript: { classOf: /constructor/, shown: /constructor/, shuffle: /random/,
                     roundEven: /round/, orderOf: /isArray/, deepCopy: /getPrototypeOf/, significant: /toPrecision/,
-                    sliceStep: /"by"/, toJson: /stringify/, popKey: /delete/ },
+                    sliceStep: /"by"/, toJson: /stringify/, popKey: /delete/, currencyFormat: /toFixed/, isInteger: /test/ },
       java: { shown: /instanceof|"shown"/, tableOf: /"put"/, joined: /"append"/, sortedList: /sort/,
               sizeOf: /instanceof/, orderOf: /instanceof/, sortIn: /sort/, reverseIn: /reverse/,
               reversedList: /reverse/, shuffledList: /shuffle/, itemsOf: /entrySet/,
@@ -80,12 +81,13 @@
               transpose: /MAX_VALUE/, listPlus: /addAll/, bind: /arraycopy/, setWork: /contains/,
               zipped: /MAX_VALUE/, enumerated: /asList|enumerated/, chars: /toCharArray/,
               classOf: /getSimpleName/, itemOf: /instanceof/, padded: /"pad"/, significant: /MathContext/,
-              deepCopy: /LinkedHashMap/, sliceStep: /"by"/, stepAt: /"low"/, toJson: /toJson/, indexFrom: /Objects/ },
+              deepCopy: /LinkedHashMap/, sliceStep: /"by"/, stepAt: /"low"/, toJson: /toJson/, indexFrom: /Objects/,
+              currencyFormat: /Locale/, isInteger: /matches/, substring: /"from"/ },
       csharp: { Shown: /IDictionary|IEnumerable/, OrderOf: /IList|CompareOrdinal/, SortIn: /Sort|OrderBy/,
                 ReverseIn: /Reverse/, PopAt: /RemoveAt/, SortedList: /OrderBy/, Shuffle: /Next/,
                 IsNumber: /TryParse/, ClassOf: /GetType/, ItemOf: /ToString|"string"/, PopKey: /Remove/,
                 Significant: /InvariantCulture/, DeepCopy: /CreateInstance/, SliceStep: /"by"/, ToBase: /digits/,
-                ToJson: /ToJson/ },
+                ToJson: /ToJson/, IsInteger: /TryParse/, CurrencyFormat: /InvariantCulture/, Substring: /"from"/ },
       cpp: { shownIn: /"out"/, valueOrder: /valueOrder/, valueSame: /valueSame/, classOf: /"Nothing"/,
              itemsOf: /push_back/, zipped: /push_back/, enumerated: /push_back/, popAt: /erase/, indexOf: /"find"/, joined: /"out"/,
              splitText: /push_back/, chars: /push_back/, keysOf: /"first"/, valuesOf: /"second"/,
@@ -95,7 +97,10 @@
              uniqueOf: /"find"/, setWork: /"has"/, padded: /"size"/, fixedText: /setprecision/,
              lastIndexOf: /"size"/, reprOf: /shownIn|"'"/, transpose: /"min"/, listPlus: /insert/,
              realText: /setprecision/, significant: /setprecision/, popKey: /erase/, deepCopy: /deepCopy|"v":"v"/,
-             sliceStep: /"by"/, toBase: /digits/, grouped: /"whole"/, toJson: /toJson|true|"o"/ }
+             sliceStep: /"by"/, toBase: /digits/, grouped: /"whole"/, toJson: /toJson|true|"o"/,
+             isInteger: /isdigit/, currencyFormat: /setprecision/, extendWith: /insert/, countText: /npos/, sliceOf: /2147483647/,
+             sumOf: /total/, minOf: /min_element/, maxOf: /max_element/, containsIn: /"find"/, countIn: /"count"/,
+             anyIn: /"v"/, allIn: /"v"/, allCased: /isalpha/, temp: /made/, substringOf: /"from"/ }
     };
 
     // ------------------------------------------------------ saying why --
@@ -666,6 +671,18 @@
         if ((lang === "cpp" || cs) && c === "#" && !codeOnLine) {   // #include, #region
           var eol = s.indexOf("\n", i);
           if (eol < 0) { eol = n; }
+          // the page's own Table (18-code.js), fenced in where it wrote it:
+          // passed over whole, and Table<K, V> read as the table it is
+          if (lang === "cpp" && /^#\s*ifndef\s+FLOWCHART_TABLE\b/.test(s.slice(i, eol))) {
+            var fenceEnd = s.indexOf("#endif", eol);
+            if (fenceEnd >= 0) {
+              var fenceEol = s.indexOf("\n", fenceEnd);
+              if (fenceEol < 0) { fenceEol = n; }
+              for (i = eol; i < fenceEol; i++) { if (s[i] === "\n") { i++; newline(); i--; } }
+              i = fenceEol;
+              continue;
+            }
+          }
           // #define LIMIT 10: a name for a value, which is a Constant
           var def = /^#\s*define\s+([A-Za-z_]\w*)\s+(.+?)\s*$/.exec(s.slice(i, eol));
           if (def && lang === "cpp") { defines.push({ name: def[1], text: def[2], line: line }); }
@@ -2102,7 +2119,7 @@
       }
       var CAST_WORDS = /^(int|long|short|byte|double|float|char|bool|boolean|decimal|string|String|unsigned|signed|Integer|Double|size_t|dynamic|object)$/;
       // C++'s kinds of holder, made by name: std::vector<int>(3, 0)
-      var CPP_MADE = /^(vector|map|unordered_map|set|unordered_set|multiset|multimap|pair|tuple|deque|list|stack|queue|priority_queue|array|optional)$/;
+      var CPP_MADE = /^(Table|vector|map|unordered_map|set|unordered_set|multiset|multimap|pair|tuple|deque|list|stack|queue|priority_queue|array|optional)$/;
       function cUnary() {
         var t = peek();
         if (own) { return ownUnary(); }
@@ -4407,7 +4424,7 @@
                                rtype: rtype.name, line: nmt.line, statik: !!mods.static, kind: "get", getter: true, lead: lead });
             continue;
           }
-          if (isOp("(") || (isOp("<", 0) && templateAhead())) {
+          if ((isOp("(") && !madeAt(pos)) || (isOp("<", 0) && templateAhead())) {
             if (isOp("<")) { skipAngles(); }
             var params2 = cParams();
             skipQualifiers();
@@ -4464,6 +4481,18 @@
           cls.name = alias;
         }
         return cls;
+      }
+      // std::vector<int> marks(5, 0) and Point origin(0, 0) at the top of a
+      // C++ file: a variable made with what is in the brackets, not a
+      // function -- whose brackets would start with a type
+      function madeAt(at) {
+        var open = toks[at], a = toks[at + 1], b = toks[at + 2];
+        if (!cpp || !open || open.t !== "op" || open.v !== "(" || !a) { return false; }
+        if (a.t === "num" || a.t === "str") { return true; }
+        if (a.t === "op") { return a.v === "-" || a.v === "{"; }
+        return a.t === "name" && !!b && b.t === "op" && (b.v === "," || b.v === ")") &&
+               !/^(int|double|float|char|bool|long|short|unsigned|signed|void|string|auto|size_t)$/.test(a.v) &&
+               classes.indexOf(a.v) < 0;
       }
       function friendOperator() {
         for (var at = 1; at < 8; at++) {
@@ -9061,6 +9090,8 @@
                 looks = toks[pos + k] && toks[pos + k].t === "name" && toks[pos + k + 1] &&
                         toks[pos + k + 1].t === "op" && toks[pos + k + 1].v === "(" ? "fn"
                       : (k && toks[pos + k] && toks[pos + k].t === "name" ? "field" : false);
+                // std::vector<int> marks(5, 0): made there and then, not a function
+                if (looks === "fn" && madeAt(pos + k + 1)) { looks = false; }
               }
             }
           } catch (e) { looks = false; }
@@ -9411,7 +9442,7 @@
                    __iadd__: "+=", __isub__: "-=", __neg__: "u-" };
     var LIST_TYPES = /^(List|ArrayList|LinkedList|Vector|vector|Stack|Queue|Deque|ArrayDeque|IList|IEnumerable|ICollection|Collection|Iterable|list|tuple|Tuple|deque|array|stack|queue|priority_queue|PriorityQueue|Array|Sequence|Iterator|IReadOnlyList|ReadOnlyCollection|span|Span|initializer_list)$/;
     var SET_TYPES = /^(Set|HashSet|TreeSet|LinkedHashSet|SortedSet|ISet|set|unordered_set|multiset|frozenset)$/;
-    var MAP_TYPES = /^(Map|HashMap|TreeMap|LinkedHashMap|Dictionary|IDictionary|SortedDictionary|SortedList|map|unordered_map|multimap|dict|Dict|Hashtable|defaultdict|OrderedDict|Counter|Mapping|IReadOnlyDictionary)$/;
+    var MAP_TYPES = /^(Table|Map|HashMap|TreeMap|LinkedHashMap|Dictionary|IDictionary|SortedDictionary|SortedList|map|unordered_map|multimap|dict|Dict|Hashtable|defaultdict|OrderedDict|Counter|Mapping|IReadOnlyDictionary)$/;
     var TYPE_WORD = { int: "Integer", real: "Real", text: "String", bool: "Boolean" };
     var knownRecords = Object.create(null);                  // this program's classes, while it is read
     function kindOfType(t) {
@@ -9475,7 +9506,7 @@
     // What the runner does itself (15-sums.js): a function of the program's
     // own called one of these would take the name from it, so one is
     // given its class's name in front.
-    var BUILT_NAMES = /^(sqrt|abs|round|floor|ceiling|ceil|int|integer|length|toupper|tolower|random|pow|min|max|log|log10|exp|sin|cos|tan|atan|atan2|asin|acos|hypot|trunc|sign|real|append|insert|remove|pop|contains|indexof|count|slice|substring|join|split|sum|sort|sorted|reverse|reversed|shuffle|choice|repeat|range|keys|values|items|copy|deepcopy|tostring|replace|trim|startswith|endswith|isdigit|isalpha|isupper|islower|isspace|ord|chr|classof|any|all|newlist|get|clear|extend|isnumber|tolist|unique|zip|enumerate|union|intersection|difference|padleft|padright|find|number|text|lastindexof|compare|bind|repr|transpose|roundeven|tobase|frombase|grouped|tojson|significant|fixed|bitand|bitor|bitxor|shuffled)$/i;
+    var BUILT_NAMES = /^(sqrt|abs|round|floor|ceiling|ceil|int|integer|length|toupper|tolower|random|pow|min|max|log|log10|exp|sin|cos|tan|atan|atan2|asin|acos|hypot|trunc|sign|real|append|insert|remove|pop|contains|indexof|count|slice|substring|join|split|sum|sort|sorted|reverse|reversed|shuffle|choice|repeat|range|keys|values|items|copy|deepcopy|tostring|replace|trim|startswith|endswith|isdigit|isalpha|isupper|islower|isspace|ord|chr|classof|any|all|newlist|get|clear|extend|isnumber|tolist|unique|zip|enumerate|union|intersection|difference|padleft|padright|find|number|text|lastindexof|compare|bind|repr|transpose|roundeven|tobase|frombase|grouped|tojson|significant|fixed|bitand|bitor|bitxor|shuffled|isinteger|currencyformat)$/i;
 
     // A dotted name, for looking things up: Math.sqrt, System.out.println,
     // std::cout -- or null for anything that is not a plain path of names.
@@ -13165,6 +13196,24 @@
         switch (name) {
           case "class_of": case "classOf": case "ClassOf": return B("classOf", [a[0]]);
           case "is_number": case "isNumber": case "IsNumber": return B("isNumber", [a[0]]);
+          case "is_integer": case "isInteger": case "IsInteger": return B("isInteger", [a[0]]);
+          case "currency_format": case "currencyFormat": case "CurrencyFormat": return B("currencyFormat", [a[0]]);
+          case "extendWith": return B("extend", a);
+          case "countText": return B("count", a);
+          case "sliceOf": return B("slice", a);
+          case "sumOf": return B("sum", a);
+          case "minOf": return B("min", a);
+          case "maxOf": return B("max", a);
+          case "containsIn": return B("contains", a);
+          case "countIn": return B("count", a);
+          case "anyIn": return B("any", a);
+          case "allIn": return B("all", a);
+          case "temp": return a[0];
+          case "substring": case "Substring": case "substringOf": return B("substring", a);
+          case "allCased": {
+            var up = stripParens(a[1]);
+            return B(up && up.k === "bool" && !up.v ? "isLower" : "isUpper", [a[0]]);
+          }
           case "shown": case "Shown": {
             // shown(x, true) is x the way a list shows it: words in quotes
             var inside = stripParens(a[1]);
@@ -16431,10 +16480,11 @@
         if (dot && /^(lastIndexOf|LastIndexOf|rfind|rindex)$/.test(dot) && a.length === 1) {
           return B("lastIndexOf", [self, a[0]]);
         }
-        if (dot && /^(compareTo|CompareTo|compare|localeCompare)$/.test(dot) && a.length === 1) {
+        if (dot && /^(compareTo|CompareTo|compare|localeCompare|compareToIgnoreCase)$/.test(dot) && a.length === 1) {
           return { k: "compare", a: self, b: a[0], line: e.line };
         }
-        if (/^(string\.Compare|String\.Compare|strcmp|string\.CompareOrdinal|Integer\.compare|Double\.compare)$/.test(p) && a.length === 2) {
+        if (/^(string\.Compare|String\.Compare|strcmp|string\.CompareOrdinal|Integer\.compare|Double\.compare)$/.test(p) &&
+            (a.length === 2 || (a.length === 3 && /^(string\.Compare|String\.Compare)$/.test(p) && /StringComparison/.test(pathOf(a[2]) || "")))) {
           return { k: "compare", a: a[0], b: a[1], line: e.line };
         }
         // fmod keeps the sign of what was divided, as MOD does: not Python's %
@@ -18245,15 +18295,16 @@
       // next one of the same kind.  Words with double quotes in them go in
       // single ones, and words with both kinds in them go in as pieces,
       // each in the quote it does not hold.  A line break inside words is
-      // NewLine, joined on.
+      // NewLine, joined on, and a tab is Tab -- not four spaces, which print
+      // as four spaces where the program printed a tab.
       function quoted(v) {
-        var s = String(v).replace(/\t/g, "    ");
-        if (s.indexOf("\n") >= 0) {
-          var bits = s.split("\n").map(function (b) { return b ? quoted(b) : null; });
+        var s = String(v);
+        if (/[\n\t]/.test(s)) {
           var out = [];
-          bits.forEach(function (b, i) {
-            if (i) { out.push("NewLine"); }
-            if (b) { out.push(b); }
+          s.split(/([\n\t])/).forEach(function (b) {
+            if (b === "\n") { out.push("NewLine"); }
+            else if (b === "\t") { out.push("Tab"); }
+            else if (b) { out.push(quoted(b)); }
           });
           return out.join(" + ");
         }

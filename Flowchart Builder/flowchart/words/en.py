@@ -142,6 +142,8 @@ EN = {
     "w_until_alone": "Line {line}: Until, but no Do or Repeat above it.",
     "w_mend_change": "Change {word} to {instead}",
     "w_mend_drop": "Take line {line} out",
+    "w_mend_drop_lines": "Take lines {line}–{last} out",
+    "w_code_tail": "Lines {line}–{last} look like Python code pasted under the pseudocode, so the program does it all twice.",
     "w_mend_insert": "Put {text} in at line {line}",
     "w_mend_tip": "Double-click to put this right",
     "w_mend_close": "Put the missing {text} on the end",

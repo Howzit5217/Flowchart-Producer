@@ -96,7 +96,12 @@ function runner(WORDS) {
     tape.appendChild(line);
   }
 
-  eval(part("14-run.js"));               // eslint-disable-line no-eval
+  // A run is cut short as a loop that never ends after 8000 steps; asked
+  // for more (thousands.py's programs made up at random, some of them long),
+  // it goes on that much further.
+  var runs = part("14-run.js");
+  if (asked && asked.stepCap) { runs = runs.replace("STEP_CAP = 8000;", "STEP_CAP = " + Number(asked.stepCap) + ";"); }
+  eval(runs);                            // eslint-disable-line no-eval
   eval(part("15-sums.js"));              // eslint-disable-line no-eval
   eval(part("18-ahead.js"));             // eslint-disable-line no-eval
   eval(part("18-code.js"));              // eslint-disable-line no-eval

@@ -141,6 +141,8 @@ FR = {
     "w_until_alone": "Ligne {line} : Until, mais ni Do ni Repeat au-dessus.",
     "w_mend_change": "Remplacer {word} par {instead}",
     "w_mend_drop": "Retirer la ligne {line}",
+    "w_mend_drop_lines": "Retirer les lignes {line} à {last}",
+    "w_code_tail": "Les lignes {line} à {last} ressemblent à du code Python collé sous le pseudocode : le programme fait donc tout deux fois.",
     "w_mend_insert": "Mettre {text} à la ligne {line}",
     "w_mend_tip": "Double-cliquez pour corriger",
     "w_mend_close": "Mettre le {text} manquant à la fin",

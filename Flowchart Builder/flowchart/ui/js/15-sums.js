@@ -116,7 +116,7 @@
   }
 
   var RANK = { "or": 1, "||": 1, "and": 2, "&&": 2, "=": 3, "==": 3, "!=": 3,
-               "<>": 3, "<": 4, "<=": 4, ">": 4, ">=": 4, "+": 5, "-": 5,
+               "<>": 3, "<": 4, "<=": 4, ">": 4, ">=": 4, "in": 4, "not in": 4, "+": 5, "-": 5,
                "*": 6, "/": 6, "mod": 6, "%": 6, "div": 6, "^": 7 };
 
   // Working an expression out can mean running a whole chart: a call in the
@@ -368,9 +368,12 @@
       while (peek()) {
         var tok = peek();
         var op = tok.t === "op" ? tok.v : word(tok);
+        // x not in xs: two words, one test
+        if (op === "not" && ts[at + 1] && ts[at + 1].t === "name" && word(ts[at + 1]) === "in") { op = "not in"; }
         var rank = RANK[op];
         if (!rank || rank < least) { break; }
         take();
+        if (op === "not in") { take(); }
         // AND with a false on its left, OR with a true: the answer is
         // known, and the right is read past without being worked out --
         // so i < n AND list[i] > 0 never looks past the end of the list
@@ -613,8 +616,10 @@
       }
       return a.length - b.length;
     }
+    // "-1 Fox" and "-2" are words, not -1 and -2: only words that are
+    // wholly a number are put in order as numbers
     if (typeof a === "string" && typeof b === "string" &&
-        (isNaN(parseFloat(a)) || isNaN(parseFloat(b)))) {
+        (!R_READS_NUM.test(a.trim()) || !R_READS_NUM.test(b.trim()))) {
       var x = a.toLowerCase(), y = b.toLowerCase();
       return x < y ? -1 : (x > y ? 1 : 0);
     }
@@ -656,6 +661,9 @@
       case "<=": return sooner(a, b) <= 0;
       case ">": return sooner(a, b) > 0;
       case ">=": return sooner(a, b) >= 0;
+      // 100 in scores, "a" in word, key in table: Python's way of asking
+      case "in": return !!LIST_BUILT.contains(b, a);
+      case "not in": return !LIST_BUILT.contains(b, a);
       case "and": case "&&": return truthy(a) && truthy(b);
       case "or": case "||": return truthy(a) || truthy(b);
       default: throw new Error(say("r_odd_op", { op: op }));
@@ -752,6 +760,8 @@
     }
     return same(a, b);
   }
+  // The built-ins that take words as they are.
+  var WORDS_BUILT = { length: 1, toupper: 1, tolower: 1 };
   function extreme(given, way) {
     var items = given.length === 1 && Array.isArray(given[0]) ? given[0]
               : Array.prototype.slice.call(given);
@@ -835,7 +845,12 @@
     length: function (v) {
       return Array.isArray(v) ? v.length : isTable(v) ? v.map.size : String(v).length;
     },
-    append: function (list, x) { listArg(list, "append").push(x); return ""; },
+    // append(first, last), two words: the textbook's way of joining them,
+    // handed back -- the same name as a list's, which it changes
+    append: function (list, x) {
+      if (typeof list === "string") { return list + (typeof x === "string" ? x : readable(x)); }
+      listArg(list, "append").push(x); return "";
+    },
     insert: function (list, at, x) {
       listArg(list, "insert");
       var i = Math.trunc(num(at));
@@ -1114,6 +1129,17 @@
     isnumber: function (v) {
       return typeof v === "number" || (typeof v === "string" && R_READS_NUM.test(v.trim()));
     },
+    // isInteger("42"): words that say a whole number, and nothing else
+    isinteger: function (v) {
+      return typeof v === "number" ? v === Math.trunc(v) : /^[-+]?\d+$/.test(String(v).trim());
+    },
+    // currencyFormat(1234.5) is $1,234.50: dollars and cents, the thousands
+    // marked, the way the textbook shows money
+    currencyformat: function (v) {
+      var n = num(v), said = Math.abs(n).toFixed(2).split(".");
+      return (n < 0 && Number(said.join(".")) ? "-" : "") + "$" +
+             said[0].replace(/\B(?=(\d{3})+(?!\d))/g, ",") + "." + said[1];
+    },
     tolist: function (v) { return itemsOf(v).slice(); },
     unique: function (v) {
       var out = [];
@@ -1207,8 +1233,10 @@
       // a module handed over and kept under a name of its own
       if (held instanceof FnRef) { return await callRef(held, args, given); }
       if (built) {
+        // words that are a number are that number to sqrt() and max(), and
+        // only those: "24 Kiwi" is not 24, and length("007") is 3
         return await built.apply(null, RAW_BUILT[low] ? args : args.map(function (a) {
-          return typeof a === "string" && !isNaN(parseFloat(a)) ? parseFloat(a) : a;
+          return typeof a === "string" && !WORDS_BUILT[low] && R_READS_NUM.test(a.trim()) ? parseFloat(a) : a;
         }));
       }
     } finally {

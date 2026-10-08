@@ -18,8 +18,16 @@ from ..words.lookup import word
 # What a Set puts its value into: a name, or a place inside what a name
 # holds -- scores[i], grid[y][x], p.x, rows[k].cells[j] -- with a bracket
 # allowed inside a bracket once, as in marks[order[i]].
+def _brackets(deep):
+    """What can stand between [ and ]: brackets in it too, so far down."""
+    inside = r"[^\[\]]*"
+    for _ in range(deep):
+        inside = r"(?:[^\[\]]|\[" + inside + r"\])*"
+    return inside
+
+
 R_SET = re.compile(r"^(?:set\s+|let\s+)?([A-Za-z_]\w*"
-                   r"(?:\s*\[(?:[^\[\]]|\[[^\[\]]*\])*\]|\s*\.\s*[A-Za-z_]\w*)*)\s*"
+                   r"(?:\s*\[" + _brackets(5) + r"\]|\s*\.\s*[A-Za-z_]\w*)*)\s*"
                    r"(?:=|:=|<-|←)\s*(.+)$", re.I)
 # Currency and Money are types of their own, not spellings of Real: a
 # program that says a number is money is telling the runner and the code
@@ -42,6 +50,7 @@ R_CALL_ANY = re.compile(r"^call\s+([A-Za-z_]\w*)", re.I)
 R_EACH = re.compile(r"^for\s+(?:(?:each|every)\s+)?([A-Za-z_]\w*)\s+(?:in|of)\s+(.+)$", re.I)
 R_CALL_NAME = re.compile(r"^call\s+([A-Za-z_]\w*)\s*\((.*)\)\s*$", re.I)
 R_BARE_CALL = re.compile(r"^([A-Za-z_]\w*)\s*\((.*)\)$")
+R_METHOD_CALL = re.compile(r"^([A-Za-z_]\w*(?:\s*\[[^\]]*\]|\.[A-Za-z_]\w*)*)\.([A-Za-z_]\w*)\s*\((.*)\)$")
 R_RETURN_VAL = re.compile(r"^return\b\s*(.*)$", re.I)
 
 
@@ -64,8 +73,10 @@ def statement_json(text, node_id, line, shape="", scope=""):
     m = boards.R_ASKED.match(text)
     if m:
         out.update(op="input", var=m.group(1).strip())
-        if (m.group(2) or "").strip():
-            out["prompt"] = m.group(2).strip()
+        if m.group(2):
+            out["as"] = boards.ASKED_AS.get(m.group(2).lower(), "")
+        if (m.group(3) or "").strip():
+            out["prompt"] = m.group(3).strip()
         return out
     m = R_DECL_ONE.match(said)
     if m and R_DECL.match(said):
@@ -74,6 +85,13 @@ def statement_json(text, node_id, line, shape="", scope=""):
                    expr=(m.group(5) or "").strip())
         if m.group(4):
             out["dims"] = [d.strip() for d in R_DIMS.findall(m.group(4))]
+            # Declare Integer days[12] = 31, 28, 31, ...: what the array
+            # starts out holding, written the textbook's way, is a list
+            values = boards.split_top(out["expr"]) if out["expr"][:1] not in "[{" else []
+            if len(values) > 1:
+                out["expr"] = "[" + ", ".join(v.strip() for v in values) + "]"
+                if len(out["dims"]) > 1:
+                    out["flat"] = True      # shaped into rows in program_json
         return out
     if R_OUT.match(text):
         out.update(op="display", parts=said_out(text))
@@ -106,6 +124,11 @@ def statement_json(text, node_id, line, shape="", scope=""):
     m = R_BARE_CALL.match(text)
     if m:                               # greet(name), without the word Call
         out.update(op="call", name=m.group(1), args=m.group(2))
+        return out
+    m = R_METHOD_CALL.match(text)
+    if m:                               # scores.append(s): append(scores, s)
+        given = m.group(3).strip()
+        out.update(op="call", name=m.group(2), args=m.group(1).strip() + (", " + given if given else ""))
         return out
     m = R_CALL_ANY.match(text)
     if m:                               # Call names.append(x): a call all the same
@@ -232,6 +255,62 @@ def items_json(items):
     return out
 
 
+def every_statement(steps):
+    """Each statement in a run of them, and in everything inside them."""
+    for st in steps:
+        yield st
+        for key in ("then", "else", "body"):
+            for inner in every_statement(st.get(key) or []):
+                yield inner
+        for one in st.get("cases") or []:
+            for inner in every_statement(one.get("body") or []):
+                yield inner
+
+
+def shaped(prog):
+    """Declare Integer grid[2][3] = 1, 2, 3, 4, 5, 6: the values in rows of
+    three, the way they fill the table -- [[1, 2, 3], [4, 5, 6]].  The size
+    of a row can be a Constant the program sets to a plain number."""
+    flat = []
+    known = {}
+    for steps in [prog["main"]] + [m["body"] for m in prog["modules"]]:
+        for st in every_statement(steps):
+            if st.get("op") == "declare" and st.get("flat"):
+                flat.append(st)
+            elif st.get("op") == "declare" and re.match(r"^\d+$", st.get("expr") or ""):
+                known[st["var"].lower()] = int(st["expr"])
+    for st in flat:
+        st.pop("flat")
+        sizes = []
+        for d in st["dims"][1:]:
+            d = d.strip()
+            sizes.append(int(d) if d.isdigit() else known.get(d.lower()))
+        if not sizes or None in sizes or not all(sizes):
+            continue
+        values = [v.strip() for v in boards.split_top(st["expr"][1:-1])]
+        if len(values) % _product(sizes) == 0:
+            st["expr"] = _said(_rows(values, sizes))
+
+
+def _product(sizes):
+    out = 1
+    for n in sizes:
+        out *= n
+    return out
+
+
+def _rows(items, sizes):
+    """A flat run of values cut into rows as long as the sizes say."""
+    if not sizes:
+        return items
+    step = _product(sizes)
+    return [_rows(items[i:i + step], sizes[1:]) for i in range(0, len(items), step)]
+
+
+def _said(v):
+    return "[" + ", ".join(_said(x) for x in v) + "]" if isinstance(v, list) else v
+
+
 def program_json(charts):
     """The whole program as data: the main flow, and every module in it."""
     # Asked for here rather than at the top: story.py reads its patterns out
@@ -252,6 +331,7 @@ def program_json(charts):
                 "returns": (mod.rtype if mod else ""),
                 "body": body})
     own = set(m["name"].lower() for m in out["modules"])
+    shaped(out)
     out["main"] = plained(out["main"], own)
     for mod in out["modules"]:
         mod["body"] = plained(mod["body"], own)
@@ -269,7 +349,9 @@ R_WORTH = re.compile(r"[≠≤≥×÷−&]|"
                      r"\b(?:len|left|right|mid|substring|position|ucase|lcase|to_upper|"
                      r"to_lower|string_to_int|string_to_real|str_to_num|float|int_to_string|"
                      r"real_to_string|num_to_str|str|char_to_code|asc|code_to_char|"
-                     r"random_int|randint|randombetween|rand|div|mod|is_num)\s*\(|"
+                     r"random_int|randint|randombetween|rand|div|mod|is_num|"
+                     r"stringtointeger|stringtoreal|integertostring|realtostring|tointeger|toreal|"
+                     r"isreal|isletter|iswhitespace)\s*\(|"
                      r"\.(?:length|upper|lower|left|right|substring)\b|\w\s*\[[^\]]*,", re.I)
 R_ARROW_SET = re.compile(r"^(?:set\s+)?(.+?)\s*←\s*(.+)$", re.I)
 

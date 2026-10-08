@@ -2001,12 +2001,12 @@ End
 CUT_WRITES = [
     ("python",
      ["def part1():", "def part2():", "import shared", "for i in range(",
-      "shared.total = shared.total + score", "---- shared.py"],
+      "shared.total += score", "---- shared.py"],
      ["shared.i", "shared.score", "shared.band", "shared.stars"],
      []),
     ("java",
      ["class Part1 {", "class Part2 {", "class Shared {",
-      "Part1.part1();", "for (int i = 1;", "Shared.total = Shared.total + score;"],
+      "Part1.part1();", "for (int i = 1;", "Shared.total += score;"],
      ["Shared.i", "Shared.score", "Shared.band", "Shared.stars"],
      []),
     ("csharp",
@@ -2237,6 +2237,9 @@ def _():
          [("w_open_if", {"how": "ask", "ask": "close", "text": "End If", "like": 2})]),
         ('Start\nDo\n    Display "round"\nLoop\nEnd\n',
          [("w_do_no_test", {"how": "ask", "ask": "until", "at": 4, "like": 2, "swap": True})]),
+        # the program, and the Python written for it pasted in under it
+        ('Module main()\n    Display "hi"\nEnd Module\n# Untitled\n\nfor i in range(2):\n    print("hi")\n',
+         [("w_code_tail", {"how": "drop", "at": 4, "to": 7})]),
     ]
     bad = []
     for text, expect in want:
@@ -2347,6 +2350,37 @@ def _():
         note += "; %d also in a file each" % apart
     if wrong:
         note += "\n       " + "\n       ".join(wrong[:6])
+    return not wrong, note
+
+
+@check("programs made up at random, plain to insane, run the same everywhere")
+def _():
+    """Programs nobody wrote: four at each level of made_up.py, from a dozen
+    plain lines (level 0) to a dozen modules with loops seven deep (level 5),
+    and eight whose whole numbers go past what a 32-bit int holds -- written
+    out in every language and run, and each one has to print what the runner
+    printed.  The same numbers make the same programs every time.  For
+    thousands of them at once: python tests/thousands.py --count 5000.
+    """
+    if not node_there():
+        return None, "node is not installed -- skipped"
+    import shutil
+    import thousands
+    cases = thousands.made(0, 24, [0, 1, 2, 3, 4, 5], False) + thousands.made(0, 8, [0], True)
+    folder = tempfile.mkdtemp(prefix="_out-made-", dir=HERE)
+    try:
+        shelf, results = thousands.run_batch(cases, folder)
+        ran = [(s, r) for s, r in zip(shelf, results) if not r["faults"]]
+        wrong, tally = written.marked([s for s, r in ran], [r for s, r in ran], folder)
+    except RuntimeError as e:
+        return False, str(e)
+    finally:
+        shutil.rmtree(folder, ignore_errors=True)
+    wrong += ["%s: does not read: %s" % (c["name"], c["unread"]) for c in cases if "unread" in c]
+    said = ", ".join("%s %d" % (lang, tally[lang]["right"]) for lang in sorted(tally))
+    note = "%d programs, %d stopped by the runner as too long: %s" % (len(cases), len(shelf) - len(ran), said)
+    if wrong:
+        note += "\n       " + "\n       ".join(line.split("\n")[0][:300] for line in wrong[:6])
     return not wrong, note
 
 
@@ -2681,10 +2715,10 @@ def _():
 # nought to the runner, and an error in Python and Java -- which is what a
 # JavaScript parseInt read in comes to when it is written out again.
 WRITTEN_DIFFERS = {("js3 numbers", "python"), ("js3 numbers", "java"), ("js3 numbers", "csharp"),
-                   # and numbers past what an int holds: Fib(50) is a long in
-                   # C# and C++, where a Java or C# int written out overflows
-                   ("cs4 recursion and static fields", "java"), ("cs4 recursion and static fields", "csharp"),
-                   ("cpp4 memo and long", "java"), ("cpp4 memo and long", "csharp")}
+                   # a JavaScript default of another kind than what the table
+                   # holds -- {z = "zed"} out of a table of numbers -- is a
+                   # Value in C++, and C++ will not put a Value into a string
+                   ("js4 destructuring defaults", "cpp")}
 
 
 @check("code read in is written back out in every language, and runs the same")

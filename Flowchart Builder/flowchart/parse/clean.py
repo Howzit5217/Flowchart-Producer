@@ -79,6 +79,33 @@ def needs_more(s):
     return depth > 0 or bool(CONT_END.search(s.rstrip()))
 
 
+# total += price, Set count -= 1, i++: the short ways of saying it, said the
+# long way -- Set total = total + price -- which is what the runner, the
+# chart and every language written out from it read.  A sum on the right is
+# kept whole: x *= a + b is x = x * (a + b).
+R_COMPOUND = re.compile(r"^(set\s+|let\s+)?([A-Za-z_]\w*(?:\s*\[[^\[\]]*\]|\s*\.\s*[A-Za-z_]\w*)*)"
+                        r"\s*([-+*/])=(?!=)\s*(.+)$", re.I)
+R_BUMP = re.compile(r"^(?:(\+\+|--)\s*([A-Za-z_]\w*(?:\s*\[[^\[\]]*\])*)|"
+                    r"([A-Za-z_]\w*(?:\s*\[[^\[\]]*\])*)\s*(\+\+|--))\s*;?$")
+
+
+def said_long(text):
+    """A compound assignment or a ++ written out as the Set it means; any
+    other line as it is."""
+    m = R_COMPOUND.match(text)
+    if m:
+        place, op, rest = m.group(2).strip(), m.group(3), m.group(4).strip().rstrip(";").strip()
+        simple = re.match(r"^(?:\w+|\"[^\"]*\"|\d+(?:\.\d+)?)$", rest)
+        return "%s%s = %s %s %s" % ("Set " if m.group(1) else "",
+                                    place, place, op, rest if simple else "(%s)" % rest)
+    m = R_BUMP.match(text)
+    if m:
+        place = (m.group(2) or m.group(3)).strip()
+        sign = (m.group(1) or m.group(4))[0]
+        return "%s = %s %s 1" % (place, place, sign)
+    return text
+
+
 def join_lines(raw_lines):
     """Clean every line and glue continuation lines together.
 
@@ -108,7 +135,7 @@ def join_lines(raw_lines):
         buf = ""
     if buf:
         out.append((buf_indent, buf, buf_line))
-    return out
+    return [(indent, said_long(text) if text else text, no) for indent, text, no in out]
 
 
 def tidy(s):

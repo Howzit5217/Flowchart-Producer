@@ -108,12 +108,17 @@
     if (node.record) { return L.newRecord(node.record, w, recordArgs(node, w)); }
     if (node.index) {
       var holder = w.kind(node.index), at = asCode(node.at, w);
+      if (L.bigInt && L.narrow && w.isWide(node.at)) { at = L.narrow(at); }
       var negative = node.at.unary === "-" && node.at.of.lit !== undefined;
       if (negative && !L.negatives) {
         at = L.lengthOf(held(asCode(node.index, w)), holder, w) + " - " + node.at.of.lit;
       }
       if (holder === "text") { return L.charAt(asCode(node.index, w), at, w); }
-      if (isTableKind(holder)) { return L.lookUp(asCode(node.index, w), at, holder, w); }
+      if (isTableKind(holder)) {
+        var looked = L.lookUp(asCode(node.index, w), at, holder, w);
+        var table = node.index.name && !node.index.field && !node.index.index && !node.index.call ? w.entry(node.index.name) : null;
+        return w.wideTable(table) ? looked.replace(/^\(int\) ?/, "(" + L.bigInt + ") ") : looked;
+      }
       return L.itemAt(asCode(node.index, w), at, holder, w);
     }
     if (node.field) {
@@ -163,8 +168,7 @@
         if (node.right && (node.right.unary === "-" || (node.right.lit !== undefined && Number(node.right.lit) < 0))) { whole = false; }
         if (!L.pow) {
           // 2 ^ 40 is past an int: made a long instead
-          if (whole && L.bigInt && node.left.lit !== undefined && node.right.lit !== undefined &&
-              Math.abs(Math.pow(Number(node.left.lit), Number(node.right.lit))) > 2147483647) {
+          if (whole && L.bigInt && w.isWide(node)) {
             return "(" + L.bigInt + ") " + L.power(a, b, false, w);
           }
           return L.power(a, b, whole, w);
@@ -176,7 +180,12 @@
       case "div":
         return L.into(a, b, whole, w);
       case "mod": case "%":
-        if (L.towardNought && (minusIn(node.left) || minusIn(node.right))) { return L.towardNought(a, b, whole, w); }
+        // Python's % goes the other way from the runner's below nought: its
+        // own % only where neither side can ever be less than nought
+        if (L.towardNought && (L.floorsMod ? !(w.nonNeg(node.left) && w.nonNeg(node.right))
+                                           : (minusIn(node.left) || minusIn(node.right)))) {
+          return L.towardNought(a, b, whole, w);
+        }
         return (!whole && L.rest && (ka === "real" || kb === "real"))
                ? L.rest(a, b, w) : a + " " + L.mod + " " + b;
       case "=": case "==": case "!=": case "<>":
@@ -211,18 +220,47 @@
         if ((ka === "any" || kb === "any") && !words && !compoundKind(ka) && !compoundKind(kb) && L.anyOrder) {
           return L.anyOrder(a, differ ? "!=" : "==", b, w);
         }
+        // "YES" = "yes": the runner lets capitals go between words (== does not)
+        if ((op === "=" || op === "<>") && ka === "text" && kb === "text" && L.sameText) {
+          return L.sameText(a, b, differ, node.left, node.right, w);
+        }
         if ((words || compoundKind(ka) || compoundKind(kb)) && L.alike) { return L.alike(a, b, differ); }
         if ((compoundKind(ka) || compoundKind(kb)) && L.sameItems) { return L.sameItems(a, b, differ, w); }
         return a + " " + (differ ? L.ne : L.eq) + " " + b;
       case "<": case "<=": case ">": case ">=":
         if ((ka === "any" || kb === "any") && L.anyOrder) { return L.anyOrder(a, op, b, w); }
+        if (ka === "text" && kb === "text" && L.orderedText) { return L.orderedText(a, op, b, node.left, node.right, w); }
         if (words && L.ordered) { return L.ordered(a, op, b); }
         return a + " " + op + " " + b;
+      case "*":
+        // [0] * 8, Python's way of making eight noughts, and "-" * 20:
+        // that many over, the way each language says it (Python as it is)
+        var lt = (isListKind(ka) || ka === "text") && kb === "int";
+        var rt = (isListKind(kb) || kb === "text") && ka === "int";
+        if ((lt || rt) && L.ext !== "py" && L.lists && L.lists.repeat) {
+          var many = lt ? node.left : node.right, count = lt ? b : a;
+          var mk = lt ? ka : kb;
+          if (isListKind(mk) && isListKind(want)) { mk = want; }
+          if (many.list && many.list.length === 1 && isListKind(mk) && !compoundKind(elemOf(mk)) && L.lists.newlist) {
+            return L.lists.newlist.call(L, [count, w.fitIn(many.list[0], elemOf(mk))], ["int", elemOf(mk)], w,
+                                        [lt ? node.right : node.left, many.list[0]]);
+          }
+          return L.lists.repeat.call(L, [lt ? a : b, count], [mk, "int"], w, [many, lt ? node.right : node.left]);
+        }
+        if (L.bigInt && ka === "int" && kb === "int" && w.isWide(node) && !w.isWide(node.left) && !w.isWide(node.right)) {
+          return "(" + L.bigInt + ") " + a + " * " + b;
+        }
+        return a + " * " + b;
       case "+":
         if (isListKind(ka) && isListKind(kb) && L.listPlus) { return L.listPlus(a, b, w); }
         if (words && L.shown) {
           if (compoundKind(ka)) { a = L.shown(a, w); ka = "text"; }
           if (compoundKind(kb)) { b = L.shown(b, w); kb = "text"; }
+        }
+        // "a" + True: yes and no joined on as the chart says them
+        if (words && L.flagText) {
+          if (ka === "bool") { a = L.flagText(a); ka = "text"; }
+          if (kb === "bool") { b = L.flagText(b); kb = "text"; }
         }
         if (words && L.worded) {
           if (ka !== "text") { a = L.worded(a); }
@@ -231,6 +269,10 @@
         if (words && L.words && node.left.str !== undefined &&
             (node.right.str !== undefined || kb !== "text")) { a = L.words(a); }
         return a + " + " + b;
+      // 100 in scores: contains(scores, 100), each language's way
+      case "in": case "not in":
+        var held1 = w.calling({ call: "contains", args: [node.right, node.left] });
+        return op === "in" ? held1 : L.not + held(held1);
       case "and": case "&&": return a + " " + L.and + " " + b;
       case "or": case "||": return a + " " + L.or + " " + b;
       default: return a + " " + op + " " + b;
@@ -506,7 +548,12 @@
       if (!low) { out.push(item); return; }
       if (loose[low]) { return; }         // nobody's: every chart counts its own
       if (sends[low] !== undefined) {     // it is one part's, and goes with it
-        parts[sends[low]].body.unshift(item);
+        // ...as the part's own: a Constant written above everything is the
+        // program's, and left so it would be read from the shared file
+        // while its value was set in the part
+        var owned = Object.assign({}, item);
+        delete owned.scope;
+        parts[sends[low]].body.unshift(owned);
         return;
       }
       if (!mine[low]) { out.push(item); return; }
@@ -552,11 +599,15 @@
       eachStep(scope.items, function (item) {
         var trees = sumsOf(item).map(tree);
         if (item.op === "call") { trees.push(callOf(item)); }
+        if (item.op === "wait") { used["@wait"] = true; }
         trees.forEach(function (node) {
           eachCall(node, function (call) { used[lowered(call.call)] = true; });
         });
       });
     });
+    // what brings in Python's random: a name called random is in its way
+    // only then -- and its time only where the program waits
+    if (used.random || used.shuffle || used.shuffled || used.choice) { used["@random"] = true; }
 
     // Where the program is written out in several files, the names of
     // those files are names too: `import shared` puts `shared` into the
@@ -578,10 +629,14 @@
     var recLow = Object.create(null);
     Object.keys(recordsIn(prog)).forEach(function (kind) { recLow[lowered(kind)] = true; });
 
-    function safe(said, mine) {          // a name this language will accept
+    function safe(said, mine, entry) {   // a name this language will accept
       var soft = L.soft && holds(L.soft, said) && used[L.soft[said]];
       var home = mine ? homes[said] === "shared" : !!homes[said];
-      return (L.kept[said] || soft || home) ? said + "_" : said;
+      // what the C library puts in every file's way is only in the way of
+      // what the whole file shares: a variable inside a function can be
+      // called time or index, and is
+      var kept = L.kept[said] && !(L.keptShared && L.keptShared[said] && entry && !entry.shared);
+      return (kept || soft || home) ? said + "_" : said;
     }
 
     var w = {
@@ -632,12 +687,12 @@
 
       // ---- names ---------------------------------------------------------
       entry: function (who) { return lookUp(w.scope, bareName(who)); },
-      spelled: function (entry) { return safe(entry.name); },
+      spelled: function (entry) { return safe(entry.name, false, entry); },
       named: function (who) {            // a name, as this chart knows it
         var entry = lookUp(w.scope, who);
         if (!entry) { return safe(who); }
         var boxed = entry.param && w.boxes[lowered(entry.name)];
-        return (entry.shared ? w.reach : "") + safe(entry.name) +
+        return (entry.shared ? w.reach : "") + safe(entry.name, false, entry) +
                (boxed ? "[0]" : "");
       },
       called: function (one) {
@@ -686,20 +741,22 @@
       sharing: function () {
         var seen = Object.create(null), list = [];
         prog.main.items.forEach(function (item) {
-          if (item.scope !== "global" || item.op !== "declare") { return; }
+          if (!globalItem(item, prog) || item.op !== "declare") { return; }
           var entry = lookUp(prog.shared, bareName(item.var));
           if (!entry || seen[lowered(entry.name)]) { return; }
           seen[lowered(entry.name)] = true;
-          list.push({ entry: entry, name: safe(entry.name), fixed: !!item.const,
+          list.push({ entry: entry, name: safe(entry.name), fixed: !!item.const && !entry.setAgain,
                       plain: isLiteral(tree(item.expr || "0")),
-                      code: w.sizedList(item, entry) ||
-                            (item.expr ? w.fitted(item.expr, entry.kind, entry) : w.zero(entry.kind, entry)) });
+                      code: w.withWide(entry, function () {
+                        return w.sizedList(item, entry) ||
+                               (item.expr ? w.fitted(item.expr, entry.kind, entry) : w.zero(entry.kind, entry));
+                      }) });
         });
         Object.keys(prog.shared.names).forEach(function (low) {
           var entry = prog.shared.names[low];
           if (seen[low] || entry.param) { return; }
           list.push({ entry: entry, name: safe(entry.name), fixed: false,
-                      plain: true, code: w.zero(entry.kind, entry) });
+                      plain: true, code: w.withWide(entry, function () { return w.zero(entry.kind, entry); }) });
         });
         return list;
       },
@@ -708,7 +765,7 @@
       // the program rather than to main and go in the shared file.
       mains: function () {
         return prog.main.items.filter(function (item) {
-          return !(item.scope === "global" && item.op === "declare");
+          return !(globalItem(item, prog) && item.op === "declare");
         });
       },
       // Does this chart touch a name the whole program shares?  A file that
@@ -788,6 +845,16 @@
         if (node.str === "" && entry && (entry.nullable || entry.givesNone) && L.boxedKind && L.boxedKind[into]) { return L.nullValue; }
         if (node.str === "" && w.nothingFor(into)) { return w.nothingFor(into); }
         if (L.fromAny && into && into !== "any" && w.kind(node) === "any") { return L.fromAny(asCode(node, w, into), into, w); }
+        // Set middle = (first + last) / 2 into an Integer: Python and
+        // JavaScript divide into a fraction, so the whole part of it is
+        // taken, the way the others' / takes it (and the runner: keptWhole)
+        var top = node;
+        while (top.group) { top = top.group; }
+        if (into === "int" && L.wholeOver && top.op === "/") {
+          return L.wholeOver(asCode(top.left, w), asCode(top.right, w),
+                             w.nonNeg(top.left) && w.nonNeg(top.right) &&
+                             w.kind(top.left) === "int" && w.kind(top.right) === "int");
+        }
         if (!L.narrow || into !== "int" || w.kind(node) !== "real") {
           return asCode(node, w, into);
         }
@@ -795,11 +862,28 @@
             w.kind(node.right) === "int") {
           return asCode(node.left, w) + " / " + asCode(node.right, w);
         }
+        if (entry && entry.wide && L.bigInt) { return "(" + L.bigInt + ") " + held(asCode(node, w)); }
         return L.narrow(asCode(node, w));
       },
       // A test.  `While n` is fine by the runner, and by Python; the typed
       // languages want to be told that what is meant is "while n is not 0".
       tested: function (src) { return w.truth(tree(src)); },
+      // The opposite of a test, as anybody would write it: price > 0
+      // rather than not (price <= 0), done rather than not (not done)
+      negated: function (src) {
+        var node = tree(src);
+        while (node && node.group) { node = node.group; }
+        if (node && node.unary === "not" && w.kind(node.of) === "bool") { return w.write(node.of); }
+        var flip = node && NEGATED[node.op];
+        if (flip) {
+          var ka = w.kind(node.left), kb = w.kind(node.right);
+          var order = !/^(=|==|<>|!=)$/.test(node.op);
+          var ok = order ? /^(int|real|text)$/.test(ka) && /^(int|real|text)$/.test(kb) && (ka === "text") === (kb === "text")
+                         : /^(int|real|text|bool)$/.test(ka) && /^(int|real|text|bool)$/.test(kb);
+          if (ok) { return w.write({ op: flip, left: node.left, right: node.right }); }
+        }
+        return L.not + "(" + w.code(src) + ")";
+      },
       // Whether something counts as yes, the way the runner counts: a
       // number that is not nought, words that are not empty, a list with
       // something in it, a record that is there at all.
@@ -848,6 +932,7 @@
       elemType: function (overSrc, elem) {
         var over = tree(overSrc), held = over.name && !over.field && !over.index ? w.entry(over.name) : null;
         if (held && held.elemNullable && L.boxedKind && L.boxedKind[elem]) { return L.boxedKind[elem]; }
+        if (elem === "int" && w.wideList(held)) { return L.bigInt; }
         return w.typeOf(elem || "real");
       },
       nothingFor: function (kind) {
@@ -869,12 +954,18 @@
       },
       // One thing handed to a module, as the module needs it handed.
       handed: function (one, i, node) {
-        var p = one.params[i], code = asCode(node, w, p && p.entry.kind);
+        var p = one.params[i];
+        // memo = {} handed to a module that keeps longs in it: made as one
+        var code = w.withWide(p && p.entry, function () { return asCode(node, w, p && p.entry.kind); });
         if (p && node.str === "" && w.nothingFor(p.entry.kind)) { code = w.nothingFor(p.entry.kind); }
         if (!p) { return code; }
         var how = p.ref ? w.plan(one) : "";
-        if (how === "own" && node.name) { return L.refArg(code); }
+        if (how === "own" && (node.name || (node.index && L.asArrays && L.asArrays(w)))) { return L.refArg(code); }
         if (how === "box") { return L.boxArg(code, p.entry.kind); }
+        // C++: a list or table made on the spot, handed to a module that
+        // changes the one it is given (and so takes it by reference)
+        if (L.refTemp && !how && p.entry.changed && compoundKind(p.entry.kind) &&
+            !(node.name || node.index || node.field)) { return L.refTemp(code, w); }
         if (L.narrow && p.entry.kind === "int" && w.kind(node) === "real") {
           return L.narrow(code);
         }
@@ -955,6 +1046,11 @@
           }
         }
         if (low === "classof" && staticClass(kinds[0])) { return quoted(staticClass(kinds[0])); }
+        // "aeiou".find(c): words written down are not a string in C++ until
+        // they are made one, and have nothing to call
+        if (L.madeText && kinds[0] === "text" && node.args[0] && node.args[0].str !== undefined) {
+          codes[0] = L.madeText(codes[0]);
+        }
         // what lists, tables and words have done to them
         if (L.lists[low] && (!holds(BUILT_KIND, low) || !L.calls[low] ||
                              kinds.some(function (k) { return isListKind(k) || isTableKind(k); }) ||
@@ -968,7 +1064,7 @@
             return codes[0];
           }
           if (/^(int|integer)$/.test(low) && kinds[0] === "text" && L.parseInt) { return L.parseInt(codes[0]); }
-          return L.calls[low].call(L, codes, kinds, w);
+          return L.calls[low].call(L, codes, kinds, w, node.args);
         }
         if (low === "random" && L.calls.random) { return L.calls.random.call(L, [], [], w); }
         // a function kept in a name: called through the name, wherever it is kept
@@ -994,9 +1090,40 @@
       // `return;` in it -- which is not Java, and will not compile.
       returns: function (one) {
         if (!L.kinds) { return ""; }
-        if (w.plan(one) === "back") { return w.typeOf(one.refs[0].entry.kind); }
+        if (w.plan(one) === "back") { return L.typed(one.refs[0].entry, w).trim(); }
         if (one.givesNone && L.boxedKind && L.boxedKind[one.gives]) { return L.boxedKind[one.gives]; }
+        if (one.wide && one.gives === "int" && L.bigInt) { return L.bigInt; }
         return one.gives ? w.typeOf(one.gives) : "void";
+      },
+      // Is what this comes to past what an int holds (wideNames)?
+      isWide: function (node) { return !!L.bigInt && wideIn(node, w.scope, prog); },
+      // A list of longs: memo[] holding Fibonacci numbers.  Java's lists
+      // will not take an int added to a list of Longs, so there it is one
+      // only where the program's lists are arrays.
+      wideList: function (entry) {
+        return !!(entry && entry.elemWide && L.bigInt && entry.kind === "list:int" &&
+                  (L.ext !== "java" || (L.asArrays && L.asArrays(w))));
+      },
+      // A table of longs: memo[n] = fib(n - 1) + fib(n - 2)
+      wideTable: function (entry) {
+        return !!(entry && entry.elemWide && L.bigInt && isTableKind(entry.kind) && tableValue(entry.kind) === "int");
+      },
+      // its type, as it would be and as it is: Dictionary<int, long>
+      tableTypes: function (entry) {
+        var plain = typeOfKind(L, entry.kind, w);
+        var one = L.ext === "java" ? "Integer" : "int", wide = L.ext === "java" ? "Long" : L.bigInt;
+        return { plain: plain, wide: plain.replace(new RegExp(one + ">$"), wide + ">") };
+      },
+      // ...and whatever is written about one, written with long for int
+      withWide: function (entry, fn) {
+        if (w.wideTable(entry)) {
+          var said = fn(), t = w.tableTypes(entry);
+          return typeof said === "string" ? said.split(t.plain).join(t.wide) : said;
+        }
+        if (!w.wideList(entry)) { return fn(); }
+        var keep = L.kinds;
+        L.kinds = Object.assign({}, keep, { "int": L.bigInt });
+        try { return fn(); } finally { L.kinds = keep; }
       },
 
       zero: function (kind, entry) {     // what a name holds before it is given anything
@@ -1035,6 +1162,16 @@
         if (code === undefined && L.widen && into === "real" && w.kind(tree(src)) === "int") { put = L.widen(put); }
         if (node.index) {
           var hk = w.kind(node.index), holder = asCode(node.index, w), at = asCode(node.at, w);
+          if (L.bigInt && L.narrow && w.isWide(node.at)) { at = L.narrow(at); }
+          // a long put into a list of ints
+          if (code === undefined && into === "int" && L.bigInt && L.narrow && !w.wideList(listEntryOf(node)) &&
+              !w.wideTable(listEntryOf(node)) && w.isWide(tree(src))) {
+            put = L.narrow(put);
+          }
+          // Java's table of Longs takes no int
+          if (code === undefined && L.ext === "java" && w.wideTable(listEntryOf(node)) && !w.isWide(tree(src))) {
+            put = "(" + L.bigInt + ") " + held(put);
+          }
           if (isTableKind(hk)) { return L.putIn(holder, at, put, hk, w); }
           if (hk === "text" && L.setChar) { return L.setChar(holder, at, put, w); }
           return L.setAt(holder, at, put, hk, w);
@@ -1065,6 +1202,104 @@
         return L.lists.newlist.call(L, nodes.map(function (n) { return asCode(n, w); }).concat([fill]),
                                     nodes.map(function () { return "int"; }).concat([inner]), w,
                                     nodes.concat([item.expr ? tree(item.expr) : { lit: fill }]));
+      },
+      // Does working these out call a module that prints or asks?
+      speaksIn: function (srcs) {
+        if (!prog.speakers) {
+          var talk = Object.create(null), more = true;
+          prog.mods.forEach(function (one) {
+            eachStep(one.body, function (st) { if (st.op === "display" || st.op === "input") { talk[lowered(one.name)] = true; } });
+          });
+          while (more) {
+            more = false;
+            prog.mods.forEach(function (one) {
+              if (talk[lowered(one.name)]) { return; }
+              eachStep(one.body, function (st) {
+                var trees = sumsOf(st).map(tree);
+                if (st.op === "call") { trees.push(callOf(st)); }
+                trees.forEach(function (node) {
+                  eachCall(node, function (c) {
+                    if (talk[lowered(c.call)] && !talk[lowered(one.name)]) { talk[lowered(one.name)] = true; more = true; }
+                  });
+                });
+              });
+            });
+          }
+          prog.speakers = talk;
+        }
+        var said = false;
+        srcs.forEach(function (src) {
+          eachCall(tree(src), function (c) { if (prog.speakers[lowered(c.call)] && !w.entry(c.call)) { said = true; } });
+        });
+        return said;
+      },
+      // What a For Each's own body does to the list it goes round: "grow"
+      // where it adds, takes away, reorders or hands it to a module, "set"
+      // where it only puts into its places, "" where it leaves it be.
+      listChangedIn: function (item) {
+        var over = tree(item.over || "");
+        if (!over.name || over.field || over.call || !isListKind(w.kind(over))) { return ""; }
+        var low = lowered(over.name), said = "";
+        function rootIs(node) {
+          while (node && (node.index || node.group)) { node = node.index || node.group; }
+          return !!node && !!node.name && !node.field && lowered(node.name) === low;
+        }
+        eachStep(item.body, function (one) {
+          if ((one.op === "set" || one.op === "input") && one["var"] && !R_JUST_A_NAME.test(one["var"]) &&
+              rootIs(tree(one["var"]))) { said = said || "set"; }
+          var trees = sumsOf(one).map(tree);
+          if (one.op === "call") { trees.push(callOf(one)); }
+          trees.forEach(function (node) {
+            eachCall(node, function (call) {
+              var name = lowered(call.call), own = prog.byName[name];
+              if ((own || CHANGES_ITS_FIRST[name]) && (call.args || []).some(function (a, i) {
+                return (own || i === 0) && rootIs(a);
+              })) { said = "grow"; }
+            });
+          });
+        });
+        return said;
+      },
+      // Is this sure never to come to less than nought (18-ahead, signsOf)?
+      nonNeg: function (node) { return nonNegIn(node, w.scope, prog); },
+      // A name of main's that the whole program shares as well -- the same
+      // name set above every module and declared again inside Module main
+      // -- in a language that writes main's lines where the shared names
+      // are: one name there, declared once.
+      sharedToo: function (entry) {
+        if (!L.mainAtTop || w.scope !== prog.main || !entry) { return false; }
+        var other = prog.shared.names[lowered(entry.name)];
+        return !!other && other !== entry;
+      },
+      // x = x + 1 as x++ (x += 1 in Python), total = total + price as
+      // total += price: the same sum, said the way anybody says it.  Only
+      // for a number or some words -- a list added to with += is changed in
+      // place, where any other name for it would see the change -- and only
+      // where the place costs nothing to work out twice.
+      shorter: function (line, node, kind) {
+        var op = node && node.op, cut = line.indexOf(" = ");
+        if (cut < 1 || !(op === "+" || op === "-" || op === "*") || !/^(int|real|text)$/.test(kind) ||
+            (kind === "text" && op !== "+") || !node.left) { return line; }
+        var place = line.slice(0, cut), code = line.slice(cut + 3), head = place + " " + op + " ";
+        if (/[()"'\x60]/.test(place) || code.indexOf(head) !== 0 || w.write(node.left) !== place) { return line; }
+        var rest = code.slice(head.length);
+        if (!rest) { return line; }
+        if (rest === "1" && op === "*") { return line; }
+        if (rest === "1" && L.semi && kind !== "text") { return place + op + op; }
+        if (wrappedWhole(rest)) { rest = rest.slice(1, -1); }
+        return place + " " + op + "= " + rest;
+      },
+      // Does this statement declare the name, as the first to give it
+      // something (tightNames)?  And does this loop declare its own counter?
+      declaresHere: function (item, entry) {
+        var mine = entry && entry.tight && prog.declares && prog.declares.get(item);
+        return !!mine && mine.indexOf(entry) >= 0;
+      },
+      bareDeclare: function (entry) {    // int total -- no value, none needed
+        return L.lead(false, false) + L.typed(entry, w) + w.spelled(entry);
+      },
+      ownLoop: function (item, entry) {
+        return !!entry && (!!entry.perLoop || w.declaresHere(item, entry));
       },
       // The names the whole program shares that nobody declared.
       sharedLines: function (deep) {
@@ -1113,8 +1348,10 @@
         if (L.hoists) {
           Object.keys(w.scope.names).forEach(function (low) {
             var entry = w.scope.names[low];
-            if (entry.hoist) {
-              w.line(deep, L.declare(w, entry, w.zero(entry.kind, entry), false, true) + L.semi);
+            if (entry.hoist && !w.sharedToo(entry)) {
+              w.line(deep, w.withWide(entry, function () {
+                return entry.bare ? w.bareDeclare(entry) : L.declare(w, entry, w.zero(entry.kind, entry), false, true);
+              }) + L.semi);
             }
           });
         }
@@ -1158,6 +1395,12 @@
         var started = out.length;
         for (var i = 0; i < (items || []).length; i++) {
           w.before = i ? items[i - 1] : null;  // what an Input may take as its question
+          var placed = L.hoists && prog.before && prog.before.get(items[i]);
+          (placed || []).forEach(function (entry) {
+            if (w.sharedToo(entry)) { return; }
+            w.line(deep, (entry.bare ? w.bareDeclare(entry)
+                          : L.declare(w, entry, w.zero(entry.kind, entry), false, true)) + L.semi);
+          });
           each(items[i], deep);
           // Whatever follows a Return can never run, and Java will not
           // compile a line that can never run.
@@ -1185,6 +1428,23 @@
           if (other) { w.block(other.body, deep, true); }
           return;
         }
+        // Select abs(roll()) MOD 4 is worked out once, as the runner works it
+        // out, and not again for every Case -- each of which would roll
+        // again, and do the sum again.  It goes in a name of its own first.
+        var looks = 0, kind = w.kind(subject), held = null, braced = false;
+        tests.forEach(function (one) {
+          looks += one.any ? one.any.reduce(function (n, piece) { return n + (piece.is !== undefined ? 1 : 2); }, 0) : 1;
+        });
+        if (looks > 1 && workedOut(subject) && /^(int|real|text|bool)$/.test(kind)) {
+          held = { name: w.spare("choice"), kind: kind, wide: kind === "int" && w.isWide(subject) };
+          w.scope.names[lowered(held.name)] = held;
+          // straight inside a switch's case, a C++ declaration would be
+          // jumped over by the next case, which the compiler refuses
+          braced = !!L.shut && w.caseDeep === deep;
+          if (braced) { w.line(deep, "{"); deep++; }
+          w.line(deep, L.declare(w, held, w.write(subject), true, false) + L.semi);
+          subject = tree(held.name);
+        }
         for (var i = tests.length - 1; i >= 0; i--) {
           rest = { op: "if", chained: i > 0,
                    test: caseTest(subject, tests[i]),
@@ -1192,8 +1452,66 @@
                    "else": rest ? [rest] : (other ? other.body : []) };
         }
         each(rest, deep);
+        if (held) { delete w.scope.names[lowered(held.name)]; }
+        if (braced) { w.line(deep - 1, "}"); }
+      },
+
+      // A name for something the writer holds on to that the program never
+      // named: choice, choice2 -- never one the program, the language or
+      // another of these in the same module already has.
+      spared: {},
+      spare: function (base) {
+        var home = (w.where ? lowered(w.where.name) : "") + ":";
+        for (var n = 1; ; n++) {
+          var said = n > 1 ? base + n : base, low = lowered(said);
+          if (!lookUp(w.scope, said) && !prog.byName[low] && !(prog.records && prog.records[said]) &&
+              !L.kept[said] && safe(said) === said && !w.spared[home + low]) {
+            w.spared[home + low] = true;
+            return said;
+          }
+        }
       }
     };
+
+    var NEGATED = { "<": ">=", "<=": ">", ">": "<=", ">=": "<", "=": "<>", "<>": "=", "==": "!=", "!=": "==" };
+
+  // "(a + b)", in brackets that close at its very end, and not "(a) + (b)"
+    function wrappedWhole(code) {
+      if (code.charAt(0) !== "(" || code.charAt(code.length - 1) !== ")") { return false; }
+      var depth = 0, quote = "";
+      for (var i = 0; i < code.length; i++) {
+        var c = code.charAt(i);
+        if (quote) { if (c === "\\") { i++; } else if (c === quote) { quote = ""; } continue; }
+        if (c === '"' || c === "'") { quote = c; continue; }
+        if (c === "(") { depth++; }
+        if (c === ")") { depth--; if (!depth && i < code.length - 1) { return false; } }
+      }
+      return depth === 0;
+    }
+
+    // memo[n]: the name of the list it is a place in
+    function listEntryOf(node) {
+      var at = node && node.index;
+      return at && at.name && !at.field && !at.index && !at.call ? w.entry(at.name) : null;
+    }
+
+    // Does working this out call one of the program's own modules?
+    function callsMine(node) {
+      var hit = false;
+      eachCall(node, function (c) { if (prog.byName[lowered(c.call)] && !w.entry(c.call)) { hit = true; } });
+      return hit;
+    }
+
+    // Worth working out only once: anything more than a name, a number or
+    // a place in a list or record.
+    function workedOut(node) {
+      if (!node) { return false; }
+      if (node.call || node.op || node.unary) { return true; }
+      if (node.group) { return workedOut(node.group); }
+      if (node.index) { return workedOut(node.index) || workedOut(node.at); }
+      if (node.field) { return workedOut(node.field); }
+      return false;
+    }
 
     function shut(deep) { if (L.shut) { w.line(deep, L.shut); } }
 
@@ -1219,6 +1537,57 @@
       shut(deep);
     }
 
+    // swap(array[i], array[i + 1]), the textbook's bubble sort: a place in a
+    // list or a record handed to a module to change, which is put back into
+    // afterwards the way a Set puts into it.  (A letter of some words is no
+    // such place, and nor is a place in a table.)
+    w.refPlace = function (src) {
+      src = String(src || "").trim();
+      if (!src || R_JUST_A_NAME.test(src)) { return null; }
+      var node = tree(src), at = node;
+      if (!node.index && !node.field) { return null; }
+      while (at.index || at.field) {
+        var holder = w.kind(at.index || at.field);
+        if (at.index ? !isListKind(holder) : !isRecKind(holder) && holder !== "") { return null; }
+        at = at.index || at.field;
+      }
+      return at.name && !at.call ? node : null;
+    };
+
+    // For Each i In range(0, n) -- Python's own for, read in -- as the count
+    // it is: from, to (not reached) and by how much, or null where it is
+    // not a count a counted `for` goes through the same way.  `exact` is
+    // for a language whose own loop is range()'s: it only needs the call
+    // to be the built-in one.
+    w.rangeOf = function (item, exact) {
+      var node = tree(item.over || "");
+      if (!node.call || node.field || lowered(node.call) !== "range" ||
+          prog.byName.range || w.entry("range")) { return null; }
+      var a = node.args || [];
+      if (!a.length || a.length > 3) { return null; }
+      if (a.some(function (one) { return w.kind(one) !== "int"; })) { return null; }
+      var by = 1;
+      if (a.length === 3) {
+        var s = a[2], n = s.lit !== undefined ? Number(s.lit)
+              : s.unary === "-" && s.of.lit !== undefined ? -Number(s.of.lit) : NaN;
+        if (!n || n !== Math.trunc(n)) { return exact ? {} : null; }
+        by = n;
+      }
+      var out = { from: a.length > 1 ? w.write(a[0]) : "0", to: w.write(a[a.length > 1 ? 1 : 0]),
+                  by: by, down: by < 0, codes: a.map(function (one) { return w.write(one); }) };
+      if (exact) { return out; }
+      // a counted for leaves its counter one past where For Each did, goes
+      // round as often as the counter says rather than once a number, and
+      // looks at where it stops every time round
+      var ends = [];
+      a.forEach(function (one) {
+        tokens(w.write(one)).forEach(function (tok) { if (tok.t === "name") { ends.push(tok.v); } });
+      });
+      if (counterReadAfter(prog, item, item["var"]) ||
+          setInside(item.body, [item["var"]].concat(ends), prog)) { return null; }
+      return out;
+    };
+
     // A Call.  Most are a line; one that hands something over by reference
     // may need the answer putting back where it came from afterwards.
     function call(item, deep) {
@@ -1226,6 +1595,11 @@
       var given = pieces(item.args || "");
       var how = one ? w.plan(one) : "";
       if (how === "box") { L.boxCall(w, one, given, deep); return; }
+      if (how === "own" && L.refTemps && !(L.asArrays && L.asArrays(w)) &&
+          one.params.some(function (p, i) { return p.ref && w.refPlace(given[i]); })) {
+        L.refTemps(w, one, given, deep);
+        return;
+      }
       w.statement = true;
       var code = w.calling(callOf(item));
       w.statement = false;
@@ -1233,15 +1607,23 @@
       // and a cast in front of a call that nothing reads is not a statement
       if (L.kinds) { code = code.replace(/^\((?:int|double|boolean|bool)\)\s*/, ""); }
       if (how === "back") {
-        var any = false, first = null;
+        var any = false, first = null, places = [];
         var targets = one.params.map(function (p, i) {
           if (!p.ref) { return undefined; }
           var mine = R_JUST_A_NAME.test(given[i] || "") ? given[i].trim() : "";
           if (mine) { any = true; first = first || { mine: w.entry(mine), p: p }; }
-          return mine ? w.named(mine) : null;
+          if (mine) { return w.named(mine); }
+          var place = w.refPlace(given[i]);
+          if (place) { any = true; places.push({ src: given[i].trim(), node: place, p: p }); return asCode(place, w); }
+          return null;
         }).filter(function (t) { return t !== undefined; });
-        if (any) {
-          if (L.narrow && targets.length === 1 && first.mine &&
+        if (any && targets.length === 1 && places.length === 1) {
+          // one answer, going into a place: put there the way a Set puts it
+          var put = places[0];
+          if (L.narrow && w.kind(put.node) === "int" && put.p.entry.kind === "real") { code = L.narrow(code); }
+          code = w.store(put.src, undefined, code);
+        } else if (any) {
+          if (L.narrow && targets.length === 1 && first && first.mine &&
               first.mine.kind === "int" && first.p.entry.kind === "real") {
             code = L.narrow(code);
           }
@@ -1255,7 +1637,22 @@
       var entry, code;
       switch (item.op) {
         case "declare":
-          entry = lookUp(item.scope === "global" ? prog.shared : w.scope, item.var);
+          entry = lookUp(globalItem(item, prog) ? prog.shared : w.scope, item.var);
+          // declared where it is first given something (tightNames), or
+          // here without a value, since nothing reads the one it would have
+          if (entry && entry.tight) { break; }
+          if ((w.wideList(entry) || w.wideTable(entry)) && !item.wideDone) {
+            item.wideDone = true;
+            try {
+              var wideLines = w.aside(function () { w.withWide(entry, function () { each(item, deep); }); });
+              w.pour(wideLines.map(function (row) { return w.withWide(entry, function () { return row; }); }));
+            } finally { item.wideDone = false; }
+            break;
+          }
+          if (entry && entry.bare && !globalItem(item, prog) && !w.sharedToo(entry)) {
+            if (L.hoists) { w.line(deep, w.bareDeclare(entry) + L.semi); }
+            break;
+          }
           code = w.sizedList(item, entry) ||
                  (item.expr ? w.fitted(item.expr, entry.kind, entry) : w.zero(entry.kind, entry));
           if (L.hoists && entry.hoist) {
@@ -1265,28 +1662,55 @@
             var spot = entry.spots.filter(function (s) { return s.item === item; })[0];
             if (item.expr || (spot && spot.deep > 0)) {
               w.line(deep, w.named(item.var) + " = " + code + L.semi);
+              if (L.afterDeclare) { L.afterDeclare(w, w.named(item.var), code, deep); }
             }
             break;
           }
-          w.line(deep, L.declare(w, entry, code, !!item.const,
+          if (w.sharedToo(entry) && item.scope !== "global") {
+            w.line(deep, w.named(item.var) + " = " + code + L.semi);
+            break;
+          }
+          w.line(deep, L.declare(w, entry, code, (!!item.const && !(entry && entry.setAgain)) ||
+                                 !!(L.constLocals && entry && entry.writes === 0 && !entry.shared),
                                  isLiteral(tree(item.expr || "0"))) + L.semi);
+          if (L.afterDeclare) { L.afterDeclare(w, w.named(item.var), code, deep); }
           break;
         case "set":
+          // Set scores[pick()] = mark(): the runner works out what goes in
+          // before where it goes, as Python and C++ do, and JavaScript, Java
+          // and C# the other way round.  Where both call a module of the
+          // program's, what goes in is worked out first, into a name.
+          if (L.leftFirst && !R_JUST_A_NAME.test(item["var"] || "") &&
+              callsMine(tree(item["var"])) && callsMine(tree(item.expr))) {
+            var into = w.kind(tree(item["var"]));
+            if (/^(int|real|text|bool)$/.test(into)) {
+              var heldValue = { name: w.spare("value"), kind: into };
+              w.line(deep, L.declare(w, heldValue, w.fitted(item.expr, into), false, false) + L.semi);
+              w.line(deep, w.store(item["var"], undefined, w.spelled(heldValue)) + L.semi);
+              break;
+            }
+          }
           if (!R_JUST_A_NAME.test(item["var"] || "")) {
-            w.line(deep, w.store(item["var"], item.expr) + L.semi);
+            w.line(deep, w.shorter(w.store(item["var"], item.expr), tree(item.expr),
+                                   w.kind(tree(item["var"]))) + L.semi);
             break;
           }
           entry = w.entry(item.var);
-          code = w.fitted(item.expr, entry ? entry.kind : "", entry);
-          if (L.hoists && entry && entry.born === item) {
-            w.line(deep, L.declare(w, entry, code, false, false) + L.semi);
+          code = w.withWide(entry, function () { return w.fitted(item.expr, entry ? entry.kind : "", entry); });
+          if (L.hoists && entry && (entry.born === item || w.declaresHere(item, entry))) {
+            w.line(deep, L.declare(w, entry, code, !!(L.constLocals &&
+                   (entry.tight ? entry.once : entry.writes === 1)), false) + L.semi);
           } else {
-            w.line(deep, w.named(bareName(item.var)) +
+            w.line(deep, w.shorter(w.named(bareName(item.var)) +
                    String(item.var).slice(bareName(item.var).length).trim() +
-                   " = " + code + L.semi);
+                   " = " + code, tree(item.expr), entry ? entry.kind : "") + L.semi);
           }
           break;
         case "display":
+          // Display "Total: ", total(xs) where total() prints as well: the
+          // line is worked out first and then printed, as the runner does --
+          // a C++ stream would have "Total: " out before total() spoke
+          if (L.sayLater && w.speaksIn(pieces(item.parts || ""))) { L.sayLater(w, saying(item.parts, w), deep); break; }
           w.line(deep, L.say(saying(item.parts, w)) + L.semi);
           break;
         case "input":
@@ -1317,8 +1741,9 @@
           }
           code = L.ask(entry.kind === "int" ? "whole" : entry.kind === "real" ? "real"
                      : entry.kind === "bool" ? "flag" : "text", w, asking);
-          if (L.hoists && entry.born === item) {
-            w.line(deep, L.declare(w, entry, code, false, false) + L.semi);
+          if (L.hoists && (entry.born === item || w.declaresHere(item, entry))) {
+            w.line(deep, L.declare(w, entry, code, !!(L.constLocals &&
+                   (entry.tight ? entry.once : entry.writes === 1)), false) + L.semi);
           } else {
             w.line(deep, w.named(item.var.trim()) + " = " + code + L.semi);
           }
@@ -1351,13 +1776,26 @@
           break;
         case "while":
           if (!item.cond) { w.line(deep, L.note + item.text); break; }
-          code = item.until ? L.not + "(" + w.code(item.cond) + ")" : w.tested(item.cond);
+          code = item.until ? w.negated(item.cond) : w.tested(item.cond);
           w.line(deep, "while " + L.test(code) + L.open);
           w.block(item.body, deep + 1);
           shut(deep);
           break;
         case "dowhile": L.repeat(w, item, deep); break;
-        case "foreach": L.forEach(w, item, deep); break;
+        case "foreach":
+          var counted = L.countRange && w.rangeOf(item, L.countRange.exact);
+          if (counted && counted.codes) { L.countRange(w, item, counted, deep); break; }
+          // a list the loop itself changes: gone round by its places, as
+          // the runner goes round it, where the language's own for would
+          // stop on it (C# on any change, Java and C++ on one that adds or
+          // takes away)
+          var changes = L.walkByIndex && w.listChangedIn(item);
+          if (changes && L.walkByIndex(w, item, changes)) {
+            L.indexLoop(w, item, deep);
+            break;
+          }
+          L.forEach(w, item, deep);
+          break;
         case "for": L.count(w, item, deep); break;
         case "select": L.pick(w, item, deep); break;
         case "start": break;
@@ -1384,11 +1822,16 @@
       w.sharedFile = L.fileName ? L.fileName(L.sharedName) : L.sharedName;
       taken[lowered(name)] = taken[lowered(w.sharedFile)] = true;
       w.files = Object.create(null);
+      // nor another module's name: Calc2's class called Calc22, beside a
+      // module Calc22, is a method there and not the class at all
+      var modNames = Object.create(null);
+      prog.mods.forEach(function (one) { modNames[lowered(one.name)] = true; });
       prog.mods.forEach(function (one) {
         var base = L.fileName ? L.fileName(safe(one.name)) : safe(one.name);
         var file = base, n = 2;
         while (taken[lowered(file)] || L.kept[file] || L.kept[lowered(file)] ||
-               R_TAKEN_FILE.test(file) || (L.ownName && file === safe(one.name, true))) {
+               R_TAKEN_FILE.test(file) || (L.ownName && file === safe(one.name, true)) ||
+               (modNames[lowered(file)] && lowered(file) !== lowered(one.name))) {
           file = base + n++;
         }
         taken[lowered(file)] = true;

@@ -141,6 +141,8 @@ DE = {
     "w_until_alone": "Zeile {line}: Until, aber darüber steht kein Do oder Repeat.",
     "w_mend_change": "{word} in {instead} ändern",
     "w_mend_drop": "Zeile {line} entfernen",
+    "w_mend_drop_lines": "Zeilen {line}–{last} entfernen",
+    "w_code_tail": "Die Zeilen {line}–{last} sehen aus wie Python-Code unter dem Pseudocode, also macht das Programm alles zweimal.",
     "w_mend_insert": "{text} in Zeile {line} einsetzen",
     "w_mend_tip": "Doppelklick, um das zu beheben",
     "w_mend_close": "Das fehlende {text} ans Ende setzen",

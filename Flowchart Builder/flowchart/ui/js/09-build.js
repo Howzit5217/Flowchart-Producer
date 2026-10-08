@@ -884,7 +884,8 @@
       // Said again in the language the page is wearing now, rather than the
       // one it was drawn in -- the page can change its words without asking
       // anybody, and this should change with them.
-      row.textContent = TXT[bit.why] ? say(bit.why, { line: bit.line })
+      // (and the last line of a run of them, where the fix takes out a run)
+      row.textContent = TXT[bit.why] ? say(bit.why, { line: bit.line, last: (bit.fix && bit.fix.to) || bit.line })
                                      : (bit.says || bit.why);
       if (bit.line) {
         row.title = TXT.r_show_line || "";

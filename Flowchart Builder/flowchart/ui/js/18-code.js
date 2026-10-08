@@ -79,6 +79,99 @@
     return true;
   }
 
+  // A double-quoted literal as these files write them -- "Total: ", "\n" --
+  // made back into the words it says, or null for anything else.
+  function literalOf(code) {
+    var m = /^"((?:[^"\\]|\\.)*)"$/.exec(code);
+    if (!m) { return null; }
+    return m[1].replace(/\\(.)/g, function (all, c) {
+      return c === "n" ? "\n" : c === "t" ? "\t" : c === "r" ? "\r" : c;
+    });
+  }
+  // A colon outside every bracket and quote: lambda, or a slice outside [].
+  function bareColon(code) {
+    var depth = 0, quote = "";
+    for (var i = 0; i < code.length; i++) {
+      var c = code.charAt(i);
+      if (quote) { if (c === "\\") { i++; } else if (c === quote) { quote = ""; } continue; }
+      if (c === '"' || c === "'") { quote = c; }
+      else if ("([{".indexOf(c) >= 0) { depth++; }
+      else if (")]}".indexOf(c) >= 0) { depth--; }
+      else if (c === ":" && !depth) { return true; }
+    }
+    return false;
+  }
+  // str(n) in an f-string, String(n) in a template: n, which they make
+  // words of anyway -- where the brackets are the call's own
+  function madeWords(code, fn) {
+    if (code.indexOf(fn + "(") !== 0 || code.charAt(code.length - 1) !== ")") { return code; }
+    var depth = 0, quote = "";
+    for (var i = fn.length; i < code.length; i++) {
+      var c = code.charAt(i);
+      if (quote) { if (c === "\\") { i++; } else if (c === quote) { quote = ""; } continue; }
+      if (c === '"' || c === "'") { quote = c; continue; }
+      if (c === "(") { depth++; }
+      if (c === ")") { depth--; if (!depth && i < code.length - 1) { return code; } }
+    }
+    return code.slice(fn.length + 1, -1);
+  }
+  // The pieces of a Display as words said outright and code worked out:
+  // [{words}, {code, cash}], or null where a piece is something else.
+  function sayParts(bits) {
+    return bits.map(function (bit) {
+      var said = bit.cash ? null : literalOf(bit.code);
+      return said !== null ? { words: said } : { code: bit.code, cash: !!bit.cash, kind: bit.kind };
+    });
+  }
+  // Python's f"Race {n} took {t:.2f}" -- the same as "Race " + str(n) + ...,
+  // which f-strings are made of, and shorter.  Python before 3.12 will not
+  // have a backslash, the quote mark round it, a # or a bare colon inside
+  // the {}, so a line with any of those is added up the old way.
+  function joinPython(bits) {
+    var L = this;
+    function old() {
+      if (bits.length === 1 && !bits[0].cash) { return bits[0].code; }
+      return bits.map(function (bit) {
+        return bit.cash ? L.cash(bit.code) : bit.kind === "text" ? bit.code : "str(" + bit.code + ")";
+      }).join(" + ");
+    }
+    var parts = sayParts(bits);
+    var words = parts.filter(function (p) { return p.words !== undefined; }).length;
+    var worked = parts.filter(function (p) { return p.code !== undefined && (p.kind !== "text" || p.cash); }).length;
+    if (words === parts.length) {
+      return parts.length > 1 ? quoted(parts.map(function (p) { return p.words; }).join("")) : old();
+    }
+    if (!(words && parts.length > 1) && !worked) { return old(); }
+    if (parts.length === 1 && !parts[0].cash) { return old(); }
+    var codes = parts.filter(function (p) { return p.code !== undefined; }).map(function (p) { return p.code; });
+    if (codes.some(function (c) { return /[\\{}#\n]/.test(c) || bareColon(c) || /!(?!=)/.test(c); })) { return old(); }
+    var mark = '"';
+    if (codes.some(function (c) { return c.indexOf('"') >= 0; })) {
+      if (codes.some(function (c) { return c.indexOf("'") >= 0; })) { return old(); }
+      mark = "'";
+    }
+    return "f" + mark + parts.map(function (p) {
+      if (p.code !== undefined) { return "{" + (p.cash ? p.code : madeWords(p.code, "str")) + (p.cash ? ":.2f" : "") + "}"; }
+      return p.words.replace(/\\/g, "\\\\").replace(new RegExp(mark, "g"), "\\" + mark)
+                    .replace(/\n/g, "\\n").replace(/\t/g, "\\t").replace(/\r/g, "\\r")
+                    .replace(/\{/g, "{{").replace(/\}/g, "}}");
+    }).join("") + mark;
+  }
+  // JavaScript's `Race ${n} took ${t}`: what "Race " + n + ... adds up to.
+  function joinTemplate(bits, w) {
+    var L = this, parts = sayParts(bits);
+    var words = parts.filter(function (p) { return p.words !== undefined; }).length;
+    if (words === parts.length && parts.length > 1) {
+      return quoted(parts.map(function (p) { return p.words; }).join(""));
+    }
+    if (!words || words === parts.length) { return joinCurly.call(L, bits, w); }
+    return "\x60" + parts.map(function (p) {
+      if (p.code !== undefined) { return "${" + (p.cash ? L.cash(p.code, p.kind) : madeWords(p.code, "String")) + "}"; }
+      return p.words.replace(/\\/g, "\\\\").replace(/`/g, "\\`").replace(/\$\{/g, "\\${")
+                    .replace(/\n/g, "\\n").replace(/\t/g, "\\t").replace(/\r/g, "\\r");
+    }).join("") + "\x60";
+  }
+
   // A piece of a Display that would come apart if it were simply added on:
   // "Sum: " + a + b is "Sum: 34", and what was meant is "Sum: 7".
   function joinCurly(bits) {             // "a" + x + " b" -- text first
@@ -92,7 +185,10 @@
       if (bit.cash) { return L.cash(bit.code, bit.kind); }
       return bit.loose ? "(" + bit.code + ")" : bit.code;
     });
-    if (bits[0].kind !== "text" && !bits[0].cash) { said.unshift('""'); }
+    // 2 + 3 + " apples" adds up first: a "" in front makes it words from
+    // the start -- needed only where the second piece is not words already
+    if (bits[0].kind !== "text" && !bits[0].cash &&
+        !(bits[1] && (bits[1].kind === "text" || bits[1].cash))) { said.unshift('""'); }
     return said.join(" + ");
   }
 
@@ -106,6 +202,18 @@
     var by = w.write(node.right);
     if (by === "1") { return name + node.op + node.op; }
     return name + " " + node.op + "= " + by;
+  }
+
+  // i <= n - 1 as i < n, and i >= n + 1 as i > n, where both are whole
+  // numbers -- the same test, as anybody would write it
+  function countTest(w, item, set) {
+    var code = item.cond ? w.code(item.cond) : "";
+    var test = set.op === "set" && R_TEST.exec(String(item.cond || "").trim());
+    if (!test || lowered(test[1]) !== lowered(set["var"]) || !(test[2] === "<=" || test[2] === ">=") ||
+        w.kind(tree(set["var"])) !== "int" || w.kind(tree(test[3])) !== "int") { return code; }
+    var bound = w.code(test[3]), moved = edge(bound, test[2] === "<=" ? 1 : -1);
+    if (moved.length >= bound.length) { return code; }
+    return w.named(set["var"]) + (test[2] === "<=" ? " < " : " > ") + moved;
   }
 
   function isLiteral(node) {             // something a `case` will accept
@@ -130,12 +238,13 @@
   // what goes at the top -- the Scanner, the Random -- depends on whether
   // anything inside turned out to want it.
   function classFile(w, opening, mainLine) {
-    function shared(item) { return item.scope === "global" && item.op === "declare"; }
+    function shared(item) { return globalItem(item, w.prog) && item.op === "declare"; }
     var main = w.prog.main.items;
     var inside = w.aside(function () {
       var before = w.count();
       main.filter(shared).forEach(function (item) {
-        w.infront = w.L.field(item.const, isLiteral(tree(item.expr || "0")));
+        var sharedOne = lookUp(w.prog.shared, bareName(item.var));
+        w.infront = w.L.field(item.const && !(sharedOne && sharedOne.setAgain), isLiteral(tree(item.expr || "0")));
         w.each(item, 1);
       });
       w.infront = w.L.field(false, true);
@@ -213,7 +322,10 @@
     // and saying both is a thing the compiler refuses outright.
     field: function () { return "static "; },
     typed: function (entry, w) {
-      if (this.kinds && entry.kind === "int" && entry.big && this.bigInt) { return this.bigInt + " "; }
+      if (this.kinds && entry.kind === "int" && (entry.big || entry.wide) && this.bigInt) { return this.bigInt + " "; }
+      var L = this;
+      if (w && w.wideList && w.wideList(entry)) { return w.withWide(entry, function () { return typeOfKind(L, entry.kind, w) + " "; }); }
+      if (w && w.wideTable && w.wideTable(entry)) { return w.tableTypes(entry).wide + " "; }
       // a number that is sometimes nothing: Integer, int? -- which can be null
       if (this.kinds && this.boxedKind && entry.nullable && this.boxedKind[entry.kind]) { return this.boxedKind[entry.kind] + " "; }
       if (this.kinds && this.boxedKind && entry.elemNullable && isListKind(entry.kind) && this.boxedKind[elemOf(entry.kind)] && this.nullableList) {
@@ -222,8 +334,9 @@
       return this.kinds ? typeOfKind(this, entry.kind, w) + " " : "";
     },
     declare: function (w, entry, start, fixed, plain) {
-      return this.lead(fixed, plain) + this.typed(entry, w) +
-             w.spelled(entry) + " = " + start;
+      var type = this.typed(entry, w), name = w.spelled(entry);
+      var tidy = this.madeAs && !w.infront && this.madeAs(type.trim(), name, String(start));
+      return this.lead(fixed, plain) + (tidy || type + name + " = " + start);
     },
     // What goes in front of a counter that its For declares for itself.
     head: function (w, entry) { return this.typed(entry, w); },
@@ -237,7 +350,7 @@
       w.line(deep, "do" + this.open);
       w.block(item.body, deep + 1);
       w.line(deep, "} while (" + (!code ? this.no
-             : item.until ? this.not + "(" + code + ")" : code) + ");");
+             : item.until ? w.negated(item.cond) : code) + ");");
     },
     count: function (w, item, deep) {    // For, as a for
       var set = statementOf(item.init || ""), step = statementOf(item.step || "");
@@ -248,10 +361,21 @@
       // same name declared twice in one scope, which Java and C# both
       // refuse outright and JavaScript quietly shadows.
       var first = set.op !== "set" ? ""
-                : (entry && entry.perLoop ? this.head(w, entry) : "") +
+                : (w.ownLoop(item, entry) ? this.head(w, entry) : "") +
                   w.named(set.var) + " = " + w.fitted(set.expr, entry && entry.kind);
-      w.line(deep, "for (" + first + "; " + (item.cond ? w.code(item.cond) : "") +
+      w.line(deep, "for (" + first + "; " + countTest(w, item, set) +
              "; " + counterStep(w, step) + ")" + this.open);
+      w.block(item.body, deep + 1);
+      w.line(deep, this.shut);
+    },
+    // For Each i In range(0, n), where nothing reads i once it is done: a
+    // counted for, the way anybody would write it (w.rangeOf says when)
+    countRange: function (w, item, r, deep) {
+      var entry = w.entry(item["var"]), name = w.named(item["var"]);
+      var first = (w.ownLoop(item, entry) ? this.head(w, entry) : "") + name + " = " + r.from;
+      var step = r.by === 1 ? name + "++" : r.by === -1 ? name + "--"
+               : name + (r.down ? " -= " + (-r.by) : " += " + r.by);
+      w.line(deep, "for (" + first + "; " + name + (r.down ? " > " : " < ") + r.to + "; " + step + ")" + this.open);
       w.block(item.body, deep + 1);
       w.line(deep, this.shut);
     },
@@ -273,13 +397,16 @@
       // double, C++ will not switch on a string, and none of them take a
       // case that has to be worked out.  A chain of ifs says the same thing
       // and all of them take that.
-      if (!L.switches(w.kind(subject), plain)) { w.chain(item, deep); return; }
+      if (!L.switches(w.kind(subject), plain) || (L.bigInt && w.isWide(subject))) { w.chain(item, deep); return; }
       w.line(deep, "switch (" + w.write(subject) + ")" + L.open);
       item.cases.forEach(function (one) {
         var label = String(one.match || "").trim();
         w.line(deep + 1, OTHERWISE.test(label) ? "default:"
                                                : "case " + w.code(label) + ":");
+        var was = w.caseDeep;
+        w.caseDeep = deep + 2;
         w.block(one.body, deep + 2, true);
+        w.caseDeep = was;
         // A break after a return is a line that can never be reached, and
         // Java refuses to compile one.
         if (!w.leaves(one.body)) { w.line(deep + 2, "break;"); }
@@ -318,6 +445,28 @@
     return code + (by > 0 ? " + " + by : " - " + (-by));
   }
 
+  // Is any of these names set somewhere among these statements?
+  function setInside(items, names, prog) {
+    var lows = names.map(lowered), hit = false;
+    eachStep(items, function (one) {
+      if (hit) { return; }
+      targetsOf(one, prog).concat(one.op === "declare" ? [one["var"]] : []).forEach(function (n) {
+        if (lows.indexOf(lowered(bareName(n))) >= 0) { hit = true; }
+      });
+      // a list the count runs to the length of, made longer or shorter
+      if (one.op === "call" || one.op === "set") {
+        sumsOf(one).concat(one.op === "call" ? [one.name + "(" + (one.args || "") + ")"] : []).forEach(function (src) {
+          eachCall(tree(src), function (call) {
+            var first = call.args[0];
+            if (CHANGES_ITS_FIRST[lowered(call.call)] && first && first.name &&
+                lows.indexOf(lowered(first.name)) >= 0) { hit = true; }
+          });
+        });
+      }
+    });
+    return hit;
+  }
+
   function counting(w, item, set, step) {
     if (!item.cond || set.op !== "set" || step.op !== "set") { return null; }
     if (lowered(step.var) !== lowered(set.var)) { return null; }
@@ -333,7 +482,14 @@
     // A counter something goes on to read afterwards has to end where the
     // chart leaves it, which is one past where range() does.
     var entry = w.entry(set.var);
-    if (entry && !entry.loopOnly) { return null; }
+    if (entry && !entry.loopOnly && counterReadAfter(w.prog, item, set.var)) { return null; }
+    // range() is worked out once, before the first time round: a count
+    // whose counter or end the loop itself changes is not one it can do
+    if (setInside(item.body, [set.var].concat(tokens(test[3]).filter(function (tok) {
+          return tok.t === "name";
+        }).map(function (tok) { return tok.v; })), w.prog)) {
+      return null;
+    }
     // range() counts in whole numbers and nothing else: handed a Real it
     // stops the program, so a count that might be one stays a while.
     if (w.kind(tree(set.expr)) !== "int" || w.kind(tree(test[3])) !== "int") {
@@ -344,6 +500,7 @@
                          : (test[2] === "<=" ? 1 : 0));
     var parts = [w.code(set.expr), stop];
     if (down || by !== 1) { parts.push(String(down ? -by : by)); }
+    else if (parts[0] === "0") { parts.shift(); }    // range(n), not range(0, n)
     return "range(" + parts.join(", ") + ")";
   }
 
@@ -370,6 +527,31 @@
     return /^\d+$/.test(code) ? code : "(int) (" + code + ")";
   }
 
+  // The helpers a C++ file wants, in the order they go in: the Table every
+  // table is first, where there is one (anything wanting <map> wants it),
+  // since the helpers after it are written in terms of it.
+  function cppHelpers(L, w) {
+    var helpers = Object.keys(L.helpers).filter(function (name) { return w.needs[name] && name !== "Table"; });
+    return w.needs.map ? ["Table"].concat(helpers) : helpers;
+  }
+  // A helper's lines, less what it says about tables where the program
+  // has none: a function written in terms of a Table nobody defined would
+  // not compile, and one about tables in a program without any is clutter.
+  function cppLines(L, w, name) {
+    var lines = L.helpers[name].lines || L.helpers[name];
+    if (w.needs.map) { return lines; }
+    var out = [], deep = 0;
+    lines.forEach(function (row) {
+      if (deep > 0 || /\bTable</.test(row)) {
+        deep += (row.match(/\{/g) || []).length - (row.match(/\}/g) || []).length;
+        if (deep < 0) { deep = 0; }
+        return;
+      }
+      out.push(row);
+    });
+    return out;
+  }
+
   // The headers a C++ file brings in only when something in it wants one.
   var CPP_LIBS = ["cmath", "cstdlib", "algorithm", "vector", "map", "sstream",
                   "numeric", "iomanip", "cctype", "ctime"];
@@ -389,22 +571,15 @@
       kept: "False None True and as assert async await break class continue " +
             "def del elif else except finally for from global if import in " +
             "is lambda nonlocal not or pass raise return try while with yield " +
-            "print input int float str format range math random time",
+            "print input int float str format range math",
       // Kept only if the program uses the built-in of that name: `max` is
       // what half of all pseudocode calls its largest-so-far, and it is a
       // perfectly good Python variable until somebody calls max().
-      soft: { min: "min", max: "max", abs: "abs", pow: "pow", len: "length" },
+      soft: { min: "min", max: "max", abs: "abs", pow: "pow", len: "length",
+              time: "@wait", random: "@random" },
       chain: function (w, deep, head) { w.line(deep, head); },
       cash: function (code) { return "format(" + code + ', ".2f")'; },
-      join: function (bits) {
-        var L = this;
-        if (bits.length === 1 && !bits[0].cash) { return bits[0].code; }
-        return bits.map(function (bit) {
-          return bit.cash ? L.cash(bit.code)
-               : bit.kind === "text" ? bit.code
-               : "str(" + bit.code + ")";
-        }).join(" + ");
-      },
+      join: joinPython,
       test: function (code) { return bare(code); },
       say: function (said) { return "print(" + said + ")"; },
       ask: function (kind, w, question) {
@@ -433,6 +608,11 @@
         w.line(deep, "time.sleep(" + napFor(w, item, "s") + ")");
       },
       into: function (a, b) { return a + " // " + b; },
+      // A division going into a name declared an Integer: the whole part of
+      // it, as int() takes it -- toward nought, the way the others' / does;
+      // where nothing is below nought, // says the same, shorter
+      wholeOver: function (a, b, plain) { return plain ? a + " // " + b : "int(" + a + " / " + b + ")"; },
+      floorsMod: true,
       // -7 MOD 2 is -1, where Python's -7 % 2 is 1
       towardNought: function (a, b, whole, w) {
         w.need("math");
@@ -465,9 +645,15 @@
         w.line(deep, "while True:");
         w.block(item.body, deep + 1, true);
         w.line(deep + 1, "if " + (!code ? "True"
-               : item.until ? code : "not (" + code + ")") + ":");
+               : item.until ? code : w.negated(item.cond)) + ":");
         w.line(deep + 2, "break");
       },
+      // For Each i In range(...) is Python's own for, as it was written
+      countRange: Object.assign(function (w, item, r, deep) {
+        var codes = r.codes.length === 2 && r.codes[0] === "0" ? r.codes.slice(1) : r.codes;
+        w.line(deep, "for " + w.named(item["var"]) + " in range(" + codes.join(", ") + "):");
+        w.block(item.body, deep + 1);
+      }, { exact: true }),
       count: function (w, item, deep) {  // a For is a for, over a range
         var set = statementOf(item.init || ""), step = statementOf(item.step || "");
         var over = counting(w, item, set, step);
@@ -594,6 +780,7 @@
     java: {
       like: CURLY,
       name: "Java", ext: "java",
+      leftFirst: true,                   // a[i()] = f(): the place is worked out first
       kinds: { int: "int", real: "double", text: "String", bool: "boolean" },
       bigInt: "long",
       longSuffix: "L",
@@ -640,8 +827,9 @@
       alike: function (a, b, not) { return (not ? "!" : "") + held(a) + ".equals(" + b + ")"; },
       ordered: function (a, op, b) { return held(a) + ".compareTo(" + b + ") " + op + " 0"; },
       narrow: function (code) { return "(int) " + held(code); },
+      // (words are picked out letting capitals go, which a switch does not)
       switches: function (kind, plain) {
-        return plain && (kind === "int" || kind === "text");
+        return plain && kind === "int";
       },
       quit: function (w, inMain) { return inMain ? "return" : "System.exit(0)"; },
       // Thread.sleep is a checked one: a method that lets it out has to say
@@ -668,13 +856,17 @@
           var src = String(given[i] === undefined ? "" : given[i]);
           if (!p.ref) { return w.handed(one, i, tree(src)); }
           var box = w.spelled(p.entry) + "Box";
-          w.line(deep + 1, typeOfKind(L, p.entry.kind, w) + "[] " + box + " = { " +
+          w.line(deep + 1, L.typed(p.entry, w).trim() + "[] " + box + " = { " +
                  w.code(src) + " };");
           var mine = R_JUST_A_NAME.test(src) ? w.entry(src.trim()) : null;
+          var place = mine ? null : w.refPlace(src);
           if (mine) {
             after.push(w.named(src.trim()) + " = " +
                        (mine.kind === "int" && p.entry.kind === "real" ? "(int) " : "") +
                        box + "[0];");
+          } else if (place) {             // swap(array[i], array[i + 1])
+            after.push(w.store(src, undefined, (w.kind(place) === "int" && p.entry.kind === "real" ? "(int) " : "") +
+                               box + "[0]") + ";");
           }
           return box;
         });
@@ -838,6 +1030,7 @@
     csharp: {
       like: CURLY,
       name: "C#", ext: "cs",
+      leftFirst: true,                   // a[i()] = f(): the place is worked out first
       kinds: { int: "int", real: "double", text: "string", bool: "bool" },
       bigInt: "long",
       kept: "abstract as base bool break byte case catch char checked class " +
@@ -879,7 +1072,7 @@
       },
       narrow: function (code) { return "(int)" + held(code); },
       switches: function (kind, plain) {
-        return plain && (kind === "int" || kind === "text" || kind === "bool");
+        return plain && (kind === "int" || kind === "bool");
       },
       quit: function (w, inMain) { return inMain ? "return" : "Environment.Exit(0)"; },
       // Said from the root rather than through a using, so the top of the
@@ -893,6 +1086,25 @@
       refs: "own",
       byRef: function (type, name) { return "ref " + type + name; },
       refArg: function (code) { return "ref " + code; },
+      // A place in a List cannot be handed over by ref -- swap(ref
+      // array[i], ...) is refused -- so it goes in a name of its own for the
+      // call, and back where it came from afterwards.
+      refTemps: function (w, one, given, deep) {
+        var L = this, after = [];
+        w.line(deep, "{");
+        var args = one.params.map(function (p, i) {
+          var src = String(given[i] === undefined ? "" : given[i]);
+          var place = p.ref ? w.refPlace(src) : null;
+          if (!place) { return w.handed(one, i, tree(src)); }
+          var held = w.spelled(p.entry) + "Ref";
+          w.line(deep + 1, L.typed(p.entry, w) + held + " = " + w.fitIn(place, p.entry.kind) + ";");
+          after.push(w.store(src, undefined, (w.kind(place) === "int" && p.entry.kind === "real" ? "(int)" : "") + held) + ";");
+          return "ref " + held;
+        });
+        w.line(deep + 1, w.reachMod(one) + w.called(one) + "(" + args.join(", ") + ");");
+        after.forEach(function (line) { w.line(deep + 1, line); });
+        w.line(deep, "}");
+      },
       calls: {
         sqrt: function (a) { return "Math.Sqrt(" + a[0] + ")"; },
         abs: function (a) { return "Math.Abs(" + a[0] + ")"; },
@@ -1047,6 +1259,11 @@
             // and what the C library has already put in every file's way
             "time rand srand abs round floor ceil sqrt pow exit fmod div log " +
             "exp sin cos tan index remove rename signal",
+      // ... which is in the way of a name the whole file shares, and of a
+      // function's, and not of a variable inside a function
+      keptShared: { time: 1, rand: 1, srand: 1, abs: 1, round: 1, floor: 1, ceil: 1, sqrt: 1,
+                    pow: 1, exit: 1, fmod: 1, div: 1, log: 1, exp: 1, sin: 1, cos: 1, tan: 1,
+                    index: 1, remove: 1, rename: 1, signal: 1 },
       lead: function (fixed) { return fixed ? "const " : ""; },
       field: function () { return ""; },
       // Writing out is a chain of <<, not a sum.  "You are " + age is a
@@ -1071,6 +1288,14 @@
         }).join(" << ");
       },
       say: function (said) { return "std::cout << " + said + " << std::endl"; },
+      sayLater: function (w, said, deep) {
+        w.need("sstream");
+        w.line(deep, "{");
+        w.line(deep + 1, "std::ostringstream lineOut_;");
+        w.line(deep + 1, "lineOut_ << " + said + ";");
+        w.line(deep + 1, "std::cout << lineOut_.str() << std::endl;");
+        w.line(deep, "}");
+      },
       // No endl, so the answer is typed beside it; std::cin is tied to
       // std::cout, and reading from one empties what is waiting in the other.
       hint: function (question) { return "std::cout << " + question; },
@@ -1149,16 +1374,25 @@
         pow: function (a, k, w) {
           return this.power(a[0], a[1], k[0] === "int" && k[1] === "int", w);
         },
-        // std::min wants both sides the same type, and says so at length.
-        min: function (a, k, w) {
+        // std::min wants both sides the same type, and says so at length --
+        // and takes more than two only as one braced list of them
+        min: function (a, k, w, nodes) {
           w.need("algorithm");
-          return "std::min<" + this.kinds[bothKinds(k[0], k[1]) || "real"] + ">(" +
-                 a.join(", ") + ")";
+          var kind = k.reduce(function (x, y) { return x === y ? x : bothKinds(x, y); });
+          if (kind === "int" && (nodes || []).some(function (n) { return w.isWide(n); })) {
+            return "std::min<long long>(" + (a.length > 2 ? "{" + a.join(", ") + "}" : a.join(", ")) + ")";
+          }
+          return "std::min<" + this.kinds[kind || "real"] + ">(" +
+                 (a.length > 2 ? "{" + a.join(", ") + "}" : a.join(", ")) + ")";
         },
-        max: function (a, k, w) {
+        max: function (a, k, w, nodes) {
           w.need("algorithm");
-          return "std::max<" + this.kinds[bothKinds(k[0], k[1]) || "real"] + ">(" +
-                 a.join(", ") + ")";
+          var kind = k.reduce(function (x, y) { return x === y ? x : bothKinds(x, y); });
+          if (kind === "int" && (nodes || []).some(function (n) { return w.isWide(n); })) {
+            return "std::max<long long>(" + (a.length > 2 ? "{" + a.join(", ") + "}" : a.join(", ")) + ")";
+          }
+          return "std::max<" + this.kinds[kind || "real"] + ">(" +
+                 (a.length > 2 ? "{" + a.join(", ") + "}" : a.join(", ")) + ")";
         }
       },
       // The small functions a program may need at the top of its file, and
@@ -1229,7 +1463,7 @@
       },
       whole: function (w) {
         var L = this;
-        function shared(item) { return item.scope === "global" && item.op === "declare"; }
+        function shared(item) { return globalItem(item, w.prog) && item.op === "declare"; }
         var main = w.prog.main.items;
         var inside = w.aside(function () {
           // What the whole program shares goes above the modules, not inside
@@ -1267,7 +1501,7 @@
           w.line(1, "return 0;");
           w.line(0, L.shut);
         });
-        var helpers = Object.keys(L.helpers).filter(function (name) { return w.needs[name]; });
+        var helpers = cppHelpers(L, w);
         var wants = { iostream: true, string: true };
         CPP_LIBS.forEach(function (lib) {
           if (w.needs[lib]) { wants[lib] = true; }
@@ -1275,14 +1509,16 @@
         helpers.forEach(function (name) {
           (L.helpers[name].wants || []).forEach(function (lib) { wants[lib] = true; });
         });
+        delete wants.map;
         w.line(0, L.note + w.title);
         Object.keys(wants).sort().forEach(function (lib) {
           w.line(0, "#include <" + lib + ">");
         });
         helpers.forEach(function (name) {
-          if (!L.helpers[name].lines.length) { return; }
+          var rows = cppLines(L, w, name);
+          if (!rows.length) { return; }
           w.line(0, "");
-          L.helpers[name].lines.forEach(function (row) { w.line(0, row); });
+          rows.forEach(function (row) { w.line(0, row); });
         });
         w.pour(inside);
       },
@@ -1318,19 +1554,19 @@
           CPP_LIBS.forEach(function (lib) {
             if (w.needs[lib]) { wants[lib] = true; }
           });
-          var helpers = Object.keys(L.helpers).filter(function (name) {
-            return w.needs[name];
-          });
+          var helpers = cppHelpers(L, w);
           helpers.forEach(function (name) {
             (L.helpers[name].wants || []).forEach(function (lib) { wants[lib] = true; });
           });
+          delete wants.map;
           Object.keys(wants).sort().forEach(function (lib) {
             w.line(0, "#include <" + lib + ">");
           });
           helpers.forEach(function (name) {
-            if (!L.helpers[name].lines.length) { return; }
+            var rows = cppLines(L, w, name);
+            if (!rows.length) { return; }
             w.line(0, "");
-            L.helpers[name].lines.forEach(function (row) { w.line(0, row); });
+            rows.forEach(function (row) { w.line(0, row); });
           });
         }
         function header(name, write) {
@@ -1339,10 +1575,20 @@
             w.line(0, "#pragma once");
             w.line(0, "#include <string>");
             // and the lists and tables it names, where it names any
-            if (said.some(function (row) { return /std::map</.test(row); })) { w.line(0, "#include <map>"); }
+            if (said.some(function (row) { return /\bTable</.test(row); })) {
+              w.line(0, "#include <vector>");
+              w.line(0, "#include <utility>");
+              w.line(0, "#include <initializer_list>");
+              w.line(0, "#include <stdexcept>");
+              L.helpers.Table.lines.forEach(function (row) { w.line(0, row); });
+            }
             if (said.some(function (row) { return /std::vector</.test(row); })) { w.line(0, "#include <vector>"); }
             // a Value named here is made in full in each file that has one
-            if (said.some(function (row) { return /\bValue\b/.test(row); })) { w.line(0, ""); w.line(0, "struct Value;"); }
+            // a function handed about (Fn) is a std::function of Values
+            var fns = said.some(function (row) { return /\bFn\b/.test(row); });
+            if (fns) { w.line(0, "#include <functional>"); w.line(0, "#include <vector>"); }
+            if (fns || said.some(function (row) { return /\bValue\b/.test(row); })) { w.line(0, ""); w.line(0, "struct Value;"); }
+            if (fns) { w.line(0, "using Fn = std::function<Value(std::vector<Value>)>;"); }
             w.line(0, "");
             w.pour(said);
           });
@@ -1376,7 +1622,7 @@
           header(w.sharedFile, function () {
             holds.forEach(function (one) {
               w.line(0, "extern " + (one.fixed ? "const " : "") +
-                     typeOfKind(L, one.entry.kind, w) + " " + one.name + ";");
+                     L.typed(one.entry, w) + one.name + ";");
             });
           });
           part(w.sharedFile, "cpp", function () {
@@ -1387,7 +1633,7 @@
               // A const at the top of a file is that file's own unless it
               // is told to be everybody's, and the header has said it is.
               w.line(0, (one.fixed ? "extern const " : "") +
-                     typeOfKind(L, one.entry.kind, w) + " " + one.name + " = " + one.code + ";");
+                     L.typed(one.entry, w) + one.name + " = " + one.code + ";");
             });
           });
         }
@@ -1418,6 +1664,7 @@
     javascript: {
       like: CURLY,
       name: "JavaScript", ext: "js",
+      leftFirst: true,                   // a[i()] = f(): the place is worked out first
       paramDefault: function (code) { return " = " + code; },
       tab: "  ", eq: "===", ne: "!==",
       kinds: null,
@@ -1433,8 +1680,11 @@
             // the file handing back nothing at all.
             "module exports Date",
       lead: function (fixed) { return fixed ? "const " : "let "; },
+      constLocals: true,                 // a name given something once is a const
       head: function () { return "let "; },
+      mainAtTop: true,                   // main's lines are the file's own
       cash: function (code) { return held(code) + ".toFixed(2)"; },
+      join: joinTemplate,
       say: function (said) { return "console.log(" + said + ")"; },
       ask: function (kind, w, question) {
         w.need("ask");
@@ -1443,8 +1693,11 @@
              : kind === "flag" ? read + ' === "true"' : "Number(" + read + ")";
       },
       into: function (a, b) { return "Math.floor(" + a + " / " + b + ")"; },
+      // A division going into a name declared an Integer: the whole part of
+      // it, toward nought, the way the typed languages' / takes it
+      wholeOver: function (a, b) { return "Math.trunc(" + a + " / " + b + ")"; },
       pow: "**",
-      switches: function () { return true; },
+      switches: function (kind) { return kind !== "text"; },
       quit: function (w) { w.need("stop"); return "stop()"; },
       pause: function (w, item, deep) {
         w.need("wait");
@@ -1649,6 +1902,7 @@
       return L.anyType || L.kinds.text;
     }
     if (isListKind(kind)) {
+      if (w && L.arrayType && L.asArrays(w)) { return L.arrayType(typeOfKind(L, elemOf(kind) || "real", w)); }
       if (w) { w.need("vector"); }
       return L.listType(typeOfKind(L, elemOf(kind) || "real", w), elemOf(kind) || "real");
     }
@@ -1951,7 +2205,7 @@
         var over = tree(item.over), kind = w.kind(over), src = w.code(item.over);
         var entry = w.entry(item["var"]);
         if (isTableKind(kind)) { src = held(src) + ".keys()"; }
-        w.line(deep, "for (" + (entry && !entry.perLoop ? "" : loopSetsItsName(item) ? "let " : "const ") +
+        w.line(deep, "for (" + (entry && !w.ownLoop(item, entry) ? "" : loopSetsItsName(item) ? "let " : "const ") +
                w.named(item["var"]) + " of " + src + ") {");
         w.block(item.body, deep + 1);
         w.line(deep, "}");
@@ -2254,7 +2508,7 @@
       else if (kind === "any") { src = "(List<?>) " + held(src); }
       else if (isTableKind(kind)) { src = held(src) + ".keySet()"; }
       var type = w.elemType(item.over, elem);
-      if (entry && !entry.perLoop) {
+      if (entry && !w.ownLoop(item, entry)) {
         var loose = (entry ? w.spelled(entry) : w.named(item["var"])) + "_";
         w.line(deep, "for (" + type + " " + loose + " : " + src + ") {");
         w.line(deep + 1, w.named(item["var"]) + " = " + loose + ";");
@@ -2664,8 +2918,19 @@
     tableType: function (k, v) { return "Dictionary<" + k + ", " + v + ">"; },
     recType: function (name, w) { return name ? w.recName(name) : "Record"; },
     fnType: "object",
-    listOf: function (items, kind, w) { return "new " + w.typeOf(kind) + " { " + items.join(", ") + " }"; },
+    listOf: function (items, kind, w) {
+      return "new " + w.typeOf(kind) + (items.length ? " { " + items.join(", ") + " }" : "()");
+    },
+    // var xs = new List<int>(): the type is there on the right already
+    madeAs: function (type, name, start) {
+      var made = "new " + type, ch = start.charAt(made.length);
+      if (start.indexOf(made) === 0 && (ch === "(" || ch === " " || ch === "{")) { return "var " + name + " = " + start; }
+      if (/\[\]$/.test(type) && start.indexOf("new " + type.slice(0, -2) + "[") === 0 &&
+          !/\[\]/.test(type.slice(0, -2))) { return "var " + name + " = " + start; }
+      return null;
+    },
     tableOf: function (pairs, kind, w) {
+      if (!pairs.length) { return "new " + w.typeOf(kind) + "()"; }
       return "new " + w.typeOf(kind) + " { " + pairs.map(function (p) { return "{ " + p[0] + ", " + p[1] + " }"; }).join(", ") + " }";
     },
     newRecord: function (kind, w, args) { return "new " + w.recName(kind) + "(" + (args || []).join(", ") + ")"; },
@@ -2684,7 +2949,7 @@
       if (kind === "text") { src = held(src) + ".Select(c_ => c_.ToString())"; }
       else if (isTableKind(kind)) { src = held(src) + ".Keys.ToList()"; }
       var type = w.elemType(item.over, elem);
-      if (entry && !entry.perLoop) {
+      if (entry && !w.ownLoop(item, entry)) {
         w.line(deep, "foreach (" + type + " " + w.spelled(entry) + "_ in " + src + ") {");
         w.line(deep + 1, w.named(item["var"]) + " = " + w.spelled(entry) + "_;");
       } else if (loopSetsItsName(item)) {
@@ -2857,8 +3122,9 @@
         // a list of Reals started at nought starts at 0.0: Repeat(0, n) is a
         // List<int>, which a List<double> will not take
         if (k[k.length - 1] === "real" && /^-?\d+$/.test(String(fill).trim())) { fill = String(fill).trim() + ".0"; }
+        var said = this.kinds["int"] !== "int" && k[k.length - 1] === "int" ? "<" + this.kinds["int"] + ">" : "";
         var made = compoundKind(k[k.length - 1]) ? "Enumerable.Range(0, " + sizes[sizes.length - 1] + ").Select(n_ => " + fill + ").ToList()"
-                                                  : "Enumerable.Repeat(" + fill + ", " + sizes[sizes.length - 1] + ").ToList()";
+                                                  : "Enumerable.Repeat" + said + "(" + fill + ", " + sizes[sizes.length - 1] + ").ToList()";
         for (var d = sizes.length - 2; d >= 0; d--) { made = "Enumerable.Range(0, " + sizes[d] + ").Select(n_ => " + made + ").ToList()"; }
         return made;
       },
@@ -2996,16 +3262,37 @@
 
   LIST_WORK.cpp = {
     negatives: false,
+    // words written down, made a string so that something can be called on them
+    madeText: function (code) { return "std::string(" + code + ")"; },
+    // a list made on the spot, given a place to be while a module changes it
+    refTemp: function (code, w) { w.need("temp"); return "temp(" + code + ")"; },
     constant: function (name, w) {
       if (name === "infinity") { w.need("cmath"); return "INFINITY"; }
       return name === "newline" ? 'std::string("\\n")' : 'std::string("\\t")';
     },
     fnRef: function (name) { return name; },
     listType: function (type) { return "std::vector<" + type + ">"; },
-    tableType: function (k, v) { return "std::map<" + k + ", " + v + ">"; },
+    tableType: function (k, v) { return "Table<" + k + ", " + v + ">"; },
     recType: function (name, w) { return (name ? w.recName(name) : "Record") + "*"; },
     fnType: "void*",
     listOf: function (items, kind, w) { w.need("vector"); return w.typeOf(kind) + "{" + items.join(", ") + "}"; },
+    // std::vector<int> xs{1, 2} and std::vector<double> xs(n, 0): made
+    // where it is declared, rather than made and then copied in
+    madeAs: function (type, name, start) {
+      if (start.indexOf(type) !== 0 || !/^(std::|Table<)/.test(type)) { return null; }
+      var rest = start.slice(type.length), open = rest.charAt(0), shut = open === "{" ? "}" : open === "(" ? ")" : "";
+      if (!shut || rest.charAt(rest.length - 1) !== shut) { return null; }
+      var depth = 0, quote = "";
+      for (var i = 0; i < rest.length; i++) {
+        var c = rest.charAt(i);
+        if (quote) { if (c === "\\") { i++; } else if (c === quote) { quote = ""; } continue; }
+        if (c === '"' || c === "'") { quote = c; continue; }
+        if ("({[".indexOf(c) >= 0) { depth++; }
+        if (")}]".indexOf(c) >= 0) { depth--; if (!depth && i < rest.length - 1) { return null; } }
+      }
+      if (rest.length === 2) { return type + " " + name; }
+      return type + " " + name + rest;
+    },
     tableOf: function (pairs, kind, w) {
       w.need("map");
       return w.typeOf(kind) + "{" + pairs.map(function (p) { return "{" + p[0] + ", " + p[1] + "}"; }).join(", ") + "}";
@@ -3025,8 +3312,8 @@
       var entry = w.entry(item["var"]), elem = kind === "text" ? "text" : isTableKind(kind) ? tableKey(kind) : kind === "any" ? "any" : elemOf(kind);
       if (kind === "text") { w.need("chars"); src = "chars(" + src + ")"; }
       else if (isTableKind(kind)) { w.need("keysOf"); src = "keysOf(" + src + ")"; }
-      var type = w.typeOf(elem || "real");
-      if (entry && !entry.perLoop) {
+      var type = w.elemType(item.over, elem || "real");
+      if (entry && !w.ownLoop(item, entry)) {
         w.line(deep, "for (" + type + " " + w.spelled(entry) + "_ : " + src + ") {");
         w.line(deep + 1, w.named(item["var"]) + " = " + w.spelled(entry) + "_;");
       } else {
@@ -3043,10 +3330,21 @@
       var fields = unionFields(w.prog);
       w.need("shown");
       w.line(0, "");
+      // a Node holding the next Node: each kind said to be one before the
+      // fields name it, which C++ will not take on trust
+      var types = Object.keys(fields).map(function (low) { return w.typeOf(fields[low].kind); });
+      var named = Object.keys(recs).filter(function (kind) {
+        var re = new RegExp("\\b" + w.recName(kind) + "\\b");
+        return types.some(function (t) { return re.test(t); });
+      });
+      if (named.length) {
+        named.forEach(function (kind) { w.line(0, "struct " + w.recName(kind) + ";"); });
+        w.line(0, "");
+      }
       w.line(0, "struct Record {");
       w.line(1, 'std::string kindName = "Record";');
-      Object.keys(fields).forEach(function (low) {
-        w.line(1, w.typeOf(fields[low].kind) + " " + w.fieldName(fields[low].name) + "{};");
+      Object.keys(fields).forEach(function (low, i) {
+        w.line(1, types[i] + " " + w.fieldName(fields[low].name) + "{};");
       });
       w.line(1, "virtual ~Record() {}");
       w.line(0, "};");
@@ -3116,7 +3414,13 @@
         w.need("indexOf");
         return "indexOf(" + a[0] + ", " + a[1] + ")";
       },
-      count: function (a, k, w) { w.need("algorithm"); return "(int)std::count(" + held(a[0]) + ".begin(), " + held(a[0]) + ".end(), " + a[1] + ")"; },
+      count: function (a, k, w) {
+        // how many times some words are in some words: the helper, not
+        // std::count, which counts letters
+        if (k[0] === "text") { w.need("countText"); return "countText(" + a[0] + ", " + a[1] + ")"; }
+        w.need("algorithm");
+        return "(int)std::count(" + held(a[0]) + ".begin(), " + held(a[0]) + ".end(), " + a[1] + ")";
+      },
       slice: function (a, k, w) {
         if (k[0] === "text") { return held(a[0]) + ".substr(" + a[1] + (a[2] ? ", " + a[2] + " - " + held(a[1]) : "") + ")"; }
         return w.typeOf(k[0]) + "(" + held(a[0]) + ".begin() + " + held(a[1]) + ", " + (a[2] ? held(a[0]) + ".begin() + " + held(a[2]) : held(a[0]) + ".end()") + ")";
@@ -3164,8 +3468,10 @@
       },
       isdigit: function (a, k, w) { w.need("allOf"); return "allOf(" + a[0] + ", ::isdigit)"; },
       isalpha: function (a, k, w) { w.need("allOf"); return "allOf(" + a[0] + ", ::isalpha)"; },
-      isupper: function (a, k, w) { w.need("allOf"); return "allOf(" + a[0] + ", ::isupper)"; },
-      islower: function (a, k, w) { w.need("allOf"); return "allOf(" + a[0] + ", ::islower)"; },
+      // "HELLO WORLD" is in capitals: every letter is, and there is one --
+      // the space is no letter at all
+      isupper: function (a, k, w) { w.need("allCased"); return "allCased(" + a[0] + ", true)"; },
+      islower: function (a, k, w) { w.need("allCased"); return "allCased(" + a[0] + ", false)"; },
       isspace: function (a, k, w) { w.need("allOf"); return "allOf(" + a[0] + ", ::isspace)"; },
       ord: function (a) { return "(int)(unsigned char)" + held(a[0]) + "[0]"; },
       chr: function (a) { return "std::string(1, (char)(" + a[0] + "))"; },
@@ -3192,13 +3498,30 @@
         }
         return made;
       },
+      // get(t, k, otherwise): nothing said for otherwise is what the table
+      // holds made from nothing (0, "")
       get: function (a, k, w) {
-        if (isTableKind(k[0])) { return "(" + held(a[0]) + ".count(" + a[1] + ") ? " + held(a[0]) + "[" + a[1] + "] : " + (a[2] || "{}") + ")"; }
-        return "(" + a[1] + " >= 0 && " + a[1] + " < (int)" + held(a[0]) + ".size() ? " + held(a[0]) + "[" + a[1] + "] : " + (a[2] || "{}") + ")";
+        var holds = isTableKind(k[0]) ? tableValue(k[0]) : elemOf(k[0]);
+        var found = held(a[0]) + "[" + a[1] + "]", other = a[2] || w.zero(holds || "real");
+        if (isTableKind(k[0])) { return "(" + held(a[0]) + ".count(" + a[1] + ") ? " + found + " : " + other + ")"; }
+        return "(" + a[1] + " >= 0 && " + a[1] + " < (int)" + held(a[0]) + ".size() ? " + found + " : " + other + ")";
       },
       clear: function (a) { return held(a[0]) + ".clear()"; },
-      extend: function (a) { return held(a[0]) + ".insert(" + held(a[0]) + ".end(), " + held(a[1]) + ".begin(), " + held(a[1]) + ".end())"; },
-      isnumber: function (a, k, w) { w.need("isNumber"); return "isNumber(" + a[0] + ")"; },
+      // a name's own begin and end; a list made on the spot -- a slice --
+      // is made once, by the helper, or its two ends are of two lists
+      extend: function (a, k, w) {
+        if (/^[A-Za-z_]\w*$/.test(String(a[1]).trim())) {
+          return held(a[0]) + ".insert(" + held(a[0]) + ".end(), " + a[1] + ".begin(), " + a[1] + ".end())";
+        }
+        w.need("extendWith");
+        return "extendWith(" + a[0] + ", " + a[1] + ")";
+      },
+      // a number already is one; words are read to see
+      isnumber: function (a, k, w) {
+        if (k[0] === "int" || k[0] === "real") { return "true"; }
+        w.need("isNumber");
+        return "isNumber(" + a[0] + ")";
+      },
       tolist: function (a, k, w) {
         if (k[0] === "text") { w.need("chars"); return "chars(" + a[0] + ")"; }
         if (isTableKind(k[0])) { w.need("keysOf"); return "keysOf(" + a[0] + ")"; }
@@ -3238,7 +3561,7 @@
       // cout << a list, a table or a record, the way the chart shows one
       shown: { wants: ["vector", "map", "ostream"], lines: [
                "template <typename T> std::ostream& operator<<(std::ostream& out, const std::vector<T>& items);",
-               "template <typename K, typename V> std::ostream& operator<<(std::ostream& out, const std::map<K, V>& table);",
+               "template <typename K, typename V> std::ostream& operator<<(std::ostream& out, const Table<K, V>& table);",
                "static void shownIn(std::ostream& out, const std::string& s) { out << \"'\" << s << \"'\"; }",
                "static void shownIn(std::ostream& out, bool b) { out << (b ? \"True\" : \"False\"); }",
                "template <typename T> static void shownIn(std::ostream& out, const T& v) { out << v; }",
@@ -3247,7 +3570,7 @@
                "    for (size_t i = 0; i < items.size(); i++) { if (i) { out << \", \"; } shownIn(out, (T)items[i]); }",
                "    return out << \"]\";",
                "}",
-               "template <typename K, typename V> std::ostream& operator<<(std::ostream& out, const std::map<K, V>& table) {",
+               "template <typename K, typename V> std::ostream& operator<<(std::ostream& out, const Table<K, V>& table) {",
                "    out << \"{\";",
                "    bool first = true;",
                "    for (const auto& kv : table) {",
@@ -3258,10 +3581,19 @@
                "    return out << \"}\";",
                "}"] },
       popKey: { wants: ["map"], lines: ["// what a table holds under key, taken out of it",
-                                        "template <typename K, typename V, typename Q> static V popKey(std::map<K, V>& table, const Q& key) {",
+                                        "template <typename K, typename V, typename Q> static V popKey(Table<K, V>& table, const Q& key) {",
                                         "    V v = table.at(key);",
                                         "    table.erase(key);",
                                         "    return v;", "}"] },
+      temp: { wants: [], lines: ["// somewhere for a list made on the spot to be, while what it is handed to changes it",
+              "template <typename T> static T& temp(T&& made) { return made; }"] },
+      countText: { wants: [], lines: ["static int countText(const std::string& s, const std::string& part) {",
+                   "    if (part.empty()) { return (int)s.size() + 1; }",
+                   "    int n = 0;",
+                   "    for (size_t at = s.find(part); at != std::string::npos; at = s.find(part, at + part.size())) { n++; }",
+                   "    return n;", "}"] },
+      extendWith: { wants: ["vector"], lines: ["template <typename T> static void extendWith(std::vector<T>& items, const std::vector<T>& more) {",
+                    "    items.insert(items.end(), more.begin(), more.end());", "}"] },
       popAt: { wants: ["vector"], lines: ["template <typename T> static T popAt(std::vector<T>& items, int at = -1) {",
                "    if (at < 0) { at = (int)items.size() - 1; }", "    T got = items[at];",
                "    items.erase(items.begin() + at);", "    return got;", "}"] },
@@ -3283,10 +3615,10 @@
       chars: { wants: ["vector"], lines: ["static std::vector<std::string> chars(const std::string& s) {",
                "    std::vector<std::string> out;", "    for (char c : s) { out.push_back(std::string(1, c)); }",
                "    return out;", "}"] },
-      keysOf: { wants: ["vector", "map"], lines: ["template <typename K, typename V> static std::vector<K> keysOf(const std::map<K, V>& table) {",
+      keysOf: { wants: ["vector", "map"], lines: ["template <typename K, typename V> static std::vector<K> keysOf(const Table<K, V>& table) {",
                 "    std::vector<K> out;", "    for (const auto& kv : table) { out.push_back(kv.first); }",
                 "    return out;", "}"] },
-      valuesOf: { wants: ["vector", "map"], lines: ["template <typename K, typename V> static std::vector<V> valuesOf(const std::map<K, V>& table) {",
+      valuesOf: { wants: ["vector", "map"], lines: ["template <typename K, typename V> static std::vector<V> valuesOf(const Table<K, V>& table) {",
                   "    std::vector<V> out;", "    for (const auto& kv : table) { out.push_back(kv.second); }",
                   "    return out;", "}"] },
       sortedList: { wants: ["vector", "algorithm"], lines: ["template <typename T> static std::vector<T> sortedList(std::vector<T> items) {",
@@ -3315,6 +3647,13 @@
       trimmed: { lines: ["static std::string trimmed(const std::string& s) {",
                  "    size_t a = s.find_first_not_of(\" \\t\\n\\r\");", "    if (a == std::string::npos) { return \"\"; }",
                  "    size_t b = s.find_last_not_of(\" \\t\\n\\r\");", "    return s.substr(a, b - a + 1);", "}"] },
+      allCased: { wants: ["cctype"], lines: ["static bool allCased(const std::string& s, bool upper) {",
+                  "    bool cased = false;",
+                  "    for (char c : s) {",
+                  "        unsigned char u = (unsigned char)c;",
+                  "        if (std::isalpha(u)) { cased = true; if (upper ? std::islower(u) : std::isupper(u)) { return false; } }",
+                  "    }",
+                  "    return cased;", "}"] },
       allOf: { wants: ["cctype"], lines: ["static bool allOf(const std::string& s, int (*test)(int)) {",
                "    if (s.empty()) { return false; }", "    for (char c : s) { if (!test((unsigned char)c)) { return false; } }",
                "    return true;", "}"] },
@@ -3470,7 +3809,7 @@
     "    template <typename T> Value(const std::vector<T>& items) : kind(LIST), list(std::make_shared<std::vector<Value>>()) {",
     "        for (const auto& x : items) { list->push_back(Value(x)); }",
     "    }",
-    "    template <typename K, typename V> Value(const std::map<K, V>& t) : kind(TABLE), table(std::make_shared<std::vector<std::pair<Value, Value>>>()) {",
+    "    template <typename K, typename V> Value(const Table<K, V>& t) : kind(TABLE), table(std::make_shared<std::vector<std::pair<Value, Value>>>()) {",
     "        for (const auto& kv : t) { table->push_back(std::make_pair(Value(kv.first), Value(kv.second))); }",
     "    }",
     "    bool isNumber() const { return kind == WHOLE || kind == REAL || kind == FLAG; }",
@@ -3712,7 +4051,12 @@
     var call = w.reachMod(got.one) + w.called(got.one) + "(" + bound.concat(rest).join(", ") + ")";
     return "Fn([=](std::vector<Value> a_) -> Value { " + cppFnBody(got.one, call) + " })";
   };
-  LIST_WORK.cpp.callFn = function (name, codes) { return name + "(std::vector<Value>{" + codes.join(", ") + "})"; };
+  // a function held in a name, called: what it is handed made Values, which
+  // the file has to have in full -- a file of its own (a file each) as well
+  LIST_WORK.cpp.callFn = function (name, codes, w) {
+    if (w) { w.need("value"); w.need("fn"); }
+    return name + "(std::vector<Value>{" + codes.join(", ") + "})";
+  };
   LIST_WORK.cpp.helpers.fn = { wants: ["functional", "vector"], lines: [
     "// A function handed about as a value: handed a list of Values, handing one back.",
     "using Fn = std::function<Value(std::vector<Value>)>;"] };
@@ -3731,7 +4075,7 @@
     return "enumerated<" + w.typeOf(elemOf(elemOf(builtKind("enumerate", k)) || "any") || "any") + ">(" + a.join(", ") + ")";
   };
   LIST_WORK.cpp.helpers.itemsOf = { wants: ["vector", "map"], lines: [
-    "template <typename E, typename K, typename V> static std::vector<std::vector<E>> itemsOf(const std::map<K, V>& table) {",
+    "template <typename E, typename K, typename V> static std::vector<std::vector<E>> itemsOf(const Table<K, V>& table) {",
     "    std::vector<std::vector<E>> out;",
     "    for (const auto& kv : table) { out.push_back(std::vector<E>{E(kv.first), E(kv.second)}); }",
     "    return out;",
@@ -3998,7 +4342,7 @@
   LIST_WORK.cpp.helpers.toJson = { wants: ["string", "vector", "map", "sstream"], lines: [
     "// Something written the way JSON writes it: {\"a\":1,\"b\":[2,3]}.",
     "template <typename T> static std::string toJson(const std::vector<T>& items);",
-    "template <typename K, typename V> static std::string toJson(const std::map<K, V>& table);",
+    "template <typename K, typename V> static std::string toJson(const Table<K, V>& table);",
     "static std::string toJson(const std::string& s) {",
     "    std::string out = \"\\\"\";",
     "    for (char c : s) { if (c == '\"' || c == '\\\\') { out += '\\\\'; } out += c; }",
@@ -4012,7 +4356,7 @@
     "    for (size_t i = 0; i < items.size(); i++) { if (i) { out += \",\"; } out += toJson(items[i]); }",
     "    return out + \"]\";",
     "}",
-    "template <typename K, typename V> static std::string toJson(const std::map<K, V>& table) {",
+    "template <typename K, typename V> static std::string toJson(const Table<K, V>& table) {",
     "    std::string out = \"{\";",
     "    bool first = true;",
     "    for (const auto& kv : table) {",
@@ -4140,14 +4484,14 @@
       "template <typename T> static T deepCopy(const T& v) { return v; }",
       "template <typename T> static T* deepCopy(T* const& v) { return v ? new T(*v) : v; }",
       "template <typename T> static std::vector<T> deepCopy(const std::vector<T>& items);",
-      "template <typename K, typename V> static std::map<K, V> deepCopy(const std::map<K, V>& table);",
+      "template <typename K, typename V> static Table<K, V> deepCopy(const Table<K, V>& table);",
       "template <typename T> static std::vector<T> deepCopy(const std::vector<T>& items) {",
       "    std::vector<T> out;",
       "    for (const auto& x : items) { out.push_back(deepCopy(x)); }",
       "    return out;",
       "}",
-      "template <typename K, typename V> static std::map<K, V> deepCopy(const std::map<K, V>& table) {",
-      "    std::map<K, V> out;",
+      "template <typename K, typename V> static Table<K, V> deepCopy(const Table<K, V>& table) {",
+      "    Table<K, V> out;",
       "    for (const auto& kv : table) { out[kv.first] = deepCopy(kv.second); }",
       "    return out;",
       "}"] };
@@ -4155,11 +4499,11 @@
 
   // a number with a point the way the chart shows it: to six places at most,
   // no noughts left on the end -- 20.333333, 2.5, 3
-  LIST_WORK.cpp.helpers.realText = { wants: ["string", "sstream", "iomanip"], lines: [
+  LIST_WORK.cpp.helpers.realText = { wants: ["string", "sstream", "iomanip", "cmath"], lines: [
     "// A number with a point, the way the chart shows it: to six places, no noughts on the end.",
     "static std::string realText(double x) {",
     "    std::ostringstream o;",
-    "    o << std::fixed << std::setprecision(6) << x;",
+    "    o << std::fixed << std::setprecision(6) << std::floor(x * 1e6 + 0.5) / 1e6;",
     "    std::string s = o.str();",
     "    if (s.find('.') != std::string::npos) {",
     "        s.erase(s.find_last_not_of('0') + 1);",
@@ -4334,27 +4678,345 @@
     });
   })();
 
+  // ---- the textbook's library -------------------------------------------
+  // isInteger("42"), currencyFormat(1234.5) is $1,234.50, and append("Ann",
+  // "Lee") joining two words (Gaddis) -- the list's append, given words,
+  // joins them instead.
+  (function () {
+    var text = {
+      python: { isinteger: function (a, k, w) { w.need("isInteger"); return "is_integer(" + a[0] + ")"; },
+                currencyformat: function (a, k, w) { w.need("currencyFormat"); return "currency_format(" + a[0] + ")"; } },
+      javascript: { isinteger: function (a, k, w) { w.need("isInteger"); return "isInteger(" + a[0] + ")"; },
+                    currencyformat: function (a, k, w) { w.need("currencyFormat"); return "currencyFormat(" + a[0] + ")"; } },
+      java: { isinteger: function (a, k, w) {
+                w.need("isInteger");
+                return "isInteger(" + (k[0] === "text" ? a[0] : "String.valueOf(" + a[0] + ")") + ")";
+              },
+              currencyformat: function (a, k, w) { w.need("currencyFormat"); return "currencyFormat(" + a[0] + ")"; } },
+      csharp: { isinteger: function (a, k, w) { w.need("isInteger"); return "IsInteger(Convert.ToString(" + a[0] + "))"; },
+                currencyformat: function (a, k, w) { w.need("currencyFormat"); return "CurrencyFormat(" + a[0] + ")"; } },
+      cpp: { isinteger: function (a, k, w) { w.need("isInteger"); return "isInteger(" + a[0] + ")"; },
+             currencyformat: function (a, k, w) { w.need("currencyFormat"); return "currencyFormat(" + a[0] + ")"; } }
+    };
+    Object.keys(text).forEach(function (code) {
+      Object.keys(text[code]).forEach(function (name) { LIST_WORK[code].lists[name] = text[code][name]; });
+      var listAppend = LIST_WORK[code].lists.append;
+      LIST_WORK[code].lists.append = function (a, k) {
+        if (k[0] === "text" && k[1] === "text") { return a[0] + " + " + held(a[1]); }
+        return listAppend.apply(this, arguments);
+      };
+    });
+    LIST_WORK.python.helpers.isInteger = [
+      "def is_integer(v):",
+      "    text = str(v).strip()",
+      "    return text.lstrip(\"+-\").isdigit() and text.count(\"+\") + text.count(\"-\") <= 1"];
+    LIST_WORK.python.helpers.currencyFormat = [
+      "def currency_format(amount):",
+      "    text = \"$\" + format(abs(amount), \",.2f\")",
+      "    return \"-\" + text if amount < 0 and text != \"$0.00\" else text"];
+    LIST_WORK.javascript.helpers.isInteger = [
+      "// Words that say a whole number, and nothing else.",
+      "function isInteger(v) {",
+      "  return /^[-+]?\\d+$/.test(String(v).trim());",
+      "}"];
+    LIST_WORK.java.helpers.isInteger = [
+      "    // Words that say a whole number, and nothing else.",
+      "    static boolean isInteger(String s) {",
+      "        return s.trim().matches(\"[-+]?\\\\d+\");",
+      "    }"];
+    LIST_WORK.javascript.helpers.currencyFormat = [
+      "// Dollars and cents, the thousands marked: 1234.5 is $1,234.50.",
+      "function currencyFormat(amount) {",
+      "  const text = \"$\" + Math.abs(amount).toFixed(2).replace(/\\B(?=(\\d{3})+(?!\\d))/g, \",\");",
+      "  return amount < 0 && text !== \"$0.00\" ? \"-\" + text : text;",
+      "}"];
+    LIST_WORK.java.helpers.currencyFormat = [
+      "    // Dollars and cents, the thousands marked: 1234.5 is $1,234.50.",
+      "    static String currencyFormat(double amount) {",
+      "        String text = \"$\" + String.format(java.util.Locale.US, \"%,.2f\", Math.abs(amount));",
+      "        return amount < 0 && !text.equals(\"$0.00\") ? \"-\" + text : text;",
+      "    }"];
+    LIST_WORK.csharp.helpers.isInteger = [
+      "    static bool IsInteger(string s) {",
+      "        int got;",
+      "        return int.TryParse(s.Trim(), out got);",
+      "    }"];
+    LIST_WORK.csharp.helpers.currencyFormat = [
+      "    // Dollars and cents, the thousands marked: 1234.5 is $1,234.50.",
+      "    static string CurrencyFormat(double amount) {",
+      "        string text = \"$\" + Math.Abs(amount).ToString(\"N2\", System.Globalization.CultureInfo.InvariantCulture);",
+      "        return amount < 0 && text != \"$0.00\" ? \"-\" + text : text;",
+      "    }"];
+    LIST_WORK.cpp.helpers.isInteger = { wants: ["cctype"], lines: [
+      "static bool isInteger(const std::string& s) {",
+      "    size_t from = s.find_first_not_of(\" \\t\"), to = s.find_last_not_of(\" \\t\");",
+      "    if (from == std::string::npos) { return false; }",
+      "    if (s[from] == '+' || s[from] == '-') { from++; }",
+      "    if (from > to) { return false; }",
+      "    for (size_t i = from; i <= to; i++) { if (!std::isdigit((unsigned char) s[i])) { return false; } }",
+      "    return true;",
+      "}"] };
+    LIST_WORK.cpp.helpers.currencyFormat = { wants: ["sstream", "iomanip", "cmath"], lines: [
+      "// Dollars and cents, the thousands marked: 1234.5 is $1,234.50.",
+      "static std::string currencyFormat(double amount) {",
+      "    std::ostringstream o;",
+      "    o << std::fixed << std::setprecision(2) << std::fabs(amount);",
+      "    std::string digits = o.str(), text;",
+      "    size_t point = digits.find('.');",
+      "    for (size_t i = 0; i < point; i++) {",
+      "        if (i > 0 && (point - i) % 3 == 0) { text += ','; }",
+      "        text += digits[i];",
+      "    }",
+      "    text = \"$\" + text + digits.substr(point);",
+      "    return amount < 0 && text != \"$0.00\" ? \"-\" + text : text;",
+      "}"] };
+  })();
+
+  // ---- a C++ list made on the spot, looked through once -----------------
+  // min([4, 1, 9]), sum(range(101)): std::min_element(x.begin(), x.end())
+  // works x out twice, and a list made twice is two lists -- the two ends
+  // of different ones, and the answer whatever lies between them in
+  // memory.  A name is the one list however often it is said; anything
+  // else goes to a small helper that is handed it once.
+  (function () {
+    var once = { sum: "sumOf", min: "minOf", max: "maxOf", contains: "containsIn", count: "countIn",
+                 any: "anyIn", all: "allIn" };
+    function lvalue(code) {
+      return /^[A-Za-z_]\w*(?:\s*(?:\.|->)\s*[A-Za-z_]\w*|\s*\[[^\[\]]*\])*$/.test(String(code).trim());
+    }
+    Object.keys(once).forEach(function (name) {
+      var was = LIST_WORK.cpp.lists[name];
+      LIST_WORK.cpp.lists[name] = function (a, k, w) {
+        if (isListKind(k[0]) && ((name !== "min" && name !== "max") || k.length === 1) && !lvalue(a[0])) {
+          w.need(once[name]);
+          return once[name] + "(" + a.join(", ") + ")";
+        }
+        return was.apply(this, arguments);
+      };
+    });
+    var H = LIST_WORK.cpp.helpers;
+    H.sumOf = { wants: ["vector"], lines: ["template <typename T> static T sumOf(const std::vector<T>& items) {",
+                "    T total = T();", "    for (const T& v : items) { total += v; }", "    return total;", "}"] };
+    H.minOf = { wants: ["vector", "algorithm"], lines: ["template <typename T> static T minOf(const std::vector<T>& items) {",
+                "    return *std::min_element(items.begin(), items.end());", "}"] };
+    H.maxOf = { wants: ["vector", "algorithm"], lines: ["template <typename T> static T maxOf(const std::vector<T>& items) {",
+                "    return *std::max_element(items.begin(), items.end());", "}"] };
+    H.containsIn = { wants: ["vector", "algorithm"], lines: ["template <typename T, typename U> static bool containsIn(const std::vector<T>& items, const U& x) {",
+                     "    return std::find(items.begin(), items.end(), x) != items.end();", "}"] };
+    H.countIn = { wants: ["vector", "algorithm"], lines: ["template <typename T, typename U> static int countIn(const std::vector<T>& items, const U& x) {",
+                  "    return (int)std::count(items.begin(), items.end(), x);", "}"] };
+    H.anyIn = { wants: ["vector"], lines: ["static bool anyIn(const std::vector<bool>& items) {",
+                "    for (bool v : items) { if (v) { return true; } }", "    return false;", "}"] };
+    H.allIn = { wants: ["vector"], lines: ["static bool allIn(const std::vector<bool>& items) {",
+                "    for (bool v : items) { if (!v) { return false; } }", "    return true;", "}"] };
+  })();
+
+  // ---- a C++ table that keeps its order ------------------------------------
+  // The chart's tables, and Python's dicts, Java's LinkedHashMap, C#'s
+  // Dictionary and JavaScript's objects with them, go round their keys in
+  // the order they were put in; std::map goes round them sorted, and a
+  // table of months printed Apr, Feb, Jan.  So C++ is given a small table
+  // of its own that keeps them in order, written in only where one is used
+  // (cppHelpers), and fenced so that two headers holding it do not clash.
+  LIST_WORK.cpp.helpers.Table = { wants: ["vector", "utility", "initializer_list", "stdexcept"], lines: [
+    "#ifndef FLOWCHART_TABLE",
+    "#define FLOWCHART_TABLE",
+    "// A table that keeps its keys in the order they were first put in.",
+    "template <typename K, typename V> struct Table {",
+    "    std::vector<std::pair<K, V>> rows;",
+    "    Table() {}",
+    "    Table(std::initializer_list<std::pair<K, V>> given) {",
+    "        for (const auto& row : given) { (*this)[row.first] = row.second; }",
+    "    }",
+    "    V& operator[](const K& key) {",
+    "        for (auto& row : rows) { if (row.first == key) { return row.second; } }",
+    "        rows.push_back(std::pair<K, V>(key, V()));",
+    "        return rows.back().second;",
+    "    }",
+    "    V& at(const K& key) {",
+    "        for (auto& row : rows) { if (row.first == key) { return row.second; } }",
+    "        throw std::out_of_range(\"no such key\");",
+    "    }",
+    "    const V& at(const K& key) const {",
+    "        for (const auto& row : rows) { if (row.first == key) { return row.second; } }",
+    "        throw std::out_of_range(\"no such key\");",
+    "    }",
+    "    size_t count(const K& key) const {",
+    "        for (const auto& row : rows) { if (row.first == key) { return 1; } }",
+    "        return 0;",
+    "    }",
+    "    size_t erase(const K& key) {",
+    "        for (size_t i = 0; i < rows.size(); i++) {",
+    "            if (rows[i].first == key) { rows.erase(rows.begin() + i); return 1; }",
+    "        }",
+    "        return 0;",
+    "    }",
+    "    size_t size() const { return rows.size(); }",
+    "    bool empty() const { return rows.empty(); }",
+    "    void clear() { rows.clear(); }",
+    "    typename std::vector<std::pair<K, V>>::iterator begin() { return rows.begin(); }",
+    "    typename std::vector<std::pair<K, V>>::iterator end() { return rows.end(); }",
+    "    typename std::vector<std::pair<K, V>>::const_iterator begin() const { return rows.begin(); }",
+    "    typename std::vector<std::pair<K, V>>::const_iterator end() const { return rows.end(); }",
+    "    typename std::vector<std::pair<K, V>>::iterator find(const K& key) {",
+    "        for (auto it = rows.begin(); it != rows.end(); ++it) { if (it->first == key) { return it; } }",
+    "        return rows.end();",
+    "    }",
+    "    bool operator==(const Table& other) const {",
+    "        if (size() != other.size()) { return false; }",
+    "        for (const auto& row : rows) {",
+    "            if (!other.count(row.first) || !(other.at(row.first) == row.second)) { return false; }",
+    "        }",
+    "        return true;",
+    "    }",
+    "    bool operator!=(const Table& other) const { return !(*this == other); }",
+    "};",
+    "#endif"] };
+
+  // ---- words compared the way the runner compares them ---------------------
+  // = and <> between words let capitals go -- "YES" = "yes" -- and so does
+  // putting words in order, "apple" < "Banana"; == and != are exact
+  // (15-sums.js: same, sooner).  So the code says so: answer.lower() ==
+  // "yes", answer.equalsIgnoreCase("yes").  Words written down are put in
+  // small letters here and now rather than every time the line runs.
+  (function () {
+    function low(code, node, how) {
+      return node && node.str !== undefined ? quoted(node.str.toLowerCase()) : how(code);
+    }
+    var by = {
+      python: function (c) { return held(c) + ".lower()"; },
+      javascript: function (c) { return held(c) + ".toLowerCase()"; },
+      csharp: function (c) { return held(c) + ".ToLower()"; },
+      cpp: function (c, w) { w.need("toLower"); return "toLower(" + c + ")"; }
+    };
+    Object.keys(by).forEach(function (code) {
+      function both(a, b, na, nb, w) {
+        var one = function (c) { return by[code](c, w); };
+        var x = low(a, na, one), y = low(b, nb, one);
+        // two words written down, in C++, are two pointers: one made a string
+        if (code === "cpp" && na && na.str !== undefined && nb && nb.str !== undefined) { x = "std::string(" + x + ")"; }
+        return [x, y];
+      }
+      LIST_WORK[code].sameText = function (a, b, not, na, nb, w) {
+        var two = both(a, b, na, nb, w);
+        return two[0] + " " + (not ? this.ne : this.eq) + " " + two[1];
+      };
+      LIST_WORK[code].orderedText = function (a, op, b, na, nb, w) {
+        var two = both(a, b, na, nb, w);
+        return code === "csharp" ? "string.Compare(" + two[0] + ", " + two[1] + ", StringComparison.Ordinal) " + op + " 0"
+                                 : two[0] + " " + op + " " + two[1];
+      };
+    });
+    LIST_WORK.java.sameText = function (a, b, not, na, nb) {
+      if (na && na.str !== undefined && !(nb && nb.str !== undefined)) { var was = a; a = b; b = was; }
+      return (not ? "!" : "") + held(a) + ".equalsIgnoreCase(" + b + ")";
+    };
+    LIST_WORK.java.orderedText = function (a, op, b) {
+      return held(a) + ".compareToIgnoreCase(" + b + ") " + op + " 0";
+    };
+  })();
+
+  // ---- a For Each over a list the loop changes ----------------------------
+  // for (int at_ = 0; at_ < xs.Count; at_++) { int x = xs[at_]; ... }: the
+  // list as it is each time round, the way the runner goes round it.
+  (function () {
+    function indexLoop(w, item, deep) {
+      var L = this, over = tree(item.over), kind = w.kind(over), src = w.code(item.over);
+      var entry = w.entry(item["var"]), elem = elemOf(kind);
+      var at = "at" + deep + "_";
+      var type = L.ext === "js" ? "let " : entry ? L.typed(entry, w) : w.elemType(item.over, elem || "real") + " ";
+      w.line(deep, "for (" + (L.ext === "js" ? "let " : "int ") + at + " = 0; " + at + " < " +
+             L.lengthOf(held(src), kind, w) + "; " + at + "++)" + L.open);
+      var put = L.itemAt(src, at, kind, w);
+      if (entry && !w.ownLoop(item, entry)) { w.line(deep + 1, w.named(item["var"]) + " = " + put + L.semi); }
+      else { w.line(deep + 1, type + w.named(item["var"]) + " = " + put + L.semi); }
+      w.block(item.body, deep + 1);
+      w.line(deep, L.shut);
+    }
+    LIST_WORK.csharp.indexLoop = indexLoop;
+    LIST_WORK.csharp.walkByIndex = function (w, item, how) { return !this.asArrays(w) || how === "grow"; };
+    LIST_WORK.java.indexLoop = indexLoop;
+    LIST_WORK.java.walkByIndex = function (w, item, how) { return how === "grow"; };
+    LIST_WORK.cpp.indexLoop = indexLoop;
+    LIST_WORK.cpp.walkByIndex = function (w, item, how) { return how === "grow"; };
+  })();
+
+  // ---- the textbook's arrays, as arrays ------------------------------------
+  // A program whose lists are all fixed-size arrays (18-ahead.js, fixedArrays)
+  // is written with Java's and C#'s own arrays -- double[] times = new
+  // double[8], times[i], times.length -- the way the textbook's programs are
+  // written in those languages, rather than with lists and their casts.
+  // C#'s arrays of arrays are not made in one go, so there only an array of
+  // one size is one.
+  (function () {
+    function arrays(L, w) {
+      return !!(w && w.prog && w.prog.arrays) && (L.ext !== "cs" || w.prog.arrayDims <= 1);
+    }
+    ["java", "csharp"].forEach(function (code) {
+      var J = LIST_WORK[code], java = code === "java";
+      var was = { itemAt: J.itemAt, setAt: J.setAt, lengthOf: J.lengthOf, listOf: J.listOf,
+                  emptyOf: J.emptyOf, newlist: J.lists.newlist, length: J.lists.length };
+      J.lists.length = function (a, k, w) {
+        return arrays(this, w) && isListKind(k[0]) ? held(a[0]) + (java ? ".length" : ".Length") : was.length.apply(this, arguments);
+      };
+      J.asArrays = function (w) { return arrays(this, w); };
+      J.arrayType = function (type) { return type + "[]"; };
+      J.itemAt = function (o, i, kind, w) {
+        return arrays(this, w) && isListKind(kind) ? held(o) + "[" + i + "]" : was.itemAt.apply(this, arguments);
+      };
+      J.setAt = function (o, i, v, kind, w) {
+        return arrays(this, w) && isListKind(kind) ? held(o) + "[" + i + "] = " + v : was.setAt.apply(this, arguments);
+      };
+      J.lengthOf = function (o, kind, w) {
+        return arrays(this, w) && isListKind(kind) ? held(o) + (java ? ".length" : ".Length") : was.lengthOf.apply(this, arguments);
+      };
+      J.listOf = function (items, kind, w) {
+        if (!arrays(this, w) || !isListKind(kind)) { return was.listOf.apply(this, arguments); }
+        return "new " + w.typeOf(kind) + " { " + items.join(", ") + " }";
+      };
+      J.emptyOf = function (kind, w) {
+        return arrays(this, w) && isListKind(kind) ? "null" : was.emptyOf.apply(this, arguments);
+      };
+      // Declare Real times[8]: new double[8], noughts every one; words start
+      // as nothing in either, and are made "" the way the chart starts them
+      J.lists.newlist = function (a, k, w) {
+        if (!arrays(this, w)) { return was.newlist.apply(this, arguments); }
+        var sizes = a.slice(0, -1), elem = k[k.length - 1];
+        if (elem === "text" && !java) { return "Enumerable.Repeat(\"\", " + sizes[0] + ").ToArray()"; }
+        return "new " + typeOfKind(this, elem, w) + sizes.map(function (s) { return "[" + s + "]"; }).join("");
+      };
+    });
+    // String[] names = new String[5] holds nulls: each made "" on the next line
+    LIST_WORK.java.afterDeclare = function (w, name, code, deep) {
+      if (!this.asArrays(w) || !/^new String\[[^\]]+\]$/.test(code)) { return; }
+      var field = w.infront;
+      w.infront = "";
+      w.line(deep, (field ? "static { " : "") + "Arrays.fill(" + name + ", \"\");" + (field ? " }" : ""));
+      w.infront = field;
+    };
+  })();
+
   // The names each language's lists lean on, which a variable of the
   // program's must not be standing on.
-  LIST_WORK.python.keptToo = "sorted class_of list dict set map str type repr vars len float int object is_number functools lambda";
+  LIST_WORK.python.keptToo ="sorted class_of list dict set map str type repr vars len float int object is_number is_integer currency_format functools lambda";
   LIST_WORK.python.softToo = { sum: "sum", sorted: "sorted", any: "any", all: "all", zip: "zip",
                                ord: "ord", chr: "chr", enumerate: "enumerate" };
   LIST_WORK.python.builtRef = { length: "len", tostring: "str", abs: "abs", sum: "sum", int: "int",
                                 real: "float", sorted: "sorted", ord: "ord", chr: "chr" };
   LIST_WORK.python.lambda = function (v, body) { return "lambda " + v + ": " + body; };
-  LIST_WORK.javascript.keptToo = "classOf Array Map Set Object Boolean JSON Infinity NaN isNaN shown shuffle";
+  LIST_WORK.javascript.keptToo = "classOf Array Map Set Object Boolean JSON Infinity NaN isNaN shown shuffle currencyFormat isInteger";
   LIST_WORK.javascript.lambda = function (v, body) { return "(" + v + ") => " + body; };
   LIST_WORK.java.keptToo = "transpose sizeOf orderOf listPlus Record kindName sortIn reverseIn ArrayList LinkedHashMap LinkedHashSet Arrays Collections List Map Comparator " +
                            "Object StringBuilder shown joined filled filledFrom tableOf sortedList " +
-                           "reversedList shuffledList itemsOf isNumber java";
+                           "reversedList shuffledList itemsOf isNumber currencyFormat isInteger java";
   LIST_WORK.java.lambda = function (v, body) { return v + " -> " + body; };
   LIST_WORK.java.lambdaName = "v_";
-  LIST_WORK.csharp.keptToo = "OrderOf Record KindName SortIn ReverseIn dynamic List Dictionary Enumerable Shown PopAt SortedList Shuffle IsNumber System Linq";
+  LIST_WORK.csharp.keptToo = "OrderOf Record KindName SortIn ReverseIn dynamic List Dictionary Enumerable Shown PopAt SortedList Shuffle IsNumber IsInteger CurrencyFormat System Linq";
   LIST_WORK.csharp.lambda = function (v, body) { return v + " => " + body; };
   LIST_WORK.csharp.lambdaName = "v_";
-  LIST_WORK.cpp.keptToo = "lastIndexOf reprOf transpose listPlus kindName vector map shown shownIn popAt indexOf joined splitText chars keysOf valuesOf " +
+  LIST_WORK.cpp.keptToo = "lastIndexOf reprOf transpose listPlus kindName vector map Table extendWith countText temp allCased sliceOf sumOf minOf maxOf containsIn countIn anyIn allIn shown shownIn popAt indexOf joined splitText chars keysOf valuesOf " +
                           "sortedList reversedCopy shuffleIn shuffledCopy repeated rangeOf textOf replaced " +
-                          "trimmed allOf isNumber uniqueOf setWork padded fixedText Record INFINITY";
+                          "trimmed allOf isNumber isInteger currencyFormat uniqueOf setWork padded fixedText Record INFINITY";
   LIST_WORK.cpp.lambda = function (v, body) { return "[](auto " + v + ") { return " + body + "; }"; };
 
 
@@ -4500,8 +5162,21 @@
     var len = "(int)" + held(a[0]) + ".size()";
     var from = fromEnd(a[1], len), to = a[2] ? fromEnd(a[2], len) : null;
     if (k[0] === "text") { return held(a[0]) + ".substr(" + from + (to ? ", " + to + " - " + held(from) : "") + ")"; }
-    return w.typeOf(k[0]) + "(" + held(a[0]) + ".begin() + " + held(from) + ", " + (to ? held(a[0]) + ".begin() + " + held(to) : held(a[0]) + ".end()") + ")";
+    // the list worked out once, and the ends kept inside it, the way the
+    // chart (and Python) keep them: begin() + 3 of a list of two is nowhere
+    w.need("sliceOf");
+    return "sliceOf(" + a[0] + ", " + a[1] + (a[2] ? ", " + a[2] : "") + ")";
   };
+  LIST_WORK.cpp.helpers.sliceOf = { wants: ["vector", "algorithm"], lines: [
+    "// items[from:to], the ends counted from the back where they are less than nought, and kept inside the list",
+    "template <typename T> static std::vector<T> sliceOf(const std::vector<T>& items, int from, int to = 2147483647) {",
+    "    int n = (int)items.size();",
+    "    if (from < 0) { from += n; }",
+    "    if (to < 0) { to += n; }",
+    "    from = std::max(0, std::min(n, from));",
+    "    to = std::max(from, std::min(n, to));",
+    "    return std::vector<T>(items.begin() + from, items.begin() + to);",
+    "}"] };
   LIST_WORK.cpp.lists.substring = function (a) {
     var len = "(int)" + held(a[0]) + ".size()";
     var from = fromEnd(a[1], len), to = a[2] ? fromEnd(a[2], len) : null;
@@ -4709,6 +5384,66 @@
   LIST_WORK.java.keptToo += " toJson";
   LIST_WORK.csharp.keptToo += " ToJson";
   LIST_WORK.python.keptToo += " json";
+
+  // ---- a piece of some words, the way the chart cuts one --------------------
+  // substring("cat", 0, 12) is "cat" to the runner (15-sums.js, cut), and to
+  // Python's slice and JavaScript's; Java's and C#'s throw, and C++'s takes
+  // a count that goes wrong.  So past the plainest cases -- from the start
+  // to the end, or to its length -- the three are handed a substring of
+  // their own that cuts the way the chart does.
+  (function () {
+    function plain(a, nodes) {
+      var from = String(a[1]).trim(), to = a[2] === undefined ? null : String(a[2]).trim();
+      if (from !== "0") { return false; }
+      if (to === null) { return true; }
+      var n = nodes && nodes[2];
+      return !!(n && n.call && lowered(n.call) === "length" && n.args && n.args.length === 1 &&
+                JSON.stringify(n.args[0]) === JSON.stringify(nodes[0]));
+    }
+    var helper = { java: "substring", csharp: "Substring", cpp: "substringOf" };
+    Object.keys(helper).forEach(function (code) {
+      var was = LIST_WORK[code].lists.substring;
+      LIST_WORK[code].lists.substring = function (a, k, w, nodes) {
+        if (plain(a, nodes)) { return was.apply(this, arguments); }
+        w.need("cutText");
+        return helper[code] + "(" + a[0] + ", " + a[1] + (a[2] !== undefined ? ", " + a[2] : "") + ")";
+      };
+    });
+    LIST_WORK.java.helpers.cutText = [
+      "    // substring(s, from, to), the ends kept inside the words (from the back where less than nought)",
+      "    static String substring(String s, int from, int to) {",
+      "        int n = s.length();",
+      "        from = Math.max(0, Math.min(n, from < 0 ? from + n : from));",
+      "        to = Math.max(from, Math.min(n, to < 0 ? to + n : to));",
+      "        return s.substring(from, to);",
+      "    }",
+      "    static String substring(String s, int from) { return substring(s, from, s.length()); }"];
+    LIST_WORK.csharp.helpers.cutText = [
+      "    // Substring(s, from, to), the ends kept inside the words (from the back where less than nought)",
+      "    static string Substring(string s, int from, int to) {",
+      "        int n = s.Length;",
+      "        from = Math.Max(0, Math.Min(n, from < 0 ? from + n : from));",
+      "        to = Math.Max(from, Math.Min(n, to < 0 ? to + n : to));",
+      "        return s.Substring(from, to - from);",
+      "    }",
+      "    static string Substring(string s, int from) { return Substring(s, from, s.Length); }"];
+    LIST_WORK.cpp.helpers.cutText = { wants: ["algorithm"], lines: [
+      "// substringOf(s, from, to), the ends kept inside the words (from the back where less than nought)",
+      "static std::string substringOf(const std::string& s, int from, int to = 2147483647) {",
+      "    int n = (int)s.size();",
+      "    from = std::max(0, std::min(n, from < 0 ? from + n : from));",
+      "    to = std::max(from, std::min(n, to < 0 ? to + n : to));",
+      "    return s.substr(from, to - from);",
+      "}"] };
+    LIST_WORK.java.keptToo += " substring";
+    LIST_WORK.csharp.keptToo += " Substring";
+    LIST_WORK.cpp.keptToo += " substringOf";
+  })();
+
+  // Yes and no, joined into words, said True and False the way the chart
+  // says them -- not Java's and JavaScript's true and false
+  LIST_WORK.java.flagText = function (code) { return "(" + code + " ? \"True\" : \"False\")"; };
+  LIST_WORK.javascript.flagText = function (code) { return "(" + code + " ? \"True\" : \"False\")"; };
 
   // Filled into each language's own block, once.
   Object.keys(LIST_WORK).forEach(function (code) {

@@ -142,6 +142,8 @@ ES = {
     "w_until_alone": "Línea {line}: Until, pero no hay ningún Do ni Repeat encima.",
     "w_mend_change": "Cambiar {word} por {instead}",
     "w_mend_drop": "Quitar la línea {line}",
+    "w_mend_drop_lines": "Quitar las líneas {line}–{last}",
+    "w_code_tail": "Las líneas {line}–{last} parecen código Python pegado bajo el pseudocódigo, así que el programa lo hace todo dos veces.",
     "w_mend_insert": "Poner {text} en la línea {line}",
     "w_mend_tip": "Doble clic para arreglarlo",
     "w_mend_close": "Poner el {text} que falta al final",

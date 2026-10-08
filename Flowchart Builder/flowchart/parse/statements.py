@@ -1,7 +1,7 @@
 """One line of pseudocode, turned into a shape."""
 import re
 
-from ..parse.clean import tidy
+from ..parse.clean import said_long, tidy
 from ..parse.nodes import For, If, Loop, Module, Node, Select
 from ..parse.keywords import (
     R_CALL, R_END, R_FOR_C, R_FOR_TO, R_IN, R_OUT, R_RETURN, R_START)
@@ -43,7 +43,9 @@ def parse_for(rest, raw):
     m = R_FOR_C.match(rest)
     if m:
         init, test, bump = (g.strip() for g in m.groups())
-        return For(raw, init or None, test or "True", bump or None)
+        # for (int i = 0; i < 5; i++): i = 0, and i = i + 1
+        init = re.sub(r"^(?:int|integer|var|let|auto|long|double|float|real)\s+(?=[A-Za-z_])", "", init or "", flags=re.I)
+        return For(raw, init or None, test or "True", said_long(bump) if bump else None)
     loop = Loop("pre", raw)                          # For Each x In y, etc.
     loop.hex = True
     return loop
@@ -54,6 +56,9 @@ class Frame:
 
     def __init__(self, owner, items, indent):
         self.owner, self.items, self.indent = owner, items, indent
+        # Closed by the lines stepping back out, Python's way -- "for x in
+        # xs:" with its body indented under it -- rather than by an End
+        self.by_indent = False
 
 
 class Chart:

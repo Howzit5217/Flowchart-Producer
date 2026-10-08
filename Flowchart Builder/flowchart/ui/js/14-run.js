@@ -1059,12 +1059,88 @@
       // away with the module's own names the moment it ended.  Only a plain
       // variable can be handed back into: there is nowhere to put an answer
       // if what was passed was a sum.
-      refs.forEach(function (isRef, i) {
-        if (isRef && outer && /^[A-Za-z_]\w*$/.test(String((given || [])[i] || ""))) {
-          putIn(outer, given[i], where.vars[names[i]]);
+      //
+      // Or a place in one -- Call swap(array[i], array[i + 1]), the
+      // textbook's bubble sort -- which is put back into the way a Set puts
+      // into it, once the module is done.
+      for (var r = 0; r < refs.length; r++) {
+        var back = String((given || [])[r] || "").trim();
+        if (!refs[r] || !outer) { continue; }
+        if (/^[A-Za-z_]\w*$/.test(back)) { putIn(outer, back, where.vars[names[r]]); }
+        else if (R_REF_PLACE.test(back)) {
+          try { await assignTo(outer, back, where.vars[names[r]]); } catch (nowhere) { /* the place is gone */ }
         }
+      }
+    }
+  }
+  // grid[y][x], p.x, rows[k].cells[j]: somewhere a value can be put back
+  var R_REF_PLACE = /^[A-Za-z_]\w*(?:\s*\[[^\]]+\]|\s*\.\s*[A-Za-z_]\w*)+$/;
+
+  // ---- a whole number divided stays whole ---------------------------------
+  // Set middle = (first + last) / 2, with middle declared an Integer: the
+  // textbook's binary search.  A division going into a whole-number name
+  // keeps the whole part -- Java's int, C#'s and C++'s do, and the code
+  // written for the others says so -- so the run does too: 3, not 3.5,
+  // which no list can be picked from.  Only a division, only for names the
+  // program declared whole numbers, in the chart that declared them (or
+  // shared by all of them), and for an array of them, each place in it.
+  // Anything else goes in as it is, as it always did: a name read in from
+  // JavaScript as an Integer because it started at 0 is not made to drop
+  // the pennies it is later given.
+  var wholeSaid = null;                  // { ast, charts: {chart: {name: whole?}}, shared }
+  var R_WHOLE_TYPE = /^(int|integer|long)$/i;
+  function wholeNamesOf(ast) {
+    var out = { ast: ast, charts: Object.create(null), shared: Object.create(null) };
+    function walk(steps, mine) {
+      (steps || []).forEach(function (st) {
+        if (st.op === "declare" && /^[A-Za-z_]\w*$/.test(String(st.var || ""))) {
+          (st.scope === "global" ? out.shared : mine)[String(st.var).toLowerCase()] =
+            R_WHOLE_TYPE.test(String(st.type || ""));
+        }
+        ["then", "else", "body"].forEach(function (k) { walk(st[k], mine); });
+        (st.cases || []).forEach(function (one) { walk(one.body, mine); });
       });
     }
+    var main = Object.create(null);
+    walk(ast && ast.main, main);
+    out.charts.main = main;
+    ((ast && ast.modules) || []).forEach(function (mod) {
+      var mine = Object.create(null);
+      paramBits(mod.params).forEach(function (p) {
+        mine[p.name.toLowerCase()] = p.words.slice(0, -1).some(function (b) { return R_WHOLE_TYPE.test(b); });
+      });
+      walk(mod.body, mine);
+      out.charts[String(mod.name).toLowerCase()] = mine;
+    });
+    return out;
+  }
+  // Is the last thing a sum does a division: (first + last) / 2, a / b * c
+  // is not (the multiplying is last), nor is a / b + 1.
+  function dividesLast(src) {
+    var ts = tokens(src), deep = 0, last = "", after = false;
+    for (var i = 0; i < ts.length; i++) {
+      var t = ts[i], v = String(t.v);
+      if (t.t === "op" && (v === "(" || v === "[")) { deep++; after = false; continue; }
+      if (t.t === "op" && (v === ")" || v === "]")) { deep--; after = true; continue; }
+      if (deep) { continue; }
+      if (t.t === "name" && /^(and|or|not)$/i.test(v)) { return false; }
+      if (t.t === "name" && /^(mod|div)$/i.test(v)) { last = v.toLowerCase(); after = false; continue; }
+      if (t.t !== "op") { after = true; continue; }
+      if ((v === "+" || v === "-") && !after) { continue; }     // a sign, not a sum
+      if (v === "*" || v === "/" || v === "%") { last = v; after = false; continue; }
+      if (v === "^") { after = false; continue; }
+      return false;                                              // + - < = and the rest
+    }
+    return last === "/";
+  }
+  function keptWhole(where, target, v, src) {
+    if (typeof v !== "number" || !isFinite(v) || v === Math.trunc(v) || !dividesLast(src)) { return v; }
+    if (!wholeSaid || wholeSaid.ast !== AST) { wholeSaid = wholeNamesOf(AST); }
+    var head = /^\s*([A-Za-z_]\w*)/.exec(String(target || ""));
+    if (!head || /\./.test(String(target))) { return v; }
+    var low = head[1].toLowerCase(), mine = wholeSaid.charts[String(where && where.name || "main").toLowerCase()];
+    var whole = mine && low in mine ? mine[low] : !!wholeSaid.shared[low];
+    return whole ? Math.trunc(v) : v;
   }
 
   // A module's parameters, each as it is written: "Integer step = 1" is
@@ -1075,10 +1151,15 @@
       var text = p.trim(), dflt = "";
       var eq = /^([^=]*[^=<>!])=(?!=)(.*)$/.exec(text);
       if (eq) { text = eq[1].trim(); dflt = eq[2].trim(); }
+      // Integer array[], String names[][], Integer[] array: an array handed
+      // over, its brackets on the name or on the type -- the name is the
+      // name without them, and `dims` says how many it had
+      var dims = 0;
+      text = text.replace(/\s*\[\s*[^\]\s]*\s*\]/g, function () { dims++; return ""; });
       var bits = text.split(/\s+/).filter(Boolean);
       if (!bits.length) { return null; }
       return { name: bits[bits.length - 1], type: bits.length > 1 ? bits[0] : "", dflt: dflt,
-               ref: bits.some(function (b) { return R_REF.test(b); }), words: bits };
+               ref: bits.some(function (b) { return R_REF.test(b); }), words: bits, dims: dims };
     }).filter(Boolean);
   }
 
@@ -1134,11 +1215,16 @@
   var NUMERIC = {};                      // the names declared to hold numbers
   var R_NUM_TYPE = /^(int|integer|real|num|number|float|double|currency|money|decimal)$/i;
   var R_READS_NUM = /^[-+]?(\d+\.?\d*|\.\d+)([eE][-+]?\d+)?$/;
+  // and the ones declared to hold words, which a 42 typed in stays: words,
+  // that + joins on to ("42" + 13 is "4213") the way every language does
+  var TEXTUAL = {};
+  var R_TEXT_TYPE = /^(string|str|text|char|character)$/i;
 
   function noteCash(name, type) {
     var kind = String(type || "").trim();
     if (R_CASH_TYPE.test(kind)) { CASH[name] = true; }
-    if (R_NUM_TYPE.test(kind)) { NUMERIC[name] = true; }
+    if (R_NUM_TYPE.test(kind)) { NUMERIC[name] = true; delete TEXTUAL[name]; }
+    if (R_TEXT_TYPE.test(kind)) { TEXTUAL[name] = true; delete NUMERIC[name]; }
   }
 
   function cashy(src) {                  // does this expression handle money?
@@ -1284,10 +1370,11 @@
       else switch (item.op) {
         case "declare":
           noteCash(item.var, item.type);
-          declareIn(where, item.var, await declared(item, where), item.scope === "global");
+          declareIn(where, item.var, keptWhole(where, item.var, await declared(item, where), item.expr),
+                    item.scope === "global");
           break;
         case "set":
-          await assignTo(where, item.var, await value(item.expr, where),
+          await assignTo(where, item.var, keptWhole(where, item.var, await value(item.expr, where), item.expr),
                          item.scope === "global");
           break;
         case "foreach":
@@ -1303,7 +1390,7 @@
           // A name declared to hold a number holds one, however it was
           // written down; anything else has to read back exactly as it was
           // typed before it stops being text.
-          var isNum = said !== "" && !isNaN(asNum) &&
+          var isNum = said !== "" && !isNaN(asNum) && !TEXTUAL[item.var] &&
                       (NUMERIC[item.var] ? R_READS_NUM.test(said)
                                          : String(asNum) === said);
           await assignTo(where, item.var, isNum ? asNum : typed,
@@ -1754,7 +1841,9 @@
     trail = [];
     CASH = back ? back.cash : {};        // a fresh run, a fresh set of names
     GLOBALS = back ? back.globals : {};  //   and a fresh set of shared ones
-    if (back) { Object.assign(NUMERIC, back.numeric); }
+    NUMERIC = {};                        // and what each was declared as,
+    TEXTUAL = {};                        //   not what last run's names were
+    if (back) { Object.assign(NUMERIC, back.numeric); Object.assign(TEXTUAL, back.textual || {}); }
     stepped = {};
     doingNow = null;
     if (!quiet) {
