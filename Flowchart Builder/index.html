@@ -62810,6 +62810,29 @@ window.addEventListener("load", function () {
     V3_ADDED[name] = { key: key, house: house, land: land, extra: extra, faces: faces.slice(f0) };
     for (i = f0; i < faces.length; i++) { faces[i] = v3FaceCopy(faces[i]); }
   }
+  function v3OverSteps(n) {
+    if (!n || !V3) { return 0; }
+    var pic = V3.picture || (V3.picture = {}), L = pic.stepsUnder;
+    if (!L) {
+      var floors = typeof floorsOf === "function" ? floorsOf() : [];
+      L = pic.stepsUnder = [];
+      (floors.length && typeof floorLinks === "function" ? floorLinks(floors) : []).forEach(function (pair) {
+        var a = pair[0], b = pair[1], fa = floorAt(floors, a.x, a.y), fb = floorAt(floors, b.x, b.y);
+        if ((a.kind !== "i_stairs" && a.kind !== "i_escalator") || (a.turn || 0) % 90 || !fa || !fb || fa === fb) { return; }
+        var low = fa.z <= fb.z ? a : b;
+        L.push({ s: low, f: fa.z <= fb.z ? fa : fb, rise: Math.abs(fb.z - fa.z) / FLOOR_PX });
+      });
+    }
+    if (!L.length) { return 0; }
+    var floors2 = floorsOf(), fn = floorAt(floors2, n.x, n.y);
+    for (var i = 0; i < L.length; i++) {
+      var s = L[i].s;
+      if (L[i].f !== fn || !insideArea(s, n.x, n.y, -3)) { continue; }
+      var a = -(s.turn || 0) * Math.PI / 180, ly = (n.x - s.x) * Math.sin(a) + (n.y - s.y) * Math.cos(a);
+      return Math.max(0, Math.min(1, (s.h / 2 - ly) / s.h)) * L[i].rise;
+    }
+    return 0;
+  }
   function v3FaceCopy(f) {
     var c = Object.assign({}, f);
     if (f.mesh) { c.mesh = Object.assign({}, f.mesh); }
@@ -62849,16 +62872,16 @@ window.addEventListener("load", function () {
     if (stack < 1) {
       floors = floors.map(function (f) { return Object.assign({}, f, { dx: f.dx * stack, dy: f.dy * stack }); });
     }
-    var show = inside ? (indoors ? (V3.myLevel || 0) : null) : V3.upTo;
+    var show = inside ? null : V3.upTo, walkLevel = inside ? (V3.myLevel || 0) : 0;
     function shown(f) {
       if (!f) { return true; }
-      if (inside) { return !indoors || f.level === show || (V3.flightUp !== undefined && f.level === V3.flightUp); }
+      if (inside) { return true; }
       if (flat) { return true; }        // flat, every floor, side by side as drawn
       return show === null || show === undefined || f.level <= show;
     }
     var topLevel = floors.length ? floors[floors.length - 1].level : 0;
     var roofV = V3.roofV === undefined ? 1 : V3.roofV;
-    var roofed = !low && !flat && (inside ? !indoors : show === null || show === undefined || show >= topLevel);
+    var roofed = !low && !flat && (inside || show === null || show === undefined || show >= topLevel);
     var hush = roofed && !inside && roofV > 0.999 && !V3.tw.roofV;
     var roomsAll = hand.nodes.filter(function (m) { return m.kind === "i_room"; });
     var roomsNear = listNear(roomsAll), allKept = null;
@@ -62892,8 +62915,8 @@ window.addEventListener("load", function () {
       var f = floorOfNode(n);
       if (!f) { return false; }
       if (!inside) { return coveredAbove(n, f); }
-      if (!indoors) { return f.level !== 0 && roomsHolding(n, 0) > 0; }
-      return false;
+      if (f.level === walkLevel || (V3.flightUp !== undefined && f.level === V3.flightUp)) { return false; }
+      return roomsAt(n.x, n.y, 0).some(function (r) { return r !== n && !r.court && insideArea(r, n.x, n.y); });
     }
     function storeyOf(room) {
       var f = floorOfNode(room), next = f && floorOver(floors, f);
@@ -62901,7 +62924,7 @@ window.addEventListener("load", function () {
     }
     function wallTop(room) {
       var c = ceilOf(room) * FLOOR_PX;
-      return indoors && V3.flightUp === undefined ? c : Math.max(c, storeyOf(room));
+      return Math.max(c, storeyOf(room));
     }
     function outsideOnly(room) {
       var hw = room.w / 2, hh = room.h / 2;
@@ -63091,6 +63114,8 @@ window.addEventListener("load", function () {
           clear = Math.max(clear, pieceHigh(m) + 0.06);
         });
         if (clear > hang[0] && hang[1] - hang[0] + clear <= ceilAt(n) - 0.02) { hang = [clear, clear + hang[1] - hang[0]]; }
+        var upSteps = v3OverSteps(n);
+        if (upSteps) { hang = [hang[0] + upSteps, hang[1] + upSteps]; }
         var front = v3FrontPic(n, hang);
         var ft = (n.turn || 0) * Math.PI / 180, facing = [-Math.sin(ft), Math.cos(ft), 0];
         if (n.kind === "i_shelf") {
@@ -63174,10 +63199,10 @@ window.addEventListener("load", function () {
     }
     var labelsOn = (V3.labelV === undefined ? 1 : V3.labelV) > 0.01;
     var keyNow = [JSON.stringify(hand.nodes), JSON.stringify(hand.links), JSON.stringify(style), V3.scene, V3.mode,
-                  V3.inRoom ? V3.inRoom.id : "", indoors ? V3.myLevel || 0 : "", low ? 1 : 0, flat ? 1 : 0, stack.toFixed(3),
+                  inside && big ? walkLevel : "", low ? 1 : 0, flat ? 1 : 0, stack.toFixed(3),
                   String(show), hush ? 1 : 0, roofed ? 1 : 0, labelsOn ? 1 : 0, big ? 1 : 0,
                   typeof modelsOn === "function" && modelsOn() ? 1 : 0, walkAt && simNow ? walkAt.id : "",
-                  inside && V3.me ? V3.me.as || "" : "", V3.flightUp === undefined ? "" : V3.flightUp].join("|");
+                  inside && V3.me ? V3.me.as || "" : "", inside && big && V3.flightUp !== undefined ? V3.flightUp : ""].join("|");
     var kept = v3KeptGet(keyNow);
     function putUp(n) {
       var f = floorOfNode(n);
@@ -63215,7 +63240,9 @@ window.addEventListener("load", function () {
     }
     faces = kept.faces.map(v3FaceCopy);
     stand = kept.stand.map(function (s) { return Object.assign({}, s); });
-    labels = kept.labels.map(function (l) { return Object.assign({}, l); });
+    var hereIs = V3.inRoom ? V3.inRoom.id : null;
+    labels = kept.labels.filter(function (l) { return l.within === undefined || l.within === hereIs; })
+                        .map(function (l) { return Object.assign({}, l); });
     var doorsWas = kept.doorFaces || (kept.doorFaces = {});
     kept.doors.forEach(function (n) {
       var at = V3.doorAt[n.id], was = doorsWas[n.id];
@@ -63273,9 +63300,10 @@ window.addEventListener("load", function () {
         if (room && n.partOf !== undefined) { return null; }
         var inRoom = room ? null : roomsAt(n.x, n.y, 0).filter(function (r) { return insideArea(r, n.x, n.y); })[0] || null;
         if (!inside && f && coveredAbove(n, f)) { return null; }
+        var within;
         if (inside) {
           if (room) { return null; }                  // the room is named at the top
-          if (indoors ? inRoom !== V3.inRoom : !!inRoom) { return null; }
+          within = inRoom ? inRoom.id : null;
         } else if (hush && !room && inRoom) { return null; }
         var z, text;
         if (room) {
@@ -63284,14 +63312,16 @@ window.addEventListener("load", function () {
         } else {
           text = String(n.text || "").split("\n")[0].trim() || labelName(n.kind);
           if (isFigure(n.kind) || n.kind === "actor") { z = pieceHigh(n) + 0.3; }
-          else if (V3_WALL[n.kind]) { z = wallHang(n)[1] + 0.2; }
+          else if (V3_WALL[n.kind]) { z = wallHang(n)[1] + v3OverSteps(n) + 0.2; }
           else if (FROM_CEILING[n.kind]) { z = ceilAt(n) - hangDrop(n)[0] - 0.15; }
           else if (ON_TOP[n.kind]) { z = under(n) + pieceHigh(n) + 0.2; }
           else if (V3_HIGH[n.kind] !== undefined) { z = pieceHigh(n) + 0.25; }
           else { z = 0.8; }
           z *= FLOOR_PX;
         }
-        return { x: n.x + (f ? f.dx : 0), y: n.y + (f ? f.dy : 0), z: z + (f ? f.z : 0), text: text, room: room };
+        var said = { x: n.x + (f ? f.dx : 0), y: n.y + (f ? f.dy : 0), z: z + (f ? f.z : 0), text: text, room: room };
+        if (within !== undefined) { said.within = within; }
+        return said;
     }
     return { faces: faces, stand: stand, spheres: spheres, rings: rings, labels: labels };
   }
@@ -64988,6 +65018,8 @@ window.addEventListener("load", function () {
         });
       }
       if (clear > hang[0] && hang[1] - hang[0] + clear <= ceilAt(n) - 0.02) { hang = [clear, clear + hang[1] - hang[0]]; }
+      var upSteps = typeof v3OverSteps === "function" ? v3OverSteps(n) : 0;
+      if (upSteps) { hang = [hang[0] + upSteps, hang[1] + upSteps]; }
       z0 = hang[0] * P; H = (hang[1] - hang[0]) * P; extra.onWall = true;
     } else if (V3_HIGH[n.kind] !== undefined) {
       z0 = 0; H = pieceHigh(n) * P;
@@ -69143,8 +69175,10 @@ window.addEventListener("load", function () {
   var gl3BoxLast = { faces: null, n: -1, box: null };
   function gl3FacesBox(faces) {
     if (gl3BoxLast.faces === faces && gl3BoxLast.n === faces.length) { return Object.assign({}, gl3BoxLast.box); }
+    var K = typeof V3 !== "undefined" && V3 && V3.mode === "walk" && V3.kept ? V3.kept[0] : null, now = performance.now();
+    if (K && gl3BoxLast.kept === K && Math.abs(gl3BoxLast.n - faces.length) < 4000 && now - gl3BoxLast.at < 1000) { return Object.assign({}, gl3BoxLast.box); }
     var box = gl3FacesBoxOf(faces);
-    gl3BoxLast = { faces: faces, n: faces.length, box: box };
+    gl3BoxLast = { faces: faces, n: faces.length, box: box, kept: K, at: now };
     return Object.assign({}, box);
   }
   function gl3FacesBoxOf(faces, but) {
@@ -77396,7 +77430,7 @@ window.addEventListener("load", function () {
     if (!S || !V3 || V3.scene === "space" || (V3.flat && V3.flatDone) || V3.low) { return; }
     var inside = V3.mode === "walk", indoors = inside && !!V3.inRoom;
     if (!inside && (V3.rise === undefined ? 1 : V3.rise) < 0.98) { return; }
-    var whole = inside ? !indoors : (V3.upTo === null || V3.upTo === undefined);
+    var whole = inside ? true : (V3.upTo === null || V3.upTo === undefined);
     var floors = typeof floorsOf === "function" ? floorsOf() : [], px = FLOOR_PX;
     var rooms = hand.nodes.filter(function (n) { return n.kind === "i_room"; });
     function inRoom(x, y) { return rooms.some(function (r) { return insideArea(r, x, y); }); }
@@ -82180,7 +82214,7 @@ window.addEventListener("load", function () {
         if (model && houseOpt("frontPorch") && !(S && S.porch) && typeof stylePorch === "function" && V3 && V3.scene !== "space" &&
             !(V3.flat && V3.flatDone) && !V3.low) {
           var inside = V3.mode === "walk", indoors = inside && !!V3.inRoom;
-          var whole = inside ? !indoors : (V3.upTo === null || V3.upTo === undefined) && (V3.rise === undefined ? 1 : V3.rise) >= 0.98;
+          var whole = inside ? true : (V3.upTo === null || V3.upTo === undefined) && (V3.rise === undefined ? 1 : V3.rise) >= 0.98;
           if (whole) {
             var floors = typeof floorsOf === "function" ? floorsOf() : [];
             var rooms = hand.nodes.filter(function (n) { return n.kind === "i_room"; });
@@ -83371,11 +83405,16 @@ window.addEventListener("load", function () {
     model.faces.forEach(function (f) {
       var n = f.node;
       if (!n || f.found) { return; }
+      var s = f.src;
+      if (s && s.tlT === T && s.tlPts === f.pts) { f.pts = s.tlOut; return; }
       var k0 = terrLiftKept && !f.mesh ? terrLiftKept.get(f.pts) : null;
-      if (k0 && k0.T === T) { f.pts = k0.out; return; }
+      if (k0 && k0.T === T) { if (s) { s.tlT = T; s.tlPts = f.pts; s.tlOut = k0.out; } f.pts = k0.out; return; }
       var L = byNode.get(n);
       if (L === undefined) { L = terrNodeLift(T, n); byNode.set(n, L); }
-      if (!L || (!L.drape && !L.z)) { if (terrLiftKept && !f.mesh) { terrLiftKept.set(f.pts, { T: T, key: 0, out: f.pts }); } return; }
+      if (!L || (!L.drape && !L.z)) {
+        if (terrLiftKept && !f.mesh) { terrLiftKept.set(f.pts, { T: T, key: 0, out: f.pts }); if (s) { s.tlT = T; s.tlPts = f.pts; s.tlOut = f.pts; } }
+        return;
+      }
       if (L.drape) {
         if (f.mesh) { f.terrDrape = true; return; }                          // laid over it as it is drawn (gl3Mesh)
         f.pts = terrLiftPts(f.pts, T, "d", function (p) { return [p[0], p[1], p[2] + terrAt(p[0], p[1]) + 0.6]; });
@@ -88092,10 +88131,23 @@ window.addEventListener("load", function () {
     var model = V3 && V3.dragModel;
     if (!model || !model.faces || !R) { return null; }
     var o = R.o, boxes = {}, list = [], walls = [], reach = far + 3 * FLOOR_PX, small = O3_MIN * FLOOR_PX;
+    var farOf = new Map(), fls = typeof floorsOf === "function" ? floorsOf() : [];
+    function farOff(n) {
+      var v = farOf.get(n);
+      if (v === undefined) {
+        var fl = fls.length ? floorAt(fls, n.x, n.y) : null, fz = fl ? fl.z : 0;
+        var dh = Math.max(0, Math.hypot(n.x + (fl ? fl.dx : 0) - o[0], n.y + (fl ? fl.dy : 0) - o[1]) - Math.hypot(n.w || 0, n.h || 0) / 2);
+        var dz = Math.max(fz - FLOOR_PX - o[2], 0, o[2] - (fz + Math.max(4.5, (n.ceil || 0) + 1) * FLOOR_PX));
+        v = dh * dh + dz * dz > reach * reach;
+        farOf.set(n, v);
+      }
+      return v;
+    }
     model.faces.forEach(function (f) {
       var P = f.pts;
       if (f.me || f.found || f.moves || !P || P.length < 3) { return; }
       var n = f.node, how = f.how || {};
+      if (n && n.x !== undefined && farOff(n)) { return; }
       var fixed = n ? !!(O3_FIXED[n.kind] || (typeof BETWEEN_FLOORS === "object" && BETWEEN_FLOORS[n.kind])) : !!(how.wall || how.roof);
       if (!n && !fixed) { return; }                // water running, a plug's cord, the grid carried over: not in the way
       var bx = o3Boxes ? o3Boxes.get(P) : null;
@@ -93379,7 +93431,7 @@ window.addEventListener("load", function () {
       var S = styleNow();
       if (!S || !V3 || V3.scene === "space" || (V3.flat && V3.flatDone) || V3.low) { return; }
       var inside = V3.mode === "walk", indoors = inside && !!V3.inRoom;
-      var whole = inside ? !indoors : (V3.upTo === null || V3.upTo === undefined);
+      var whole = inside ? true : (V3.upTo === null || V3.upTo === undefined);
       if (!whole) { return; }
       try { if (S.awning) { civicAwnings(model, S); } } catch (e) { /* without */ }
       try { if (S.cupola && typeof roofKept === "object" && roofKept.out) { civicCupola(model, S); } } catch (e2) { /* without */ }
@@ -95446,7 +95498,7 @@ window.addEventListener("load", function () {
       try {
         if (V3 && V3.scene !== "space" && !(V3.flat && V3.flatDone) && !V3.low) {
           var inside = V3.mode === "walk", indoors = inside && !!V3.inRoom;
-          var whole = inside ? !indoors : (V3.upTo === null || V3.upTo === undefined) && (V3.rise === undefined ? 1 : V3.rise) >= 0.98;
+          var whole = inside ? true : (V3.upTo === null || V3.upTo === undefined) && (V3.rise === undefined ? 1 : V3.rise) >= 0.98;
           if (whole) { ybChimneys(model, typeof styleNow === "function" ? styleNow() : null); }
         }
       } catch (e) { /* without them */ }

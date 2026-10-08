@@ -1503,11 +1503,26 @@
     var model = V3 && V3.dragModel;
     if (!model || !model.faces || !R) { return null; }
     var o = R.o, boxes = {}, list = [], walls = [], reach = far + 3 * FLOOR_PX, small = O3_MIN * FLOOR_PX;
+    // (2026-10-07: walking round the whole building, fifty thousand faces -- a piece far off is passed over at
+    // once, by where it stands on its floor, not each of its faces boxed and measured, several times a second)
+    var farOf = new Map(), fls = typeof floorsOf === "function" ? floorsOf() : [];
+    function farOff(n) {
+      var v = farOf.get(n);
+      if (v === undefined) {
+        var fl = fls.length ? floorAt(fls, n.x, n.y) : null, fz = fl ? fl.z : 0;
+        var dh = Math.max(0, Math.hypot(n.x + (fl ? fl.dx : 0) - o[0], n.y + (fl ? fl.dy : 0) - o[1]) - Math.hypot(n.w || 0, n.h || 0) / 2);
+        var dz = Math.max(fz - FLOOR_PX - o[2], 0, o[2] - (fz + Math.max(4.5, (n.ceil || 0) + 1) * FLOOR_PX));
+        v = dh * dh + dz * dz > reach * reach;
+        farOf.set(n, v);
+      }
+      return v;
+    }
     model.faces.forEach(function (f) {
       var P = f.pts;
       // (nor what is on its way -- carried in, going up: 40-movein.js)
       if (f.me || f.found || f.moves || !P || P.length < 3) { return; }
       var n = f.node, how = f.how || {};
+      if (n && n.x !== undefined && farOff(n)) { return; }
       var fixed = n ? !!(O3_FIXED[n.kind] || (typeof BETWEEN_FLOORS === "object" && BETWEEN_FLOORS[n.kind])) : !!(how.wall || how.roof);
       if (!n && !fixed) { return; }                // water running, a plug's cord, the grid carried over: not in the way
       // (a face's box kept with its corners, which last from picture to picture: 2026-10-04)

@@ -593,6 +593,9 @@
         });
       }
       if (clear > hang[0] && hang[1] - hang[0] + clear <= ceilAt(n) - 0.02) { hang = [clear, clear + hang[1] - hang[0]]; }
+      // (over a flight of stairs, as far up as the step under it: 38-view3d.js v3OverSteps)
+      var upSteps = typeof v3OverSteps === "function" ? v3OverSteps(n) : 0;
+      if (upSteps) { hang = [hang[0] + upSteps, hang[1] + upSteps]; }
       z0 = hang[0] * P; H = (hang[1] - hang[0]) * P; extra.onWall = true;
     } else if (V3_HIGH[n.kind] !== undefined) {
       z0 = 0; H = pieceHigh(n) * P;

@@ -470,7 +470,7 @@
     if (!S || !V3 || V3.scene === "space" || (V3.flat && V3.flatDone) || V3.low) { return; }
     var inside = V3.mode === "walk", indoors = inside && !!V3.inRoom;
     if (!inside && (V3.rise === undefined ? 1 : V3.rise) < 0.98) { return; }
-    var whole = inside ? !indoors : (V3.upTo === null || V3.upTo === undefined);
+    var whole = inside ? true : (V3.upTo === null || V3.upTo === undefined);
     var floors = typeof floorsOf === "function" ? floorsOf() : [], px = FLOOR_PX;
     var rooms = hand.nodes.filter(function (n) { return n.kind === "i_room"; });
     function inRoom(x, y) { return rooms.some(function (r) { return insideArea(r, x, y); }); }

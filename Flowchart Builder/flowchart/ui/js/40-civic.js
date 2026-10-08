@@ -116,7 +116,7 @@
       var S = styleNow();
       if (!S || !V3 || V3.scene === "space" || (V3.flat && V3.flatDone) || V3.low) { return; }
       var inside = V3.mode === "walk", indoors = inside && !!V3.inRoom;
-      var whole = inside ? !indoors : (V3.upTo === null || V3.upTo === undefined);
+      var whole = inside ? true : (V3.upTo === null || V3.upTo === undefined);
       if (!whole) { return; }
       try { if (S.awning) { civicAwnings(model, S); } } catch (e) { /* without */ }
       try { if (S.cupola && typeof roofKept === "object" && roofKept.out) { civicCupola(model, S); } } catch (e2) { /* without */ }

@@ -2176,8 +2176,13 @@
   var gl3BoxLast = { faces: null, n: -1, box: null };
   function gl3FacesBox(faces) {
     if (gl3BoxLast.faces === faces && gl3BoxLast.n === faces.length) { return Object.assign({}, gl3BoxLast.box); }
+    // (walking round: the same building as last picture -- the scene kept as it was made, 38-view3d.js -- with
+    // only what moves about in it moved: its box as it was, for a second at most, not every face of a whole
+    // building gone through again each picture, 2026-10-07)
+    var K = typeof V3 !== "undefined" && V3 && V3.mode === "walk" && V3.kept ? V3.kept[0] : null, now = performance.now();
+    if (K && gl3BoxLast.kept === K && Math.abs(gl3BoxLast.n - faces.length) < 4000 && now - gl3BoxLast.at < 1000) { return Object.assign({}, gl3BoxLast.box); }
     var box = gl3FacesBoxOf(faces);
-    gl3BoxLast = { faces: faces, n: faces.length, box: box };
+    gl3BoxLast = { faces: faces, n: faces.length, box: box, kept: K, at: now };
     return Object.assign({}, box);
   }
   function gl3FacesBoxOf(faces, but) {

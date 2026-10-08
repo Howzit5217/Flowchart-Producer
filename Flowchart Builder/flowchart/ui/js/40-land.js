@@ -489,12 +489,20 @@
     model.faces.forEach(function (f) {
       var n = f.node;
       if (!n || f.found) { return; }
+      // (2026-10-07) the same, kept on what the face is a copy of (38-view3d.js v3FaceCopy) where its corners are
+      // those very ones: walking round a whole building, its fifty thousand faces each looked up again each
+      // picture, ten milliseconds of every picture
+      var s = f.src;
+      if (s && s.tlT === T && s.tlPts === f.pts) { f.pts = s.tlOut; return; }
       // (its corners as they were last time, on the same land: as they were lifted then -- or not at all)
       var k0 = terrLiftKept && !f.mesh ? terrLiftKept.get(f.pts) : null;
-      if (k0 && k0.T === T) { f.pts = k0.out; return; }
+      if (k0 && k0.T === T) { if (s) { s.tlT = T; s.tlPts = f.pts; s.tlOut = k0.out; } f.pts = k0.out; return; }
       var L = byNode.get(n);
       if (L === undefined) { L = terrNodeLift(T, n); byNode.set(n, L); }
-      if (!L || (!L.drape && !L.z)) { if (terrLiftKept && !f.mesh) { terrLiftKept.set(f.pts, { T: T, key: 0, out: f.pts }); } return; }
+      if (!L || (!L.drape && !L.z)) {
+        if (terrLiftKept && !f.mesh) { terrLiftKept.set(f.pts, { T: T, key: 0, out: f.pts }); if (s) { s.tlT = T; s.tlPts = f.pts; s.tlOut = f.pts; } }
+        return;
+      }
       if (L.drape) {
         if (f.mesh) { f.terrDrape = true; return; }                          // laid over it as it is drawn (gl3Mesh)
         f.pts = terrLiftPts(f.pts, T, "d", function (p) { return [p[0], p[1], p[2] + terrAt(p[0], p[1]) + 0.6]; });

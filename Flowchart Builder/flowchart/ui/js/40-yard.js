@@ -180,7 +180,7 @@
         if (model && houseOpt("frontPorch") && !(S && S.porch) && typeof stylePorch === "function" && V3 && V3.scene !== "space" &&
             !(V3.flat && V3.flatDone) && !V3.low) {
           var inside = V3.mode === "walk", indoors = inside && !!V3.inRoom;
-          var whole = inside ? !indoors : (V3.upTo === null || V3.upTo === undefined) && (V3.rise === undefined ? 1 : V3.rise) >= 0.98;
+          var whole = inside ? true : (V3.upTo === null || V3.upTo === undefined) && (V3.rise === undefined ? 1 : V3.rise) >= 0.98;
           if (whole) {
             var floors = typeof floorsOf === "function" ? floorsOf() : [];
             var rooms = hand.nodes.filter(function (n) { return n.kind === "i_room"; });

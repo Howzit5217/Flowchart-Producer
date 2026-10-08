@@ -551,6 +551,34 @@
     V3_ADDED[name] = { key: key, house: house, land: land, extra: extra, faces: faces.slice(f0) };
     for (i = f0; i < faces.length; i++) { faces[i] = v3FaceCopy(faces[i]); }
   }
+  // (2026-10-07, "make it so the stairs in the building also stop with these weird floor issues") What hangs
+  // on a stairwell's wall over its flight -- the stairwell's light, a picture -- as far up the wall as the
+  // step under it, metres: hung at the floor's own height it sat on the steps at the foot of the flight,
+  // and the steps went up through it further along. (Its lift on the paper is as it was: this is the 3D's.)
+  function v3OverSteps(n) {
+    if (!n || !V3) { return 0; }
+    var pic = V3.picture || (V3.picture = {}), L = pic.stepsUnder;
+    if (!L) {
+      var floors = typeof floorsOf === "function" ? floorsOf() : [];
+      L = pic.stepsUnder = [];
+      (floors.length && typeof floorLinks === "function" ? floorLinks(floors) : []).forEach(function (pair) {
+        var a = pair[0], b = pair[1], fa = floorAt(floors, a.x, a.y), fb = floorAt(floors, b.x, b.y);
+        if ((a.kind !== "i_stairs" && a.kind !== "i_escalator") || (a.turn || 0) % 90 || !fa || !fb || fa === fb) { return; }
+        var low = fa.z <= fb.z ? a : b;
+        L.push({ s: low, f: fa.z <= fb.z ? fa : fb, rise: Math.abs(fb.z - fa.z) / FLOOR_PX });
+      });
+    }
+    if (!L.length) { return 0; }
+    var floors2 = floorsOf(), fn = floorAt(floors2, n.x, n.y);
+    for (var i = 0; i < L.length; i++) {
+      var s = L[i].s;
+      if (L[i].f !== fn || !insideArea(s, n.x, n.y, -3)) { continue; }
+      // how far up the flight it is: its foot at +y, its top at -y (40-climb.js)
+      var a = -(s.turn || 0) * Math.PI / 180, ly = (n.x - s.x) * Math.sin(a) + (n.y - s.y) * Math.cos(a);
+      return Math.max(0, Math.min(1, (s.h / 2 - ly) / s.h)) * L[i].rise;
+    }
+    return 0;
+  }
   function v3FaceCopy(f) {
     var c = Object.assign({}, f);
     if (f.mesh) { c.mesh = Object.assign({}, f.mesh); }
@@ -604,16 +632,22 @@
     if (stack < 1) {
       floors = floors.map(function (f) { return Object.assign({}, f, { dx: f.dx * stack, dy: f.dy * stack }); });
     }
-    var show = inside ? (indoors ? (V3.myLevel || 0) : null) : V3.upTo;
+    // (2026-10-07, "when touring the building the building is there completely ... if I look out into a
+    // courtyard area the rest of the building should be there above me") Walking round, every floor is
+    // put up, roofed -- not only the floor you are on, as it was in a room: in a courtyard (a room, to
+    // the plan), at a window onto one, in a stairwell, the building round you stood one storey high
+    // with the sky over it, and the floor above or below came and went as a flight was stepped onto
+    // and off. What is in the rooms of the other floors is still left out of a big building (unseen).
+    var show = inside ? null : V3.upTo, walkLevel = inside ? (V3.myLevel || 0) : 0;
     function shown(f) {
       if (!f) { return true; }
-      if (inside) { return !indoors || f.level === show || (V3.flightUp !== undefined && f.level === V3.flightUp); }
+      if (inside) { return true; }
       if (flat) { return true; }        // flat, every floor, side by side as drawn
       return show === null || show === undefined || f.level <= show;
     }
     var topLevel = floors.length ? floors[floors.length - 1].level : 0;
     var roofV = V3.roofV === undefined ? 1 : V3.roofV;
-    var roofed = !low && !flat && (inside ? !indoors : show === null || show === undefined || show >= topLevel);
+    var roofed = !low && !flat && (inside || show === null || show === undefined || show >= topLevel);
     // roofed and settled, from above: what is inside is not seen, so not drawn
     var hush = roofed && !inside && roofV > 0.999 && !V3.tw.roofV;
     var roomsAll = hand.nodes.filter(function (m) { return m.kind === "i_room"; });
@@ -657,8 +691,10 @@
       var f = floorOfNode(n);
       if (!f) { return false; }
       if (!inside) { return coveredAbove(n, f); }
-      if (!indoors) { return f.level !== 0 && roomsHolding(n, 0) > 0; }
-      return false;
+      // walking: what stands in a room on another floor than yours (or the one a flight is going up to);
+      // a courtyard's trees and benches are seen from every floor round it
+      if (f.level === walkLevel || (V3.flightUp !== undefined && f.level === V3.flightUp)) { return false; }
+      return roomsAt(n.x, n.y, 0).some(function (r) { return r !== n && !r.court && insideArea(r, n.x, n.y); });
     }
     // the walls of a room go up to the floor over it, where there is one
     function storeyOf(room) {
@@ -667,8 +703,9 @@
     }
     function wallTop(room) {
       var c = ceilOf(room) * FLOOR_PX;
-      // (up to the floor over it while a flight is climbed: between the two, the sky showed, 40-climb.js)
-      return indoors && V3.flightUp === undefined ? c : Math.max(c, storeyOf(room));
+      // (up to the floor over it, walking round too: between the two, the sky showed -- up a flight, and
+      // across a courtyard at the building round it, 2026-10-07)
+      return Math.max(c, storeyOf(room));
     }
     // the parts of a wall with outdoors beyond them: the rest is inside
     function outsideOnly(room) {
@@ -891,6 +928,8 @@
           clear = Math.max(clear, pieceHigh(m) + 0.06);
         });
         if (clear > hang[0] && hang[1] - hang[0] + clear <= ceilAt(n) - 0.02) { hang = [clear, clear + hang[1] - hang[0]]; }
+        var upSteps = v3OverSteps(n);
+        if (upSteps) { hang = [hang[0] + upSteps, hang[1] + upSteps]; }
         var front = v3FrontPic(n, hang);
         // the way its front faces: seen from behind its wall, it is not seen
         var ft = (n.turn || 0) * Math.PI / 180, facing = [-Math.sin(ft), Math.cos(ft), 0];
@@ -987,11 +1026,14 @@
     // made from has changed since (the view only turned), as it was then;
     // the doors put up afresh each picture, swinging as they do
     var labelsOn = (V3.labelV === undefined ? 1 : V3.labelV) > 0.01;
+    // (the floor walked on, and the one a flight goes up to, only where they change what is put up -- what
+    // stands in a big building's rooms, `unseen`: elsewhere a step onto the stairs, or off them at the top,
+    // made the whole building again, a hitch on every flight, 2026-10-07)
     var keyNow = [JSON.stringify(hand.nodes), JSON.stringify(hand.links), JSON.stringify(style), V3.scene, V3.mode,
-                  V3.inRoom ? V3.inRoom.id : "", indoors ? V3.myLevel || 0 : "", low ? 1 : 0, flat ? 1 : 0, stack.toFixed(3),
+                  inside && big ? walkLevel : "", low ? 1 : 0, flat ? 1 : 0, stack.toFixed(3),
                   String(show), hush ? 1 : 0, roofed ? 1 : 0, labelsOn ? 1 : 0, big ? 1 : 0,
                   typeof modelsOn === "function" && modelsOn() ? 1 : 0, walkAt && simNow ? walkAt.id : "",
-                  inside && V3.me ? V3.me.as || "" : "", V3.flightUp === undefined ? "" : V3.flightUp].join("|");
+                  inside && V3.me ? V3.me.as || "" : "", inside && big && V3.flightUp !== undefined ? V3.flightUp : ""].join("|");
     var kept = v3KeptGet(keyNow);
     function putUp(n) {
       var f = floorOfNode(n);
@@ -1032,7 +1074,9 @@
     }
     faces = kept.faces.map(v3FaceCopy);
     stand = kept.stand.map(function (s) { return Object.assign({}, s); });
-    labels = kept.labels.map(function (l) { return Object.assign({}, l); });
+    var hereIs = V3.inRoom ? V3.inRoom.id : null;
+    labels = kept.labels.filter(function (l) { return l.within === undefined || l.within === hereIs; })
+                        .map(function (l) { return Object.assign({}, l); });
     // (a door that has not swung since the last picture: put in as it was
     // then, not built again -- its faces copies, as the rest are, so the
     // picture keeps their corners too; a tower's every door was built and
@@ -1101,9 +1145,13 @@
         var inRoom = room ? null : roomsAt(n.x, n.y, 0).filter(function (r) { return insideArea(r, n.x, n.y); })[0] || null;
         // from above, what has a floor over it is under that floor, not seen
         if (!inside && f && coveredAbove(n, f)) { return null; }
+        // (walking: each kept with the room it is in, and only those in the room you are in -- or, out of
+        // doors, in none -- shown, picture by picture, 2026-10-07: the whole building was made again
+        // at every doorway walked through, a fifth of a second, for its names)
+        var within;
         if (inside) {
           if (room) { return null; }                  // the room is named at the top
-          if (indoors ? inRoom !== V3.inRoom : !!inRoom) { return null; }
+          within = inRoom ? inRoom.id : null;
         } else if (hush && !room && inRoom) { return null; }
         var z, text;
         if (room) {
@@ -1112,14 +1160,16 @@
         } else {
           text = String(n.text || "").split("\n")[0].trim() || labelName(n.kind);
           if (isFigure(n.kind) || n.kind === "actor") { z = pieceHigh(n) + 0.3; }
-          else if (V3_WALL[n.kind]) { z = wallHang(n)[1] + 0.2; }
+          else if (V3_WALL[n.kind]) { z = wallHang(n)[1] + v3OverSteps(n) + 0.2; }
           else if (FROM_CEILING[n.kind]) { z = ceilAt(n) - hangDrop(n)[0] - 0.15; }
           else if (ON_TOP[n.kind]) { z = under(n) + pieceHigh(n) + 0.2; }
           else if (V3_HIGH[n.kind] !== undefined) { z = pieceHigh(n) + 0.25; }
           else { z = 0.8; }
           z *= FLOOR_PX;
         }
-        return { x: n.x + (f ? f.dx : 0), y: n.y + (f ? f.dy : 0), z: z + (f ? f.z : 0), text: text, room: room };
+        var said = { x: n.x + (f ? f.dx : 0), y: n.y + (f ? f.dy : 0), z: z + (f ? f.z : 0), text: text, room: room };
+        if (within !== undefined) { said.within = within; }
+        return said;
     }
     return { faces: faces, stand: stand, spheres: spheres, rings: rings, labels: labels };
   }
