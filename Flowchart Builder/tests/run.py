@@ -2540,8 +2540,12 @@ def _():
             # it runs right, so nothing it does is to be called something that can't be run
             for n in got.get("notes") or []:
                 wrong.append("%s (%s): noted %r" % (name, lang, n.get("text") if isinstance(n, dict) else n))
+            # and the files beside it, there to be opened by the names on their
+            # tabs -- one with none is file2.txt, as the Code tab calls it
             cases.append({"name": name, "typed": typed, "title": "x",
-                          "ast": read_as_data(got["text"])})
+                          "ast": read_as_data(got["text"]),
+                          "files": [{"name": n or "file%d.txt" % (k + 1), "text": t}
+                                    for k, (n, t) in enumerate(code)] if isinstance(code, list) else []})
             kept.append((name, lang, want))
         for (name, lang, want), result in zip(kept, shelf_run(cases, folder, "coded")):
             if result["said"] != want or result["faults"]:

@@ -69,7 +69,7 @@
                      SHRT_MAX: "32767", CHAR_BIT: "8", EXIT_SUCCESS: "0", EXIT_FAILURE: "1" };
     var PAGE_HELPERS = {
       python: { class_of: /isinstance/, is_number: /float/, copied: /vars/, to_base: /digits/,
-                is_integer: /lstrip/, currency_format: /abs/ },
+                is_integer: /lstrip/, currency_format: /abs/, end_of_file: /seek/ },
       javascript: { classOf: /constructor/, shown: /constructor/, shuffle: /random/,
                     roundEven: /round/, orderOf: /isArray/, deepCopy: /getPrototypeOf/, significant: /toPrecision/,
                     sliceStep: /"by"/, toJson: /stringify/, popKey: /delete/, currencyFormat: /toFixed/, isInteger: /test/ },
@@ -9645,7 +9645,7 @@
       var end = to === undefined ? laid.files.length : Math.min(to, laid.files.length);
       for (var k = from || 0; k < end; k++) {
         var one = laid.files[k];
-        if (!String(one.text || "").trim()) { continue; }
+        if (!String(one.text || "").trim() || dataFile(one, laid.files)) { continue; }
         var parser = null;
         try {
           parser = parserFor(lexCode(one.text, lang, laid.spans[k].from - 1), lang);
@@ -9667,7 +9667,7 @@
       var py = lang === "python", js = lang === "javascript";
       var cpp = lang === "cpp", cs = lang === "csharp", java = lang === "java";
       var some = files.map(function (one, k) { return { one: one, k: k }; })
-                      .filter(function (x) { return String(x.one.text || "").trim(); });
+                      .filter(function (x) { return String(x.one.text || "").trim() && !dataFile(x.one, files); });
       if (!some.length) { throw oops("cm_empty", 0); }
       var tops = some.map(function (x) {
         var lexed = null, parser = null, read;
@@ -11991,6 +11991,12 @@
               else { statementExpr(it.e, ch, out, line); }
             });
             out.push.apply(out, lower(st.body, ch));
+            // and a file it opened, closed again at the end of it
+            st.items.forEach(function (it) {
+              if (it.as && pyOpen(it.e) && stripParens(it.as).k === "name") {
+                out.push({ k: "call", e: builtinCall("close", [nameNode(stripParens(it.as).v, line)], line), line: line });
+              }
+            });
             return;
           }
           case "block": out.push.apply(out, lower(st.body, ch)); return;
@@ -12244,6 +12250,7 @@
       var R_ZERO = /^(ZeroDivisionError|ArithmeticError|ArithmeticException|DivideByZeroException|Exception|exception|std\.exception|Error|RuntimeException|SystemException|BaseException)$/;
       var R_OUT_OF_RANGE = /^(IndexError|LookupError|IndexOutOfBoundsException|ArrayIndexOutOfBoundsException|StringIndexOutOfBoundsException|IndexOutOfRangeException|ArgumentOutOfRangeException|out_of_range|std\.out_of_range|Exception|exception|std\.exception|Error|RuntimeException|SystemException|BaseException)$/;
       var R_NO_KEY = /^(KeyError|LookupError|KeyNotFoundException|NoSuchElementException|out_of_range|std\.out_of_range|Exception|exception|std\.exception|Error|RuntimeException|SystemException|BaseException)$/;
+      var R_NO_FILE = /^(FileNotFoundError|IOError|OSError|EnvironmentError|Exception|BaseException)$/;
       function handlerOf(st, test) {
         return (st.handlers || []).filter(function (h) {
           var types = !h.type ? [] : stripParens(h.type).k === "tuple" ? stripParens(h.type).items : [h.type];
@@ -12260,6 +12267,11 @@
           if (x.k === "call" && x.args.length >= 1 && !inputOf(x) && R_CONVERTS.test(bare(pathOf(x.fn) || "")) &&
               handlerOf(st, R_BAD_NUMBER)) {
             found = { what: "number", of: x.args[0], handler: handlerOf(st, R_BAD_NUMBER) };
+            return false;
+          }
+          // open(name) to read: a file that may not be there
+          if (opensToRead(x) && handlerOf(st, R_NO_FILE)) {
+            found = { what: "file", of: x.args[0], handler: handlerOf(st, R_NO_FILE) };
             return false;
           }
           // xs[5], xs.get(5), v.at(5): a place that may not be there -- and
@@ -12325,6 +12337,7 @@
           out.push.apply(out, asked0);
           var size0 = on0 ? builtinCall("length", [on0], st.line) : null;
           var cond0 = risk.what === "number" ? builtinCall("isNumber", [what0], st.line)
+                    : risk.what === "file" ? builtinCall("fileExists", [what0], st.line)
                     : risk.what === "key" ? builtinCall("contains", [on0, what0], st.line)
                     : risk.what === "index" ? { k: "bin", op: "&&", line: st.line,
                         a: { k: "bin", op: ">=", a: what0, b: py ? { k: "un", op: "-", a: size0 } : num(0), line: st.line },
@@ -13135,6 +13148,26 @@
       function builtinCall(name, args, line) {
         return { k: "call", fn: nameNode(name, line), args: args, builtin: true, line: line || 0 };
       }
+      // ---- files ---------------------------------------------------------
+      // Python's open(name, mode): a file the runner opens by its name, from
+      // the Code tab's files (15-sums.js) -- the mode as it was written,
+      // and open(name) or "r" to read one, which may not be there.
+      function pyOpen(e) {
+        e = stripParens(e);
+        return !!(py && e && e.k === "call" && !e.builtin && e.args.length >= 1 &&
+                  /^(open|io\.open|codecs\.open)$/.test(bare(pathOf(e.fn) || "")) && !userFn("open"));
+      }
+      function openMode(e) {
+        var m = e.args.filter(function (a) { return a.k !== "kw"; })[1] || null;
+        e.args.forEach(function (a) { if (a.k === "kw" && a.name === "mode") { m = a.value; } });
+        return m;
+      }
+      function opensToRead(e) {
+        if (!pyOpen(e)) { return false; }
+        var m = openMode(stripParens(e));
+        m = m ? stripParens(m) : null;
+        return !m || (m.k === "str" && !/[wax]/.test(m.v));
+      }
       // /^[0-9]+$/.test(s), s.matches("[A-Za-z]+"), re.fullmatch(r"\s+", s):
       // a pattern that asks what kind of letters s is made of, in the
       // chart's words -- isDigit(s), isAlpha(s), isSpace(s) -- and one that
@@ -13198,6 +13231,7 @@
           case "is_number": case "isNumber": case "IsNumber": return B("isNumber", [a[0]]);
           case "is_integer": case "isInteger": case "IsInteger": return B("isInteger", [a[0]]);
           case "currency_format": case "currencyFormat": case "CurrencyFormat": return B("currencyFormat", [a[0]]);
+          case "end_of_file": return B("endOfFile", [a[0]]);
           case "extendWith": return B("extend", a);
           case "countText": return B("count", a);
           case "sliceOf": return B("slice", a);
@@ -14074,7 +14108,8 @@
           }), ch));
           return;
         }
-        // printing
+        // printing -- or printing into a file, print(x, file=f)
+        if (py && p === "print" && printedInto(e, ch, out, line)) { return; }
         var said = displayOf(e, p, dot);
         if (said) { emitPrint(said, st, ch, out, line); return; }
         // getline(cin, s)
@@ -14237,6 +14272,33 @@
       }
 
       // ---- printing ----------------------------------------------------
+      // print(a, b, file=f): what the print would say, written into the
+      // file f -- writeLine(f, a, " ", b), or write() where end= says it
+      // does not end the line.
+      function printedInto(e, ch, out, line) {
+        var into = null, sep = " ", end = "\n";
+        e.args.forEach(function (a) {
+          if (a.k !== "kw") { return; }
+          var v = stripParens(a.value);
+          if (a.name === "file") { into = a.value; }
+          if (a.name === "sep" && v.k === "str") { sep = v.v; }
+          if (a.name === "end" && v.k === "str") { end = v.v; }
+        });
+        if (!into || /^(sys\.)?(stderr|stdout)$/.test(pathOf(into) || "")) { return false; }
+        var parts = [], post = [];
+        e.args.filter(function (a) { return a.k !== "kw"; }).forEach(function (a, i) {
+          if (i && sep) { parts.push({ k: "str", v: sep }); }
+          if (a.k === "star") { parts.push(builtinCall("join", [a.e, { k: "str", v: sep }], line)); }
+          else { parts.push.apply(parts, piecesOf(a)); }
+        });
+        var lined = end === "\n";
+        if (!lined && end) { parts.push({ k: "str", v: end }); }
+        var args = [into].concat(parts).map(function (x) { var r = ready(x, ch, out); post = post.concat(r.post); return r.e; });
+        if (!lined && args.length === 1) { args.push({ k: "str", v: "" }); }
+        out.push({ k: "call", e: builtinCall(lined ? "writeLine" : "write", args, line), line: line });
+        lowerPost(post, ch, out);
+        return true;
+      }
       // What a print says, as the pieces a Display lists -- and, where the
       // words hold a line break, as several Displays.  `open` is a print
       // that does not end its line.
@@ -16398,6 +16460,18 @@
         var name = p.replace(lib, "");
         function B(fn, args) { return builtinCall(fn, args, e.line); }
         function bin(op, x, y) { return { k: "bin", op: op, a: x, b: y, line: e.line }; }
+        // a file opened, and what is done to it
+        if (pyOpen(e)) { return B("open", openMode(e) ? [a[0], openMode(e)] : [a[0]]); }
+        if (py && /^(os\.path\.exists|os\.path\.isfile)$/.test(p) && a.length === 1) { return B("fileExists", [a[0]]); }
+        if (py && dot && self && !/^(sys\.)?(stdin|stdout|stderr)$/.test(pathOf(self) || "") &&
+            !/^(text|list|set|map|int|real|bool)\b/.test(sk || "")) {
+          if (dot === "readline" && !a.length) { return B("readLine", [self]); }
+          if (dot === "readlines" && !a.length) { return B("readLines", [self]); }
+          if (dot === "read" && a.length <= 1) { return B("read", [self].concat(a)); }
+          if (dot === "write" && a.length === 1) { return B("write", [self, a[0]]); }
+          if (dot === "writelines" && a.length === 1) { return B("write", [self, B("join", [a[0], { k: "str", v: "" }])]); }
+          if (dot === "close" && !a.length) { return B("close", [self]); }
+        }
         var rnd = randomRange(e);
         if (rnd) { return rnd; }
         if (/^(sqrt|Sqrt|cbrt)$/.test(name) && p !== "") { return B("sqrt", a); }
@@ -19224,11 +19298,31 @@
                      mjs: "javascript", cjs: "javascript", ts: "typescript", tsx: "typescript",
                      mts: "typescript", c: "c", kt: "kotlin", kts: "kotlin", swift: "swift",
                      go: "go", rs: "rust" };
+    // A file that holds what the program reads, not the program -- a tab
+    // named numbers.txt, or one with the numbers typed into it -- is not
+    // read as code: open() reads it when the program runs (15-sums.js).
+    // Its name says so where it ends in something no language is written
+    // in; without one, what is in it does: lines of words and numbers with
+    // nothing a program is written with -- no bracket, no =, no ;, no
+    // comment and no keyword at the front.  A program in one file is that
+    // program, whatever it is called.
+    var R_CODE_LINE = new RegExp("[(){}\\[\\]=;]|^\\s*(#|//|/\\*|@|(import|from|def|class|return|pass|break|" +
+      "continue|global|nonlocal|del|raise|assert|yield|async|await|with|lambda|print|using|package|" +
+      "namespace|public|private|protected|static|var|let|const|function|fn|func|int|void|if|elif|else|" +
+      "for|while|do|try|except|catch|finally|switch|case|struct|enum|interface|export|throw|new|echo)\\b)");
+    function dataFile(one, files) {
+      if (!one || typeof one !== "object" || (files && files.length < 2)) { return false; }
+      var ext = /\.([A-Za-z0-9]+)$/.exec(String(one.name || ""));
+      if (ext) { return !EXT_LANG[ext[1].toLowerCase()]; }
+      var lines = String(one.text || "").split(/\r\n?|\n/).filter(function (l) { return l.trim(); });
+      return lines.length > 0 && !lines.some(function (l) { return R_CODE_LINE.test(l); });
+    }
     function detect(src) {
       var files = typeof src === "string" ? [{ name: "", text: src }] : (src || []);
       var score = {};
       Object.keys(SIGNS).forEach(function (lang) { score[lang] = 0; });
       files.forEach(function (one) {
+        if (dataFile(one, files)) { return; }
         var ext = /\.([A-Za-z0-9]+)$/.exec(String(one.name || ""));
         if (ext && EXT_LANG[ext[1].toLowerCase()]) { score[EXT_LANG[ext[1].toLowerCase()]] += 50; }
         var text = String(one.text || "");
@@ -20048,6 +20142,7 @@
     }
 
     translate.detect = detect;
+    translate.isData = dataFile;
     translate.dialects = DIALECTS;
     translate.tryMend = tryMend;
     translate.mendAll = mendAll;

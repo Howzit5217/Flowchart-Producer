@@ -15,6 +15,53 @@ gets typed, what it prints).
 """
 
 # flake8: noqa
+
+# A file's name typed in, the file opened, and what is in it added up --
+# the numbers a tab of their own beside the program.
+ANALYZER = r'''# Numbers File Analyzer
+import sys
+
+filename = input("Enter the name of the file: ")
+try:
+    infile = open(filename, "r")
+except IOError:
+    print("Error: the file", filename, "could not be opened.")
+    sys.exit()
+
+count = 0
+total = 0.0
+largest = 0.0
+smallest = 0.0
+print()
+print("Numbers in the file:")
+for line in infile:
+    line = line.strip()
+    if line != "":
+        number = float(line)
+        print(number)
+        count += 1
+        total += number
+        if count == 1:
+            largest = number
+            smallest = number
+        else:
+            if number > largest:
+                largest = number
+            if number < smallest:
+                smallest = number
+infile.close()
+print()
+if count == 0:
+    print("The file contains no numbers.")
+else:
+    average = total / count
+    print("Count of numbers:", count)
+    print("Sum of the numbers:", total)
+    print("Average of the numbers:", format(average, ",.2f"))
+    print("Largest number:", largest)
+    print("Smallest number:", smallest)
+'''
+
 CODED = [
     ('py bank accounts', 'python', r'''
 """Bank account manager.
@@ -1483,4 +1530,80 @@ next();
 console.log("count", next());
 ''', [],
      ['count 3']),
+    # Files: a tab of the Code tab is a file the program opens by its name
+    # (15-sums.js) -- one holding only numbers is file2.txt, data and not
+    # code -- and a file that is not there is the except's to deal with.
+    ('py numbers file analyzer', 'python', [('main.py', ANALYZER), ('', '45\n12\n87\n3\n68\n29\n')], ['file2.txt'],
+     ['Enter the name of the file: ', '', 'Numbers in the file:', '45', '12', '87', '3', '68', '29', '',
+      'Count of numbers: 6', 'Sum of the numbers: 244', 'Average of the numbers: 40.67',
+      'Largest number: 87', 'Smallest number: 3']),
+    ('py a file that is not there', 'python', [('main.py', ANALYZER), ('', '45\n12\n')], ['file3.txt'],
+     ['Enter the name of the file: ', 'Error: the file file3.txt could not be opened.']),
+    ('py readline until the end', 'python', [('sales.py', r'''
+def main():
+    infile = open("sales.txt", "r")
+    total = 0.0
+    line = infile.readline()
+    while line != "":
+        amount = float(line)
+        total += amount
+        print(line.rstrip("\n"))
+        line = infile.readline()
+    infile.close()
+    print("Total:", format(total, ".2f"))
+
+main()
+'''), ('sales.txt', '100.5\n200\n12.25\n')], [],
+     ['100.5', '200', '12.25', 'Total: 312.75']),
+    ('py with open and readlines', 'python', [('names.py', r'''
+with open("names.txt") as f:
+    names = f.readlines()
+for i in range(len(names)):
+    names[i] = names[i].rstrip("\n")
+print(names)
+print(len(names), "names", f.closed)
+'''), ('names.txt', 'Ada\nGrace\nAlan')], [],
+     ["['Ada', 'Grace', 'Alan']", '3 names True']),
+    ('py a file written and read back', 'python', r'''
+outfile = open("scores.txt", "w")
+for n in range(1, 4):
+    outfile.write(str(n * 10) + "\n")
+print("done", file=outfile)
+outfile.close()
+infile = open("scores.txt", "r")
+contents = infile.read()
+infile.close()
+print(contents)
+''', [],
+     ['10', '20', '30', 'done', '']),
+    ('py appended to and split by commas', 'python', [('best.py', r'''
+f = open("people.csv", "a")
+f.write("Cy,77\n")
+f.close()
+best = ""
+top = -1
+for row in open("people.csv"):
+    name, score = row.strip().split(",")
+    if int(score) > top:
+        top = int(score)
+        best = name
+print(best, top)
+'''), ('people.csv', 'Ann,90\nBo,85\n')], [],
+     ['Ann 90']),
+    ('py FileNotFoundError in a function', 'python', [('main.py', r'''
+def main():
+    try:
+        name = input("File: ")
+        infile = open(name)
+        total = 0
+        for line in infile:
+            total += int(line)
+        infile.close()
+        print("Total:", total)
+    except FileNotFoundError:
+        print("No such file:", name)
+
+main()
+'''), ('data.txt', '1\n2\n3\n')], ['data.txt'],
+     ['File: ', 'Total: 6']),
 ]

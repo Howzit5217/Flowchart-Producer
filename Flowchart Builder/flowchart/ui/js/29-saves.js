@@ -334,7 +334,7 @@
              main: packVars(runWhere ? runWhere.vars : {}, seen),
              globals: packVars(GLOBALS, seen),
              cash: Object.keys(CASH), numeric: Object.keys(NUMERIC), textual: Object.keys(TEXTUAL),
-             tape: tapeNow() };
+             files: filesWritten(), tape: tapeNow() };
   }
 
   // Whether a path still leads where it led in the program on the page.
@@ -393,6 +393,7 @@
       at: 0, phase: snap.phase || "",
       main: unpackVars(snap.main, made), globals: unpackVars(snap.globals, made),
       cash: nameSet(snap.cash), numeric: nameSet(snap.numeric), textual: nameSet(snap.textual || []),
+      files: snap.files || [],
       start: function (where) {
         putTape(snap.tape);
         if (noted) { talk(TXT.sv_back, "note").classList.add("back-here"); }

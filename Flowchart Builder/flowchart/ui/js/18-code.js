@@ -684,7 +684,7 @@
           w.inside(null, 0);
         });
         w.line(0, this.note + w.title);
-        ["copy", "functools", "json", "math", "random", "time"].forEach(function (lib) {
+        ["copy", "functools", "json", "math", "os", "random", "time"].forEach(function (lib) {
           if (w.needs[lib]) { w.line(0, "import " + lib); }
         });
         helpersFor(w, 0);
@@ -716,7 +716,7 @@
         function top(what, brings) {
           w.line(0, L.note + w.title + (what ? " -- " + what : ""));
           var before = w.count();
-          ["copy", "functools", "json", "math", "random", "time"].forEach(function (lib) {
+          ["copy", "functools", "json", "math", "os", "random", "time"].forEach(function (lib) {
             if (w.needs[lib]) { w.line(0, "import " + lib); }
           });
           brings.forEach(function (name) { w.line(0, "import " + name); });
@@ -4678,6 +4678,37 @@
     });
   })();
 
+  // ---- files ---------------------------------------------------------------
+  // open(name, mode) and what is done to the file it opens (15-sums.js),
+  // which read the way Python's do: Python says them as they are, and
+  // reads them back as they were (18-from-code.js).
+  (function () {
+    var py = LIST_WORK.python.lists;
+    function on(method) { return function (a) { return held(a[0]) + "." + method + "(" + a.slice(1).join(", ") + ")"; }; }
+    py.open = function (a) { return "open(" + a.join(", ") + ")"; };
+    py.readline = on("readline");
+    py.readlines = on("readlines");
+    py.read = on("read");
+    py.close = on("close");
+    // write(f, s): f.write(s); anything else, as print would say it
+    py.write = function (a, k) {
+      if (a.length === 2 && k[1] === "text") { return held(a[0]) + ".write(" + a[1] + ")"; }
+      if (a.length === 2) { return held(a[0]) + ".write(str(" + a[1] + "))"; }
+      return "print(" + a.slice(1).concat(['sep=""', 'end=""', "file=" + a[0]]).join(", ") + ")";
+    };
+    py.writeline = function (a) {
+      return "print(" + a.slice(1).concat(a.length > 2 ? ['sep=""'] : [], ["file=" + a[0]]).join(", ") + ")";
+    };
+    py.fileexists = function (a, k, w) { w.need("os"); return "os.path.exists(" + a[0] + ")"; };
+    py.endoffile = py.eof = function (a, k, w) { w.need("endOfFile"); return "end_of_file(" + a[0] + ")"; };
+    LIST_WORK.python.helpers.endOfFile = [
+      "def end_of_file(f):",
+      "    here = f.tell()",
+      "    more = f.read(1)",
+      "    f.seek(here)",
+      "    return more == \"\""];
+  })();
+
   // ---- the textbook's library -------------------------------------------
   // isInteger("42"), currencyFormat(1234.5) is $1,234.50, and append("Ann",
   // "Lee") joining two words (Gaddis) -- the list's append, given words,
@@ -5384,6 +5415,7 @@
   LIST_WORK.java.keptToo += " toJson";
   LIST_WORK.csharp.keptToo += " ToJson";
   LIST_WORK.python.keptToo += " json";
+  LIST_WORK.python.keptToo += " open os end_of_file";
 
   // ---- a piece of some words, the way the chart cuts one --------------------
   // substring("cat", 0, 12) is "cat" to the runner (15-sums.js, cut), and to

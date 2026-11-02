@@ -557,10 +557,12 @@
     v[whereIn(v, at, false)] = what;
   }
   // A value as it reads inside a list: words in quotes, so ["1", 1] does
-  // not print as [1, 1].
+  // not print as [1, 1] -- and a line break in them written \n, the way
+  // Python shows the lines read from a file: ['45\n', '12\n'].
   function shownIn(v) {
     if (typeof v === "string") {
-      return v.indexOf("'") >= 0 && v.indexOf('"') < 0 ? '"' + v + '"' : "'" + v + "'";
+      var said = v.replace(/\n/g, "\\n").replace(/\r/g, "\\r").replace(/\t/g, "\\t");
+      return v.indexOf("'") >= 0 && v.indexOf('"') < 0 ? '"' + said + '"' : "'" + said + "'";
     }
     return readable(v);
   }
@@ -786,6 +788,7 @@
   }
   function itemsOf(v) {                  // what a For Each walks over
     if (Array.isArray(v)) { return v; }
+    if (isFile(v)) { return linesLeft(v); }   // the lines still to be read
     if (isTable(v)) { return v.keys(); }
     if (typeof v === "string") { return v.split(""); }
     throw new Error(say("r_no_items", { what: whatIs(v) }));
@@ -1215,9 +1218,180 @@
       return copy;
     }
   };
+  // ---- files -------------------------------------------------------------
+  // A program can open a file by its name -- open(name, "r") -- and the
+  // files there are to open are the Code tab's, a tab each (32-code-side.js):
+  // a tab named numbers.txt with the numbers typed into it is a file
+  // holding those numbers.  What a run writes is kept for the rest of that
+  // run, so a program can write a file and read it back again, but the
+  // tabs themselves are never written over: every run starts from the
+  // tabs as they are.
+  //
+  // An open file is a record of kind File -- its name, its mode, whether it
+  // is closed and how far into it the reading has got -- so a save writes
+  // it down like any other record (29-saves.js), and f.name and f.closed
+  // read the way Python's do.  It reads the way Python reads, too: a line
+  // keeps its line break, so readLine() gives "" only at the end, and a
+  // line is made a number, or trimmed, before it is used.
+  var FILES_NOW = null;                  // this run's: low name -> { name, text, wrote }
+  function filesNow() {
+    if (FILES_NOW) { return FILES_NOW; }
+    FILES_NOW = new Map();
+    (typeof langFilesOpen === "function" ? langFilesOpen() : []).forEach(function (one) {
+      var name = String(one.name || "").trim();
+      if (name && !FILES_NOW.has(name.toLowerCase())) {
+        FILES_NOW.set(name.toLowerCase(), { name: name, text: String(one.text || "").replace(/\r\n?/g, "\n") });
+      }
+    });
+    return FILES_NOW;
+  }
+  // The file a name means: as it is written on its tab, capitals or not
+  // (the way Windows and a Mac take a name), with or without a folder in
+  // front -- C:\Users\me\numbers.txt is numbers.txt -- and with or without
+  // its ending, so numbers is numbers.txt where nothing else is numbers.
+  function fileNamed(name) {
+    var all = filesNow(), low = String(name).trim().toLowerCase();
+    var base = low.replace(/^.*[\\\/]/, "");
+    if (all.has(low)) { return all.get(low); }
+    if (all.has(base)) { return all.get(base); }
+    var like = [];
+    all.forEach(function (f, k) {
+      if (k.replace(/\.[^.]*$/, "") === base || base.replace(/\.[^.]*$/, "") === k) { like.push(f); }
+    });
+    return like.length === 1 ? like[0] : null;
+  }
+  function noFile(name) {
+    var names = [];
+    filesNow().forEach(function (f) { names.push(f.name); });
+    var err = new Error(say(names.length ? "r_no_file" : "r_no_files",
+                            { name: String(name), files: names.join(", ") }));
+    err.why = "r_no_file"; err.name = String(name);
+    var meant = nearest(String(name).replace(/^.*[\\\/]/, ""), names) ||
+                nearest(String(name).replace(/^.*[\\\/]/, "").replace(/\.[^.]*$/, ""),
+                        names.map(function (n) { return n.replace(/\.[^.]*$/, ""); }));
+    if (meant) {
+      names.forEach(function (n) { if (n.replace(/\.[^.]*$/, "") === meant) { meant = n; } });
+    }
+    err.tip = meant ? say("r_mean", { name: meant }) : (TXT.r_file_tip || "");
+    return err;
+  }
+  function isFile(v) { return isTable(v) && v.kind === "File" && !!v.get("at") && !!v.get("mode"); }
+  function fileField(v, field) { var got = v.get(field); return got ? got[1] : ""; }
+  // the open file a built-in was handed, and whether it can do what is asked
+  function fileArg(v, fn, writing) {
+    if (!isFile(v)) { throw new Error(say("r_needs_file", { name: fn + "()" })); }
+    var name = String(fileField(v, "name"));
+    if (fileField(v, "closed") === true) { throw new Error(say("r_file_shut", { name: name })); }
+    var mode = String(fileField(v, "mode"));
+    if (writing ? !/[wax+]/.test(mode) : !/[r+]/.test(mode)) {
+      throw new Error(say(writing ? "r_file_not_write" : "r_file_not_read", { name: name }));
+    }
+    var held = filesNow().get(name.toLowerCase());
+    if (!held) { throw noFile(name); }
+    return held;
+  }
+  // What is left to read, and the reading moved on past what was taken.
+  function fileTake(v, upto, fn) {
+    var held = fileArg(v, fn, false);
+    var at = Math.max(0, Math.trunc(num(fileField(v, "at"))));
+    var end = upto(held.text, at);
+    v.put("at", end);
+    return held.text.slice(at, end);
+  }
+  function lineEnd(text, at) {
+    var nl = text.indexOf("\n", at);
+    return nl < 0 ? text.length : nl + 1;
+  }
+  function linesLeft(v) {                // For Each line In f, readLines(f)
+    var out = [], left = fileTake(v, function (text) { return text.length; }, "readLines");
+    for (var k = 0; k < left.length;) {
+      var nl = left.indexOf("\n", k), to = nl < 0 ? left.length : nl + 1;
+      out.push(left.slice(k, to));
+      k = to;
+    }
+    return out;
+  }
+  function fileOpened(name, mode) {
+    if (typeof name !== "string" && typeof name !== "number") {
+      throw new Error(say("r_file_name", { what: whatIs(name) }));
+    }
+    var how = mode === undefined || mode === "" ? "r" : String(mode).toLowerCase();
+    var asked = String(name).trim(), held = fileNamed(asked);
+    if (!asked) { throw noFile(asked); }
+    if (/x/.test(how) && held) { throw new Error(say("r_file_there", { name: held.name })); }
+    if (/[wxa]/.test(how)) {
+      if (!held) {
+        held = { name: asked.replace(/^.*[\\\/]/, ""), text: "" };
+        filesNow().set(held.name.toLowerCase(), held);
+      }
+      if (!/a/.test(how)) { held.text = ""; }
+      held.wrote = true;
+    } else if (!held) {
+      throw noFile(asked);
+    }
+    var f = new Table("File");
+    f.put("name", held.name);
+    f.put("mode", how);
+    f.put("closed", false);
+    f.put("at", /a/.test(how) ? held.text.length : 0);
+    return f;
+  }
+  function fileWords(given) {
+    return Array.prototype.slice.call(given, 1).map(function (s) {
+      return typeof s === "string" ? s : readable(s);
+    }).join("");
+  }
+  function fileAdd(v, said, fn) {
+    var held = fileArg(v, fn, true);
+    held.text += said;
+    held.wrote = true;
+    v.put("at", held.text.length);
+    return "";
+  }
+  // What this run wrote, for a save to keep and for the tape to say.
+  function filesWritten() {
+    var out = [];
+    if (FILES_NOW) { FILES_NOW.forEach(function (f) { if (f.wrote) { out.push({ name: f.name, text: f.text }); } }); }
+    return out;
+  }
+  function filesBack(list) {
+    FILES_NOW = null;
+    (list || []).forEach(function (f) {
+      filesNow().set(String(f.name).toLowerCase(), { name: f.name, text: String(f.text || ""), wrote: true });
+    });
+  }
+  var FILE_BUILT = {
+    open: fileOpened,
+    // readLine(f): the next line, its line break and all; "" at the end
+    readline: function (f) { return fileTake(f, lineEnd, "readLine"); },
+    readlines: function (f) { return linesLeft(f); },
+    // read(f): all that is left; read(f, n): the next n letters of it
+    read: function (f, n) {
+      return fileTake(f, function (text, at) {
+        return n === undefined || n === "" || num(n) < 0 ? text.length : Math.min(text.length, at + Math.trunc(num(n)));
+      }, "read");
+    },
+    endoffile: function (f) {
+      var held = fileArg(f, "endOfFile", false);
+      return num(fileField(f, "at")) >= held.text.length;
+    },
+    // write(f, a, b): a and b, one after the other, as they are; writeLine
+    // with a line break after them -- what print(a, b, file=f) puts in a
+    // file, the space between them written in
+    write: function (f) { return fileAdd(f, fileWords(arguments), "write"); },
+    writeline: function (f) { return fileAdd(f, fileWords(arguments) + "\n", "writeLine"); },
+    close: function (f) {
+      if (!isFile(f)) { throw new Error(say("r_needs_file", { name: "close()" })); }
+      f.put("closed", true);
+      return "";
+    },
+    fileexists: function (name) { return !!String(name).trim() && !!fileNamed(name); }
+  };
+  FILE_BUILT.eof = FILE_BUILT.endoffile;
+
   var RAW_BUILT = {};
-  Object.keys(LIST_BUILT).forEach(function (name) {
-    BUILT[name] = LIST_BUILT[name];
+  Object.keys(LIST_BUILT).concat(Object.keys(FILE_BUILT)).forEach(function (name) {
+    BUILT[name] = LIST_BUILT[name] || FILE_BUILT[name];
     RAW_BUILT[name] = true;
   });
 

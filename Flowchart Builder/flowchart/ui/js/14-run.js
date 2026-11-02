@@ -1844,6 +1844,7 @@
     NUMERIC = {};                        // and what each was declared as,
     TEXTUAL = {};                        //   not what last run's names were
     if (back) { Object.assign(NUMERIC, back.numeric); Object.assign(TEXTUAL, back.textual || {}); }
+    filesBack(back ? back.files : null); // the Code tab's files as they are, and what it had written
     stepped = {};
     doingNow = null;
     if (!quiet) {
@@ -1895,6 +1896,12 @@
       if (typeof graphRun === "function") { graphRun(); }   // what it printed, charted where it wants it
     }
     if (broke) { sayFault(broke, "bad"); }
+    // what it wrote, which is gone with the run: the tabs are not written over
+    if (!quiet) {
+      filesWritten().forEach(function (f) {
+        talk(say("r_file_wrote", { name: f.name, n: f.text.replace(/\n$/, "") ? f.text.replace(/\n$/, "").split("\n").length : 0 }), "note");
+      });
+    }
     var over = false;
     for (var key in stepped) { if (stepped[key]) { over = true; } }
     if (over && !runDropped) { talk(TXT.r_stepped_over, "warn"); }

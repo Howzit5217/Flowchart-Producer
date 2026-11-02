@@ -143,6 +143,12 @@
     langKeep();
     return langFiles.map(function (one) { return { name: one.name || "", text: one.text || "" }; });
   }
+  // And every file as a run opens it (15-sums.js): by the name on its tab,
+  // made up or not, since that is the name there is to type.
+  function langFilesOpen() {
+    langKeep();
+    return langFiles.map(function (one, k) { return { name: fileLabel(k), text: one.text || "" }; });
+  }
   function langHasCode() {
     langKeep();
     return langFiles.some(function (one) { return String(one.text || "").trim(); });
@@ -157,6 +163,8 @@
     if (!one) { return ""; }
     if (one.name) { return one.name; }
     var lang = langNow(), ext = (LANGS[lang] || (codeToPseudo.dialects || {})[lang] || {}).ext || "txt";
+    // numbers typed into a tab of their own: a file the program reads
+    if (codeToPseudo.isData(one, langFiles)) { return "file" + (k + 1) + ".txt"; }
     var named = (lang === "java" || lang === "csharp") &&
                 /\bclass\s+([A-Za-z_]\w*)/.exec(one.text || "");
     if (named) { return named[1] + "." + ext; }
@@ -1461,23 +1469,30 @@
     var box = langBox();
     if (!box || !langCanWrite() || readsOnly(langNow())) { return false; }
     var lang = langNow(), made;
-    try { made = langFiles.length > 1 ? filesFor(lang) : [codeFor(lang)]; }
+    // the files the program reads -- numbers.txt -- are not the program,
+    // and stay as they are, after it
+    langKeep();
+    var data = langFiles.filter(function (one) { return codeToPseudo.isData(one, langFiles); });
+    var code = langFiles.filter(function (one) { return data.indexOf(one) < 0; });
+    try { made = code.length > 1 ? filesFor(lang) : [codeFor(lang)]; }
     catch (e) { return false; }
     if (!made || !made.length || typeof made[0].text !== "string") { return false; }
     function tidied(one) { return one.text.replace(/\s+$/, "") + "\n"; }
     if (made.length > 1) {
       langFiles = made.map(function (one) {
         return { name: one.file + "." + one.ext, text: tidied(one) };
-      });
+      }).concat(data);
       langAt = 0;
       box.value = langFiles[0].text;
     } else if (typed) {
-      langKeep();
-      langFiles = [langFiles[langAt]];
+      // typed over the program's file, never over one it reads
+      if (!code.length) { langFiles = [{ name: "", text: "" }].concat(data); langAt = 0; box.value = ""; }
+      else if (data.indexOf(langFiles[langAt]) >= 0) { showFile(langFiles.indexOf(code[0])); }
+      langFiles = [langFiles[langAt]].concat(data);
       langAt = 0;
       typeOver(box, 0, box.value.length, tidied(made[0]));
     } else {
-      langFiles = [{ name: "", text: tidied(made[0]) }];
+      langFiles = [{ name: "", text: tidied(made[0]) }].concat(data);
       langAt = 0;
       box.value = langFiles[0].text;
     }

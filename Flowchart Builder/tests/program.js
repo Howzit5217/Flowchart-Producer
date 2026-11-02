@@ -82,6 +82,10 @@ function runner(WORDS) {
   function showLine() {}
   function pickLine() {}
   function markFault() {}
+  // The files a program can open, as the Code tab's tabs would hand them
+  // over (15-sums.js): [{name, text}], given with the program.
+  var filesGiven = [];
+  function langFilesOpen() { return filesGiven; }   // eslint-disable-line no-unused-vars
   var whenBuilt = [];                    // eslint-disable-line no-unused-vars
   var builtText = null;                  // the box as it was built, while asking
   function buildAsked() {}
@@ -148,8 +152,9 @@ function runner(WORDS) {
   // Run for what it prints and nothing else -- the way a puzzle is marked.
   // The run above waits a quarter of a second on every step, as the studio
   // does for somebody watching; sixty programs of that is eight minutes.
-  go.quietly = function (ast, typed) {
+  go.quietly = function (ast, typed, files) {
     AST = ast;
+    filesGiven = files || [];
     tape.innerHTML = "";
     faults.length = 0;
     return runQuietly(typed || []).then(function (out) {
@@ -466,7 +471,7 @@ function wanted(one) {                   // what run.py said it should print
   if (asked.shelf) {
     var shelf = [];
     for (var s = 0; s < asked.shelf.length; s++) {
-      var book = asked.shelf[s], ran = await go.quietly(book.ast, book.typed);
+      var book = asked.shelf[s], ran = await go.quietly(book.ast, book.typed, book.files);
       var code = {}, apart = {};
       go.languages().forEach(function (lang) {
         try { code[lang] = go.written(book.ast, lang, book.title); }

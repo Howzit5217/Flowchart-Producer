@@ -320,6 +320,11 @@
         return "";
       case "isinteger": return "bool";
       case "currencyformat": return "text";
+      // a file (15-sums.js), and what is read from one
+      case "readline": case "read": return "text";
+      case "readlines": return "list:text";
+      case "fileexists": case "endoffile": case "eof": return "bool";
+      case "write": case "writeline": case "close": return "";
     }
     return null;
   }
