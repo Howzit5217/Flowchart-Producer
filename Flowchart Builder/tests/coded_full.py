@@ -1530,6 +1530,140 @@ next();
 console.log("count", next());
 ''', [],
      ['count 3']),
+]
+
+
+# Files, in all five languages: a tab of the Code tab is a file the program
+# opens by its name (15-sums.js), and a data tab beside the program is one
+# with no name of its own -- file2.txt.  Each is read in, run by the runner
+# with the files handed to it, and has to print what the real program
+# prints (run here for real); then it is written out again in every
+# language and run (see "file programs written out ...", run.py), with the
+# same files beside it.
+JAVA_SUM = r'''import java.io.*;
+import java.util.Scanner;
+
+public class FileSum {
+    public static void main(String[] args) throws IOException {
+        Scanner keyboard = new Scanner(System.in);
+        System.out.print("Enter the file name: ");
+        String filename = keyboard.nextLine();
+        File file = new File(filename);
+        if (!file.exists()) {
+            System.out.println("The file " + filename + " is not there.");
+            System.exit(0);
+        }
+        Scanner inputFile = new Scanner(file);
+        int count = 0;
+        double total = 0.0;
+        while (inputFile.hasNext()) {
+            double number = inputFile.nextDouble();
+            total += number;
+            count++;
+        }
+        inputFile.close();
+        System.out.println("Count: " + count);
+        System.out.printf("Total: %.2f%n", total);
+    }
+}
+'''
+
+JAVA_GRADES = r'''import java.io.File;
+import java.io.FileNotFoundException;
+import java.util.Scanner;
+
+public class Grades {
+    public static void main(String[] args) {
+        Scanner keyboard = new Scanner(System.in);
+        System.out.print("File: ");
+        String name = keyboard.nextLine();
+        try (Scanner in = new Scanner(new File(name))) {
+            int lineNo = 0;
+            while (in.hasNextLine()) {
+                String row = in.nextLine();
+                lineNo++;
+                if (row.isEmpty()) {
+                    continue;
+                }
+                String[] bits = row.split(" ");
+                int sum = 0;
+                for (int k = 1; k < bits.length; k++) {
+                    sum += Integer.parseInt(bits[k]);
+                }
+                System.out.println(bits[0] + " " + sum);
+            }
+            System.out.println(lineNo + " lines read");
+        } catch (FileNotFoundException e) {
+            System.out.println("No file called " + name);
+        }
+    }
+}
+'''
+
+CPP_COUNT = r'''#include <iostream>
+#include <fstream>
+#include <string>
+using namespace std;
+
+int main() {
+    ifstream inputFile;
+    string filename;
+    cout << "Enter the file name: ";
+    cin >> filename;
+    inputFile.open(filename);
+    if (!inputFile) {
+        cout << "Error opening the file." << endl;
+        return 1;
+    }
+    int number, count = 0, total = 0;
+    while (inputFile >> number) {
+        count++;
+        total += number;
+    }
+    inputFile.close();
+    cout << "Count: " << count << endl;
+    cout << "Total: " << total << endl;
+    return 0;
+}
+'''
+
+CS_WORDS = r'''using System;
+using System.IO;
+
+class Words {
+    static void Main() {
+        Console.Write("File: ");
+        string name = Console.ReadLine();
+        try {
+            StreamReader sr = new StreamReader(name);
+            string all = sr.ReadToEnd();
+            sr.Close();
+            string[] lines = all.Trim().Split('\n');
+            Console.WriteLine(lines.Length + " lines");
+            Console.WriteLine("Last: " + lines[lines.Length - 1]);
+        } catch (FileNotFoundException) {
+            Console.WriteLine("Missing: " + name);
+        }
+    }
+}
+'''
+
+JS_LOAD = r'''const fs = require("fs");
+
+function load(name) {
+  try {
+    return fs.readFileSync(name, "utf8").split("\n").filter((l) => l !== "");
+  } catch (err) {
+    console.log("No file " + name);
+    return [];
+  }
+}
+
+console.log(load("a.txt").length);
+console.log(load("b.txt").length);
+'''
+
+FILES = [
     # Files: a tab of the Code tab is a file the program opens by its name
     # (15-sums.js) -- one holding only numbers is file2.txt, data and not
     # code -- and a file that is not there is the except's to deal with.
@@ -1606,4 +1740,433 @@ def main():
 main()
 '''), ('data.txt', '1\n2\n3\n')], ['data.txt'],
      ['File: ', 'Total: 6']),
+    # ---- Java ----
+    ('java Scanner over a File, numbers added', 'java', [('FileSum.java', JAVA_SUM), ('numbers.txt', '12.5\n7\n30.25\n')],
+     ['numbers.txt'],
+     ['Enter the file name: ', 'Count: 3', 'Total: 49.75']),
+    ('java a File that is not there', 'java', [('FileSum.java', JAVA_SUM), ('numbers.txt', '1\n')],
+     ['nothing.txt'],
+     ['Enter the file name: ', 'The file nothing.txt is not there.']),
+    ('java BufferedReader to the null', 'java', [('Names.java', r'''import java.io.BufferedReader;
+import java.io.FileReader;
+import java.io.IOException;
+
+public class Names {
+    public static void main(String[] args) {
+        try {
+            BufferedReader reader = new BufferedReader(new FileReader("names.txt"));
+            String line;
+            int count = 0;
+            while ((line = reader.readLine()) != null) {
+                count++;
+                System.out.println(count + ": [" + line.toUpperCase() + "]");
+            }
+            reader.close();
+            System.out.println(count + " names");
+            BufferedReader again = new BufferedReader(new FileReader("names.txt"));
+            String first = again.readLine();
+            while (first != null) {
+                System.out.println(first.length());
+                first = again.readLine();
+            }
+            again.close();
+        } catch (IOException e) {
+            System.out.println("Could not read names.txt");
+        }
+    }
+}
+'''), ('names.txt', 'Ada\nGrace\n\nAlan')], [],
+     ['1: [ADA]', '2: [GRACE]', '3: []', '4: [ALAN]', '4 names', '3', '5', '0', '4']),
+    ('java PrintWriter, FileWriter and readAllLines', 'java', [('Scores.java', r'''import java.io.*;
+import java.nio.file.*;
+import java.util.List;
+
+public class Scores {
+    public static void main(String[] args) throws IOException {
+        PrintWriter out = new PrintWriter(new FileWriter("scores.txt"));
+        for (int i = 1; i <= 3; i++) {
+            out.println("Player " + i + "," + (i * 15));
+        }
+        out.print("Total,");
+        out.println(90);
+        out.close();
+        PrintWriter more = new PrintWriter(new FileWriter("scores.txt", true));
+        more.println("Extra,5");
+        more.close();
+        List<String> lines = Files.readAllLines(Paths.get("scores.txt"));
+        System.out.println(lines.size() + " lines");
+        for (String line : lines) {
+            String[] parts = line.split(",");
+            System.out.println(parts[0] + " -> " + parts[1]);
+        }
+        for (String line : Files.readAllLines(Paths.get("scores.txt"))) {
+            if (line.startsWith("T")) {
+                System.out.println(line);
+            }
+        }
+    }
+}
+''')], [],
+     ['5 lines', 'Player 1 -> 15', 'Player 2 -> 30', 'Player 3 -> 45', 'Total -> 90', 'Extra -> 5', 'Total,90']),
+    ('java try-with-resources and FileNotFoundException', 'java', [('Grades.java', JAVA_GRADES),
+     ('grades.txt', 'Ann 90 85\nBo 70 80\n\nCy 60 65\n')], ['grades.txt'],
+     ['File: ', 'Ann 175', 'Bo 150', 'Cy 125', '4 lines read']),
+    ('java FileNotFoundException caught', 'java', [('Grades.java', JAVA_GRADES),
+     ('grades.txt', 'Ann 90 85\n')], ['marks.txt'],
+     ['File: ', 'No file called marks.txt']),
+    ('java nextInt then nextLine', 'java', [('Items.java', r'''import java.io.*;
+import java.util.*;
+
+public class Items {
+    public static void main(String[] args) throws FileNotFoundException {
+        Scanner in = new Scanner(new File("items.txt"));
+        int n = in.nextInt();
+        in.nextLine();
+        for (int i = 0; i < n; i++) {
+            String item = in.nextLine();
+            System.out.println((i + 1) + ". " + item);
+        }
+        int total = 0;
+        while (in.hasNextInt()) {
+            total += in.nextInt();
+        }
+        in.close();
+        System.out.println("Sum " + total);
+    }
+}
+'''), ('items.txt', '3\nTea\nMilk\nBread\n4 5 6\n7\n')], [],
+     ['1. Tea', '2. Milk', '3. Bread', 'Sum 22']),
+    # ---- C# ----
+    ('cs StreamReader to the null in a using', 'csharp', [('Prices.cs', r'''using System;
+using System.IO;
+
+class Prices {
+    static void Main() {
+        int count = 0;
+        double total = 0;
+        using (StreamReader reader = new StreamReader("prices.txt")) {
+            string line;
+            while ((line = reader.ReadLine()) != null) {
+                total += double.Parse(line);
+                count++;
+            }
+        }
+        Console.WriteLine("Items: " + count);
+        Console.WriteLine("Total: " + total.ToString("F2"));
+    }
+}
+'''), ('prices.txt', '1.25\n3.50\n10\n')], [],
+     ['Items: 3', 'Total: 14.75']),
+    ('cs StreamWriter, then EndOfStream', 'csharp', [('Log.cs', r'''using System;
+using System.IO;
+
+class Log {
+    static void Main() {
+        StreamWriter writer = new StreamWriter("log.txt");
+        writer.WriteLine("first");
+        writer.WriteLine("second {0}", 2);
+        writer.Write("third");
+        writer.WriteLine();
+        writer.Close();
+        StreamWriter again = new StreamWriter("log.txt", true);
+        again.WriteLine("fourth");
+        again.Close();
+        StreamReader r = File.OpenText("log.txt");
+        int n = 0;
+        while (!r.EndOfStream) {
+            string s = r.ReadLine();
+            n++;
+            Console.WriteLine(n + " " + s);
+        }
+        r.Close();
+    }
+}
+''')], [],
+     ['1 first', '2 second 2', '3 third', '4 fourth']),
+    ('cs the File class', 'csharp', [('Todo.cs', r'''using System;
+using System.IO;
+
+class Todo {
+    static void Main() {
+        if (!File.Exists("todo.txt")) {
+            Console.WriteLine("No list");
+            return;
+        }
+        string[] tasks = File.ReadAllLines("todo.txt");
+        Console.WriteLine(tasks.Length + " tasks");
+        foreach (string t in tasks) {
+            Console.WriteLine("- " + t);
+        }
+        File.WriteAllText("done.txt", "Done: " + tasks[0] + "\n");
+        File.AppendAllText("done.txt", "Done: " + tasks[1] + "\n");
+        string done = File.ReadAllText("done.txt");
+        Console.Write(done);
+        foreach (string line in File.ReadAllLines("done.txt")) {
+            Console.WriteLine(line.ToUpper());
+        }
+        Console.WriteLine(File.Exists("nothing.txt"));
+    }
+}
+'''), ('todo.txt', 'Shop\nCook\nClean\n')], [],
+     ['3 tasks', '- Shop', '- Cook', '- Clean', 'Done: Shop', 'Done: Cook', 'DONE: SHOP', 'DONE: COOK', 'False']),
+    ('cs ReadToEnd', 'csharp', [('Words.cs', CS_WORDS), ('story.txt', 'the cat\nsat on the mat\n')], ['story.txt'],
+     ['File: ', '2 lines', 'Last: sat on the mat']),
+    ('cs FileNotFoundException caught', 'csharp', [('Words.cs', CS_WORDS), ('story.txt', 'x\n')], ['tale.txt'],
+     ['File: ', 'Missing: tale.txt']),
+    # ---- C++ ----
+    ('cpp ifstream read with >>', 'cpp', [('count.cpp', CPP_COUNT), ('numbers.txt', '10 20\n30\n40\n')], ['numbers.txt'],
+     ['Enter the file name: ', 'Count: 4', 'Total: 100']),
+    ('cpp ifstream that did not open', 'cpp', [('count.cpp', CPP_COUNT), ('numbers.txt', '1\n')], ['none.txt'],
+     ['Enter the file name: ', 'Error opening the file.']),
+    ('cpp getline into an ofstream', 'cpp', [('report.cpp', r'''#include <iostream>
+#include <fstream>
+#include <string>
+using namespace std;
+
+int main() {
+    ifstream in("people.txt");
+    ofstream out("report.txt");
+    string line;
+    int n = 0;
+    while (getline(in, line)) {
+        n++;
+        out << n << ". " << line << endl;
+    }
+    in.close();
+    out.close();
+    ofstream add("report.txt", ios::app);
+    add << "end" << "\n";
+    add.close();
+    ifstream back("report.txt");
+    string got;
+    while (getline(back, got)) {
+        cout << got << endl;
+    }
+    back.close();
+    return 0;
+}
+'''), ('people.txt', 'Ann\nBo\nCy\n')], [],
+     ['1. Ann', '2. Bo', '3. Cy', 'end']),
+    ('cpp is_open, eof and words', 'cpp', [('scores.cpp', r'''#include <iostream>
+#include <fstream>
+#include <iomanip>
+#include <string>
+using namespace std;
+
+int main() {
+    ifstream file("scores.txt");
+    if (file.is_open()) {
+        string name;
+        int score;
+        while (file >> name >> score) {
+            cout << name << " scored " << score << endl;
+        }
+        file.close();
+    } else {
+        cout << "Unable to open file" << endl;
+    }
+    ofstream money("money.txt");
+    money << fixed << setprecision(2) << 3.5 << endl;
+    money << 10.1 << endl;
+    money.close();
+    ifstream m("money.txt");
+    string s;
+    while (!m.eof()) {
+        getline(m, s);
+        if (s != "") {
+            cout << "[" << s << "]" << endl;
+        }
+    }
+    m.close();
+    return 0;
+}
+'''), ('scores.txt', 'Ann 90\nBo 85\nCy 77\n')], [],
+     ['Ann scored 90', 'Bo scored 85', 'Cy scored 77', '[3.50]', '[10.10]']),
+    # ---- JavaScript ----
+    ('js readFileSync split into lines', 'javascript', [('avg.js', r'''const fs = require("fs");
+
+const text = fs.readFileSync("scores.txt", "utf8");
+const lines = text.trim().split("\n");
+let total = 0;
+for (const line of lines) {
+  const [name, score] = line.split(",");
+  total += Number(score);
+  console.log(`${name}: ${score}`);
+}
+console.log("Average:", (total / lines.length).toFixed(1));
+'''), ('scores.txt', 'Ann,90\nBo,85\nCy,77\n')], [],
+     ['Ann: 90', 'Bo: 85', 'Cy: 77', 'Average: 84.0']),
+    ('js writeFileSync, appendFileSync and existsSync', 'javascript', [('log.js', r'''const fs = require("fs");
+
+if (!fs.existsSync("log.txt")) {
+  console.log("starting a new log");
+}
+fs.writeFileSync("log.txt", "one\n");
+fs.appendFileSync("log.txt", "two\n");
+fs.appendFileSync("log.txt", "three\n");
+const lines = fs.readFileSync("log.txt", "utf8").split("\n");
+console.log(lines.length);
+lines.forEach((l, i) => {
+  if (l) {
+    console.log(i + 1, l);
+  }
+});
+console.log(fs.existsSync("log.txt") ? "kept" : "gone");
+''')], [],
+     ['starting a new log', '4', '1 one', '2 two', '3 three', 'kept']),
+    ('js a file that is not there caught', 'javascript', [('load.js', JS_LOAD), ('a.txt', 'x\ny\n\nz\n')], [],
+     ['3', 'No file b.txt', '0']),
+    ('py a file handed to a function', 'python', [('main.py', r'''
+def count_lines(f):
+    n = 0
+    for line in f:
+        n += 1
+    return n
+
+def main():
+    out = open("data.txt", "w")
+    out.write("alpha beta\n")
+    print(3.5, True, [1, 2], file=out)
+    out.write("last")
+    out.close()
+    f = open("data.txt")
+    print(f.name, f.read(5))
+    print(count_lines(f))
+    f.close()
+    g = None
+    if f.closed:
+        g = open("data.txt")
+    first = g.readline()
+    print(first.strip(), len(first))
+    print(g.readlines())
+    g.close()
+
+main()
+''')], [],
+     ['data.txt alpha', '3', 'alpha beta 11', "['3.5 True [1, 2]\\n', 'last']"]),
+    ('java a Scanner handed to a method', 'java', [('Totals.java', r'''import java.io.*;
+import java.util.Scanner;
+
+public class Totals {
+    static int total(Scanner in) {
+        int t = 0;
+        while (in.hasNextInt()) {
+            t += in.nextInt();
+        }
+        return t;
+    }
+
+    static void report(PrintWriter out, String name, int value) {
+        out.println(name + ": " + value);
+    }
+
+    public static void main(String[] args) throws IOException {
+        Scanner in = new Scanner(new File("nums.txt"));
+        int t = total(in);
+        in.close();
+        PrintWriter out = new PrintWriter("report.txt");
+        report(out, "total", t);
+        report(out, "double", t * 2);
+        out.close();
+        BufferedReader back = new BufferedReader(new FileReader("report.txt"));
+        String line = back.readLine();
+        while (line != null) {
+            System.out.println(line);
+            line = back.readLine();
+        }
+        back.close();
+        java.util.List<String> names = new java.util.ArrayList<>();
+        names.add("Ann");
+        names.add("Bo");
+        java.nio.file.Files.write(java.nio.file.Paths.get("names.txt"), names);
+        System.out.println(String.join(",", java.nio.file.Files.readAllLines(java.nio.file.Paths.get("names.txt"))));
+        System.out.println(new String(java.nio.file.Files.readAllBytes(java.nio.file.Paths.get("nums.txt"))).trim());
+    }
+}
+'''), ('nums.txt', '4 5\n6\n')], [],
+     ['total: 15', 'double: 30', 'Ann,Bo', '4 5', '6']),
+    ('cs using a StreamWriter and WriteAllLines', 'csharp', [('Lines.cs', r'''using System;
+using System.IO;
+using System.Collections.Generic;
+
+class Lines {
+    static int CountWords(StreamReader r) {
+        int n = 0;
+        while (r.Peek() >= 0) {
+            string line = r.ReadLine();
+            n += line.Split(' ').Length;
+        }
+        return n;
+    }
+
+    static void Main() {
+        using (StreamWriter w = new StreamWriter("poem.txt")) {
+            w.WriteLine("roses are red");
+            w.WriteLine("violets are blue");
+        }
+        StreamReader r = new StreamReader("poem.txt");
+        Console.WriteLine(CountWords(r) + " words");
+        r.Close();
+        var kept = new List<string>();
+        kept.Add("one");
+        kept.Add("two");
+        File.WriteAllLines("kept.txt", kept);
+        File.AppendAllText("kept.txt", "three\n");
+        string[] back = File.ReadAllLines("kept.txt");
+        Console.WriteLine(string.Join("+", back));
+        Console.WriteLine(File.ReadAllLines("kept.txt").Length);
+    }
+}
+''')], [],
+     ['6 words', 'one+two+three', '3']),
+    ('cpp a stream handed to a function', 'cpp', [('sum.cpp', r'''#include <iostream>
+#include <fstream>
+#include <string>
+using namespace std;
+
+double average(ifstream& in) {
+    double x, sum = 0;
+    int n = 0;
+    while (in >> x) {
+        sum += x;
+        n++;
+    }
+    return n > 0 ? sum / n : 0;
+}
+
+int main() {
+    ofstream out;
+    out.open("values.txt");
+    out << 2.5 << " " << 4 << endl;
+    out << 7.5 << endl;
+    out.close();
+    ifstream in;
+    in.open("values.txt");
+    if (in.fail()) {
+        cout << "No values" << endl;
+    } else {
+        cout << "Average " << average(in) << endl;
+        in.close();
+    }
+    ifstream again("values.txt");
+    string word;
+    again >> word;
+    string rest;
+    getline(again, rest);
+    cout << "[" << word << "][" << rest << "]" << endl;
+    again.close();
+    return 0;
+}
+''')], [],
+     ['Average 4.66667', '[2.5][ 4]']),
+    ('js fs taken apart, and a file read a line at a time', 'javascript', [('sorter.js', r'''const { readFileSync, writeFileSync, existsSync } = require("fs");
+
+writeFileSync("w.txt", ["b", "a", "c"].join("\n") + "\n");
+const words = readFileSync("w.txt", "utf8").split("\n").filter((w) => w.length > 0);
+words.sort();
+console.log(words.join(" "));
+console.log(existsSync("w.txt") ? "yes" : "no", existsSync("nope.txt") ? "yes" : "no");
+''')], [],
+     ['a b c', 'yes no']),
 ]
+CODED = CODED + FILES

@@ -1371,6 +1371,19 @@
         return n === undefined || n === "" || num(n) < 0 ? text.length : Math.min(text.length, at + Math.trunc(num(n)));
       }, "read");
     },
+    // readWord(f): the next word, the spaces and line breaks before it
+    // skipped, and "" at the end -- what C++'s in >> x and Java's next()
+    // and nextInt() read.  What comes after it is left for the next read,
+    // so a readLine() after one reads the rest of that line, as nextLine()
+    // does after nextInt(); but where nothing is left after it except
+    // spaces, the file is at its end, which is what hasNext() asks.
+    readword: function (f) {
+      return fileTake(f, function (text, at) {
+        while (at < text.length && /\s/.test(text.charAt(at))) { at++; }
+        while (at < text.length && !/\s/.test(text.charAt(at))) { at++; }
+        return /^\s*$/.test(text.slice(at)) ? text.length : at;
+      }, "readWord").trim();
+    },
     endoffile: function (f) {
       var held = fileArg(f, "endOfFile", false);
       return num(fileField(f, "at")) >= held.text.length;

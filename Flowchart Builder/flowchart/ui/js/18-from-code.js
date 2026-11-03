@@ -67,9 +67,11 @@
                      INT_MAX: "2147483647", INT_MIN: "-2147483648", UINT_MAX: "4294967295",
                      LLONG_MAX: "9223372036854775807", LLONG_MIN: "-9223372036854775808", RAND_MAX: "2147483647",
                      SHRT_MAX: "32767", CHAR_BIT: "8", EXIT_SUCCESS: "0", EXIT_FAILURE: "1" };
+    // the page's TextFile (18-code.js): what has its .at and its .text
+    var FILE_TELL = /^(?=[\s\S]*"name":"at")(?=[\s\S]*"name":"text")/;
     var PAGE_HELPERS = {
       python: { class_of: /isinstance/, is_number: /float/, copied: /vars/, to_base: /digits/,
-                is_integer: /lstrip/, currency_format: /abs/, end_of_file: /seek/ },
+                is_integer: /lstrip/, currency_format: /abs/, end_of_file: /seek/, read_word: /isspace/ },
       javascript: { classOf: /constructor/, shown: /constructor/, shuffle: /random/,
                     roundEven: /round/, orderOf: /isArray/, deepCopy: /getPrototypeOf/, significant: /toPrecision/,
                     sliceStep: /"by"/, toJson: /stringify/, popKey: /delete/, currencyFormat: /toFixed/, isInteger: /test/ },
@@ -102,6 +104,26 @@
              sumOf: /total/, minOf: /min_element/, maxOf: /max_element/, containsIn: /"find"/, countIn: /"count"/,
              anyIn: /"v"/, allIn: /"v"/, allCased: /isalpha/, temp: /made/, substringOf: /"from"/ }
     };
+    ["java", "cpp", "javascript"].forEach(function (lang) {
+      var tells = PAGE_HELPERS[lang];
+      ["readLine", "readLines", "readWord", "endOfFile", "writeText"].forEach(function (name) { tells[name] = FILE_TELL; });
+      tells.readText = /"readText"|"name":"at"/;
+      tells.writeLine = /writeText/;
+      tells.closeFile = /"closed"/;
+    });
+    PAGE_HELPERS.java.openFile = /readAllBytes/;
+    PAGE_HELPERS.java.fileExists = /isRegularFile/;
+    PAGE_HELPERS.cpp.openFile = /rdbuf/;
+    PAGE_HELPERS.cpp.fileExists = /good/;
+    PAGE_HELPERS.javascript.openFile = /readFileSync/;
+    PAGE_HELPERS.javascript.fileExists = /existsSync/;
+    ["ReadLine", "ReadLines", "ReadText", "ReadWord", "EndOfFile", "WriteText"].forEach(function (name) {
+      PAGE_HELPERS.csharp[name] = FILE_TELL;
+    });
+    PAGE_HELPERS.csharp.OpenFile = /ReadAllText/;
+    PAGE_HELPERS.csharp.WriteLine = /WriteText/;
+    PAGE_HELPERS.csharp.CloseFile = /"closed"/;
+    PAGE_HELPERS.csharp.FileExists = /Exists/;
 
     // ------------------------------------------------------ saying why --
     function oops(key, line, fill) {
@@ -3782,7 +3804,7 @@
                 expect("(");
                 var held = declAhead() ? cDeclaration(true) : [{ k: "expr", e: cAssign(), line: t.line }];
                 expect(")");
-                return held.concat(cBlockOrOne());
+                return held.concat(cBlockOrOne(), disposedOf(held, t.line));
               }
               if (cs && (isName("var", 1) || declAheadAt(pos + 1))) {   // using var r = ...;
                 next();
@@ -4095,7 +4117,25 @@
           handlers.push({ type: type, name: name, body: cBraces(), line: h.line });
         }
         if (isName("finally")) { next(); fin = cBraces(); }
-        return held.concat([{ k: "try", body: body, handlers: handlers, orelse: [], fin: fin, line: t.line }]);
+        // what it opened is shut again at the end of it -- and a file it
+        // opened is opened inside the try, for its catch to catch: a
+        // FileNotFoundException is what opening it may throw
+        var shut = disposedOf(held, t.line);
+        if (handlers.length && opensFile(held)) {
+          return [{ k: "try", body: held.concat(body, shut), handlers: handlers, orelse: [], fin: fin, line: t.line }];
+        }
+        return held.concat([{ k: "try", body: body.concat(shut), handlers: handlers, orelse: [], fin: fin, line: t.line }]);
+      }
+      function opensFile(held) {
+        return /"(File|FileReader|FileInputStream|FileWriter|FileOutputStream|Paths|Path|Files|StreamReader|StreamWriter|ifstream|ofstream)"/.test(JSON.stringify(held));
+      }
+      // try (Scanner in = ...), using (StreamReader r = ...): shut at the end
+      function disposedOf(held, line) {
+        var names = [];
+        held.forEach(function (st) {
+          if (st.k === "decl") { st.names.forEach(function (one) { names.push(one.name); }); }
+        });
+        return names.length ? [{ k: "disposed", names: names, line: line }] : [];
       }
       function cParams() {
         expect("(");
@@ -9522,7 +9562,8 @@
     function bare(path) {
       return String(path || "").replace(/^std\./, "")
         .replace(/^System\.(?=Console|Math|Threading|Convert|Environment|Linq|String|Array)/, "")
-        .replace(/^(java\.util\.stream|java\.util|java\.lang)\./, "");
+        .replace(/^System\.IO\.(?=File\.)/, "")
+        .replace(/^(java\.util\.stream|java\.util|java\.lang|java\.nio\.file|java\.io)\./, "");
     }
     function stripParens(e) { while (e && e.k === "paren") { e = e.e; } return e; }
     // A lambda's one line: x => x * 2 gives something back, but
@@ -9806,9 +9847,18 @@
       var HELPERS = helpersOf(dialect);
       var pageHelpers = Object.create(null);     // the ones found, by name
       var devices = Object.create(null);
+      // and the files these languages open, by the names that hold them
+      // (findFiles, beside the other files' work further down)
+      var FILE_KINDS = { Scanner: "words", BufferedReader: "nulls", FileReader: "nulls", LineNumberReader: "nulls",
+                         StreamReader: "nulls", TextReader: "nulls", PrintWriter: "out", FileWriter: "out",
+                         BufferedWriter: "out", PrintStream: "out", StreamWriter: "out", TextWriter: "out",
+                         ifstream: "stream", ofstream: "stream", fstream: "stream" };
+      var fileVars = Object.create(null);     // name -> { api, ty }
+      var fileNames = Object.create(null);    // Java's File f = new File(name): f is the name
+      var fileSays = Object.create(null);     // a C++ file's own fixed and setprecision
       function deviceOf(value) {
         value = stripParens(value);
-        if (!value) { return null; }
+        if (!value || fileOpen(value)) { return null; }
         if (value.k === "new") {
           var ty = String(value.type && value.type.name || value.type || "");
           if (/Scanner|BufferedReader|InputStreamReader|^Console$/.test(ty)) { return "keys"; }
@@ -9843,6 +9893,7 @@
           return st.names.length > 0;
         });
       }
+      findFiles(top);
       top.globals = dropDevices(top.globals);
       // the page's own helpers go; a function of the program's that only
       // shares a name with one is the program's
@@ -10238,6 +10289,12 @@
       if (java && pageHelpers.bind) {
         clsOrder = clsOrder.filter(function (c) { return c.name !== "Fn"; });
         delete CLS.Fn;
+      }
+      // and the page's TextFile, which is the chart's own File
+      if (pageHelpers.openFile || pageHelpers.OpenFile) {
+        clsOrder = clsOrder.filter(function (c) { return c.name !== "TextFile"; });
+        delete CLS.TextFile;
+        delete knownRecords.TextFile;
       }
 
       // The name each method is called by.
@@ -11161,6 +11218,12 @@
           // v = parseInt(s); if (isNaN(v)) ...: s made a number only where it is one
           var parsed = js ? parseThenAsk(list, i) : null;
           if (parsed) { list = parsed; }
+          // a file read to its end with its reading done twice, and a
+          // C++ file asked whether it opened
+          var readTwice = fileReadTwice(list, i);
+          if (readTwice) { list = readTwice; }
+          var checked = fileChecked(list, i);
+          if (checked) { list = checked; }
           // C++'s int& r = n: r is n by another name, from there on
           var alias = cpp ? refAlias(list[i], list.slice(i + 1)) : null;
           if (alias) {
@@ -11314,6 +11377,12 @@
             }
             case "call": {
               x = unstatic(x);
+              // File.ReadAllLines(name).Length: the lines, in a list of their own first
+              if (allLinesOf(x)) {
+                var linesHeld = nameNode(fresh(ch, "lines"), x.line);
+                allLinesInto(linesHeld, allLinesOf(x), ch, out, x.line);
+                return copyOf(linesHeld);
+              }
               // adder(1)(1), counter.inc(), fns[0](v): the function worked
               // out first, into a name, and then called by it
               var callee = stripParens(x.fn);
@@ -11482,6 +11551,19 @@
               }
               break;
             case "bin":
+              // C#'s reader.Peek() >= 0, reader.Peek() == -1: whether there is more to read
+              if (cs && /^(>=|>|!=|==|<)$/.test(x.op)) {
+                var pk = stripParens(x.a), pn = stripParens(x.b);
+                var pv = pn && pn.k === "num" ? Number(pn.v) : pn && pn.k === "un" && pn.op === "-" && stripParens(pn.a).k === "num" ? -Number(stripParens(pn.a).v) : null;
+                if (pk && pk.k === "call" && pk.fn.k === "member" && pk.fn.name === "Peek" && !pk.args.length && fileVar(pk.fn.obj) && pv !== null) {
+                  var more = (x.op === ">=" && pv === 0) || (x.op === ">" && pv === -1) || (x.op === "!=" && pv === -1);
+                  var ended = (x.op === "==" && pv === -1) || (x.op === "<" && pv === 0);
+                  if (more || ended) {
+                    var atEnd = builtinCall("endOfFile", [walk(pk.fn.obj)], x.line);
+                    return more ? { k: "un", op: "!", a: atEnd, line: x.line } : atEnd;
+                  }
+                }
+              }
               // o.w === undefined, o.w !== undefined: whether o has a w
               if (js && /^(===|==|!==|!=)$/.test(x.op)) {
                 var ul = stripParens(x.a), ur = stripParens(x.b);
@@ -11846,6 +11928,17 @@
                                      valueOrs(ix.at, ch), valueOrs(e.b, ch)], e.line);
           }
         }
+        // parseFloat(readWord(f)) || 0, the page's int() of a word read from
+        // a file: the word read once, and made a number
+        if (e.k === "bin" && e.op === "||" && js && stripParens(e.b).k === "num") {
+          var pf = stripParens(e.a), readIn = false;
+          eachNode(pf, function (x) {
+            if (x.k === "call" && x.fn.k === "name" && pageHelpers[x.fn.v] && /^read(Word|Line|Text)$/.test(x.fn.v)) { readIn = true; }
+          });
+          if (readIn && pf.k === "call" && /^(parseFloat|Number)$/.test(pathOf(pf.fn) || "") && pf.args.length === 1) {
+            return builtinCall("real", [valueOrs(pf.args[0], ch)], e.line);
+          }
+        }
         // null ?? x, "" || x, 5 ?? x: settled already
         if (e.k === "bin" && (e.op === "||" || e.op === "??") && js) {
           var lit = stripParens(e.a);
@@ -12000,6 +12093,14 @@
             return;
           }
           case "block": out.push.apply(out, lower(st.body, ch)); return;
+          // the end of a try (...) or a using (...): a file it opened, closed
+          case "disposed":
+            // (not after a Return, where it would never be reached)
+            if (out.length && /^(return|stop)$/.test(out[out.length - 1].k)) { return; }
+            st.names.forEach(function (nm) {
+              if (fileVars[nm]) { out.push({ k: "call", e: builtinCall("close", [nameNode(nm, line)], line), line: line }); }
+            });
+            return;
           case "exit": out.push({ k: "stop", line: line }); return;
           case "break": case "continue":
             out.push({ k: st.k, label: st.label || null, line: line });
@@ -12036,10 +12137,21 @@
           }
           case "decl": {
             (st.names || []).forEach(function (one) {
+              // const { readFileSync } = require("fs"): what is taken out of a library
+              if (one.pattern && deviceOf(one.value) === "lib") { return; }
               if (one.pattern) { assign(one.pattern, one.value, ch, out, line, true); return; }
               var dev = deviceOf(one.value);
               if (dev) { devices[one.name] = dev; return; }
               var ti = st.typeInfo || (st.type ? { name: st.type, dims: st.dims || 0, args: [] } : null);
+              // a file opened -- or one to be opened, ifstream in; -- and a
+              // Java File, which is the name of one
+              var opened = fileOpen(one.value);
+              if (opened) { assign(nameNode(one.name, one.line), openOf(opened, line), ch, out, line, true); return; }
+              if (!one.value && fileVars[one.name] && FILE_KINDS[typeNameOf(ti)]) { return; }
+              if (java && fileNames[one.name] && one.value) {
+                assign(nameNode(one.name, one.line), fileNameOf(one.value) || one.value, ch, out, line, true, { name: "String", dims: 0, args: [] });
+                return;
+              }
               if (ti && one.dims && !ti.dims) { ti = Object.assign({}, ti, { dims: one.dims }); }
               // C++'s istringstream in(s), ostringstream out: words, read from or added to
               if (cpp && ti && /^(istringstream|stringstream|ostringstream)$/.test(String(ti.name).replace(/^.*::/, ""))) {
@@ -12104,6 +12216,8 @@
             return;
           }
           case "while": {
+            var toEnd = fileLoop(st);
+            if (toEnd) { lowerOne(toEnd, ch, out); return; }
             var cond = stripParens(st.cond);
             var readsWords = cpp ? wordsRead(cond, ch) : null;
             if (readsWords) {
@@ -12250,7 +12364,7 @@
       var R_ZERO = /^(ZeroDivisionError|ArithmeticError|ArithmeticException|DivideByZeroException|Exception|exception|std\.exception|Error|RuntimeException|SystemException|BaseException)$/;
       var R_OUT_OF_RANGE = /^(IndexError|LookupError|IndexOutOfBoundsException|ArrayIndexOutOfBoundsException|StringIndexOutOfBoundsException|IndexOutOfRangeException|ArgumentOutOfRangeException|out_of_range|std\.out_of_range|Exception|exception|std\.exception|Error|RuntimeException|SystemException|BaseException)$/;
       var R_NO_KEY = /^(KeyError|LookupError|KeyNotFoundException|NoSuchElementException|out_of_range|std\.out_of_range|Exception|exception|std\.exception|Error|RuntimeException|SystemException|BaseException)$/;
-      var R_NO_FILE = /^(FileNotFoundError|IOError|OSError|EnvironmentError|Exception|BaseException)$/;
+      var R_NO_FILE = /^(FileNotFoundError|IOError|OSError|EnvironmentError|Exception|BaseException|FileNotFoundException|IOException|UncheckedIOException|NoSuchFileException|DirectoryNotFoundException|Throwable|SystemException|Error|exception|ios_base::failure|failure)$/;
       function handlerOf(st, test) {
         return (st.handlers || []).filter(function (h) {
           var types = !h.type ? [] : stripParens(h.type).k === "tuple" ? stripParens(h.type).items : [h.type];
@@ -12269,9 +12383,10 @@
             found = { what: "number", of: x.args[0], handler: handlerOf(st, R_BAD_NUMBER) };
             return false;
           }
-          // open(name) to read: a file that may not be there
-          if (opensToRead(x) && handlerOf(st, R_NO_FILE)) {
-            found = { what: "file", of: x.args[0], handler: handlerOf(st, R_NO_FILE) };
+          // open(name) to read -- new Scanner(new File(name)), File.ReadAllText(name) --
+          // a file that may not be there
+          if (readsFile(x) && handlerOf(st, R_NO_FILE)) {
+            found = { what: "file", of: readsFile(x), handler: handlerOf(st, R_NO_FILE) };
             return false;
           }
           // xs[5], xs.get(5), v.at(5): a place that may not be there -- and
@@ -12982,6 +13097,13 @@
                                        body: [{ k: "assign", target: target, value: nameNode(each0, line), line: line }].concat(st.body) });
           target = stripParens(st.target);
         }
+        // foreach (string line in File.ReadAllLines(name)): the file's lines,
+        // each one's line break taken off
+        if (allLinesOf(over) && target.k === "name") {
+          st = Object.assign({}, st, { over: builtinCall("open", [allLinesOf(over), { k: "str", v: "r" }], line),
+                                       body: [{ k: "assign", target: copyOf(target), value: lineOnly(copyOf(target), line), line: line }].concat(st.body) });
+          over = stripParens(st.over);
+        }
         // C#'s foreach over an int[,]: every one, row by row
         if (cs && !st.rows && rectOf(over, ch) > 1) {
           var rowName = fresh(ch, "row");
@@ -13168,6 +13290,486 @@
         m = m ? stripParens(m) : null;
         return !m || (m.k === "str" && !/[wax]/.test(m.v));
       }
+      // ---- and the other languages' files --------------------------------
+      // Java's new Scanner(new File(name)), BufferedReader and PrintWriter,
+      // C#'s StreamReader and StreamWriter, C++'s ifstream and ofstream: each
+      // is the runner's open(name, mode), read and written by its built-ins.
+      // Each says it has come to the end in its own way -- readLine() hands
+      // back null, hasNextLine() false, getline() false -- and reads a line
+      // without the line break the runner's readLine() keeps (15-sums.js):
+      // so a line read is readLine() with its line break taken off, and a
+      // loop that reads to the end asks endOfFile() before it reads.
+      //
+      // What a name holds a file for, by how it is read: "words" a Scanner
+      // (lines and words, hasNext to ask), "nulls" a BufferedReader or a
+      // StreamReader (lines, null at the end), "out" anything written to,
+      // "stream" a C++ fstream (>> and getline in, << out).
+      // (the names that hold them are found with the devices: findFiles)
+      function typeNameOf(t) {
+        return String(t && (t.name || (typeof t === "string" ? t : "")) || "").replace(/^.*[.:]/, "");
+      }
+      function fileVar(x) {
+        x = stripParens(x);
+        return x && x.k === "name" && fileVars[x.v] ? fileVars[x.v] : null;
+      }
+      function joinedName(parts, line) {
+        return parts.reduce(function (sum, p) {
+          return sum ? { k: "bin", op: "+", line: line, a: { k: "bin", op: "+", a: sum, b: { k: "str", v: "/" }, line: line }, b: p } : p;
+        }, null);
+      }
+      // The name of the file something stands for: new File(name),
+      // Paths.get(name), name.c_str() -- or a File held in a name, which
+      // holds the name; null for anything else.
+      function fileNameOf(x) {
+        x = stripParens(x);
+        if (!x) { return null; }
+        if (java && x.k === "new" && typeNameOf(x.type) === "File" && x.args.length >= 1 && x.args.length <= 2) {
+          return joinedName(x.args, x.line);
+        }
+        if (x.k === "call") {
+          var p = bare(pathOf(x.fn) || "");
+          if (java && /^(Paths\.get|Path\.of|FileSystems\.getDefault\(\)\.getPath)$/.test(p) && x.args.length) { return joinedName(x.args, x.line); }
+          if (x.fn.k === "member" && !x.args.length && ((cpp && x.fn.name === "c_str") ||
+              (java && /^(toPath|toFile|getPath|getAbsolutePath)$/.test(x.fn.name) && fileNameOf(x.fn.obj)))) {
+            return fileNameOf(x.fn.obj) || x.fn.obj;
+          }
+        }
+        if (x.k === "name" && fileNames[x.v]) { return x; }
+        return null;
+      }
+      // System.in, System.out, Console.In: the keyboard and the screen, not files
+      function stdStream(x) {
+        return /^(System\.(in|out|err)|Console\.(In|Out|Error|OpenStandardInput|OpenStandardOutput)|std::(cin|cout)|cin|cout)$/.test(pathOf(stripParens(x)) || "") ||
+               (stripParens(x).k === "call" && /^Console\.OpenStandard/.test(pathOf(stripParens(x).fn) || ""));
+      }
+      function yes(x) { x = stripParens(x); return !!(x && x.k === "bool" && x.v); }
+      // C++'s open modes: ios::app, ios::in | ios::out, as the runner's "a", "r+"
+      function streamMode(ty, how) {
+        var said = how ? JSON.stringify(how) : "";
+        if (/"app"/.test(said)) { return "a"; }
+        var reads = /"in"/.test(said), writes = /"(out|trunc)"/.test(said);
+        if (reads && writes) { return "r+"; }
+        if (reads) { return "r"; }
+        if (writes) { return "w"; }
+        return ty === "ifstream" ? "r" : ty === "ofstream" ? "w" : "r+";
+      }
+      // What opens a file, and how: { name, mode, api, ty } -- or null.
+      function fileOpen(x) {
+        x = stripParens(x);
+        if (!x || py) { return null; }
+        var args = x.args || [], inner = null;
+        if (x.k === "new") {
+          var ty = typeNameOf(x.type);
+          if (java) {
+            if (ty === "Scanner" && args.length === 1) {
+              inner = fileOpen(args[0]);
+              var scanned = inner && inner.mode === "r" ? inner.name : fileNameOf(args[0]);
+              return scanned ? { name: scanned, mode: "r", api: "words", ty: ty } : null;
+            }
+            if (/^(BufferedReader|InputStreamReader|LineNumberReader)$/.test(ty) && args.length >= 1) {
+              inner = fileOpen(args[0]);
+              return inner && inner.mode === "r" ? { name: inner.name, mode: "r", api: "nulls", ty: ty } : null;
+            }
+            if (/^(FileReader|FileInputStream)$/.test(ty) && args.length >= 1) {
+              return { name: fileNameOf(args[0]) || args[0], mode: "r", api: "nulls", ty: ty };
+            }
+            if (/^(PrintWriter|BufferedWriter|PrintStream|OutputStreamWriter)$/.test(ty) && args.length >= 1) {
+              inner = fileOpen(args[0]);
+              if (inner) { return inner.mode !== "r" ? { name: inner.name, mode: inner.mode, api: "out", ty: ty } : null; }
+              var aim = stripParens(args[0]);
+              if (!/^(PrintWriter|PrintStream)$/.test(ty) || stdStream(aim) || (aim.k === "name" && fileVars[aim.v])) { return null; }
+              return { name: fileNameOf(aim) || aim, mode: "w", api: "out", ty: ty };
+            }
+            if (/^(FileWriter|FileOutputStream)$/.test(ty) && args.length >= 1) {
+              return { name: fileNameOf(args[0]) || args[0], mode: yes(args[1]) ? "a" : "w", api: "out", ty: ty };
+            }
+          }
+          if (cs && ty === "StreamReader" && args.length >= 1 && !stdStream(args[0])) {
+            return { name: args[0], mode: "r", api: "nulls", ty: ty };
+          }
+          if (cs && ty === "StreamWriter" && args.length >= 1 && !stdStream(args[0])) {
+            return { name: args[0], mode: yes(args[1]) ? "a" : "w", api: "out", ty: ty };
+          }
+          if (cpp && /^(ifstream|ofstream|fstream)$/.test(ty) && args.length >= 1) {
+            return { name: fileNameOf(args[0]) || args[0], mode: streamMode(ty, args[1]), api: "stream", ty: ty };
+          }
+          return null;
+        }
+        if (x.k !== "call" || x.builtin) { return null; }
+        var p = bare(pathOf(x.fn) || "");
+        if (java && p === "Files.newBufferedReader" && args.length >= 1) {
+          return { name: fileNameOf(args[0]) || args[0], mode: "r", api: "nulls", ty: "BufferedReader" };
+        }
+        if (java && p === "Files.newBufferedWriter" && args.length >= 1) {
+          return { name: fileNameOf(args[0]) || args[0], mode: /"APPEND"/.test(JSON.stringify(args.slice(1))) ? "a" : "w",
+                   api: "out", ty: "BufferedWriter" };
+        }
+        if (cs && /^File\.(OpenText|CreateText|AppendText)$/.test(p) && args.length === 1) {
+          var how = p.slice(5);
+          return { name: args[0], mode: how === "OpenText" ? "r" : how === "CreateText" ? "w" : "a",
+                   api: how === "OpenText" ? "nulls" : "out", ty: how === "OpenText" ? "StreamReader" : "StreamWriter" };
+        }
+        return null;
+      }
+      // Every name that holds a file, found before any of it is read: a
+      // Scanner over a file is not the keyboard (inputOf), whatever it is
+      // called.
+      function findFiles(all) {
+        var scans = false;
+        eachNode(all, function (x) {
+          if (x.k === "decl") {
+            var ty = typeNameOf(x.typeInfo || x.type);
+            (x.names || []).forEach(function (one) {
+              var opened = fileOpen(one.value);
+              if (opened) {
+                fileVars[one.name] = { api: opened.api, ty: opened.ty };
+                if (opened.api === "words") { scans = true; }
+              } else if (!one.value && FILE_KINDS[ty] && ty !== "Scanner") {
+                fileVars[one.name] = { api: FILE_KINDS[ty], ty: ty };
+              } else if (java && /^(File|Path)$/.test(ty) && one.value && fileNameOf(one.value)) {
+                fileNames[one.name] = true;
+              }
+            });
+          }
+          var target = (x.k === "assign" || (x.k === "assignx" && x.op === "=")) ? stripParens(x.target) : null;
+          // Python's f = open(name), with open(name) as f: f is a file, whatever else it is set to
+          var pyMade = function (v) {
+            v = stripParens(v);
+            return py && v && v.k === "call" && /^(open|io\.open|codecs\.open)$/.test(bare(pathOf(v.fn) || ""));
+          };
+          if (target && target.k === "name" && pyMade(x.value)) { fileVars[target.v] = { api: "py" }; }
+          if (x.k === "with") {
+            (x.items || []).forEach(function (it) {
+              if (it.as && stripParens(it.as).k === "name" && pyMade(it.e)) { fileVars[stripParens(it.as).v] = { api: "py" }; }
+            });
+          }
+          var made = target && target.k === "name" ? fileOpen(x.value) : null;
+          if (made) {
+            fileVars[target.v] = { api: made.api, ty: made.ty };
+            if (made.api === "words") { scans = true; }
+          }
+        });
+        // handed one: void report(PrintWriter out), int total(ifstream& in)
+        eachNode(all, function (x) {
+          (Array.isArray(x.params) ? x.params : []).forEach(function (q) {
+            var ty = typeNameOf(q && (q.typeInfo || q.type));
+            if (q && q.name && FILE_KINDS[ty] && (ty !== "Scanner" || scans)) { fileVars[q.name] = { api: FILE_KINDS[ty], ty: ty }; }
+          });
+        });
+      }
+      // what is opened, said as the runner's open(name, mode)
+      function openOf(opened, line) {
+        return builtinCall("open", [opened.name, { k: "str", v: opened.mode }], line);
+      }
+      // a line, its line break taken off: what Java's readLine() reads
+      function lineOnly(e, line) {
+        return builtinCall("replace", [e, { k: "str", v: "\n" }, { k: "str", v: "" }], line);
+      }
+      // File.ReadAllLines(name), Files.readAllLines(path): the name, or null
+      function allLinesOf(x) {
+        x = stripParens(x);
+        if (!x || x.k !== "call" || x.builtin) { return null; }
+        var p = bare(pathOf(x.fn) || "");
+        if (cs && /^File\.(ReadAllLines|ReadLines)$/.test(p) && x.args.length === 1) { return x.args[0]; }
+        if (java && /^Files\.(readAllLines|lines)$/.test(p) && x.args.length >= 1) { return fileNameOf(x.args[0]) || x.args[0]; }
+        return null;
+      }
+      // The name of a file this reads, which may not be there: an open to
+      // read, Python's or any other's, File.ReadAllText(name) and the rest.
+      function readsFile(x) {
+        x = stripParens(x);
+        if (!x) { return null; }
+        if (opensToRead(x)) { return x.args[0]; }
+        var opened = fileOpen(x);
+        if (opened) { return opened.mode === "r" || opened.mode === "r+" ? opened.name : null; }
+        if (allLinesOf(x)) { return allLinesOf(x); }
+        if (x.k !== "call" || x.builtin || !x.args.length) { return null; }
+        var p = bare(pathOf(x.fn) || "");
+        if (cs && p === "File.ReadAllText") { return x.args[0]; }
+        if (java && /^Files\.(readString|readAllBytes)$/.test(p)) { return fileNameOf(x.args[0]) || x.args[0]; }
+        if (js && /^(fs\.)?readFileSync$/.test(p) && (p !== "readFileSync" || !userFn(p))) { return x.args[0]; }
+        return null;
+      }
+      // Lines into a list: the list made empty, then each line of the file
+      // put on the end of it, its line break taken off.
+      function allLinesInto(target, name, ch, out, line) {
+        var each = fresh(ch, "line");
+        ch.meet(each, { set: true, loop: true, kind: "text" });
+        out.push({ k: "set", target: copyOf(target), value: { k: "list", items: [], line: line }, line: line });
+        if (stripParens(target).k === "name") { ch.meet(stripParens(target).v, { set: true, kind: "list<text>" }); }
+        var over = ready(name, ch, out).e;
+        out.push({ k: "foreach", v: each, over: builtinCall("open", [over, { k: "str", v: "r" }], line), line: line, body: [
+          { k: "call", e: builtinCall("append", [copyOf(target), lineOnly(nameNode(each, line), line)], line), line: line }] });
+      }
+      // What the file built-ins come to in these languages, where it is a
+      // value: a line read, a word, a question, a file read whole.
+      function fileCall(e, ch) {
+        e = stripParens(e);
+        if (py || !e) { return null; }
+        var line = e.line;
+        function B(fn, args) { return builtinCall(fn, args, line); }
+        function not(x) { return { k: "un", op: "!", a: x, line: line }; }
+        // C#'s reader.EndOfStream
+        if (e.k === "member" && cs && e.name === "EndOfStream" && fileVar(e.obj)) { return B("endOfFile", [e.obj]); }
+        var opened = fileOpen(e);
+        if (opened) { return openOf(opened, line); }
+        if (e.k === "new") {
+          var nm = fileNameOf(e);
+          return nm && nm !== e ? nm : null;
+        }
+        if (e.k !== "call" || e.builtin) { return null; }
+        var p = bare(pathOf(e.fn) || ""), a = e.args;
+        var dot = e.fn.k === "member" ? e.fn.name : null, self = dot ? e.fn.obj : null;
+        // the name a File holds, and whether it is there
+        if (java && dot && fileNameOf(self) && !a.length) {
+          if (/^(exists|isFile|canRead)$/.test(dot)) { return B("fileExists", [fileNameOf(self)]); }
+          if (/^(getName|getPath|toString)$/.test(dot)) { return fileNameOf(self); }
+        }
+        if (java && fileNameOf(e) && fileNameOf(e) !== e) { return fileNameOf(e); }
+        if (java && /^Files\.(exists|isRegularFile|isReadable)$/.test(p) && a.length >= 1) { return B("fileExists", [fileNameOf(a[0]) || a[0]]); }
+        if (java && /^Files\.(readString|readAllBytes)$/.test(p) && a.length === 1) { return B("read", [B("open", [fileNameOf(a[0]) || a[0], { k: "str", v: "r" }])]); }
+        if (java && p === "Files.writeString" && a.length >= 2) {
+          var app = /"APPEND"/.test(JSON.stringify(a.slice(2)));
+          return B("write", [B("open", [fileNameOf(a[0]) || a[0], { k: "str", v: app ? "a" : "w" }]), a[1]]);
+        }
+        if (cs && p === "File.Exists" && a.length === 1) { return B("fileExists", [a[0]]); }
+        if (cs && p === "File.ReadAllText" && a.length >= 1) { return B("read", [B("open", [a[0], { k: "str", v: "r" }])]); }
+        if (cs && /^File\.(WriteAllText|AppendAllText)$/.test(p) && a.length >= 2) {
+          return B("write", [B("open", [a[0], { k: "str", v: p === "File.WriteAllText" ? "w" : "a" }]), a[1]]);
+        }
+        // JavaScript's fs, or what was taken out of it: const { readFileSync } = require("fs")
+        var jsFs = js && /^(fs\.)?(readFileSync|writeFileSync|appendFileSync|existsSync)$/.test(p) &&
+                   (/^fs\./.test(p) || !userFn(p)) ? p.replace(/^fs\./, "") : "";
+        if (jsFs === "existsSync" && a.length === 1) { return B("fileExists", [a[0]]); }
+        if (jsFs === "readFileSync" && a.length >= 1) { return B("read", [B("open", [a[0], { k: "str", v: "r" }])]); }
+        if (/^(writeFileSync|appendFileSync)$/.test(jsFs) && a.length >= 2) {
+          return B("write", [B("open", [a[0], { k: "str", v: jsFs === "writeFileSync" ? "w" : "a" }]), a[1]]);
+        }
+        var held = dot ? fileVar(self) : null;
+        if (!held) { return null; }
+        if (/^(close|Close|Dispose)$/.test(dot) && !a.length) { return B("close", [self]); }
+        if (held.api === "words") {
+          if (/^hasNext(Line|Int|Double|Long|Float|Short|Byte|Boolean)?$/.test(dot) && !a.length) { return not(B("endOfFile", [self])); }
+          if (dot === "nextLine" && !a.length) { return lineOnly(B("readLine", [self]), line); }
+          if (dot === "next" && !a.length) { return B("readWord", [self]); }
+          if (/^next(Int|Long|Short|Byte)$/.test(dot) && !a.length) { return B("int", [B("readWord", [self])]); }
+          if (/^next(Double|Float)$/.test(dot) && !a.length) { return B("real", [B("readWord", [self])]); }
+          if (dot === "nextBoolean" && !a.length) {
+            return { k: "bin", op: "==", a: B("toLower", [B("readWord", [self])]), b: { k: "str", v: "true" }, line: line };
+          }
+        }
+        if (held.api === "nulls") {
+          if (/^(readLine|ReadLine)$/.test(dot) && !a.length) { return lineOnly(B("readLine", [self]), line); }
+          if (dot === "ReadToEnd" && !a.length) { return B("read", [self]); }
+          if (dot === "ready" && !a.length) { return not(B("endOfFile", [self])); }
+        }
+        if (held.api === "stream") {
+          if (dot === "eof" && !a.length) { return B("endOfFile", [self]); }
+          if (/^(good)$/.test(dot) && !a.length) { return not(B("endOfFile", [self])); }
+          if (/^(fail|bad)$/.test(dot) && !a.length) { return B("endOfFile", [self]); }
+          if (dot === "is_open" && !a.length) { return not({ k: "member", obj: self, name: "closed", line: line }); }
+        }
+        return null;
+      }
+      // Reading and writing these languages' files as statements -- a line
+      // printed into one, getline(in, s), in >> a >> b, out.close() --
+      // where they are done for what they do.  True where this was one.
+      function fileStatement(e, ch, out, line) {
+        e = stripParens(e);
+        if (py || !e || e.k !== "call" || e.builtin) { return false; }
+        var p = bare(pathOf(e.fn) || "");
+        var dot = e.fn.k === "member" ? e.fn.name : null, self = dot ? e.fn.obj : null;
+        function call(fn, args) {
+          var post = [];
+          args = args.map(function (x) { var r = ready(x, ch, out); post = post.concat(r.post); return r.e; });
+          out.push({ k: "call", e: builtinCall(fn, args, line), line: line });
+          lowerPost(post, ch, out);
+          return true;
+        }
+        // getline(in, s): a line of the file, its line break taken off
+        if (cpp && /^(std::)?getline$/.test(p) && e.args.length === 2 && fileVar(e.args[0])) {
+          assign(e.args[1], lineOnly(builtinCall("readLine", [e.args[0]], line), line), ch, out, line);
+          return true;
+        }
+        // File.WriteAllLines(name, lines), Files.write(path, lines): a line each
+        var whole = (cs && /^File\.(WriteAllLines|AppendAllLines)$/.test(p) && e.args.length === 2) ||
+                    (java && p === "Files.write" && e.args.length >= 2 && isListKind(kindOf(e.args[1], ch)));
+        if (whole) {
+          var into = nameNode(fresh(ch, "file"), line), item = fresh(ch, "item");
+          var app = p === "File.AppendAllLines" || /"APPEND"/.test(JSON.stringify(e.args.slice(2)));
+          assign(into, builtinCall("open", [java ? fileNameOf(e.args[0]) || e.args[0] : e.args[0], { k: "str", v: app ? "a" : "w" }], line), ch, out, line);
+          ch.meet(item, { set: true, loop: true });
+          out.push({ k: "foreach", v: item, over: ready(e.args[1], ch, out).e, line: line, body: [
+            { k: "call", e: builtinCall("writeLine", [copyOf(into), nameNode(item, line)], line), line: line }] });
+          out.push({ k: "call", e: builtinCall("close", [copyOf(into)], line), line: line });
+          return true;
+        }
+        var held = dot ? fileVar(self) : null;
+        if (!held) { return false; }
+        // in.open(name), out.open(name, ios::app)
+        if (cpp && dot === "open" && e.args.length >= 1) {
+          var ty = held.ty || "fstream";
+          assign(self, openOf({ name: fileNameOf(e.args[0]) || e.args[0], mode: streamMode(ty, e.args[1]) }, line), ch, out, line);
+          return true;
+        }
+        if (/^(flush|Flush)$/.test(dot) && !e.args.length) { return true; }
+        // a read done for what it reads past: in.nextLine() after in.nextInt()
+        if (/^(nextLine|readLine|ReadLine)$/.test(dot) && !e.args.length && held.api !== "out" && held.api !== "stream") {
+          return call("readLine", [self]);
+        }
+        if (/^next(Int|Double|Long|Float|Short|Byte|Boolean)?$/.test(dot) && !e.args.length && held.api === "words") {
+          return call("readWord", [self]);
+        }
+        if (held.api !== "out" && held.api !== "stream") { return false; }
+        // what is printed into a file: what printing it would show, there
+        var how = java ? { println: "System.out.println", print: "System.out.print", printf: "System.out.printf", format: "System.out.printf" }[dot]
+                : cs ? { WriteLine: "Console.WriteLine", Write: "Console.Write" }[dot] : null;
+        var said = null;
+        if (how) { said = displayOf(e, how, null); }
+        else if (java && /^(write|append)$/.test(dot) && e.args.length === 1) { said = { lines: lines(piecesOf(e.args[0])), open: true }; }
+        else if (java && dot === "newLine" && !e.args.length) { said = { lines: [[]], open: false }; }
+        if (!said) { return false; }
+        return call(said.open ? "write" : "writeLine", [self].concat(wroteParts(said)));
+      }
+      // A print's lines, as the pieces written into a file: a line break
+      // between each of them.
+      function wroteParts(said) {
+        var parts = [];
+        said.lines.forEach(function (g, li) {
+          if (li) { parts.push({ k: "str", v: "\n" }); }
+          g.forEach(function (x) { if (!(stripParens(x).k === "str" && stripParens(x).v === "")) { parts.push(x); } });
+        });
+        if (said.open && !parts.length) { parts.push({ k: "str", v: "" }); }
+        return parts;
+      }
+      // in >> a >> b on a file: a word each, made a number where the name
+      // holds one -- and out << a << endl, written into it
+      function fileStreamed(e, chain, at, ch, out, line) {
+        if (!cpp || !fileVar(at)) { return false; }
+        if (e.op === ">>") {
+          chain.forEach(function (t) {
+            var tk = kindNow(t), word = builtinCall("readWord", [copyOf(at)], line);
+            assign(t, tk === "int" ? builtinCall("int", [word], line) : tk === "real" ? builtinCall("real", [word], line) : word, ch, out, line);
+          });
+          return true;
+        }
+        var coutWas = coutSays;
+        coutSays = fileSays[stripParens(at).v] = fileSays[stripParens(at).v] ||
+                   { fixed: false, places: null, width: null, align: ">", fill: " ", words: false };
+        var said = streamOut(chain, line);
+        coutSays = coutWas;
+        var parts = wroteParts(said), post = [];
+        if (!said.open || parts.length) {
+          var args = [copyOf(at)].concat(parts).map(function (x) { var r = ready(x, ch, out); post = post.concat(r.post); return r.e; });
+          out.push({ k: "call", e: builtinCall(said.open ? "write" : "writeLine", args, line), line: line });
+          lowerPost(post, ch, out);
+        }
+        return true;
+      }
+      // The ways a loop reads a file to its end, asked as endOfFile():
+      //   while ((line = in.readLine()) != null)   Java, C#
+      //   while (getline(in, line)), while (in >> x >> y)   C++
+      // what the test read, read first thing each time round.
+      function fileLoop(st) {
+        var cond = stripParens(st.cond), line = st.line, f = null, first = null;
+        function nulled(c) {
+          if (!c || c.k !== "bin" || c.op !== "!=") { return null; }
+          var x = stripParens(c.a), y = stripParens(c.b);
+          if (x.k === "null") { var sw0 = x; x = y; y = sw0; }
+          return y.k === "null" && x.k === "assignx" && x.op === "=" ? x : null;
+        }
+        var got = nulled(cond), read = got ? stripParens(got.value) : null;
+        if (read && read.k === "call" && read.fn.k === "member" && /^(readLine|ReadLine)$/.test(read.fn.name) &&
+            !read.args.length && fileVar(read.fn.obj) && fileVar(read.fn.obj).api === "nulls") {
+          f = read.fn.obj;
+          first = { k: "assign", target: got.target, value: read, line: line };
+        }
+        if (cpp && cond.k === "call" && /^(std::)?getline$/.test(pathOf(cond.fn) || "") && cond.args.length === 2 && fileVar(cond.args[0])) {
+          f = cond.args[0];
+          first = { k: "expr", e: cond, line: line };
+        }
+        if (cpp && cond.k === "bin" && cond.op === ">>") {
+          var head = cond;
+          while (head.k === "bin" && head.op === ">>") { head = stripParens(head.a); }
+          if (fileVar(head)) { f = head; first = { k: "expr", e: cond, line: line }; }
+        }
+        if (!f) { return null; }
+        return Object.assign({}, st, { cond: { k: "un", op: "!", a: builtinCall("endOfFile", [copyOf(f)], line), line: line },
+                                       body: [first].concat(st.body) });
+      }
+      // String line = in.readLine(); while (line != null) { ...; line = in.readLine(); }
+      // -- the same loop, written with its reading done twice
+      function fileReadTwice(list, i) {
+        var st = list[i], nx = list[i + 1];
+        if (!st || !nx || nx.k !== "while" || !nx.body.length) { return null; }
+        function readOf(s) {
+          var target = null, value = null;
+          if (s.k === "decl" && s.names.length === 1) { target = s.names[0].name; value = s.names[0].value; }
+          else if (s.k === "assign" && stripParens(s.target).k === "name") { target = stripParens(s.target).v; value = s.value; }
+          else if (s.k === "expr" && stripParens(s.e).k === "assignx" && stripParens(s.e).op === "=" &&
+                   stripParens(stripParens(s.e).target).k === "name") {
+            target = stripParens(stripParens(s.e).target).v; value = stripParens(s.e).value;
+          }
+          var v = stripParens(value);
+          if (!target || !v || v.k !== "call" || v.fn.k === "name" || !/^(readLine|ReadLine)$/.test(v.fn.name || "") || v.args.length) { return null; }
+          var f = fileVar(v.fn.obj);
+          return f && f.api === "nulls" ? { target: target, f: pathOf(v.fn.obj), value: v } : null;
+        }
+        var before = readOf(st), after = readOf(nx.body[nx.body.length - 1]);
+        var c = stripParens(nx.cond), x = c && c.k === "bin" && c.op === "!=" ? stripParens(c.a) : null, y = x ? stripParens(c.b) : null;
+        if (x && x.k === "null") { var sw0 = x; x = y; y = sw0; }
+        if (!before || !after || before.target !== after.target || before.f !== after.f ||
+            !x || x.k !== "name" || x.v !== before.target || !y || y.k !== "null") { return null; }
+        var line = nx.line;
+        var kept = st.k === "decl" ? [Object.assign({}, st, { names: [Object.assign({}, st.names[0], { value: null })] })] : [];
+        var loop = Object.assign({}, nx, {
+          cond: { k: "un", op: "!", a: builtinCall("endOfFile", [copyOf(before.value.fn.obj)], line), line: line },
+          body: [{ k: "assign", target: nameNode(before.target, line), value: before.value, line: line }].concat(nx.body.slice(0, -1)) });
+        return list.slice(0, i).concat(kept, [loop], list.slice(i + 2));
+      }
+      // ifstream in(name); if (!in) { ...; return 1; } -- C++ asks whether
+      // the file opened after opening it; the runner's open() stops where
+      // there is no such file, so the question is asked first: fileExists().
+      function fileChecked(list, i) {
+        var st = list[i], nx = list[i + 1];
+        if (!cpp || !st || !nx || nx.k !== "if") { return null; }
+        var f = null, opened = null;
+        if (st.k === "decl" && st.names.length === 1 && fileOpen(st.names[0].value)) {
+          f = st.names[0].name; opened = fileOpen(st.names[0].value);
+        }
+        var ex = st.k === "expr" ? stripParens(st.e) : null;
+        if (ex && ex.k === "call" && ex.fn.k === "member" && ex.fn.name === "open" && ex.args.length >= 1 && fileVar(ex.fn.obj)) {
+          f = pathOf(ex.fn.obj);
+          opened = { name: fileNameOf(ex.args[0]) || ex.args[0], mode: streamMode(fileVar(ex.fn.obj).ty, ex.args[1]) };
+        }
+        if (!f) { return null; }
+        // !in, in.fail(), !in.is_open(): it did not open -- in, in.is_open(), in.good(): it did
+        function asks(c) {
+          c = stripParens(c);
+          var neg = false;
+          if (c.k === "un" && c.op === "!") { neg = true; c = stripParens(c.a); }
+          var ok = null;
+          if (c.k === "name" && c.v === f) { ok = true; }
+          if (c.k === "call" && c.fn.k === "member" && pathOf(c.fn.obj) === f && !c.args.length) {
+            if (/^(is_open|good)$/.test(c.fn.name)) { ok = true; }
+            if (/^(fail|bad)$/.test(c.fn.name)) { ok = false; }
+          }
+          return ok === null ? null : neg ? !ok : ok;
+        }
+        var ok = asks(nx.cond);
+        if (ok === null) { return null; }
+        var yesDo = ok ? nx.then : (nx.orelse || []), noDo = ok ? (nx.orelse || []) : nx.then;
+        var line = nx.line, rest = list.slice(i + 2);
+        // a file opened to be written is always there to write
+        if (opened.mode !== "r" && opened.mode !== "r+") { return list.slice(0, i).concat([st], yesDo, rest); }
+        var there = builtinCall("fileExists", [opened.name], line);
+        var last = noDo[noDo.length - 1], leaves = last && (/^(return|exit|throw|break|continue)$/.test(last.k) ||
+                   (last.k === "expr" && stripParens(last.e).k === "call" && /^(exit|std::exit|abort)$/.test(pathOf(stripParens(last.e).fn) || "")));
+        if (!yesDo.length && leaves) {
+          return list.slice(0, i).concat([{ k: "if", cond: { k: "un", op: "!", a: there, line: line }, then: noDo, orelse: [], line: line }, st], rest);
+        }
+        return list.slice(0, i).concat([{ k: "if", cond: there, then: [st].concat(yesDo), orelse: noDo, line: line }], rest);
+      }
       // /^[0-9]+$/.test(s), s.matches("[A-Za-z]+"), re.fullmatch(r"\s+", s):
       // a pattern that asks what kind of letters s is made of, in the
       // chart's words -- isDigit(s), isAlpha(s), isSpace(s) -- and one that
@@ -13231,7 +13833,18 @@
           case "is_number": case "isNumber": case "IsNumber": return B("isNumber", [a[0]]);
           case "is_integer": case "isInteger": case "IsInteger": return B("isInteger", [a[0]]);
           case "currency_format": case "currencyFormat": case "CurrencyFormat": return B("currencyFormat", [a[0]]);
-          case "end_of_file": return B("endOfFile", [a[0]]);
+          case "end_of_file": case "endOfFile": case "EndOfFile": return B("endOfFile", [a[0]]);
+          // the page's TextFile, and what is done to one (18-code.js)
+          case "openFile": case "OpenFile": return B("open", a);
+          case "readLine": case "ReadLine": return B("readLine", [a[0]]);
+          case "readLines": case "ReadLines": return B("readLines", [a[0]]);
+          case "readWord": case "ReadWord": case "read_word": return B("readWord", [a[0]]);
+          case "readText": case "ReadText": return B("read", a.slice(0, 2));
+          // what is written, in the pieces a Display would have: "x " + true is "x True"
+          case "writeText": case "WriteText": return B("write", a.slice(0, 1).concat(a[1] ? piecesOf(a[1]) : []));
+          case "writeLine": case "WriteLine": return B("writeLine", a.slice(0, 1).concat(a[1] ? piecesOf(a[1]) : []));
+          case "closeFile": case "CloseFile": return B("close", [a[0]]);
+          case "fileExists": case "FileExists": return B("fileExists", [a[0]]);
           case "extendWith": return B("extend", a);
           case "countText": return B("count", a);
           case "sliceOf": return B("slice", a);
@@ -13472,6 +14085,8 @@
         if (target.k === "deref" || target.k === "addr") { target = stripParens(target.e); }
         var v = stripParens(value);
         if (!v) { return; }
+        // string[] lines = File.ReadAllLines(name): the lines, one at a time
+        if (allLinesOf(v) && target.k === "name") { allLinesInto(target, allLinesOf(v), ch, out, line); return; }
         var asked = inputOf(v);
         if (asked) {
           if (target.k === "name") { ch.meet(target.v, { kind: asked.kind, set: true }); }
@@ -13881,7 +14496,7 @@
             wrap({ Whole: "int", Real: "real", Text: "text", Flag: "bool" }[p.slice(3)]);
             seen = true; break;
           }
-          if (dot && /^next(Int|Double|Line|Float|Long|Boolean)?$|^readLine$/.test(dot) &&
+          if (dot && /^next(Int|Double|Line|Float|Long|Boolean)?$|^readLine$/.test(dot) && !fileVars[obj] &&
               (devices[obj] === "keys" || /^(sc|scan|scanner|input|in|keyboard|reader|br|kb|stdin|console)$/i.test(obj || ""))) {
             var how = /Int|Long/.test(dot) ? "int" : /Double|Float/.test(dot) ? "real"
                     : /Boolean/.test(dot) ? "bool" : null;
@@ -14026,6 +14641,7 @@
           var chain = [], at = e;
           while (at.k === "bin" && at.op === e.op) { chain.unshift(at.b); at = stripParens(at.a); }
           var head = bare(pathOf(at));
+          if (fileStreamed(e, chain, at, ch, out, line)) { return; }
           if (e.op === "<<" && /^(cout|cerr|clog)$/.test(head)) {
             emitPrint(streamOut(chain, line), st, ch, out, line);
             return;
@@ -14108,8 +14724,9 @@
           }), ch));
           return;
         }
-        // printing -- or printing into a file, print(x, file=f)
+        // printing -- or printing into a file, print(x, file=f), out.println(x)
         if (py && p === "print" && printedInto(e, ch, out, line)) { return; }
+        if (fileStatement(e, ch, out, line)) { return; }
         var said = displayOf(e, p, dot);
         if (said) { emitPrint(said, st, ch, out, line); return; }
         // getline(cin, s)
@@ -16149,6 +16766,8 @@
       function libCall(e, ch) {
         e = stripParens(e);
         if (!e) { return null; }
+        var filed = fileCall(e, ch);
+        if (filed) { return filed; }
         if (e.k === "new") { return newOf(e, ch); }
         if (e.k === "newarr") {
           if (e.init) { return e.init; }
@@ -16464,7 +17083,7 @@
         if (pyOpen(e)) { return B("open", openMode(e) ? [a[0], openMode(e)] : [a[0]]); }
         if (py && /^(os\.path\.exists|os\.path\.isfile)$/.test(p) && a.length === 1) { return B("fileExists", [a[0]]); }
         if (py && dot && self && !/^(sys\.)?(stdin|stdout|stderr)$/.test(pathOf(self) || "") &&
-            !/^(text|list|set|map|int|real|bool)\b/.test(sk || "")) {
+            (fileVar(self) || !/^(text|list|set|map|int|real|bool)\b/.test(sk || ""))) {
           if (dot === "readline" && !a.length) { return B("readLine", [self]); }
           if (dot === "readlines" && !a.length) { return B("readLines", [self]); }
           if (dot === "read" && a.length <= 1) { return B("read", [self].concat(a)); }

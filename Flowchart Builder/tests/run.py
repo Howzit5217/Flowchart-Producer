@@ -2406,6 +2406,14 @@ def shelf_run(cases, folder, name):
         return json.load(f)
 
 
+def files_beside(code):
+    """The tabs a program read in came with, as the runner is handed them to
+    open: by the names on them, and one with no name as file<n>.txt, which
+    is what the Code tab calls it."""
+    return [{"name": n or "file%d.txt" % (k + 1), "text": t}
+            for k, (n, t) in enumerate(code)] if isinstance(code, list) else []
+
+
 def read_code_in(reads, folder):
     """from-code.js over [{lang, code}]: the pseudocode each came to, or why not."""
     asked = os.path.join(folder, "reads-asked.json")
@@ -2543,9 +2551,7 @@ def _():
             # and the files beside it, there to be opened by the names on their
             # tabs -- one with none is file2.txt, as the Code tab calls it
             cases.append({"name": name, "typed": typed, "title": "x",
-                          "ast": read_as_data(got["text"]),
-                          "files": [{"name": n or "file%d.txt" % (k + 1), "text": t}
-                                    for k, (n, t) in enumerate(code)] if isinstance(code, list) else []})
+                          "ast": read_as_data(got["text"]), "files": files_beside(code)})
             kept.append((name, lang, want))
         for (name, lang, want), result in zip(kept, shelf_run(cases, folder, "coded")):
             if result["said"] != want or result["faults"]:
@@ -2730,14 +2736,16 @@ def _():
     """The other half of the Code tab: what tests/coded.py and
     tests/coded_more.py, coded_even_more.py and coded_fourth.py read in -- lists, tables, classes and all -- written
     out again in every language by Translate, really run, and compared with
-    what the runner printed."""
+    what the runner printed.  And the programs that open files
+    (coded_full.FILES), run with the files they opened beside them."""
     if not node_there():
         return None, "node is not installed -- skipped"
     import coded
     import coded_more
     import coded_even_more
     import coded_fourth
-    everything = coded.CODED + coded_more.CODED + coded_even_more.CODED + coded_fourth.CODED
+    import coded_full
+    everything = coded.CODED + coded_more.CODED + coded_even_more.CODED + coded_fourth.CODED + coded_full.FILES
     folder = tempfile.mkdtemp(prefix="_out-translated-", dir=HERE)
     try:
         back = read_code_in([{"files": [{"name": n, "text": t} for n, t in code]}
@@ -2749,7 +2757,7 @@ def _():
                 cases.append({"name": name + ", from " + lang, "typed": typed,
                               "title": "Translated %02d" % len(cases),
                               "ast": read_as_data(got["text"]), "from": name,
-                              "tuples": lang == "python"})
+                              "tuples": lang == "python", "files": files_beside(code)})
         results = shelf_run(cases, folder, "translated")
         wrong, tally = written.marked(cases, results, folder)
     except RuntimeError as e:
@@ -2778,14 +2786,16 @@ def _():
     languages by Translate -- a file for the whole and a file each --
     and that code read in once more.  It has to run as the first reading
     did: the page's own helpers (shown, sortedList, popAt, C++'s Value)
-    read as what they stand for, not as part of the program."""
+    read as what they stand for, not as part of the program -- the
+    TextFile a program that opens files is written with among them."""
     if not node_there():
         return None, "node is not installed -- skipped"
     import coded
     import coded_more
     import coded_even_more
     import coded_fourth
-    everything = coded.CODED + coded_more.CODED + coded_even_more.CODED + coded_fourth.CODED
+    import coded_full
+    everything = coded.CODED + coded_more.CODED + coded_even_more.CODED + coded_fourth.CODED + coded_full.FILES
     folder = tempfile.mkdtemp(prefix="_out-roundtrip-", dir=HERE)
     try:
         back = read_code_in([{"files": [{"name": n, "text": t} for n, t in code]}
@@ -2795,7 +2805,7 @@ def _():
         for (name, lang, code, typed, want), got in zip(everything, back):
             if "error" not in got:
                 cases.append({"name": name, "typed": typed, "title": "Round %02d" % len(cases),
-                              "ast": read_as_data(got["text"])})
+                              "ast": read_as_data(got["text"]), "files": files_beside(code)})
                 whose.append((name, lang, typed, got["text"]))
         first = shelf_run(cases, folder, "round-first")
         reads, meta = [], []
@@ -2816,8 +2826,13 @@ def _():
             if "error" in got:
                 wrong.append("%s, as %s (%s): %s (line %s)" % (name, lang, how, got["error"], got.get("line")))
                 continue
-            second.append({"name": name, "typed": whose[n][2], "title": "x", "ast": read_as_data(got["text"])})
+            second.append({"name": name, "typed": whose[n][2], "title": "x", "ast": read_as_data(got["text"]),
+                           "files": cases[n]["files"]})
             sent.append((n, lang, how))
+            # and nothing in it called something that can't be run: the page's own helpers known
+            for said in got.get("notes") or []:
+                if any(name == c[0] for c in coded_full.FILES):
+                    wrong.append("%s, as %s (%s): noted %r" % (name, lang, how, said.get("text") if isinstance(said, dict) else said))
         results = shelf_run(second, folder, "round-second")
         def plain(lines, lang, source):
             out = []

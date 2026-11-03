@@ -2363,12 +2363,20 @@ def marked(cases, results, folder):
     # what each came to is then marked in order, as it always was.
     import concurrent.futures
 
+    def beside(where, case):
+        """The files the program opens, in the folder it is run in, by the
+        names on their tabs -- what the runner opened them from."""
+        for one in case.get("files") or []:
+            with io.open(os.path.join(where, one["name"]), "w", encoding="utf-8", newline="") as f:
+                f.write(one["text"])
+
     def both(number, case, result, lang):
         made = result["code"][lang]
         if "error" in made:
             return None, None
         where = os.path.join(folder, "%02d-%s" % (number, lang))
         os.makedirs(where)
+        beside(where, case)
         one = carried_out(lang, made, case["typed"], where, have)
         # And the same program cut into a file for each of its charts.
         # One chart comes back as the one file that has just been run, so
@@ -2379,6 +2387,7 @@ def marked(cases, results, folder):
             return one, None
         apart = os.path.join(folder, "%02d-%s-apart" % (number, lang))
         os.makedirs(apart)
+        beside(apart, case)
         return one, spread_out(lang, spread, case["typed"], apart, have)
 
     jobs = []

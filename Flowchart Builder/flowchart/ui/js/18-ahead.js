@@ -222,7 +222,7 @@
   function elemOf(k) {                   // what taking one out of it gives
     if (isListKind(k)) { return k.slice(5); }
     if (isTableKind(k)) { return tableValue(k); }
-    return k === "text" || k === "any" ? k : "";
+    return k === "text" || k === "any" ? k : k === "file" ? "text" : "";
   }
   // What a name holds when it is given both of these, one time and another.
   // "none" is the empty "" a program writes for nothing-yet -- Python's
@@ -239,6 +239,8 @@
       return "table:" + joinKinds(tableKey(a), tableKey(b)) + ":" + joinKinds(tableValue(a), tableValue(b));
     }
     if (isRecKind(a) && isRecKind(b)) { return "rec:"; }
+    // f.closed says only that f holds something with fields: a file does
+    if ((a === "file" && b === "rec:") || (b === "file" && a === "rec:")) { return "file"; }
     return "any";
   }
   // Whatever inside it nobody ever said, a number.
@@ -321,7 +323,8 @@
       case "isinteger": return "bool";
       case "currencyformat": return "text";
       // a file (15-sums.js), and what is read from one
-      case "readline": case "read": return "text";
+      case "open": return "file";
+      case "readline": case "read": case "readword": return "text";
       case "readlines": return "list:text";
       case "fileexists": case "endoffile": case "eof": return "bool";
       case "write": case "writeline": case "close": return "";
@@ -476,6 +479,8 @@
       var holder = kindIn(node.field, scope, prog);
       if (/^(length|size|count)$/i.test(node.name) && (isListKind(holder) || holder === "text")) { return "int"; }
       if (isTableKind(holder)) { return tableValue(holder); }
+      // a file's name and mode, and whether it is closed (15-sums.js)
+      if (holder === "file") { return lowered(node.name) === "closed" ? "bool" : "text"; }
       return isRecKind(holder) ? fieldKind(prog, holder, lowered(node.name)) : "";
     }
     if (node.name) {

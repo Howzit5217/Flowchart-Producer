@@ -1137,7 +1137,7 @@
         }
         if (isListKind(kind) || isTableKind(kind) || isRecKind(kind)) { return L.emptyOf(kind, w); }
         if (kind === "any" && L.anyZero) { return L.anyZero; }
-        if (kind === "fn" || kind === "any") { return L.nullValue || (L.yes === "True" ? "None" : "null"); }
+        if (kind === "fn" || kind === "any" || kind === "file") { return L.nullValue || (L.yes === "True" ? "None" : "null"); }
         return kind === "text" ? '""' : kind === "bool" ? L.no : "0";
       },
       // ---- lists, tables and records -------------------------------------
@@ -1812,7 +1812,7 @@
     // back as its own run of lines, written in w.aside so that none of them
     // lands in `out` -- which is the one file's, and is still there to fall
     // back on if the split turns out to be a split into one.
-    if (apart && L.apart && prog.mods.length && !Object.keys(recordsIn(prog)).length) {
+    if (apart && L.apart && prog.mods.length && !Object.keys(recordsIn(prog)).length && !(L.kinds && opensFiles(prog))) {
       // What each file is called: the module's own name, spelled the way
       // this language spells the file that holds one -- and never the same
       // as another, because two names that differ only in their capitals

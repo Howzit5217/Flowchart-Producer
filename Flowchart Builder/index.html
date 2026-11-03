@@ -21274,6 +21274,13 @@ window.addEventListener("load", function () {
         return n === undefined || n === "" || num(n) < 0 ? text.length : Math.min(text.length, at + Math.trunc(num(n)));
       }, "read");
     },
+    readword: function (f) {
+      return fileTake(f, function (text, at) {
+        while (at < text.length && /\s/.test(text.charAt(at))) { at++; }
+        while (at < text.length && !/\s/.test(text.charAt(at))) { at++; }
+        return /^\s*$/.test(text.slice(at)) ? text.length : at;
+      }, "readWord").trim();
+    },
     endoffile: function (f) {
       var held = fileArg(f, "endOfFile", false);
       return num(fileField(f, "at")) >= held.text.length;
@@ -22049,7 +22056,7 @@ window.addEventListener("load", function () {
   function elemOf(k) {                   // what taking one out of it gives
     if (isListKind(k)) { return k.slice(5); }
     if (isTableKind(k)) { return tableValue(k); }
-    return k === "text" || k === "any" ? k : "";
+    return k === "text" || k === "any" ? k : k === "file" ? "text" : "";
   }
   function joinKinds(a, b) {
     if (!a || a === "none") { return b || a || ""; }
@@ -22061,6 +22068,7 @@ window.addEventListener("load", function () {
       return "table:" + joinKinds(tableKey(a), tableKey(b)) + ":" + joinKinds(tableValue(a), tableValue(b));
     }
     if (isRecKind(a) && isRecKind(b)) { return "rec:"; }
+    if ((a === "file" && b === "rec:") || (b === "file" && a === "rec:")) { return "file"; }
     return "any";
   }
   function settled(k, keepNone) {
@@ -22137,7 +22145,8 @@ window.addEventListener("load", function () {
         return "";
       case "isinteger": return "bool";
       case "currencyformat": return "text";
-      case "readline": case "read": return "text";
+      case "open": return "file";
+      case "readline": case "read": case "readword": return "text";
       case "readlines": return "list:text";
       case "fileexists": case "endoffile": case "eof": return "bool";
       case "write": case "writeline": case "close": return "";
@@ -22280,6 +22289,7 @@ window.addEventListener("load", function () {
       var holder = kindIn(node.field, scope, prog);
       if (/^(length|size|count)$/i.test(node.name) && (isListKind(holder) || holder === "text")) { return "int"; }
       if (isTableKind(holder)) { return tableValue(holder); }
+      if (holder === "file") { return lowered(node.name) === "closed" ? "bool" : "text"; }
       return isRecKind(holder) ? fieldKind(prog, holder, lowered(node.name)) : "";
     }
     if (node.name) {
@@ -25383,6 +25393,7 @@ window.addEventListener("load", function () {
         var over = tree(item.over), kind = w.kind(over), src = w.code(item.over);
         var entry = w.entry(item["var"]);
         if (isTableKind(kind)) { src = held(src) + ".keys()"; }
+        else if (kind === "file") { src = w.L.lists.readlines([src], [kind], w); }
         w.line(deep, "for (" + (entry && !w.ownLoop(item, entry) ? "" : loopSetsItsName(item) ? "let " : "const ") +
                w.named(item["var"]) + " of " + src + ") {");
         w.block(item.body, deep + 1);
@@ -25555,7 +25566,9 @@ window.addEventListener("load", function () {
                 "  if (v instanceof Map) {",
                 "    return \"{\" + [...v].map(([k, x]) => shown(k, true) + \": \" + shown(x, true)).join(\", \") + \"}\";",
                 "  }",
-                "  if (typeof v === \"string\") { return inside ? \"'\" + v + \"'\" : v; }",
+                "  if (typeof v === \"string\") {",
+                "    return inside ? \"'\" + v.replace(/\\n/g, \"\\\\n\").replace(/\\r/g, \"\\\\r\").replace(/\\t/g, \"\\\\t\") + \"'\" : v;",
+                "  }",
                 "  if (typeof v === \"boolean\") { return v ? \"True\" : \"False\"; }",
                 "  if (v && typeof v === \"object\") {",
                 "    return v.constructor.name + \"(\" + Object.entries(v).map(([k, x]) => k + \"=\" + shown(x, true)).join(\", \") + \")\";",
@@ -25671,6 +25684,7 @@ window.addEventListener("load", function () {
       var over = tree(item.over), kind = w.kind(over), src = w.code(item.over);
       var entry = w.entry(item["var"]), elem = kind === "text" ? "text" : isTableKind(kind) ? tableKey(kind) : elemOf(kind);
       if (kind === "text") { w.need("chars"); src = "chars(" + src + ")"; }
+      else if (kind === "file") { src = w.L.lists.readlines([src], [kind], w); }
       else if (kind === "any") { src = "(List<?>) " + held(src); }
       else if (isTableKind(kind)) { src = held(src) + ".keySet()"; }
       var type = w.elemType(item.over, elem);
@@ -25929,7 +25943,10 @@ window.addEventListener("load", function () {
               "            }",
               "            return out.append(\"}\").toString();",
               "        }",
-              "        if (v instanceof String) { return inside ? \"'\" + v + \"'\" : (String) v; }",
+              "        if (v instanceof String && inside) {",
+              "            return \"'\" + ((String) v).replace(\"\\n\", \"\\\\n\").replace(\"\\r\", \"\\\\r\").replace(\"\\t\", \"\\\\t\") + \"'\";",
+              "        }",
+              "        if (v instanceof String) { return (String) v; }",
               "        if (v instanceof Boolean) { return (Boolean) v ? \"True\" : \"False\"; }",
               "        if (v instanceof Double && (Double) v == Math.rint((Double) v) && !((Double) v).isInfinite()) {",
               "            return String.valueOf(((Double) v).longValue());",
@@ -26099,6 +26116,7 @@ window.addEventListener("load", function () {
       var over = tree(item.over), kind = w.kind(over), src = w.code(item.over);
       var entry = w.entry(item["var"]), elem = kind === "text" ? "text" : isTableKind(kind) ? tableKey(kind) : elemOf(kind);
       if (kind === "text") { src = held(src) + ".Select(c_ => c_.ToString())"; }
+      else if (kind === "file") { src = w.L.lists.readlines([src], [kind], w); }
       else if (isTableKind(kind)) { src = held(src) + ".Keys.ToList()"; }
       var type = w.elemType(item.over, elem);
       if (entry && !w.ownLoop(item, entry)) {
@@ -26317,7 +26335,10 @@ window.addEventListener("load", function () {
     helpers: {
       shown: ["    // A list, a table or a record, the way the chart shows one: ['a', 1].",
               "    public static string Shown(object v, bool inside = false) {",
-              "        if (v is string) { return inside ? \"'\" + v + \"'\" : (string)v; }",
+              "        if (v is string && inside) {",
+              "            return \"'\" + ((string)v).Replace(\"\\n\", \"\\\\n\").Replace(\"\\r\", \"\\\\r\").Replace(\"\\t\", \"\\\\t\") + \"'\";",
+              "        }",
+              "        if (v is string) { return (string)v; }",
               "        if (v is bool) { return (bool)v ? \"True\" : \"False\"; }",
               "        if (v is System.Collections.IDictionary) {",
               "            var parts = new List<string>();",
@@ -26454,6 +26475,7 @@ window.addEventListener("load", function () {
       var over = tree(item.over), kind = w.kind(over), src = w.code(item.over);
       var entry = w.entry(item["var"]), elem = kind === "text" ? "text" : isTableKind(kind) ? tableKey(kind) : kind === "any" ? "any" : elemOf(kind);
       if (kind === "text") { w.need("chars"); src = "chars(" + src + ")"; }
+      else if (kind === "file") { src = w.L.lists.readlines([src], [kind], w); }
       else if (isTableKind(kind)) { w.need("keysOf"); src = "keysOf(" + src + ")"; }
       var type = w.elemType(item.over, elem || "real");
       if (entry && !w.ownLoop(item, entry)) {
@@ -26688,7 +26710,13 @@ window.addEventListener("load", function () {
       shown: { wants: ["vector", "map", "ostream"], lines: [
                "template <typename T> std::ostream& operator<<(std::ostream& out, const std::vector<T>& items);",
                "template <typename K, typename V> std::ostream& operator<<(std::ostream& out, const Table<K, V>& table);",
-               "static void shownIn(std::ostream& out, const std::string& s) { out << \"'\" << s << \"'\"; }",
+               "static void shownIn(std::ostream& out, const std::string& s) {",
+               "    out << \"'\";",
+               "    for (char c : s) {",
+               "        if (c == '\\n') { out << \"\\\\n\"; } else if (c == '\\r') { out << \"\\\\r\"; } else if (c == '\\t') { out << \"\\\\t\"; } else { out << c; }",
+               "    }",
+               "    out << \"'\";",
+               "}",
                "static void shownIn(std::ostream& out, bool b) { out << (b ? \"True\" : \"False\"); }",
                "template <typename T> static void shownIn(std::ostream& out, const T& v) { out << v; }",
                "template <typename T> std::ostream& operator<<(std::ostream& out, const std::vector<T>& items) {",
@@ -27789,7 +27817,386 @@ window.addEventListener("load", function () {
       "    more = f.read(1)",
       "    f.seek(here)",
       "    return more == \"\""];
+    py.readword = function (a, k, w) { w.need("readWord"); return "read_word(" + a[0] + ")"; };
+    LIST_WORK.python.helpers.readWord = [
+      "# The next word in a file, the spaces before it skipped; \"\" at the end.",
+      "def read_word(f):",
+      "    word = \"\"",
+      "    letter = f.read(1)",
+      "    while letter.isspace():",
+      "        letter = f.read(1)",
+      "    while letter != \"\" and not letter.isspace():",
+      "        word += letter",
+      "        here = f.tell()",
+      "        letter = f.read(1)",
+      "    if letter != \"\" and f.read().strip() != \"\":",
+      "        f.seek(here)",
+      "    return word"];
   })();
+
+  (function () {
+    var NAMES = {
+      java: { open: "openFile", readline: "readLine", readlines: "readLines", read: "readText", readword: "readWord",
+              endoffile: "endOfFile", write: "writeText", writeline: "writeLine", close: "closeFile", fileexists: "fileExists" },
+      csharp: { open: "OpenFile", readline: "ReadLine", readlines: "ReadLines", read: "ReadText", readword: "ReadWord",
+                endoffile: "EndOfFile", write: "WriteText", writeline: "WriteLine", close: "CloseFile", fileexists: "FileExists" }
+    };
+    NAMES.cpp = NAMES.javascript = NAMES.java;
+    var LEANS = { readlines: ["readline"], writeline: ["write"] };
+    function needed(w, op) {
+      w.need("textFile");
+      (LEANS[op] || []).concat([op]).forEach(function (one) { w.need("file_" + one); });
+    }
+    function writtenWords(a, k, w) {
+      var L = w.L;
+      var bits = a.map(function (code, i) {
+        var kind = k[i] || "", one = { code: code, kind: kind, loose: !R_SIMPLE.test(code) && !postfixOnly(code), cash: false };
+        if ((compoundKind(kind) || kind === "any") && L.shown) { one.code = L.shown(one.code, w); one.kind = "text"; one.loose = false; }
+        if (kind === "bool" && L.flagText) { one.code = L.flagText(one.code); one.kind = "text"; one.loose = false; }
+        return one;
+      });
+      if (!bits.length) { return '""'; }
+      if (L !== LANGS.cpp) { return L.join(bits, w); }
+      return bits.map(function (bit, i) {
+        var code = bit.kind === "text" ? bit.code
+                 : bit.kind === "real" ? (w.need("realText"), "realText(" + bit.code + ")")
+                 : bit.kind === "int" ? "std::to_string(" + bit.code + ")"
+                 : (w.need("textOf"), "textOf(" + bit.code + ")");
+        return i === 0 && bit.kind === "text" && !/^std::|^[A-Za-z_]\w*$/.test(code) ? "std::string(" + code + ")" : code;
+      }).join(" + ");
+    }
+    Object.keys(NAMES).forEach(function (code) {
+      var to = LIST_WORK[code].lists, called = NAMES[code];
+      function plain(op) {
+        to[op] = function (a, k, w) { needed(w, op); return called[op] + "(" + a.join(", ") + ")"; };
+      }
+      ["readline", "readlines", "readword", "endoffile", "close", "fileexists"].forEach(plain);
+      to.eof = to.endoffile;
+      to.open = function (a, k, w) { needed(w, "open"); return called.open + "(" + a[0] + ", " + (a[1] || '"r"') + ")"; };
+      to.read = function (a, k, w) {
+        needed(w, "read");
+        if (a.length < 2) { return called.read + "(" + a[0] + ")"; }
+        return called.read + "(" + a[0] + ", " + (k[1] === "int" ? a[1] : (code === "javascript" ? "Math.trunc(" + a[1] + ")" : "(int)" + held(a[1]))) + ")";
+      };
+      to.write = function (a, k, w) { needed(w, "write"); return called.write + "(" + a[0] + ", " + writtenWords(a.slice(1), k.slice(1), w) + ")"; };
+      to.writeline = function (a, k, w) {
+        needed(w, "writeline");
+        return called.writeline + "(" + a[0] + (a.length > 1 ? ", " + writtenWords(a.slice(1), k.slice(1), w) : "") + ")";
+      };
+    });
+    LANGS.java.kinds.file = "TextFile";
+    LANGS.csharp.kinds.file = "TextFile";
+    LANGS.cpp.kinds.file = "TextFile*";
+
+    var J = LIST_WORK.java.helpers;
+    J.textFile = [
+      "    // A file opened by its name, the way the chart opens one: \"r\" to read",
+      "    // it, \"w\" to write it from empty, \"a\" to add on to the end of it.",
+      "    // What is read keeps its line breaks, and \"\" is what is left at the end.",
+      "    static class TextFile {",
+      "        String name, mode, text = \"\";",
+      "        int at = 0;",
+      "        boolean closed = false;",
+      "    }"];
+    J.file_open = [
+      "    static TextFile openFile(String name, String mode) {",
+      "        TextFile f = new TextFile();",
+      "        f.name = name;",
+      "        f.mode = mode;",
+      "        java.nio.file.Path path = java.nio.file.Paths.get(name);",
+      "        try {",
+      "            if (mode.contains(\"w\")) {",
+      "                java.nio.file.Files.write(path, new byte[0]);",
+      "            } else if (!mode.contains(\"a\") || java.nio.file.Files.exists(path)) {",
+      "                f.text = new String(java.nio.file.Files.readAllBytes(path), \"UTF-8\").replace(\"\\r\\n\", \"\\n\");",
+      "            }",
+      "        } catch (java.io.IOException e) {",
+      "            throw new RuntimeException(\"There is no file called \" + name, e);",
+      "        }",
+      "        if (mode.contains(\"a\")) { f.at = f.text.length(); }",
+      "        return f;",
+      "    }"];
+    J.file_readline = [
+      "    // The next line, its line break and all; \"\" at the end.",
+      "    static String readLine(TextFile f) {",
+      "        int end = f.text.indexOf('\\n', f.at);",
+      "        end = end < 0 ? f.text.length() : end + 1;",
+      "        String line = f.text.substring(f.at, end);",
+      "        f.at = end;",
+      "        return line;",
+      "    }"];
+    J.file_readlines = [
+      "    // Every line still to be read, each with its line break.",
+      "    static ArrayList<String> readLines(TextFile f) {",
+      "        ArrayList<String> lines = new ArrayList<>();",
+      "        while (f.at < f.text.length()) { lines.add(readLine(f)); }",
+      "        return lines;",
+      "    }"];
+    J.file_read = [
+      "    // All that is left to read -- or the next n letters of it.",
+      "    static String readText(TextFile f, int n) {",
+      "        int end = n < 0 ? f.text.length() : Math.min(f.text.length(), f.at + n);",
+      "        String got = f.text.substring(f.at, end);",
+      "        f.at = end;",
+      "        return got;",
+      "    }",
+      "    static String readText(TextFile f) { return readText(f, -1); }"];
+    J.file_readword = [
+      "    // The next word, the spaces before it skipped; \"\" at the end.",
+      "    static String readWord(TextFile f) {",
+      "        int from = f.at, size = f.text.length();",
+      "        while (from < size && Character.isWhitespace(f.text.charAt(from))) { from++; }",
+      "        int to = from;",
+      "        while (to < size && !Character.isWhitespace(f.text.charAt(to))) { to++; }",
+      "        f.at = f.text.substring(to).trim().isEmpty() ? size : to;",
+      "        return f.text.substring(from, to);",
+      "    }"];
+    J.file_endoffile = ["    static boolean endOfFile(TextFile f) { return f.at >= f.text.length(); }"];
+    J.file_write = [
+      "    // Words put on the end of the file, there on the disk straight away.",
+      "    static void writeText(TextFile f, Object said) {",
+      "        String words = String.valueOf(said);",
+      "        try {",
+      "            java.nio.file.Files.write(java.nio.file.Paths.get(f.name), words.getBytes(\"UTF-8\"),",
+      "                java.nio.file.StandardOpenOption.CREATE, java.nio.file.StandardOpenOption.APPEND);",
+      "        } catch (java.io.IOException e) {",
+      "            throw new RuntimeException(e);",
+      "        }",
+      "        f.text += words;",
+      "        f.at = f.text.length();",
+      "    }"];
+    J.file_writeline = [
+      "    static void writeLine(TextFile f, Object said) { writeText(f, said + \"\\n\"); }",
+      "    static void writeLine(TextFile f) { writeText(f, \"\\n\"); }"];
+    J.file_close = ["    static void closeFile(TextFile f) { f.closed = true; }"];
+    J.file_fileexists = ["    static boolean fileExists(String name) { return java.nio.file.Files.isRegularFile(java.nio.file.Paths.get(name)); }"];
+
+    var C = LIST_WORK.csharp.helpers;
+    C.textFile = [
+      "    // A file opened by its name, the way the chart opens one: \"r\" to read",
+      "    // it, \"w\" to write it from empty, \"a\" to add on to the end of it.",
+      "    // What is read keeps its line breaks, and \"\" is what is left at the end.",
+      "    class TextFile {",
+      "        public string name, mode, text = \"\";",
+      "        public int at = 0;",
+      "        public bool closed = false;",
+      "    }"];
+    C.file_open = [
+      "    static TextFile OpenFile(string name, string mode = \"r\") {",
+      "        var f = new TextFile();",
+      "        f.name = name;",
+      "        f.mode = mode;",
+      "        if (mode.Contains(\"w\")) {",
+      "            System.IO.File.WriteAllText(name, \"\");",
+      "        } else if (!mode.Contains(\"a\") || System.IO.File.Exists(name)) {",
+      "            f.text = System.IO.File.ReadAllText(name).Replace(\"\\r\\n\", \"\\n\");",
+      "        }",
+      "        if (mode.Contains(\"a\")) { f.at = f.text.Length; }",
+      "        return f;",
+      "    }"];
+    C.file_readline = [
+      "    // The next line, its line break and all; \"\" at the end.",
+      "    static string ReadLine(TextFile f) {",
+      "        int end = f.text.IndexOf('\\n', f.at);",
+      "        end = end < 0 ? f.text.Length : end + 1;",
+      "        string line = f.text.Substring(f.at, end - f.at);",
+      "        f.at = end;",
+      "        return line;",
+      "    }"];
+    C.file_readlines = [
+      "    // Every line still to be read, each with its line break.",
+      "    static List<string> ReadLines(TextFile f) {",
+      "        var lines = new List<string>();",
+      "        while (f.at < f.text.Length) { lines.Add(ReadLine(f)); }",
+      "        return lines;",
+      "    }"];
+    C.file_read = [
+      "    // All that is left to read -- or the next n letters of it.",
+      "    static string ReadText(TextFile f, int n = -1) {",
+      "        int end = n < 0 ? f.text.Length : Math.Min(f.text.Length, f.at + n);",
+      "        string got = f.text.Substring(f.at, end - f.at);",
+      "        f.at = end;",
+      "        return got;",
+      "    }"];
+    C.file_readword = [
+      "    // The next word, the spaces before it skipped; \"\" at the end.",
+      "    static string ReadWord(TextFile f) {",
+      "        int from = f.at, size = f.text.Length;",
+      "        while (from < size && char.IsWhiteSpace(f.text[from])) { from++; }",
+      "        int to = from;",
+      "        while (to < size && !char.IsWhiteSpace(f.text[to])) { to++; }",
+      "        f.at = f.text.Substring(to).Trim() == \"\" ? size : to;",
+      "        return f.text.Substring(from, to - from);",
+      "    }"];
+    C.file_endoffile = ["    static bool EndOfFile(TextFile f) { return f.at >= f.text.Length; }"];
+    C.file_write = [
+      "    // Words put on the end of the file, there on the disk straight away.",
+      "    static void WriteText(TextFile f, object said) {",
+      "        string words = Convert.ToString(said);",
+      "        System.IO.File.AppendAllText(f.name, words);",
+      "        f.text += words;",
+      "        f.at = f.text.Length;",
+      "    }"];
+    C.file_writeline = [
+      "    static void WriteLine(TextFile f, object said) { WriteText(f, Convert.ToString(said) + \"\\n\"); }",
+      "    static void WriteLine(TextFile f) { WriteText(f, \"\\n\"); }"];
+    C.file_close = ["    static void CloseFile(TextFile f) { f.closed = true; }"];
+    C.file_fileexists = ["    static bool FileExists(string name) { return System.IO.File.Exists(name); }"];
+
+    var P = LIST_WORK.cpp.helpers;
+    P.textFile = { wants: ["string"], lines: [
+      "// A file opened by its name, the way the chart opens one: \"r\" to read it,",
+      "// \"w\" to write it from empty, \"a\" to add on to the end of it.  What is",
+      "// read keeps its line breaks, and \"\" is what is left at the end.",
+      "struct TextFile {",
+      "    std::string name, mode, text;",
+      "    size_t at = 0;",
+      "    bool closed = false;",
+      "};"] };
+    P.file_open = { wants: ["fstream", "sstream", "stdexcept"], lines: [
+      "static TextFile* openFile(const std::string& name, const std::string& mode = \"r\") {",
+      "    TextFile* f = new TextFile();",
+      "    f->name = name;",
+      "    f->mode = mode;",
+      "    if (mode.find('w') != std::string::npos) {",
+      "        std::ofstream made(name, std::ios::binary);",
+      "    } else {",
+      "        std::ifstream in(name, std::ios::binary);",
+      "        if (!in && mode.find('a') == std::string::npos) { throw std::runtime_error(\"There is no file called \" + name); }",
+      "        std::ostringstream all;",
+      "        if (in) { all << in.rdbuf(); }",
+      "        f->text = all.str();",
+      "        for (size_t i = f->text.find(\"\\r\\n\"); i != std::string::npos; i = f->text.find(\"\\r\\n\", i)) { f->text.erase(i, 1); }",
+      "    }",
+      "    if (mode.find('a') != std::string::npos) { f->at = f->text.size(); }",
+      "    return f;",
+      "}"] };
+    P.file_readline = [
+      "// The next line, its line break and all; \"\" at the end.",
+      "static std::string readLine(TextFile* f) {",
+      "    size_t end = f->text.find('\\n', f->at);",
+      "    end = end == std::string::npos ? f->text.size() : end + 1;",
+      "    std::string line = f->text.substr(f->at, end - f->at);",
+      "    f->at = end;",
+      "    return line;",
+      "}"];
+    P.file_readlines = { wants: ["vector"], lines: [
+      "// Every line still to be read, each with its line break.",
+      "static std::vector<std::string> readLines(TextFile* f) {",
+      "    std::vector<std::string> lines;",
+      "    while (f->at < f->text.size()) { lines.push_back(readLine(f)); }",
+      "    return lines;",
+      "}"] };
+    P.file_read = { wants: ["algorithm"], lines: [
+      "// All that is left to read -- or the next n letters of it.",
+      "static std::string readText(TextFile* f, int n = -1) {",
+      "    size_t end = n < 0 ? f->text.size() : std::min(f->text.size(), f->at + (size_t)n);",
+      "    std::string got = f->text.substr(f->at, end - f->at);",
+      "    f->at = end;",
+      "    return got;",
+      "}"] };
+    P.file_readword = { wants: ["cctype"], lines: [
+      "// The next word, the spaces before it skipped; \"\" at the end.",
+      "static std::string readWord(TextFile* f) {",
+      "    size_t from = f->at, size = f->text.size();",
+      "    while (from < size && std::isspace((unsigned char)f->text[from])) { from++; }",
+      "    size_t to = from;",
+      "    while (to < size && !std::isspace((unsigned char)f->text[to])) { to++; }",
+      "    f->at = f->text.find_first_not_of(\" \\t\\r\\n\\f\\v\", to) == std::string::npos ? size : to;",
+      "    return f->text.substr(from, to - from);",
+      "}"] };
+    P.file_endoffile = ["static bool endOfFile(TextFile* f) { return f->at >= f->text.size(); }"];
+    P.file_write = { wants: ["fstream"], lines: [
+      "// Words put on the end of the file, there on the disk straight away.",
+      "static void writeText(TextFile* f, const std::string& said) {",
+      "    std::ofstream out(f->name, std::ios::binary | std::ios::app);",
+      "    out << said;",
+      "    f->text += said;",
+      "    f->at = f->text.size();",
+      "}"] };
+    P.file_writeline = ["static void writeLine(TextFile* f, const std::string& said = \"\") { writeText(f, said + \"\\n\"); }"];
+    P.file_close = ["static void closeFile(TextFile* f) { f->closed = true; }"];
+    P.file_fileexists = { wants: ["fstream"], lines: [
+      "static bool fileExists(const std::string& name) { return std::ifstream(name).good(); }"] };
+
+    var S = LIST_WORK.javascript.helpers;
+    S.textFile = [];
+    S.file_open = [
+      "// A file opened by its name, the way the chart opens one: \"r\" to read it,",
+      "// \"w\" to write it from empty, \"a\" to add on to the end of it.  What is",
+      "// read keeps its line breaks, and \"\" is what is left at the end.",
+      "function openFile(name, mode = \"r\") {",
+      "  const fs = require(\"fs\"), f = { name: name, mode: mode, text: \"\", at: 0, closed: false };",
+      "  if (mode.includes(\"w\")) {",
+      "    fs.writeFileSync(name, \"\");",
+      "  } else if (!mode.includes(\"a\") || fs.existsSync(name)) {",
+      "    f.text = fs.readFileSync(name, \"utf8\").replace(/\\r\\n/g, \"\\n\");",
+      "  }",
+      "  if (mode.includes(\"a\")) { f.at = f.text.length; }",
+      "  return f;",
+      "}"];
+    S.file_readline = [
+      "// The next line, its line break and all; \"\" at the end.",
+      "function readLine(f) {",
+      "  const nl = f.text.indexOf(\"\\n\", f.at), end = nl < 0 ? f.text.length : nl + 1;",
+      "  const line = f.text.slice(f.at, end);",
+      "  f.at = end;",
+      "  return line;",
+      "}"];
+    S.file_readlines = [
+      "// Every line still to be read, each with its line break.",
+      "function readLines(f) {",
+      "  const lines = [];",
+      "  while (f.at < f.text.length) { lines.push(readLine(f)); }",
+      "  return lines;",
+      "}"];
+    S.file_read = [
+      "// All that is left to read -- or the next n letters of it.",
+      "function readText(f, n = -1) {",
+      "  const end = n < 0 ? f.text.length : Math.min(f.text.length, f.at + n), got = f.text.slice(f.at, end);",
+      "  f.at = end;",
+      "  return got;",
+      "}"];
+    S.file_readword = [
+      "// The next word, the spaces before it skipped; \"\" at the end.",
+      "function readWord(f) {",
+      "  const word = /^\\s*(\\S*)/.exec(f.text.slice(f.at));",
+      "  f.at = f.text.slice(f.at + word[0].length).trim() ? f.at + word[0].length : f.text.length;",
+      "  return word[1];",
+      "}"];
+    S.file_endoffile = ["function endOfFile(f) { return f.at >= f.text.length; }"];
+    S.file_write = [
+      "// Words put on the end of the file, there on the disk straight away.",
+      "function writeText(f, said) {",
+      "  require(\"fs\").appendFileSync(f.name, String(said));",
+      "  f.text += String(said);",
+      "  f.at = f.text.length;",
+      "}"];
+    S.file_writeline = ["function writeLine(f, said = \"\") { writeText(f, said + \"\\n\"); }"];
+    S.file_close = ["function closeFile(f) { f.closed = true; }"];
+    S.file_fileexists = ["function fileExists(name) { return require(\"fs\").existsSync(name); }"];
+
+    LIST_WORK.java.keptToo += " TextFile openFile readLine readLines readText readWord endOfFile writeText writeLine closeFile fileExists";
+    LIST_WORK.csharp.keptToo += " TextFile OpenFile ReadLine ReadLines ReadText ReadWord EndOfFile WriteText WriteLine CloseFile FileExists";
+    LIST_WORK.cpp.keptToo += " TextFile openFile readLine readLines readText readWord endOfFile writeText writeLine closeFile fileExists";
+    LIST_WORK.javascript.keptToo += " openFile readLine readLines readText readWord endOfFile writeText writeLine closeFile fileExists";
+    LIST_WORK.python.keptToo += " read_word";
+  })();
+  function opensFiles(prog) {
+    var found = false;
+    prog.scopes.forEach(function (scope) {
+      eachStep(scope.items, function (item) {
+        sumsOf(item).forEach(function (src) {
+          (function look(n) {
+            if (found || !n || typeof n !== "object") { return; }
+            if (n.call && lowered(n.call) === "open") { found = true; return; }
+            for (var key in n) { if (n[key] && typeof n[key] === "object") { look(n[key]); } }
+          })(tree(src));
+        });
+      });
+    });
+    return found;
+  }
 
   (function () {
     var text = {
@@ -29365,7 +29772,7 @@ window.addEventListener("load", function () {
         }
         if (isListKind(kind) || isTableKind(kind) || isRecKind(kind)) { return L.emptyOf(kind, w); }
         if (kind === "any" && L.anyZero) { return L.anyZero; }
-        if (kind === "fn" || kind === "any") { return L.nullValue || (L.yes === "True" ? "None" : "null"); }
+        if (kind === "fn" || kind === "any" || kind === "file") { return L.nullValue || (L.yes === "True" ? "None" : "null"); }
         return kind === "text" ? '""' : kind === "bool" ? L.no : "0";
       },
       typeOf: function (kind) { return typeOfKind(L, kind, w); },
@@ -29924,7 +30331,7 @@ window.addEventListener("load", function () {
       }
     }
 
-    if (apart && L.apart && prog.mods.length && !Object.keys(recordsIn(prog)).length) {
+    if (apart && L.apart && prog.mods.length && !Object.keys(recordsIn(prog)).length && !(L.kinds && opensFiles(prog))) {
       var taken = Object.create(null);
       w.sharedFile = L.fileName ? L.fileName(L.sharedName) : L.sharedName;
       taken[lowered(name)] = taken[lowered(w.sharedFile)] = true;
@@ -30428,9 +30835,10 @@ window.addEventListener("load", function () {
                      INT_MAX: "2147483647", INT_MIN: "-2147483648", UINT_MAX: "4294967295",
                      LLONG_MAX: "9223372036854775807", LLONG_MIN: "-9223372036854775808", RAND_MAX: "2147483647",
                      SHRT_MAX: "32767", CHAR_BIT: "8", EXIT_SUCCESS: "0", EXIT_FAILURE: "1" };
+    var FILE_TELL = /^(?=[\s\S]*"name":"at")(?=[\s\S]*"name":"text")/;
     var PAGE_HELPERS = {
       python: { class_of: /isinstance/, is_number: /float/, copied: /vars/, to_base: /digits/,
-                is_integer: /lstrip/, currency_format: /abs/, end_of_file: /seek/ },
+                is_integer: /lstrip/, currency_format: /abs/, end_of_file: /seek/, read_word: /isspace/ },
       javascript: { classOf: /constructor/, shown: /constructor/, shuffle: /random/,
                     roundEven: /round/, orderOf: /isArray/, deepCopy: /getPrototypeOf/, significant: /toPrecision/,
                     sliceStep: /"by"/, toJson: /stringify/, popKey: /delete/, currencyFormat: /toFixed/, isInteger: /test/ },
@@ -30463,6 +30871,26 @@ window.addEventListener("load", function () {
              sumOf: /total/, minOf: /min_element/, maxOf: /max_element/, containsIn: /"find"/, countIn: /"count"/,
              anyIn: /"v"/, allIn: /"v"/, allCased: /isalpha/, temp: /made/, substringOf: /"from"/ }
     };
+    ["java", "cpp", "javascript"].forEach(function (lang) {
+      var tells = PAGE_HELPERS[lang];
+      ["readLine", "readLines", "readWord", "endOfFile", "writeText"].forEach(function (name) { tells[name] = FILE_TELL; });
+      tells.readText = /"readText"|"name":"at"/;
+      tells.writeLine = /writeText/;
+      tells.closeFile = /"closed"/;
+    });
+    PAGE_HELPERS.java.openFile = /readAllBytes/;
+    PAGE_HELPERS.java.fileExists = /isRegularFile/;
+    PAGE_HELPERS.cpp.openFile = /rdbuf/;
+    PAGE_HELPERS.cpp.fileExists = /good/;
+    PAGE_HELPERS.javascript.openFile = /readFileSync/;
+    PAGE_HELPERS.javascript.fileExists = /existsSync/;
+    ["ReadLine", "ReadLines", "ReadText", "ReadWord", "EndOfFile", "WriteText"].forEach(function (name) {
+      PAGE_HELPERS.csharp[name] = FILE_TELL;
+    });
+    PAGE_HELPERS.csharp.OpenFile = /ReadAllText/;
+    PAGE_HELPERS.csharp.WriteLine = /WriteText/;
+    PAGE_HELPERS.csharp.CloseFile = /"closed"/;
+    PAGE_HELPERS.csharp.FileExists = /Exists/;
 
     function oops(key, line, fill) {
       var err = new Error(say(key, fill || {}));
@@ -33725,7 +34153,7 @@ window.addEventListener("load", function () {
                 expect("(");
                 var held = declAhead() ? cDeclaration(true) : [{ k: "expr", e: cAssign(), line: t.line }];
                 expect(")");
-                return held.concat(cBlockOrOne());
+                return held.concat(cBlockOrOne(), disposedOf(held, t.line));
               }
               if (cs && (isName("var", 1) || declAheadAt(pos + 1))) {   // using var r = ...;
                 next();
@@ -34026,7 +34454,21 @@ window.addEventListener("load", function () {
           handlers.push({ type: type, name: name, body: cBraces(), line: h.line });
         }
         if (isName("finally")) { next(); fin = cBraces(); }
-        return held.concat([{ k: "try", body: body, handlers: handlers, orelse: [], fin: fin, line: t.line }]);
+        var shut = disposedOf(held, t.line);
+        if (handlers.length && opensFile(held)) {
+          return [{ k: "try", body: held.concat(body, shut), handlers: handlers, orelse: [], fin: fin, line: t.line }];
+        }
+        return held.concat([{ k: "try", body: body.concat(shut), handlers: handlers, orelse: [], fin: fin, line: t.line }]);
+      }
+      function opensFile(held) {
+        return /"(File|FileReader|FileInputStream|FileWriter|FileOutputStream|Paths|Path|Files|StreamReader|StreamWriter|ifstream|ofstream)"/.test(JSON.stringify(held));
+      }
+      function disposedOf(held, line) {
+        var names = [];
+        held.forEach(function (st) {
+          if (st.k === "decl") { st.names.forEach(function (one) { names.push(one.name); }); }
+        });
+        return names.length ? [{ k: "disposed", names: names, line: line }] : [];
       }
       function cParams() {
         expect("(");
@@ -39110,7 +39552,8 @@ window.addEventListener("load", function () {
     function bare(path) {
       return String(path || "").replace(/^std\./, "")
         .replace(/^System\.(?=Console|Math|Threading|Convert|Environment|Linq|String|Array)/, "")
-        .replace(/^(java\.util\.stream|java\.util|java\.lang)\./, "");
+        .replace(/^System\.IO\.(?=File\.)/, "")
+        .replace(/^(java\.util\.stream|java\.util|java\.lang|java\.nio\.file|java\.io)\./, "");
     }
     function stripParens(e) { while (e && e.k === "paren") { e = e.e; } return e; }
     function doneOrGiven(e, line) {
@@ -39344,9 +39787,16 @@ window.addEventListener("load", function () {
       var HELPERS = helpersOf(dialect);
       var pageHelpers = Object.create(null);     // the ones found, by name
       var devices = Object.create(null);
+      var FILE_KINDS = { Scanner: "words", BufferedReader: "nulls", FileReader: "nulls", LineNumberReader: "nulls",
+                         StreamReader: "nulls", TextReader: "nulls", PrintWriter: "out", FileWriter: "out",
+                         BufferedWriter: "out", PrintStream: "out", StreamWriter: "out", TextWriter: "out",
+                         ifstream: "stream", ofstream: "stream", fstream: "stream" };
+      var fileVars = Object.create(null);     // name -> { api, ty }
+      var fileNames = Object.create(null);    // Java's File f = new File(name): f is the name
+      var fileSays = Object.create(null);     // a C++ file's own fixed and setprecision
       function deviceOf(value) {
         value = stripParens(value);
-        if (!value) { return null; }
+        if (!value || fileOpen(value)) { return null; }
         if (value.k === "new") {
           var ty = String(value.type && value.type.name || value.type || "");
           if (/Scanner|BufferedReader|InputStreamReader|^Console$/.test(ty)) { return "keys"; }
@@ -39380,6 +39830,7 @@ window.addEventListener("load", function () {
           return st.names.length > 0;
         });
       }
+      findFiles(top);
       top.globals = dropDevices(top.globals);
       top.funcs = top.funcs.filter(function (fn) { return !(HELPERS.test(fn.name) && fn.pageHelper !== false); });
       top.defines.forEach(function (d) {
@@ -39726,6 +40177,11 @@ window.addEventListener("load", function () {
       if (java && pageHelpers.bind) {
         clsOrder = clsOrder.filter(function (c) { return c.name !== "Fn"; });
         delete CLS.Fn;
+      }
+      if (pageHelpers.openFile || pageHelpers.OpenFile) {
+        clsOrder = clsOrder.filter(function (c) { return c.name !== "TextFile"; });
+        delete CLS.TextFile;
+        delete knownRecords.TextFile;
       }
 
       function free(name) {
@@ -40561,6 +41017,10 @@ window.addEventListener("load", function () {
         for (var i = 0; i < list.length; i++) {
           var parsed = js ? parseThenAsk(list, i) : null;
           if (parsed) { list = parsed; }
+          var readTwice = fileReadTwice(list, i);
+          if (readTwice) { list = readTwice; }
+          var checked = fileChecked(list, i);
+          if (checked) { list = checked; }
           var alias = cpp ? refAlias(list[i], list.slice(i + 1)) : null;
           if (alias) {
             list = list.slice(0, i + 1).concat(swapName(list.slice(i + 1), alias.name, alias.place));
@@ -40701,6 +41161,11 @@ window.addEventListener("load", function () {
             }
             case "call": {
               x = unstatic(x);
+              if (allLinesOf(x)) {
+                var linesHeld = nameNode(fresh(ch, "lines"), x.line);
+                allLinesInto(linesHeld, allLinesOf(x), ch, out, x.line);
+                return copyOf(linesHeld);
+              }
               var callee = stripParens(x.fn);
               var heldFn = callee.k === "call" && !callee.builtin ? callee
                          : callee.k === "index" && (js || py || cs || cpp) ? callee
@@ -40857,6 +41322,18 @@ window.addEventListener("load", function () {
               }
               break;
             case "bin":
+              if (cs && /^(>=|>|!=|==|<)$/.test(x.op)) {
+                var pk = stripParens(x.a), pn = stripParens(x.b);
+                var pv = pn && pn.k === "num" ? Number(pn.v) : pn && pn.k === "un" && pn.op === "-" && stripParens(pn.a).k === "num" ? -Number(stripParens(pn.a).v) : null;
+                if (pk && pk.k === "call" && pk.fn.k === "member" && pk.fn.name === "Peek" && !pk.args.length && fileVar(pk.fn.obj) && pv !== null) {
+                  var more = (x.op === ">=" && pv === 0) || (x.op === ">" && pv === -1) || (x.op === "!=" && pv === -1);
+                  var ended = (x.op === "==" && pv === -1) || (x.op === "<" && pv === 0);
+                  if (more || ended) {
+                    var atEnd = builtinCall("endOfFile", [walk(pk.fn.obj)], x.line);
+                    return more ? { k: "un", op: "!", a: atEnd, line: x.line } : atEnd;
+                  }
+                }
+              }
               if (js && /^(===|==|!==|!=)$/.test(x.op)) {
                 var ul = stripParens(x.a), ur = stripParens(x.b);
                 if (ur.k === "member" && ul.k === "null" && ul.undef) { var uw = ul; ul = ur; ur = uw; }
@@ -41182,6 +41659,15 @@ window.addEventListener("load", function () {
                                      valueOrs(ix.at, ch), valueOrs(e.b, ch)], e.line);
           }
         }
+        if (e.k === "bin" && e.op === "||" && js && stripParens(e.b).k === "num") {
+          var pf = stripParens(e.a), readIn = false;
+          eachNode(pf, function (x) {
+            if (x.k === "call" && x.fn.k === "name" && pageHelpers[x.fn.v] && /^read(Word|Line|Text)$/.test(x.fn.v)) { readIn = true; }
+          });
+          if (readIn && pf.k === "call" && /^(parseFloat|Number)$/.test(pathOf(pf.fn) || "") && pf.args.length === 1) {
+            return builtinCall("real", [valueOrs(pf.args[0], ch)], e.line);
+          }
+        }
         if (e.k === "bin" && (e.op === "||" || e.op === "??") && js) {
           var lit = stripParens(e.a);
           if (lit.k === "null") { return valueOrs(e.b, ch); }
@@ -41324,6 +41810,12 @@ window.addEventListener("load", function () {
             return;
           }
           case "block": out.push.apply(out, lower(st.body, ch)); return;
+          case "disposed":
+            if (out.length && /^(return|stop)$/.test(out[out.length - 1].k)) { return; }
+            st.names.forEach(function (nm) {
+              if (fileVars[nm]) { out.push({ k: "call", e: builtinCall("close", [nameNode(nm, line)], line), line: line }); }
+            });
+            return;
           case "exit": out.push({ k: "stop", line: line }); return;
           case "break": case "continue":
             out.push({ k: st.k, label: st.label || null, line: line });
@@ -41360,10 +41852,18 @@ window.addEventListener("load", function () {
           }
           case "decl": {
             (st.names || []).forEach(function (one) {
+              if (one.pattern && deviceOf(one.value) === "lib") { return; }
               if (one.pattern) { assign(one.pattern, one.value, ch, out, line, true); return; }
               var dev = deviceOf(one.value);
               if (dev) { devices[one.name] = dev; return; }
               var ti = st.typeInfo || (st.type ? { name: st.type, dims: st.dims || 0, args: [] } : null);
+              var opened = fileOpen(one.value);
+              if (opened) { assign(nameNode(one.name, one.line), openOf(opened, line), ch, out, line, true); return; }
+              if (!one.value && fileVars[one.name] && FILE_KINDS[typeNameOf(ti)]) { return; }
+              if (java && fileNames[one.name] && one.value) {
+                assign(nameNode(one.name, one.line), fileNameOf(one.value) || one.value, ch, out, line, true, { name: "String", dims: 0, args: [] });
+                return;
+              }
               if (ti && one.dims && !ti.dims) { ti = Object.assign({}, ti, { dims: one.dims }); }
               if (cpp && ti && /^(istringstream|stringstream|ostringstream)$/.test(String(ti.name).replace(/^.*::/, ""))) {
                 var sv = one.value && stripParens(one.value);
@@ -41425,6 +41925,8 @@ window.addEventListener("load", function () {
             return;
           }
           case "while": {
+            var toEnd = fileLoop(st);
+            if (toEnd) { lowerOne(toEnd, ch, out); return; }
             var cond = stripParens(st.cond);
             var readsWords = cpp ? wordsRead(cond, ch) : null;
             if (readsWords) {
@@ -41560,7 +42062,7 @@ window.addEventListener("load", function () {
       var R_ZERO = /^(ZeroDivisionError|ArithmeticError|ArithmeticException|DivideByZeroException|Exception|exception|std\.exception|Error|RuntimeException|SystemException|BaseException)$/;
       var R_OUT_OF_RANGE = /^(IndexError|LookupError|IndexOutOfBoundsException|ArrayIndexOutOfBoundsException|StringIndexOutOfBoundsException|IndexOutOfRangeException|ArgumentOutOfRangeException|out_of_range|std\.out_of_range|Exception|exception|std\.exception|Error|RuntimeException|SystemException|BaseException)$/;
       var R_NO_KEY = /^(KeyError|LookupError|KeyNotFoundException|NoSuchElementException|out_of_range|std\.out_of_range|Exception|exception|std\.exception|Error|RuntimeException|SystemException|BaseException)$/;
-      var R_NO_FILE = /^(FileNotFoundError|IOError|OSError|EnvironmentError|Exception|BaseException)$/;
+      var R_NO_FILE = /^(FileNotFoundError|IOError|OSError|EnvironmentError|Exception|BaseException|FileNotFoundException|IOException|UncheckedIOException|NoSuchFileException|DirectoryNotFoundException|Throwable|SystemException|Error|exception|ios_base::failure|failure)$/;
       function handlerOf(st, test) {
         return (st.handlers || []).filter(function (h) {
           var types = !h.type ? [] : stripParens(h.type).k === "tuple" ? stripParens(h.type).items : [h.type];
@@ -41577,8 +42079,8 @@ window.addEventListener("load", function () {
             found = { what: "number", of: x.args[0], handler: handlerOf(st, R_BAD_NUMBER) };
             return false;
           }
-          if (opensToRead(x) && handlerOf(st, R_NO_FILE)) {
-            found = { what: "file", of: x.args[0], handler: handlerOf(st, R_NO_FILE) };
+          if (readsFile(x) && handlerOf(st, R_NO_FILE)) {
+            found = { what: "file", of: readsFile(x), handler: handlerOf(st, R_NO_FILE) };
             return false;
           }
           var holder = null, place = null;
@@ -42241,6 +42743,11 @@ window.addEventListener("load", function () {
                                        body: [{ k: "assign", target: target, value: nameNode(each0, line), line: line }].concat(st.body) });
           target = stripParens(st.target);
         }
+        if (allLinesOf(over) && target.k === "name") {
+          st = Object.assign({}, st, { over: builtinCall("open", [allLinesOf(over), { k: "str", v: "r" }], line),
+                                       body: [{ k: "assign", target: copyOf(target), value: lineOnly(copyOf(target), line), line: line }].concat(st.body) });
+          over = stripParens(st.over);
+        }
         if (cs && !st.rows && rectOf(over, ch) > 1) {
           var rowName = fresh(ch, "row");
           lowerForeach(Object.assign({}, st, { target: nameNode(rowName, line), orelse: null, rows: true,
@@ -42408,6 +42915,425 @@ window.addEventListener("load", function () {
         m = m ? stripParens(m) : null;
         return !m || (m.k === "str" && !/[wax]/.test(m.v));
       }
+      function typeNameOf(t) {
+        return String(t && (t.name || (typeof t === "string" ? t : "")) || "").replace(/^.*[.:]/, "");
+      }
+      function fileVar(x) {
+        x = stripParens(x);
+        return x && x.k === "name" && fileVars[x.v] ? fileVars[x.v] : null;
+      }
+      function joinedName(parts, line) {
+        return parts.reduce(function (sum, p) {
+          return sum ? { k: "bin", op: "+", line: line, a: { k: "bin", op: "+", a: sum, b: { k: "str", v: "/" }, line: line }, b: p } : p;
+        }, null);
+      }
+      function fileNameOf(x) {
+        x = stripParens(x);
+        if (!x) { return null; }
+        if (java && x.k === "new" && typeNameOf(x.type) === "File" && x.args.length >= 1 && x.args.length <= 2) {
+          return joinedName(x.args, x.line);
+        }
+        if (x.k === "call") {
+          var p = bare(pathOf(x.fn) || "");
+          if (java && /^(Paths\.get|Path\.of|FileSystems\.getDefault\(\)\.getPath)$/.test(p) && x.args.length) { return joinedName(x.args, x.line); }
+          if (x.fn.k === "member" && !x.args.length && ((cpp && x.fn.name === "c_str") ||
+              (java && /^(toPath|toFile|getPath|getAbsolutePath)$/.test(x.fn.name) && fileNameOf(x.fn.obj)))) {
+            return fileNameOf(x.fn.obj) || x.fn.obj;
+          }
+        }
+        if (x.k === "name" && fileNames[x.v]) { return x; }
+        return null;
+      }
+      function stdStream(x) {
+        return /^(System\.(in|out|err)|Console\.(In|Out|Error|OpenStandardInput|OpenStandardOutput)|std::(cin|cout)|cin|cout)$/.test(pathOf(stripParens(x)) || "") ||
+               (stripParens(x).k === "call" && /^Console\.OpenStandard/.test(pathOf(stripParens(x).fn) || ""));
+      }
+      function yes(x) { x = stripParens(x); return !!(x && x.k === "bool" && x.v); }
+      function streamMode(ty, how) {
+        var said = how ? JSON.stringify(how) : "";
+        if (/"app"/.test(said)) { return "a"; }
+        var reads = /"in"/.test(said), writes = /"(out|trunc)"/.test(said);
+        if (reads && writes) { return "r+"; }
+        if (reads) { return "r"; }
+        if (writes) { return "w"; }
+        return ty === "ifstream" ? "r" : ty === "ofstream" ? "w" : "r+";
+      }
+      function fileOpen(x) {
+        x = stripParens(x);
+        if (!x || py) { return null; }
+        var args = x.args || [], inner = null;
+        if (x.k === "new") {
+          var ty = typeNameOf(x.type);
+          if (java) {
+            if (ty === "Scanner" && args.length === 1) {
+              inner = fileOpen(args[0]);
+              var scanned = inner && inner.mode === "r" ? inner.name : fileNameOf(args[0]);
+              return scanned ? { name: scanned, mode: "r", api: "words", ty: ty } : null;
+            }
+            if (/^(BufferedReader|InputStreamReader|LineNumberReader)$/.test(ty) && args.length >= 1) {
+              inner = fileOpen(args[0]);
+              return inner && inner.mode === "r" ? { name: inner.name, mode: "r", api: "nulls", ty: ty } : null;
+            }
+            if (/^(FileReader|FileInputStream)$/.test(ty) && args.length >= 1) {
+              return { name: fileNameOf(args[0]) || args[0], mode: "r", api: "nulls", ty: ty };
+            }
+            if (/^(PrintWriter|BufferedWriter|PrintStream|OutputStreamWriter)$/.test(ty) && args.length >= 1) {
+              inner = fileOpen(args[0]);
+              if (inner) { return inner.mode !== "r" ? { name: inner.name, mode: inner.mode, api: "out", ty: ty } : null; }
+              var aim = stripParens(args[0]);
+              if (!/^(PrintWriter|PrintStream)$/.test(ty) || stdStream(aim) || (aim.k === "name" && fileVars[aim.v])) { return null; }
+              return { name: fileNameOf(aim) || aim, mode: "w", api: "out", ty: ty };
+            }
+            if (/^(FileWriter|FileOutputStream)$/.test(ty) && args.length >= 1) {
+              return { name: fileNameOf(args[0]) || args[0], mode: yes(args[1]) ? "a" : "w", api: "out", ty: ty };
+            }
+          }
+          if (cs && ty === "StreamReader" && args.length >= 1 && !stdStream(args[0])) {
+            return { name: args[0], mode: "r", api: "nulls", ty: ty };
+          }
+          if (cs && ty === "StreamWriter" && args.length >= 1 && !stdStream(args[0])) {
+            return { name: args[0], mode: yes(args[1]) ? "a" : "w", api: "out", ty: ty };
+          }
+          if (cpp && /^(ifstream|ofstream|fstream)$/.test(ty) && args.length >= 1) {
+            return { name: fileNameOf(args[0]) || args[0], mode: streamMode(ty, args[1]), api: "stream", ty: ty };
+          }
+          return null;
+        }
+        if (x.k !== "call" || x.builtin) { return null; }
+        var p = bare(pathOf(x.fn) || "");
+        if (java && p === "Files.newBufferedReader" && args.length >= 1) {
+          return { name: fileNameOf(args[0]) || args[0], mode: "r", api: "nulls", ty: "BufferedReader" };
+        }
+        if (java && p === "Files.newBufferedWriter" && args.length >= 1) {
+          return { name: fileNameOf(args[0]) || args[0], mode: /"APPEND"/.test(JSON.stringify(args.slice(1))) ? "a" : "w",
+                   api: "out", ty: "BufferedWriter" };
+        }
+        if (cs && /^File\.(OpenText|CreateText|AppendText)$/.test(p) && args.length === 1) {
+          var how = p.slice(5);
+          return { name: args[0], mode: how === "OpenText" ? "r" : how === "CreateText" ? "w" : "a",
+                   api: how === "OpenText" ? "nulls" : "out", ty: how === "OpenText" ? "StreamReader" : "StreamWriter" };
+        }
+        return null;
+      }
+      function findFiles(all) {
+        var scans = false;
+        eachNode(all, function (x) {
+          if (x.k === "decl") {
+            var ty = typeNameOf(x.typeInfo || x.type);
+            (x.names || []).forEach(function (one) {
+              var opened = fileOpen(one.value);
+              if (opened) {
+                fileVars[one.name] = { api: opened.api, ty: opened.ty };
+                if (opened.api === "words") { scans = true; }
+              } else if (!one.value && FILE_KINDS[ty] && ty !== "Scanner") {
+                fileVars[one.name] = { api: FILE_KINDS[ty], ty: ty };
+              } else if (java && /^(File|Path)$/.test(ty) && one.value && fileNameOf(one.value)) {
+                fileNames[one.name] = true;
+              }
+            });
+          }
+          var target = (x.k === "assign" || (x.k === "assignx" && x.op === "=")) ? stripParens(x.target) : null;
+          var pyMade = function (v) {
+            v = stripParens(v);
+            return py && v && v.k === "call" && /^(open|io\.open|codecs\.open)$/.test(bare(pathOf(v.fn) || ""));
+          };
+          if (target && target.k === "name" && pyMade(x.value)) { fileVars[target.v] = { api: "py" }; }
+          if (x.k === "with") {
+            (x.items || []).forEach(function (it) {
+              if (it.as && stripParens(it.as).k === "name" && pyMade(it.e)) { fileVars[stripParens(it.as).v] = { api: "py" }; }
+            });
+          }
+          var made = target && target.k === "name" ? fileOpen(x.value) : null;
+          if (made) {
+            fileVars[target.v] = { api: made.api, ty: made.ty };
+            if (made.api === "words") { scans = true; }
+          }
+        });
+        eachNode(all, function (x) {
+          (Array.isArray(x.params) ? x.params : []).forEach(function (q) {
+            var ty = typeNameOf(q && (q.typeInfo || q.type));
+            if (q && q.name && FILE_KINDS[ty] && (ty !== "Scanner" || scans)) { fileVars[q.name] = { api: FILE_KINDS[ty], ty: ty }; }
+          });
+        });
+      }
+      function openOf(opened, line) {
+        return builtinCall("open", [opened.name, { k: "str", v: opened.mode }], line);
+      }
+      function lineOnly(e, line) {
+        return builtinCall("replace", [e, { k: "str", v: "\n" }, { k: "str", v: "" }], line);
+      }
+      function allLinesOf(x) {
+        x = stripParens(x);
+        if (!x || x.k !== "call" || x.builtin) { return null; }
+        var p = bare(pathOf(x.fn) || "");
+        if (cs && /^File\.(ReadAllLines|ReadLines)$/.test(p) && x.args.length === 1) { return x.args[0]; }
+        if (java && /^Files\.(readAllLines|lines)$/.test(p) && x.args.length >= 1) { return fileNameOf(x.args[0]) || x.args[0]; }
+        return null;
+      }
+      function readsFile(x) {
+        x = stripParens(x);
+        if (!x) { return null; }
+        if (opensToRead(x)) { return x.args[0]; }
+        var opened = fileOpen(x);
+        if (opened) { return opened.mode === "r" || opened.mode === "r+" ? opened.name : null; }
+        if (allLinesOf(x)) { return allLinesOf(x); }
+        if (x.k !== "call" || x.builtin || !x.args.length) { return null; }
+        var p = bare(pathOf(x.fn) || "");
+        if (cs && p === "File.ReadAllText") { return x.args[0]; }
+        if (java && /^Files\.(readString|readAllBytes)$/.test(p)) { return fileNameOf(x.args[0]) || x.args[0]; }
+        if (js && /^(fs\.)?readFileSync$/.test(p) && (p !== "readFileSync" || !userFn(p))) { return x.args[0]; }
+        return null;
+      }
+      function allLinesInto(target, name, ch, out, line) {
+        var each = fresh(ch, "line");
+        ch.meet(each, { set: true, loop: true, kind: "text" });
+        out.push({ k: "set", target: copyOf(target), value: { k: "list", items: [], line: line }, line: line });
+        if (stripParens(target).k === "name") { ch.meet(stripParens(target).v, { set: true, kind: "list<text>" }); }
+        var over = ready(name, ch, out).e;
+        out.push({ k: "foreach", v: each, over: builtinCall("open", [over, { k: "str", v: "r" }], line), line: line, body: [
+          { k: "call", e: builtinCall("append", [copyOf(target), lineOnly(nameNode(each, line), line)], line), line: line }] });
+      }
+      function fileCall(e, ch) {
+        e = stripParens(e);
+        if (py || !e) { return null; }
+        var line = e.line;
+        function B(fn, args) { return builtinCall(fn, args, line); }
+        function not(x) { return { k: "un", op: "!", a: x, line: line }; }
+        if (e.k === "member" && cs && e.name === "EndOfStream" && fileVar(e.obj)) { return B("endOfFile", [e.obj]); }
+        var opened = fileOpen(e);
+        if (opened) { return openOf(opened, line); }
+        if (e.k === "new") {
+          var nm = fileNameOf(e);
+          return nm && nm !== e ? nm : null;
+        }
+        if (e.k !== "call" || e.builtin) { return null; }
+        var p = bare(pathOf(e.fn) || ""), a = e.args;
+        var dot = e.fn.k === "member" ? e.fn.name : null, self = dot ? e.fn.obj : null;
+        if (java && dot && fileNameOf(self) && !a.length) {
+          if (/^(exists|isFile|canRead)$/.test(dot)) { return B("fileExists", [fileNameOf(self)]); }
+          if (/^(getName|getPath|toString)$/.test(dot)) { return fileNameOf(self); }
+        }
+        if (java && fileNameOf(e) && fileNameOf(e) !== e) { return fileNameOf(e); }
+        if (java && /^Files\.(exists|isRegularFile|isReadable)$/.test(p) && a.length >= 1) { return B("fileExists", [fileNameOf(a[0]) || a[0]]); }
+        if (java && /^Files\.(readString|readAllBytes)$/.test(p) && a.length === 1) { return B("read", [B("open", [fileNameOf(a[0]) || a[0], { k: "str", v: "r" }])]); }
+        if (java && p === "Files.writeString" && a.length >= 2) {
+          var app = /"APPEND"/.test(JSON.stringify(a.slice(2)));
+          return B("write", [B("open", [fileNameOf(a[0]) || a[0], { k: "str", v: app ? "a" : "w" }]), a[1]]);
+        }
+        if (cs && p === "File.Exists" && a.length === 1) { return B("fileExists", [a[0]]); }
+        if (cs && p === "File.ReadAllText" && a.length >= 1) { return B("read", [B("open", [a[0], { k: "str", v: "r" }])]); }
+        if (cs && /^File\.(WriteAllText|AppendAllText)$/.test(p) && a.length >= 2) {
+          return B("write", [B("open", [a[0], { k: "str", v: p === "File.WriteAllText" ? "w" : "a" }]), a[1]]);
+        }
+        var jsFs = js && /^(fs\.)?(readFileSync|writeFileSync|appendFileSync|existsSync)$/.test(p) &&
+                   (/^fs\./.test(p) || !userFn(p)) ? p.replace(/^fs\./, "") : "";
+        if (jsFs === "existsSync" && a.length === 1) { return B("fileExists", [a[0]]); }
+        if (jsFs === "readFileSync" && a.length >= 1) { return B("read", [B("open", [a[0], { k: "str", v: "r" }])]); }
+        if (/^(writeFileSync|appendFileSync)$/.test(jsFs) && a.length >= 2) {
+          return B("write", [B("open", [a[0], { k: "str", v: jsFs === "writeFileSync" ? "w" : "a" }]), a[1]]);
+        }
+        var held = dot ? fileVar(self) : null;
+        if (!held) { return null; }
+        if (/^(close|Close|Dispose)$/.test(dot) && !a.length) { return B("close", [self]); }
+        if (held.api === "words") {
+          if (/^hasNext(Line|Int|Double|Long|Float|Short|Byte|Boolean)?$/.test(dot) && !a.length) { return not(B("endOfFile", [self])); }
+          if (dot === "nextLine" && !a.length) { return lineOnly(B("readLine", [self]), line); }
+          if (dot === "next" && !a.length) { return B("readWord", [self]); }
+          if (/^next(Int|Long|Short|Byte)$/.test(dot) && !a.length) { return B("int", [B("readWord", [self])]); }
+          if (/^next(Double|Float)$/.test(dot) && !a.length) { return B("real", [B("readWord", [self])]); }
+          if (dot === "nextBoolean" && !a.length) {
+            return { k: "bin", op: "==", a: B("toLower", [B("readWord", [self])]), b: { k: "str", v: "true" }, line: line };
+          }
+        }
+        if (held.api === "nulls") {
+          if (/^(readLine|ReadLine)$/.test(dot) && !a.length) { return lineOnly(B("readLine", [self]), line); }
+          if (dot === "ReadToEnd" && !a.length) { return B("read", [self]); }
+          if (dot === "ready" && !a.length) { return not(B("endOfFile", [self])); }
+        }
+        if (held.api === "stream") {
+          if (dot === "eof" && !a.length) { return B("endOfFile", [self]); }
+          if (/^(good)$/.test(dot) && !a.length) { return not(B("endOfFile", [self])); }
+          if (/^(fail|bad)$/.test(dot) && !a.length) { return B("endOfFile", [self]); }
+          if (dot === "is_open" && !a.length) { return not({ k: "member", obj: self, name: "closed", line: line }); }
+        }
+        return null;
+      }
+      function fileStatement(e, ch, out, line) {
+        e = stripParens(e);
+        if (py || !e || e.k !== "call" || e.builtin) { return false; }
+        var p = bare(pathOf(e.fn) || "");
+        var dot = e.fn.k === "member" ? e.fn.name : null, self = dot ? e.fn.obj : null;
+        function call(fn, args) {
+          var post = [];
+          args = args.map(function (x) { var r = ready(x, ch, out); post = post.concat(r.post); return r.e; });
+          out.push({ k: "call", e: builtinCall(fn, args, line), line: line });
+          lowerPost(post, ch, out);
+          return true;
+        }
+        if (cpp && /^(std::)?getline$/.test(p) && e.args.length === 2 && fileVar(e.args[0])) {
+          assign(e.args[1], lineOnly(builtinCall("readLine", [e.args[0]], line), line), ch, out, line);
+          return true;
+        }
+        var whole = (cs && /^File\.(WriteAllLines|AppendAllLines)$/.test(p) && e.args.length === 2) ||
+                    (java && p === "Files.write" && e.args.length >= 2 && isListKind(kindOf(e.args[1], ch)));
+        if (whole) {
+          var into = nameNode(fresh(ch, "file"), line), item = fresh(ch, "item");
+          var app = p === "File.AppendAllLines" || /"APPEND"/.test(JSON.stringify(e.args.slice(2)));
+          assign(into, builtinCall("open", [java ? fileNameOf(e.args[0]) || e.args[0] : e.args[0], { k: "str", v: app ? "a" : "w" }], line), ch, out, line);
+          ch.meet(item, { set: true, loop: true });
+          out.push({ k: "foreach", v: item, over: ready(e.args[1], ch, out).e, line: line, body: [
+            { k: "call", e: builtinCall("writeLine", [copyOf(into), nameNode(item, line)], line), line: line }] });
+          out.push({ k: "call", e: builtinCall("close", [copyOf(into)], line), line: line });
+          return true;
+        }
+        var held = dot ? fileVar(self) : null;
+        if (!held) { return false; }
+        if (cpp && dot === "open" && e.args.length >= 1) {
+          var ty = held.ty || "fstream";
+          assign(self, openOf({ name: fileNameOf(e.args[0]) || e.args[0], mode: streamMode(ty, e.args[1]) }, line), ch, out, line);
+          return true;
+        }
+        if (/^(flush|Flush)$/.test(dot) && !e.args.length) { return true; }
+        if (/^(nextLine|readLine|ReadLine)$/.test(dot) && !e.args.length && held.api !== "out" && held.api !== "stream") {
+          return call("readLine", [self]);
+        }
+        if (/^next(Int|Double|Long|Float|Short|Byte|Boolean)?$/.test(dot) && !e.args.length && held.api === "words") {
+          return call("readWord", [self]);
+        }
+        if (held.api !== "out" && held.api !== "stream") { return false; }
+        var how = java ? { println: "System.out.println", print: "System.out.print", printf: "System.out.printf", format: "System.out.printf" }[dot]
+                : cs ? { WriteLine: "Console.WriteLine", Write: "Console.Write" }[dot] : null;
+        var said = null;
+        if (how) { said = displayOf(e, how, null); }
+        else if (java && /^(write|append)$/.test(dot) && e.args.length === 1) { said = { lines: lines(piecesOf(e.args[0])), open: true }; }
+        else if (java && dot === "newLine" && !e.args.length) { said = { lines: [[]], open: false }; }
+        if (!said) { return false; }
+        return call(said.open ? "write" : "writeLine", [self].concat(wroteParts(said)));
+      }
+      function wroteParts(said) {
+        var parts = [];
+        said.lines.forEach(function (g, li) {
+          if (li) { parts.push({ k: "str", v: "\n" }); }
+          g.forEach(function (x) { if (!(stripParens(x).k === "str" && stripParens(x).v === "")) { parts.push(x); } });
+        });
+        if (said.open && !parts.length) { parts.push({ k: "str", v: "" }); }
+        return parts;
+      }
+      function fileStreamed(e, chain, at, ch, out, line) {
+        if (!cpp || !fileVar(at)) { return false; }
+        if (e.op === ">>") {
+          chain.forEach(function (t) {
+            var tk = kindNow(t), word = builtinCall("readWord", [copyOf(at)], line);
+            assign(t, tk === "int" ? builtinCall("int", [word], line) : tk === "real" ? builtinCall("real", [word], line) : word, ch, out, line);
+          });
+          return true;
+        }
+        var coutWas = coutSays;
+        coutSays = fileSays[stripParens(at).v] = fileSays[stripParens(at).v] ||
+                   { fixed: false, places: null, width: null, align: ">", fill: " ", words: false };
+        var said = streamOut(chain, line);
+        coutSays = coutWas;
+        var parts = wroteParts(said), post = [];
+        if (!said.open || parts.length) {
+          var args = [copyOf(at)].concat(parts).map(function (x) { var r = ready(x, ch, out); post = post.concat(r.post); return r.e; });
+          out.push({ k: "call", e: builtinCall(said.open ? "write" : "writeLine", args, line), line: line });
+          lowerPost(post, ch, out);
+        }
+        return true;
+      }
+      function fileLoop(st) {
+        var cond = stripParens(st.cond), line = st.line, f = null, first = null;
+        function nulled(c) {
+          if (!c || c.k !== "bin" || c.op !== "!=") { return null; }
+          var x = stripParens(c.a), y = stripParens(c.b);
+          if (x.k === "null") { var sw0 = x; x = y; y = sw0; }
+          return y.k === "null" && x.k === "assignx" && x.op === "=" ? x : null;
+        }
+        var got = nulled(cond), read = got ? stripParens(got.value) : null;
+        if (read && read.k === "call" && read.fn.k === "member" && /^(readLine|ReadLine)$/.test(read.fn.name) &&
+            !read.args.length && fileVar(read.fn.obj) && fileVar(read.fn.obj).api === "nulls") {
+          f = read.fn.obj;
+          first = { k: "assign", target: got.target, value: read, line: line };
+        }
+        if (cpp && cond.k === "call" && /^(std::)?getline$/.test(pathOf(cond.fn) || "") && cond.args.length === 2 && fileVar(cond.args[0])) {
+          f = cond.args[0];
+          first = { k: "expr", e: cond, line: line };
+        }
+        if (cpp && cond.k === "bin" && cond.op === ">>") {
+          var head = cond;
+          while (head.k === "bin" && head.op === ">>") { head = stripParens(head.a); }
+          if (fileVar(head)) { f = head; first = { k: "expr", e: cond, line: line }; }
+        }
+        if (!f) { return null; }
+        return Object.assign({}, st, { cond: { k: "un", op: "!", a: builtinCall("endOfFile", [copyOf(f)], line), line: line },
+                                       body: [first].concat(st.body) });
+      }
+      function fileReadTwice(list, i) {
+        var st = list[i], nx = list[i + 1];
+        if (!st || !nx || nx.k !== "while" || !nx.body.length) { return null; }
+        function readOf(s) {
+          var target = null, value = null;
+          if (s.k === "decl" && s.names.length === 1) { target = s.names[0].name; value = s.names[0].value; }
+          else if (s.k === "assign" && stripParens(s.target).k === "name") { target = stripParens(s.target).v; value = s.value; }
+          else if (s.k === "expr" && stripParens(s.e).k === "assignx" && stripParens(s.e).op === "=" &&
+                   stripParens(stripParens(s.e).target).k === "name") {
+            target = stripParens(stripParens(s.e).target).v; value = stripParens(s.e).value;
+          }
+          var v = stripParens(value);
+          if (!target || !v || v.k !== "call" || v.fn.k === "name" || !/^(readLine|ReadLine)$/.test(v.fn.name || "") || v.args.length) { return null; }
+          var f = fileVar(v.fn.obj);
+          return f && f.api === "nulls" ? { target: target, f: pathOf(v.fn.obj), value: v } : null;
+        }
+        var before = readOf(st), after = readOf(nx.body[nx.body.length - 1]);
+        var c = stripParens(nx.cond), x = c && c.k === "bin" && c.op === "!=" ? stripParens(c.a) : null, y = x ? stripParens(c.b) : null;
+        if (x && x.k === "null") { var sw0 = x; x = y; y = sw0; }
+        if (!before || !after || before.target !== after.target || before.f !== after.f ||
+            !x || x.k !== "name" || x.v !== before.target || !y || y.k !== "null") { return null; }
+        var line = nx.line;
+        var kept = st.k === "decl" ? [Object.assign({}, st, { names: [Object.assign({}, st.names[0], { value: null })] })] : [];
+        var loop = Object.assign({}, nx, {
+          cond: { k: "un", op: "!", a: builtinCall("endOfFile", [copyOf(before.value.fn.obj)], line), line: line },
+          body: [{ k: "assign", target: nameNode(before.target, line), value: before.value, line: line }].concat(nx.body.slice(0, -1)) });
+        return list.slice(0, i).concat(kept, [loop], list.slice(i + 2));
+      }
+      function fileChecked(list, i) {
+        var st = list[i], nx = list[i + 1];
+        if (!cpp || !st || !nx || nx.k !== "if") { return null; }
+        var f = null, opened = null;
+        if (st.k === "decl" && st.names.length === 1 && fileOpen(st.names[0].value)) {
+          f = st.names[0].name; opened = fileOpen(st.names[0].value);
+        }
+        var ex = st.k === "expr" ? stripParens(st.e) : null;
+        if (ex && ex.k === "call" && ex.fn.k === "member" && ex.fn.name === "open" && ex.args.length >= 1 && fileVar(ex.fn.obj)) {
+          f = pathOf(ex.fn.obj);
+          opened = { name: fileNameOf(ex.args[0]) || ex.args[0], mode: streamMode(fileVar(ex.fn.obj).ty, ex.args[1]) };
+        }
+        if (!f) { return null; }
+        function asks(c) {
+          c = stripParens(c);
+          var neg = false;
+          if (c.k === "un" && c.op === "!") { neg = true; c = stripParens(c.a); }
+          var ok = null;
+          if (c.k === "name" && c.v === f) { ok = true; }
+          if (c.k === "call" && c.fn.k === "member" && pathOf(c.fn.obj) === f && !c.args.length) {
+            if (/^(is_open|good)$/.test(c.fn.name)) { ok = true; }
+            if (/^(fail|bad)$/.test(c.fn.name)) { ok = false; }
+          }
+          return ok === null ? null : neg ? !ok : ok;
+        }
+        var ok = asks(nx.cond);
+        if (ok === null) { return null; }
+        var yesDo = ok ? nx.then : (nx.orelse || []), noDo = ok ? (nx.orelse || []) : nx.then;
+        var line = nx.line, rest = list.slice(i + 2);
+        if (opened.mode !== "r" && opened.mode !== "r+") { return list.slice(0, i).concat([st], yesDo, rest); }
+        var there = builtinCall("fileExists", [opened.name], line);
+        var last = noDo[noDo.length - 1], leaves = last && (/^(return|exit|throw|break|continue)$/.test(last.k) ||
+                   (last.k === "expr" && stripParens(last.e).k === "call" && /^(exit|std::exit|abort)$/.test(pathOf(stripParens(last.e).fn) || "")));
+        if (!yesDo.length && leaves) {
+          return list.slice(0, i).concat([{ k: "if", cond: { k: "un", op: "!", a: there, line: line }, then: noDo, orelse: [], line: line }, st], rest);
+        }
+        return list.slice(0, i).concat([{ k: "if", cond: there, then: [st].concat(yesDo), orelse: noDo, line: line }], rest);
+      }
       function letterClass(e) {
         var p = bare(pathOf(e.fn) || ""), dot = e.fn.k === "member" ? e.fn.name : null;
         var self = dot ? stripParens(e.fn.obj) : null, a = e.args, pat = null, on = null, whole = false;
@@ -42460,7 +43386,16 @@ window.addEventListener("load", function () {
           case "is_number": case "isNumber": case "IsNumber": return B("isNumber", [a[0]]);
           case "is_integer": case "isInteger": case "IsInteger": return B("isInteger", [a[0]]);
           case "currency_format": case "currencyFormat": case "CurrencyFormat": return B("currencyFormat", [a[0]]);
-          case "end_of_file": return B("endOfFile", [a[0]]);
+          case "end_of_file": case "endOfFile": case "EndOfFile": return B("endOfFile", [a[0]]);
+          case "openFile": case "OpenFile": return B("open", a);
+          case "readLine": case "ReadLine": return B("readLine", [a[0]]);
+          case "readLines": case "ReadLines": return B("readLines", [a[0]]);
+          case "readWord": case "ReadWord": case "read_word": return B("readWord", [a[0]]);
+          case "readText": case "ReadText": return B("read", a.slice(0, 2));
+          case "writeText": case "WriteText": return B("write", a.slice(0, 1).concat(a[1] ? piecesOf(a[1]) : []));
+          case "writeLine": case "WriteLine": return B("writeLine", a.slice(0, 1).concat(a[1] ? piecesOf(a[1]) : []));
+          case "closeFile": case "CloseFile": return B("close", [a[0]]);
+          case "fileExists": case "FileExists": return B("fileExists", [a[0]]);
           case "extendWith": return B("extend", a);
           case "countText": return B("count", a);
           case "sliceOf": return B("slice", a);
@@ -42681,6 +43616,7 @@ window.addEventListener("load", function () {
         if (target.k === "deref" || target.k === "addr") { target = stripParens(target.e); }
         var v = stripParens(value);
         if (!v) { return; }
+        if (allLinesOf(v) && target.k === "name") { allLinesInto(target, allLinesOf(v), ch, out, line); return; }
         var asked = inputOf(v);
         if (asked) {
           if (target.k === "name") { ch.meet(target.v, { kind: asked.kind, set: true }); }
@@ -43051,7 +43987,7 @@ window.addEventListener("load", function () {
             wrap({ Whole: "int", Real: "real", Text: "text", Flag: "bool" }[p.slice(3)]);
             seen = true; break;
           }
-          if (dot && /^next(Int|Double|Line|Float|Long|Boolean)?$|^readLine$/.test(dot) &&
+          if (dot && /^next(Int|Double|Line|Float|Long|Boolean)?$|^readLine$/.test(dot) && !fileVars[obj] &&
               (devices[obj] === "keys" || /^(sc|scan|scanner|input|in|keyboard|reader|br|kb|stdin|console)$/i.test(obj || ""))) {
             var how = /Int|Long/.test(dot) ? "int" : /Double|Float/.test(dot) ? "real"
                     : /Boolean/.test(dot) ? "bool" : null;
@@ -43182,6 +44118,7 @@ window.addEventListener("load", function () {
           var chain = [], at = e;
           while (at.k === "bin" && at.op === e.op) { chain.unshift(at.b); at = stripParens(at.a); }
           var head = bare(pathOf(at));
+          if (fileStreamed(e, chain, at, ch, out, line)) { return; }
           if (e.op === "<<" && /^(cout|cerr|clog)$/.test(head)) {
             emitPrint(streamOut(chain, line), st, ch, out, line);
             return;
@@ -43258,6 +44195,7 @@ window.addEventListener("load", function () {
           return;
         }
         if (py && p === "print" && printedInto(e, ch, out, line)) { return; }
+        if (fileStatement(e, ch, out, line)) { return; }
         var said = displayOf(e, p, dot);
         if (said) { emitPrint(said, st, ch, out, line); return; }
         if (cpp && p === "getline" && e.args.length >= 2 && bare(pathOf(e.args[0])) === "cin") {
@@ -45126,6 +46064,8 @@ window.addEventListener("load", function () {
       function libCall(e, ch) {
         e = stripParens(e);
         if (!e) { return null; }
+        var filed = fileCall(e, ch);
+        if (filed) { return filed; }
         if (e.k === "new") { return newOf(e, ch); }
         if (e.k === "newarr") {
           if (e.init) { return e.init; }
@@ -45398,7 +46338,7 @@ window.addEventListener("load", function () {
         if (pyOpen(e)) { return B("open", openMode(e) ? [a[0], openMode(e)] : [a[0]]); }
         if (py && /^(os\.path\.exists|os\.path\.isfile)$/.test(p) && a.length === 1) { return B("fileExists", [a[0]]); }
         if (py && dot && self && !/^(sys\.)?(stdin|stdout|stderr)$/.test(pathOf(self) || "") &&
-            !/^(text|list|set|map|int|real|bool)\b/.test(sk || "")) {
+            (fileVar(self) || !/^(text|list|set|map|int|real|bool)\b/.test(sk || ""))) {
           if (dot === "readline" && !a.length) { return B("readLine", [self]); }
           if (dot === "readlines" && !a.length) { return B("readLines", [self]); }
           if (dot === "read" && a.length <= 1) { return B("read", [self].concat(a)); }

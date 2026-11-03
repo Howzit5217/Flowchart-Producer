@@ -2205,6 +2205,7 @@
         var over = tree(item.over), kind = w.kind(over), src = w.code(item.over);
         var entry = w.entry(item["var"]);
         if (isTableKind(kind)) { src = held(src) + ".keys()"; }
+        else if (kind === "file") { src = w.L.lists.readlines([src], [kind], w); }
         w.line(deep, "for (" + (entry && !w.ownLoop(item, entry) ? "" : loopSetsItsName(item) ? "let " : "const ") +
                w.named(item["var"]) + " of " + src + ") {");
         w.block(item.body, deep + 1);
@@ -2380,7 +2381,9 @@
                 "  if (v instanceof Map) {",
                 "    return \"{\" + [...v].map(([k, x]) => shown(k, true) + \": \" + shown(x, true)).join(\", \") + \"}\";",
                 "  }",
-                "  if (typeof v === \"string\") { return inside ? \"'\" + v + \"'\" : v; }",
+                "  if (typeof v === \"string\") {",
+                "    return inside ? \"'\" + v.replace(/\\n/g, \"\\\\n\").replace(/\\r/g, \"\\\\r\").replace(/\\t/g, \"\\\\t\") + \"'\" : v;",
+                "  }",
                 "  if (typeof v === \"boolean\") { return v ? \"True\" : \"False\"; }",
                 "  if (v && typeof v === \"object\") {",
                 "    return v.constructor.name + \"(\" + Object.entries(v).map(([k, x]) => k + \"=\" + shown(x, true)).join(\", \") + \")\";",
@@ -2505,6 +2508,7 @@
       var over = tree(item.over), kind = w.kind(over), src = w.code(item.over);
       var entry = w.entry(item["var"]), elem = kind === "text" ? "text" : isTableKind(kind) ? tableKey(kind) : elemOf(kind);
       if (kind === "text") { w.need("chars"); src = "chars(" + src + ")"; }
+      else if (kind === "file") { src = w.L.lists.readlines([src], [kind], w); }
       else if (kind === "any") { src = "(List<?>) " + held(src); }
       else if (isTableKind(kind)) { src = held(src) + ".keySet()"; }
       var type = w.elemType(item.over, elem);
@@ -2775,7 +2779,10 @@
               "            }",
               "            return out.append(\"}\").toString();",
               "        }",
-              "        if (v instanceof String) { return inside ? \"'\" + v + \"'\" : (String) v; }",
+              "        if (v instanceof String && inside) {",
+              "            return \"'\" + ((String) v).replace(\"\\n\", \"\\\\n\").replace(\"\\r\", \"\\\\r\").replace(\"\\t\", \"\\\\t\") + \"'\";",
+              "        }",
+              "        if (v instanceof String) { return (String) v; }",
               "        if (v instanceof Boolean) { return (Boolean) v ? \"True\" : \"False\"; }",
               "        if (v instanceof Double && (Double) v == Math.rint((Double) v) && !((Double) v).isInfinite()) {",
               "            return String.valueOf(((Double) v).longValue());",
@@ -2947,6 +2954,7 @@
       var over = tree(item.over), kind = w.kind(over), src = w.code(item.over);
       var entry = w.entry(item["var"]), elem = kind === "text" ? "text" : isTableKind(kind) ? tableKey(kind) : elemOf(kind);
       if (kind === "text") { src = held(src) + ".Select(c_ => c_.ToString())"; }
+      else if (kind === "file") { src = w.L.lists.readlines([src], [kind], w); }
       else if (isTableKind(kind)) { src = held(src) + ".Keys.ToList()"; }
       var type = w.elemType(item.over, elem);
       if (entry && !w.ownLoop(item, entry)) {
@@ -3170,7 +3178,10 @@
     helpers: {
       shown: ["    // A list, a table or a record, the way the chart shows one: ['a', 1].",
               "    public static string Shown(object v, bool inside = false) {",
-              "        if (v is string) { return inside ? \"'\" + v + \"'\" : (string)v; }",
+              "        if (v is string && inside) {",
+              "            return \"'\" + ((string)v).Replace(\"\\n\", \"\\\\n\").Replace(\"\\r\", \"\\\\r\").Replace(\"\\t\", \"\\\\t\") + \"'\";",
+              "        }",
+              "        if (v is string) { return (string)v; }",
               "        if (v is bool) { return (bool)v ? \"True\" : \"False\"; }",
               "        if (v is System.Collections.IDictionary) {",
               "            var parts = new List<string>();",
@@ -3311,6 +3322,7 @@
       var over = tree(item.over), kind = w.kind(over), src = w.code(item.over);
       var entry = w.entry(item["var"]), elem = kind === "text" ? "text" : isTableKind(kind) ? tableKey(kind) : kind === "any" ? "any" : elemOf(kind);
       if (kind === "text") { w.need("chars"); src = "chars(" + src + ")"; }
+      else if (kind === "file") { src = w.L.lists.readlines([src], [kind], w); }
       else if (isTableKind(kind)) { w.need("keysOf"); src = "keysOf(" + src + ")"; }
       var type = w.elemType(item.over, elem || "real");
       if (entry && !w.ownLoop(item, entry)) {
@@ -3562,7 +3574,13 @@
       shown: { wants: ["vector", "map", "ostream"], lines: [
                "template <typename T> std::ostream& operator<<(std::ostream& out, const std::vector<T>& items);",
                "template <typename K, typename V> std::ostream& operator<<(std::ostream& out, const Table<K, V>& table);",
-               "static void shownIn(std::ostream& out, const std::string& s) { out << \"'\" << s << \"'\"; }",
+               "static void shownIn(std::ostream& out, const std::string& s) {",
+               "    out << \"'\";",
+               "    for (char c : s) {",
+               "        if (c == '\\n') { out << \"\\\\n\"; } else if (c == '\\r') { out << \"\\\\r\"; } else if (c == '\\t') { out << \"\\\\t\"; } else { out << c; }",
+               "    }",
+               "    out << \"'\";",
+               "}",
                "static void shownIn(std::ostream& out, bool b) { out << (b ? \"True\" : \"False\"); }",
                "template <typename T> static void shownIn(std::ostream& out, const T& v) { out << v; }",
                "template <typename T> std::ostream& operator<<(std::ostream& out, const std::vector<T>& items) {",
@@ -4707,7 +4725,405 @@
       "    more = f.read(1)",
       "    f.seek(here)",
       "    return more == \"\""];
+    // readWord(f): C++'s in >> word, which Python has no word for
+    py.readword = function (a, k, w) { w.need("readWord"); return "read_word(" + a[0] + ")"; };
+    LIST_WORK.python.helpers.readWord = [
+      "# The next word in a file, the spaces before it skipped; \"\" at the end.",
+      "def read_word(f):",
+      "    word = \"\"",
+      "    letter = f.read(1)",
+      "    while letter.isspace():",
+      "        letter = f.read(1)",
+      "    while letter != \"\" and not letter.isspace():",
+      "        word += letter",
+      "        here = f.tell()",
+      "        letter = f.read(1)",
+      "    if letter != \"\" and f.read().strip() != \"\":",
+      "        f.seek(here)",
+      "    return word"];
   })();
+
+  // The other four have no open() of their own that reads the way the
+  // chart's does -- Java's readLine() hands back null at the end, C++'s
+  // getline() takes the line break off -- so each has a TextFile, a file
+  // opened by its name and read the chart's way: its words held, how far
+  // into them the reading has got, and whether it is closed (f.name and
+  // f.closed, as Python's are).  It is read whole when it is opened, and
+  // what is written goes straight into the file on the disk, so a program
+  // can write a file, close it and read it back.  TextFile and its helpers
+  // are told apart when the code comes back in (PAGE_HELPERS in
+  // 18-from-code.js), and read as open(), readLine() and the rest again.
+  (function () {
+    // what a file is read and written with, by name in each language
+    var NAMES = {
+      java: { open: "openFile", readline: "readLine", readlines: "readLines", read: "readText", readword: "readWord",
+              endoffile: "endOfFile", write: "writeText", writeline: "writeLine", close: "closeFile", fileexists: "fileExists" },
+      csharp: { open: "OpenFile", readline: "ReadLine", readlines: "ReadLines", read: "ReadText", readword: "ReadWord",
+                endoffile: "EndOfFile", write: "WriteText", writeline: "WriteLine", close: "CloseFile", fileexists: "FileExists" }
+    };
+    NAMES.cpp = NAMES.javascript = NAMES.java;
+    // and what each of them leans on
+    var LEANS = { readlines: ["readline"], writeline: ["write"] };
+    function needed(w, op) {
+      w.need("textFile");
+      (LEANS[op] || []).concat([op]).forEach(function (one) { w.need("file_" + one); });
+    }
+    // What write(f, a, b) puts in a file, as one piece of words: the pieces
+    // as a Display says them (saying, 18-write.js), added up.  C++ adds up
+    // only std::strings, so each piece is made one first.
+    function writtenWords(a, k, w) {
+      var L = w.L;
+      var bits = a.map(function (code, i) {
+        var kind = k[i] || "", one = { code: code, kind: kind, loose: !R_SIMPLE.test(code) && !postfixOnly(code), cash: false };
+        if ((compoundKind(kind) || kind === "any") && L.shown) { one.code = L.shown(one.code, w); one.kind = "text"; one.loose = false; }
+        if (kind === "bool" && L.flagText) { one.code = L.flagText(one.code); one.kind = "text"; one.loose = false; }
+        return one;
+      });
+      if (!bits.length) { return '""'; }
+      if (L !== LANGS.cpp) { return L.join(bits, w); }
+      return bits.map(function (bit, i) {
+        var code = bit.kind === "text" ? bit.code
+                 : bit.kind === "real" ? (w.need("realText"), "realText(" + bit.code + ")")
+                 : bit.kind === "int" ? "std::to_string(" + bit.code + ")"
+                 : (w.need("textOf"), "textOf(" + bit.code + ")");
+        return i === 0 && bit.kind === "text" && !/^std::|^[A-Za-z_]\w*$/.test(code) ? "std::string(" + code + ")" : code;
+      }).join(" + ");
+    }
+    Object.keys(NAMES).forEach(function (code) {
+      var to = LIST_WORK[code].lists, called = NAMES[code];
+      function plain(op) {
+        to[op] = function (a, k, w) { needed(w, op); return called[op] + "(" + a.join(", ") + ")"; };
+      }
+      ["readline", "readlines", "readword", "endoffile", "close", "fileexists"].forEach(plain);
+      to.eof = to.endoffile;
+      to.open = function (a, k, w) { needed(w, "open"); return called.open + "(" + a[0] + ", " + (a[1] || '"r"') + ")"; };
+      to.read = function (a, k, w) {
+        needed(w, "read");
+        if (a.length < 2) { return called.read + "(" + a[0] + ")"; }
+        return called.read + "(" + a[0] + ", " + (k[1] === "int" ? a[1] : (code === "javascript" ? "Math.trunc(" + a[1] + ")" : "(int)" + held(a[1]))) + ")";
+      };
+      to.write = function (a, k, w) { needed(w, "write"); return called.write + "(" + a[0] + ", " + writtenWords(a.slice(1), k.slice(1), w) + ")"; };
+      to.writeline = function (a, k, w) {
+        needed(w, "writeline");
+        return called.writeline + "(" + a[0] + (a.length > 1 ? ", " + writtenWords(a.slice(1), k.slice(1), w) : "") + ")";
+      };
+    });
+    LANGS.java.kinds.file = "TextFile";
+    LANGS.csharp.kinds.file = "TextFile";
+    LANGS.cpp.kinds.file = "TextFile*";
+
+    var J = LIST_WORK.java.helpers;
+    J.textFile = [
+      "    // A file opened by its name, the way the chart opens one: \"r\" to read",
+      "    // it, \"w\" to write it from empty, \"a\" to add on to the end of it.",
+      "    // What is read keeps its line breaks, and \"\" is what is left at the end.",
+      "    static class TextFile {",
+      "        String name, mode, text = \"\";",
+      "        int at = 0;",
+      "        boolean closed = false;",
+      "    }"];
+    J.file_open = [
+      "    static TextFile openFile(String name, String mode) {",
+      "        TextFile f = new TextFile();",
+      "        f.name = name;",
+      "        f.mode = mode;",
+      "        java.nio.file.Path path = java.nio.file.Paths.get(name);",
+      "        try {",
+      "            if (mode.contains(\"w\")) {",
+      "                java.nio.file.Files.write(path, new byte[0]);",
+      "            } else if (!mode.contains(\"a\") || java.nio.file.Files.exists(path)) {",
+      "                f.text = new String(java.nio.file.Files.readAllBytes(path), \"UTF-8\").replace(\"\\r\\n\", \"\\n\");",
+      "            }",
+      "        } catch (java.io.IOException e) {",
+      "            throw new RuntimeException(\"There is no file called \" + name, e);",
+      "        }",
+      "        if (mode.contains(\"a\")) { f.at = f.text.length(); }",
+      "        return f;",
+      "    }"];
+    J.file_readline = [
+      "    // The next line, its line break and all; \"\" at the end.",
+      "    static String readLine(TextFile f) {",
+      "        int end = f.text.indexOf('\\n', f.at);",
+      "        end = end < 0 ? f.text.length() : end + 1;",
+      "        String line = f.text.substring(f.at, end);",
+      "        f.at = end;",
+      "        return line;",
+      "    }"];
+    J.file_readlines = [
+      "    // Every line still to be read, each with its line break.",
+      "    static ArrayList<String> readLines(TextFile f) {",
+      "        ArrayList<String> lines = new ArrayList<>();",
+      "        while (f.at < f.text.length()) { lines.add(readLine(f)); }",
+      "        return lines;",
+      "    }"];
+    J.file_read = [
+      "    // All that is left to read -- or the next n letters of it.",
+      "    static String readText(TextFile f, int n) {",
+      "        int end = n < 0 ? f.text.length() : Math.min(f.text.length(), f.at + n);",
+      "        String got = f.text.substring(f.at, end);",
+      "        f.at = end;",
+      "        return got;",
+      "    }",
+      "    static String readText(TextFile f) { return readText(f, -1); }"];
+    J.file_readword = [
+      "    // The next word, the spaces before it skipped; \"\" at the end.",
+      "    static String readWord(TextFile f) {",
+      "        int from = f.at, size = f.text.length();",
+      "        while (from < size && Character.isWhitespace(f.text.charAt(from))) { from++; }",
+      "        int to = from;",
+      "        while (to < size && !Character.isWhitespace(f.text.charAt(to))) { to++; }",
+      "        f.at = f.text.substring(to).trim().isEmpty() ? size : to;",
+      "        return f.text.substring(from, to);",
+      "    }"];
+    J.file_endoffile = ["    static boolean endOfFile(TextFile f) { return f.at >= f.text.length(); }"];
+    J.file_write = [
+      "    // Words put on the end of the file, there on the disk straight away.",
+      "    static void writeText(TextFile f, Object said) {",
+      "        String words = String.valueOf(said);",
+      "        try {",
+      "            java.nio.file.Files.write(java.nio.file.Paths.get(f.name), words.getBytes(\"UTF-8\"),",
+      "                java.nio.file.StandardOpenOption.CREATE, java.nio.file.StandardOpenOption.APPEND);",
+      "        } catch (java.io.IOException e) {",
+      "            throw new RuntimeException(e);",
+      "        }",
+      "        f.text += words;",
+      "        f.at = f.text.length();",
+      "    }"];
+    J.file_writeline = [
+      "    static void writeLine(TextFile f, Object said) { writeText(f, said + \"\\n\"); }",
+      "    static void writeLine(TextFile f) { writeText(f, \"\\n\"); }"];
+    J.file_close = ["    static void closeFile(TextFile f) { f.closed = true; }"];
+    J.file_fileexists = ["    static boolean fileExists(String name) { return java.nio.file.Files.isRegularFile(java.nio.file.Paths.get(name)); }"];
+
+    var C = LIST_WORK.csharp.helpers;
+    C.textFile = [
+      "    // A file opened by its name, the way the chart opens one: \"r\" to read",
+      "    // it, \"w\" to write it from empty, \"a\" to add on to the end of it.",
+      "    // What is read keeps its line breaks, and \"\" is what is left at the end.",
+      "    class TextFile {",
+      "        public string name, mode, text = \"\";",
+      "        public int at = 0;",
+      "        public bool closed = false;",
+      "    }"];
+    C.file_open = [
+      "    static TextFile OpenFile(string name, string mode = \"r\") {",
+      "        var f = new TextFile();",
+      "        f.name = name;",
+      "        f.mode = mode;",
+      "        if (mode.Contains(\"w\")) {",
+      "            System.IO.File.WriteAllText(name, \"\");",
+      "        } else if (!mode.Contains(\"a\") || System.IO.File.Exists(name)) {",
+      "            f.text = System.IO.File.ReadAllText(name).Replace(\"\\r\\n\", \"\\n\");",
+      "        }",
+      "        if (mode.Contains(\"a\")) { f.at = f.text.Length; }",
+      "        return f;",
+      "    }"];
+    C.file_readline = [
+      "    // The next line, its line break and all; \"\" at the end.",
+      "    static string ReadLine(TextFile f) {",
+      "        int end = f.text.IndexOf('\\n', f.at);",
+      "        end = end < 0 ? f.text.Length : end + 1;",
+      "        string line = f.text.Substring(f.at, end - f.at);",
+      "        f.at = end;",
+      "        return line;",
+      "    }"];
+    C.file_readlines = [
+      "    // Every line still to be read, each with its line break.",
+      "    static List<string> ReadLines(TextFile f) {",
+      "        var lines = new List<string>();",
+      "        while (f.at < f.text.Length) { lines.Add(ReadLine(f)); }",
+      "        return lines;",
+      "    }"];
+    C.file_read = [
+      "    // All that is left to read -- or the next n letters of it.",
+      "    static string ReadText(TextFile f, int n = -1) {",
+      "        int end = n < 0 ? f.text.Length : Math.Min(f.text.Length, f.at + n);",
+      "        string got = f.text.Substring(f.at, end - f.at);",
+      "        f.at = end;",
+      "        return got;",
+      "    }"];
+    C.file_readword = [
+      "    // The next word, the spaces before it skipped; \"\" at the end.",
+      "    static string ReadWord(TextFile f) {",
+      "        int from = f.at, size = f.text.Length;",
+      "        while (from < size && char.IsWhiteSpace(f.text[from])) { from++; }",
+      "        int to = from;",
+      "        while (to < size && !char.IsWhiteSpace(f.text[to])) { to++; }",
+      "        f.at = f.text.Substring(to).Trim() == \"\" ? size : to;",
+      "        return f.text.Substring(from, to - from);",
+      "    }"];
+    C.file_endoffile = ["    static bool EndOfFile(TextFile f) { return f.at >= f.text.Length; }"];
+    C.file_write = [
+      "    // Words put on the end of the file, there on the disk straight away.",
+      "    static void WriteText(TextFile f, object said) {",
+      "        string words = Convert.ToString(said);",
+      "        System.IO.File.AppendAllText(f.name, words);",
+      "        f.text += words;",
+      "        f.at = f.text.Length;",
+      "    }"];
+    C.file_writeline = [
+      "    static void WriteLine(TextFile f, object said) { WriteText(f, Convert.ToString(said) + \"\\n\"); }",
+      "    static void WriteLine(TextFile f) { WriteText(f, \"\\n\"); }"];
+    C.file_close = ["    static void CloseFile(TextFile f) { f.closed = true; }"];
+    C.file_fileexists = ["    static bool FileExists(string name) { return System.IO.File.Exists(name); }"];
+
+    var P = LIST_WORK.cpp.helpers;
+    P.textFile = { wants: ["string"], lines: [
+      "// A file opened by its name, the way the chart opens one: \"r\" to read it,",
+      "// \"w\" to write it from empty, \"a\" to add on to the end of it.  What is",
+      "// read keeps its line breaks, and \"\" is what is left at the end.",
+      "struct TextFile {",
+      "    std::string name, mode, text;",
+      "    size_t at = 0;",
+      "    bool closed = false;",
+      "};"] };
+    P.file_open = { wants: ["fstream", "sstream", "stdexcept"], lines: [
+      "static TextFile* openFile(const std::string& name, const std::string& mode = \"r\") {",
+      "    TextFile* f = new TextFile();",
+      "    f->name = name;",
+      "    f->mode = mode;",
+      "    if (mode.find('w') != std::string::npos) {",
+      "        std::ofstream made(name, std::ios::binary);",
+      "    } else {",
+      "        std::ifstream in(name, std::ios::binary);",
+      "        if (!in && mode.find('a') == std::string::npos) { throw std::runtime_error(\"There is no file called \" + name); }",
+      "        std::ostringstream all;",
+      "        if (in) { all << in.rdbuf(); }",
+      "        f->text = all.str();",
+      "        for (size_t i = f->text.find(\"\\r\\n\"); i != std::string::npos; i = f->text.find(\"\\r\\n\", i)) { f->text.erase(i, 1); }",
+      "    }",
+      "    if (mode.find('a') != std::string::npos) { f->at = f->text.size(); }",
+      "    return f;",
+      "}"] };
+    P.file_readline = [
+      "// The next line, its line break and all; \"\" at the end.",
+      "static std::string readLine(TextFile* f) {",
+      "    size_t end = f->text.find('\\n', f->at);",
+      "    end = end == std::string::npos ? f->text.size() : end + 1;",
+      "    std::string line = f->text.substr(f->at, end - f->at);",
+      "    f->at = end;",
+      "    return line;",
+      "}"];
+    P.file_readlines = { wants: ["vector"], lines: [
+      "// Every line still to be read, each with its line break.",
+      "static std::vector<std::string> readLines(TextFile* f) {",
+      "    std::vector<std::string> lines;",
+      "    while (f->at < f->text.size()) { lines.push_back(readLine(f)); }",
+      "    return lines;",
+      "}"] };
+    P.file_read = { wants: ["algorithm"], lines: [
+      "// All that is left to read -- or the next n letters of it.",
+      "static std::string readText(TextFile* f, int n = -1) {",
+      "    size_t end = n < 0 ? f->text.size() : std::min(f->text.size(), f->at + (size_t)n);",
+      "    std::string got = f->text.substr(f->at, end - f->at);",
+      "    f->at = end;",
+      "    return got;",
+      "}"] };
+    P.file_readword = { wants: ["cctype"], lines: [
+      "// The next word, the spaces before it skipped; \"\" at the end.",
+      "static std::string readWord(TextFile* f) {",
+      "    size_t from = f->at, size = f->text.size();",
+      "    while (from < size && std::isspace((unsigned char)f->text[from])) { from++; }",
+      "    size_t to = from;",
+      "    while (to < size && !std::isspace((unsigned char)f->text[to])) { to++; }",
+      "    f->at = f->text.find_first_not_of(\" \\t\\r\\n\\f\\v\", to) == std::string::npos ? size : to;",
+      "    return f->text.substr(from, to - from);",
+      "}"] };
+    P.file_endoffile = ["static bool endOfFile(TextFile* f) { return f->at >= f->text.size(); }"];
+    P.file_write = { wants: ["fstream"], lines: [
+      "// Words put on the end of the file, there on the disk straight away.",
+      "static void writeText(TextFile* f, const std::string& said) {",
+      "    std::ofstream out(f->name, std::ios::binary | std::ios::app);",
+      "    out << said;",
+      "    f->text += said;",
+      "    f->at = f->text.size();",
+      "}"] };
+    P.file_writeline = ["static void writeLine(TextFile* f, const std::string& said = \"\") { writeText(f, said + \"\\n\"); }"];
+    P.file_close = ["static void closeFile(TextFile* f) { f->closed = true; }"];
+    P.file_fileexists = { wants: ["fstream"], lines: [
+      "static bool fileExists(const std::string& name) { return std::ifstream(name).good(); }"] };
+
+    var S = LIST_WORK.javascript.helpers;
+    S.textFile = [];
+    S.file_open = [
+      "// A file opened by its name, the way the chart opens one: \"r\" to read it,",
+      "// \"w\" to write it from empty, \"a\" to add on to the end of it.  What is",
+      "// read keeps its line breaks, and \"\" is what is left at the end.",
+      "function openFile(name, mode = \"r\") {",
+      "  const fs = require(\"fs\"), f = { name: name, mode: mode, text: \"\", at: 0, closed: false };",
+      "  if (mode.includes(\"w\")) {",
+      "    fs.writeFileSync(name, \"\");",
+      "  } else if (!mode.includes(\"a\") || fs.existsSync(name)) {",
+      "    f.text = fs.readFileSync(name, \"utf8\").replace(/\\r\\n/g, \"\\n\");",
+      "  }",
+      "  if (mode.includes(\"a\")) { f.at = f.text.length; }",
+      "  return f;",
+      "}"];
+    S.file_readline = [
+      "// The next line, its line break and all; \"\" at the end.",
+      "function readLine(f) {",
+      "  const nl = f.text.indexOf(\"\\n\", f.at), end = nl < 0 ? f.text.length : nl + 1;",
+      "  const line = f.text.slice(f.at, end);",
+      "  f.at = end;",
+      "  return line;",
+      "}"];
+    S.file_readlines = [
+      "// Every line still to be read, each with its line break.",
+      "function readLines(f) {",
+      "  const lines = [];",
+      "  while (f.at < f.text.length) { lines.push(readLine(f)); }",
+      "  return lines;",
+      "}"];
+    S.file_read = [
+      "// All that is left to read -- or the next n letters of it.",
+      "function readText(f, n = -1) {",
+      "  const end = n < 0 ? f.text.length : Math.min(f.text.length, f.at + n), got = f.text.slice(f.at, end);",
+      "  f.at = end;",
+      "  return got;",
+      "}"];
+    S.file_readword = [
+      "// The next word, the spaces before it skipped; \"\" at the end.",
+      "function readWord(f) {",
+      "  const word = /^\\s*(\\S*)/.exec(f.text.slice(f.at));",
+      "  f.at = f.text.slice(f.at + word[0].length).trim() ? f.at + word[0].length : f.text.length;",
+      "  return word[1];",
+      "}"];
+    S.file_endoffile = ["function endOfFile(f) { return f.at >= f.text.length; }"];
+    S.file_write = [
+      "// Words put on the end of the file, there on the disk straight away.",
+      "function writeText(f, said) {",
+      "  require(\"fs\").appendFileSync(f.name, String(said));",
+      "  f.text += String(said);",
+      "  f.at = f.text.length;",
+      "}"];
+    S.file_writeline = ["function writeLine(f, said = \"\") { writeText(f, said + \"\\n\"); }"];
+    S.file_close = ["function closeFile(f) { f.closed = true; }"];
+    S.file_fileexists = ["function fileExists(name) { return require(\"fs\").existsSync(name); }"];
+
+    LIST_WORK.java.keptToo += " TextFile openFile readLine readLines readText readWord endOfFile writeText writeLine closeFile fileExists";
+    LIST_WORK.csharp.keptToo += " TextFile OpenFile ReadLine ReadLines ReadText ReadWord EndOfFile WriteText WriteLine CloseFile FileExists";
+    LIST_WORK.cpp.keptToo += " TextFile openFile readLine readLines readText readWord endOfFile writeText writeLine closeFile fileExists";
+    LIST_WORK.javascript.keptToo += " openFile readLine readLines readText readWord endOfFile writeText writeLine closeFile fileExists";
+    LIST_WORK.python.keptToo += " read_word";
+  })();
+  // Whether a program opens a file: Java's, C#'s and C++'s TextFile is
+  // then one kind of thing the whole program shares, so it is written in
+  // one file, as a program with records is (18-write.js).
+  function opensFiles(prog) {
+    var found = false;
+    prog.scopes.forEach(function (scope) {
+      eachStep(scope.items, function (item) {
+        sumsOf(item).forEach(function (src) {
+          (function look(n) {
+            if (found || !n || typeof n !== "object") { return; }
+            if (n.call && lowered(n.call) === "open") { found = true; return; }
+            for (var key in n) { if (n[key] && typeof n[key] === "object") { look(n[key]); } }
+          })(tree(src));
+        });
+      });
+    });
+    return found;
+  }
 
   // ---- the textbook's library -------------------------------------------
   // isInteger("42"), currencyFormat(1234.5) is $1,234.50, and append("Ann",
