@@ -440,6 +440,37 @@
     translateReady();
   }
 
+  // A file the program reads, brought in from outside (19-import.js):
+  // numbers.txt, a tab of its own beside the code, the code as it was.  A
+  // tab of that name already there is filled where it is empty, and never
+  // written over: the new one is numbers 2.txt instead.  -> the name it got.
+  function langAddData(name, text) {
+    langKeep();
+    name = String(name || "").replace(/^.*[\\/]/, "") || "data.txt";
+    text = String(text || "").replace(/\r\n?/g, "\n");
+    function at(n) {
+      for (var k = 0; k < langFiles.length; k++) {
+        if (fileLabel(k).toLowerCase() === n.toLowerCase()) { return k; }
+      }
+      return -1;
+    }
+    var k = at(name);
+    if (k >= 0 && !String(langFiles[k].text || "").trim()) {
+      langFiles[k].name = langFiles[k].name || name;
+      langFiles[k].text = text;
+      if (k === langAt && langBox()) { langBox().value = text; }   // or showFile keeps the box's
+    } else {
+      var stem = name.replace(/\.[^.]*$/, ""), ext = name.slice(stem.length);
+      for (var n = 2; at(name) >= 0; n++) { name = stem + " " + n + ext; }
+      langFiles.push({ name: name, text: text });
+      k = langFiles.length - 1;
+    }
+    showFile(k);
+    translateReady();
+    langDetect();
+    return fileLabel(k);
+  }
+
   function dropFile(k) {
     var one = langFiles[k];
     if (!one) { return; }

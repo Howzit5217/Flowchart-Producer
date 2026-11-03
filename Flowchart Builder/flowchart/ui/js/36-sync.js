@@ -125,6 +125,8 @@
   if (typeof broughtIn === "function") {
     var broughtInPlain = broughtIn;
     broughtIn = function (list, folder) {
+      // numbers.txt beside a program on Code takes nobody's place (19-import.js)
+      if (dataOnly(list, folder)) { broughtInPlain(list, folder); return; }
       guardOpen(function () { broughtInPlain(list, folder); });
     };
   }

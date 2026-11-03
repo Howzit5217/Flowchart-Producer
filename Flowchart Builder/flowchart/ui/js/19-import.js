@@ -113,6 +113,11 @@
   var R_DRAWN_END = /\.(drawio|dio|excalidraw|graphml|gv|dot|puml|plantuml|pu|iuml|wsd|mmd|mermaid|svg|fprg)$/i;
   var R_WORDS_END = /\.(txt|text|pseudo|pseudocode|psc|pc|alg|algo|md|markdown|json|xml|csv)$/i;
   var R_PSEUDO_END = /\.(pseudo|pseudocode|psc|alg|algo)$/i;
+  // What a program reads -- numbers.txt, scores.csv -- which beside its code
+  // is a file of the program's (15-sums.js), a tab of its own on Code
+  var R_DATA_END = /\.(txt|text|csv|tsv|dat|data|log|in)$/i;
+  var DATA_MOST = 20;                    // such files brought in with one program
+  var DATA_BYTES = 1e6;                  // and each no bigger than this
 
   // Pseudocode, by the look of it: most of its lines begin the way a line of
   // pseudocode begins, or set something.  A README or a list of notes does not.
@@ -169,7 +174,8 @@
                        : { what: "skip", e: e };
       }
       if (kind) { return { what: "drawing", kind: kind, text: text, e: e }; }
-      if (data || /\.(xml|csv|json)$/.test(low)) { return { what: "skip", e: e, json: !!data }; }
+      if (data || /\.(xml|json)$/.test(low)) { return { what: "skip", e: e, json: !!data }; }
+      if (R_DATA_END.test(low) && !/\.(txt|text)$/.test(low)) { return { what: "data", text: text, e: e }; }
       var shape = pseudoShape(text);
       return { what: looksPseudo(text) || R_PSEUDO_END.test(low) ? "pseudo" : "text", text: text, e: e,
                main: shape.main, subs: shape.subs };
@@ -184,7 +190,7 @@
     if (R_PICTURE.test(low)) { return { what: "picture", e: e }; }
     if (/\.vsdx$/.test(low)) { return { what: "drawing", kind: "visio", e: e }; }
     var lang = langOfFile(low);
-    if (!lang && !R_DRAWN_END.test(low) && !R_WORDS_END.test(low)) { return { what: "skip", e: e }; }
+    if (!lang && !R_DRAWN_END.test(low) && !R_WORDS_END.test(low) && !R_DATA_END.test(low)) { return { what: "skip", e: e }; }
     if (e.size > 4e6) { return { what: "skip", e: e }; }
     if (lang) { return { what: "code", lang: lang, text: null, e: e }; }
     return null;
@@ -223,11 +229,12 @@
   // program, pseudocode one program where it joins into one, and every
   // flowchart and picture a thing of its own.
   function unitsOf(items) {
-    var code = {}, pseudo = [], texts = [], drawn = [];
+    var code = {}, pseudo = [], texts = [], drawn = [], data = [];
     items.forEach(function (it) {
       if (it.what === "code") { (code[it.lang] = code[it.lang] || []).push(it); }
       else if (it.what === "pseudo") { pseudo.push(it); }
       else if (it.what === "text") { texts.push(it); }
+      else if (it.what === "data") { data.push(it); }
       else if (/^(design|drawing|picture)$/.test(it.what)) { drawn.push({ kind: "one", item: it, part: "drawn" }); }
     });
     var units = [];
@@ -235,6 +242,15 @@
       var list = code[lang].sort(byPath);
       units.push({ kind: "code", lang: lang, items: list, part: "code" });
     });
+    // Beside a program, words that are not pseudocode -- numbers.txt,
+    // scores.csv -- are what it reads, and come with it as files of its own
+    if (units.length) {
+      var beside = texts.concat(data).filter(function (it) {
+        return R_DATA_END.test(it.e.name) && String(it.text || "").length <= DATA_BYTES;
+      }).sort(byPath).slice(0, DATA_MOST);
+      units.forEach(function (u) { u.data = beside; });
+      texts = texts.filter(function (it) { return beside.indexOf(it) < 0; });
+    }
     // Words that are plainly nothing else may be programs told in plain
     // words, which the Pseudocode box reads too -- when there is nothing else.
     if (!pseudo.length && !drawn.length && !units.length) { pseudo = texts; }
@@ -411,7 +427,9 @@
         var read = pick.read.slice().sort(byPath);
         openCodeFiles(read.map(function (it) {
           return { name: it.e.name, path: it.e.path, text: it.text, rank: it.rank };
-        }), pick.rest.map(function (it) {
+        }).concat((u.data || []).map(function (it) {
+          return { name: it.e.name, path: it.e.path, text: it.text };
+        })), pick.rest.map(function (it) {
           return { name: it.e.name, path: it.e.path, entry: it.e, lang: it.lang };
         }));
         broughtDone(true, pick.rest.length
@@ -442,8 +460,15 @@
           broughtDone(true, say("f_opened", { name: name }));
         }, function () { broughtDone(false, TXT.in_cannot); });
         return;
-      case "pseudo": case "text":
+      case "pseudo": case "text": case "data":
         if (!String(it.text || "").trim()) { broughtDone(false, TXT.f_empty); return; }
+        // numbers.txt brought to a program on Code: a file of its own beside
+        // the code, which stays as it is -- not the pseudocode's new words
+        if (it.what !== "pseudo" && R_DATA_END.test(name) && byLang && langHasCode()) {
+          broughtDone(true, say("f_opened", { name: langAddData(name, it.text) }));
+          return;
+        }
+        if (it.what === "data") { openFile(name, it.text); broughtDone(true, ""); return; }
         openWritten(it.from ? name.replace(/\.[^.]+$/, ".txt") : name, it.text);
         broughtDone(true, say("f_opened", { name: name }));
         return;
@@ -482,11 +507,30 @@
     }).catch(function () { broughtDone(false, TXT.in_cannot); });
   }
 
+  // Files that are only what a program reads -- numbers.txt, scores.csv --
+  // brought to a program on Code, and not as a folder: each a file of the
+  // program's beside its code, whatever its words look like, and nothing
+  // put in the place of anything (so nothing is asked first, 36-sync.js).
+  function dataOnly(list, folder) {
+    return !String(folder || "").trim() && byLang && langHasCode() && !!list.length && list.length <= DATA_MOST &&
+           list.every(function (e) { return R_DATA_END.test(e.name || "") && (e.size || 0) <= DATA_BYTES; });
+  }
+
   // Several files, or a folder: sorted, and opened -- or asked about.
   function broughtIn(list, folder) {
     var turn = ++inTurn;
     list = list.filter(function (e) { return !junkPath(e.path); });
     if (!list.length) { broughtDone(false, TXT.in_nothing); return; }
+    if (dataOnly(list, folder)) {
+      eachFew(list, 4, function (e) {
+        return entryText(e).then(function (text) { return langAddData(e.name, text); });
+      }).then(function (names) {
+        names = names.filter(Boolean);
+        broughtDone(names.length > 0, !names.length ? TXT.in_cannot
+          : say("f_opened", { name: names.length > 1 ? say("in_files", { n: bigNum(names.length) }) : names[0] }));
+      });
+      return;
+    }
     if (list.length === 1 && !folder) { openOne(list[0]); return; }
     inBusy(list.length > 1000 ? say("in_sorting", { n: bigNum(list.length) }) : TXT.in_looking);
     // zips inside, opened as the folders they are -- in a folder of a few
@@ -508,10 +552,10 @@
         var used = new Set();
         units.forEach(function (u) {
           if (u.item) { used.add(u.item); }
-          (u.items || []).forEach(function (it) { used.add(it); });
+          (u.items || []).concat(u.data || []).forEach(function (it) { used.add(it); });
         });
         var skipped = every.length - items.filter(function (it) {
-          return it.what !== "skip" && it.what !== "zip" && (it.what !== "text" || used.has(it));
+          return it.what !== "skip" && it.what !== "zip" && ((it.what !== "text" && it.what !== "data") || used.has(it));
         }).length;
         if (!units.length) { broughtDone(false, TXT.in_nothing); return; }
         if (units.length === 1) { inBatch = null; openUnit(units[0]); return; }
