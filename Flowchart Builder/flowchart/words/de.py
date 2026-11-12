@@ -41,6 +41,11 @@ DE = {
     "mm_head": "Mermaid",
     "mm_bad": "Das konnte nicht als Mermaid-Flussdiagramm gelesen werden.",
     "mm_opened": "Als Zeichnung geöffnet.",
+    # Optionen: Code mit Klassen als UML-Klassendiagramm (19-uml.js)
+    "o_draw_as": "Zeichnen als", "o_draw_flow": "Flussdiagramm",
+    "o_draw_uml": "Klassendiagramm",
+    "o_draw_tip": "Ein UML-Klassendiagramm: jede Klasse mit ihren Feldern und Methoden",
+    "o_draw_none": "Dieser Code hat keine Klassen, darum wird er als Flussdiagramm gezeichnet.",
     "print_head": "Drucken",
     "print_go": "Drucken…",
     "print_paper": "Papier",

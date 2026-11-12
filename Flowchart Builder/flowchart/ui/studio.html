@@ -587,6 +587,19 @@ __SVG__
       <section class="more-part">
         <h3 data-w="o_shapes">__W(o_shapes)__</h3>
         <div class="opt-group">
+          <!-- Code with classes drawn as a UML class diagram instead: a box
+               for each class, with its fields and methods (19-uml.js).  On
+               the Code tab only, which is where the classes are.  The box
+               behind it is what is remembered, as with Roomier. -->
+          <div class="opt-row only-lang" id="draw-row">
+            <span class="opt-name" data-w="o_draw_as">__W(o_draw_as)__</span>
+            <div class="seg" id="draw-seg">
+              <button class="seg-btn on" data-draw="flow" data-w="o_draw_flow">__W(o_draw_flow)__</button>
+              <button class="seg-btn" data-draw="classes" data-w="o_draw_uml"
+                      data-w-title="o_draw_tip" title="__W(o_draw_tip)__">__W(o_draw_uml)__</button>
+            </div>
+            <input type="checkbox" id="o-classes" hidden>
+          </div>
           <label class="opt-row">
             <span class="opt-name" data-w="tint_switch">__W(tint_switch)__</span>
             <input type="checkbox" id="o-tint"></label>

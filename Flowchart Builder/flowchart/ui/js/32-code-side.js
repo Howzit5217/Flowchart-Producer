@@ -28,6 +28,7 @@
   // the language is chosen is a preference, and is.
   var langFrom = null;                   // the code the pseudocode was last read from
   var langMade = null;                   // and the pseudocode that reading made
+  var langUml = null;                    // and the classes it found, for 19-uml.js
   var langAsked = false;                 // Build asked for by its keys, not its button
   // Read in whatever was there before -- a file just opened, a translation
   // asked for -- but not put right: that waits for Build to be pressed.
@@ -1437,6 +1438,7 @@
     if (langAutoRename(said.notes, asked, again)) { return false; }
     langFrom = langKey();
     langMade = said.text;
+    langUml = said.uml || null;
     langNamed = { files: langAll(), folder: langFolder, hint: said.title || "" };
     if (el("#code").value !== said.text) {
       el("#code").value = said.text;

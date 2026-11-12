@@ -3481,6 +3481,24 @@ def _():
     return not got.returncode, (said[-1] if not got.returncode else "; ".join(said[:3]))[:300]
 
 
+@check("code with classes is drawn as a class diagram")
+def _():
+    """Options' Draw as: Class diagram (19-uml.js).  Programs with classes in
+    Python, Java, C#, C++, JavaScript and TypeScript, each read the way the
+    Code tab reads it: every class has to come out with the lines it should
+    -- - for its own, + for anybody, # for those built on it, ~ for its
+    package; what each field holds, what each method takes and hands back,
+    static and abstract said -- and the lines between the classes; then it
+    is drawn (every box on the paper, none over another, each under the one
+    it is built on) and written as Mermaid's classDiagram.  See tests/uml.js."""
+    if not node_there():
+        return None, "node is not installed -- skipped"
+    got = subprocess.run(["node", os.path.join(HERE, "uml.js")],
+                         cwd=HOME, capture_output=True, text=True, encoding="utf-8")
+    said = (got.stdout.strip() or got.stderr.strip() or "failed").split(chr(10))
+    return not got.returncode, (said[-1] if not got.returncode else "; ".join(said[:3]))[:300]
+
+
 @check("a drawing by hand is written out as the program it draws")
 def _():
     """What Check, Run, As pseudocode and Tidy up all start from.  An If

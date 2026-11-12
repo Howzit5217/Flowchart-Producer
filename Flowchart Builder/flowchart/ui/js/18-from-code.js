@@ -713,7 +713,7 @@
         }
         if (js && c === "#" && /[A-Za-z_$]/.test(s[i + 1] || "")) {    // this.#count
           var priv = /^#([\w$]+)/.exec(s.slice(i, i + 256));
-          push("name", "_" + priv[1]);
+          push("name", "_" + priv[1], { hash: true });
           i += priv[0].length;
           continue;
         }
@@ -4153,10 +4153,11 @@
           }
           if (isOp("...")) { next(); rest = true; }
           // TypeScript's constructor(private name: string): a field as well
-          var prop = false;
+          var prop = false, propVis = null;
           while (ts && peek().t === "name" && /^(public|private|protected|readonly|override)$/.test(peek().v) &&
                  peek(1).t === "name") {
-            next();
+            var pw = next().v;
+            if (pw !== "readonly" && pw !== "override") { propVis = pw; }
             prop = true;
           }
           while (peek().t === "name" && /^(final|const|ref|out|in|params|let|var|readonly|scoped|this|register)$/.test(peek().v) &&
@@ -4200,10 +4201,11 @@
             dims--;
             type = Object.assign({}, type, { name: "string", dims: dims });
           }
-          tsAfterName();
+          var tsSaid = tsAfterName();
           var dflt = accept("=") ? cAssign() : null;
           params.push({ name: nm.v, type: type ? type.name : null, typeInfo: type,
-                        dims: dims, ref: ref, rest: rest, dflt: dflt, line: nm.line, prop: prop });
+                        dims: dims, ref: ref, rest: rest, dflt: dflt, line: nm.line, prop: prop,
+                        propVis: propVis, umlType: tsSaid });
           if (!accept(",")) { break; }
         }
         expect(")");
@@ -4258,7 +4260,7 @@
         if (nt.t !== "name") { throw odd(nt); }
         var cls = { k: "class", name: nt.v, kind: kind, bases: [], fields: [], methods: [],
                     ctors: [], values: [], inits: [], line: kt.line, lead: lead || [],
-                    statik: !!mods.static };
+                    statik: !!mods.static, abstract: !!mods.abstract, declared: [] };
         classes.push(cls.name);
         if (isOp("<")) { skipAngles(); }
         // record Point(int x, int y): the fields, and what makes one
@@ -4333,7 +4335,15 @@
         }
         if (accept(";")) { classMembers(cls); }
       }
+      // Who else may use a member, for the class diagram (umlClasses): what its
+      // own words say -- private, protected, public, internal -- or C++'s
+      // public: above it, or null where nothing says and the language decides.
+      function seenBy(mods, section) {
+        return mods.private ? "private" : mods.protected ? "protected" : mods.public ? "public"
+             : mods.internal ? "internal" : section || null;
+      }
       function classMembers(cls) {
+        var section = cpp ? (cls.kind === "struct" ? "public" : "private") : null;
         while (!isOp("}")) {
           if (peek().t === "eof") { throw wanted("}"); }
           var t = peek();
@@ -4341,6 +4351,7 @@
           if (accept(";")) { continue; }
           if (peek().t === "name" && /^(public|private|protected|internal|signals|slots)$/.test(peek().v) &&
               isOp(":", 1)) {
+            if (/^(public|private|protected)$/.test(peek().v)) { section = peek().v; }
             next(); next();
             continue;
           }
@@ -4377,7 +4388,10 @@
               } while (accept(","));
             }
             skipQualifiers();
-            if (accept(";")) { continue; }
+            if (accept(";")) {                             // made further on: Car::Car(...)
+              cls.declared.push({ name: cls.name, params: params, vis: seenBy(mods, section), ctor: true, line: ct.line });
+              continue;
+            }
             if (isOp("=")) { skipMember(); continue; }     // = default;
             var cbody;
             if (accept("=>")) { cbody = [{ k: "expr", e: cAssign(), line: ct.line }]; accept(";"); }
@@ -4386,7 +4400,8 @@
             var props = params.filter(function (q) { return q.prop; });
             if (props.length) {
               var sets = props.map(function (q) {
-                cls.fields.push({ name: q.name, value: null, statik: false, line: q.line });
+                cls.fields.push({ name: q.name, value: null, statik: false, line: q.line, vis: q.propVis || null,
+                                  umlType: q.umlType || null });
                 return { k: "expr", line: q.line, e: { k: "assignx", op: "=", line: q.line,
                          target: { k: "member", obj: { k: "name", v: "this", line: q.line }, name: q.name, line: q.line },
                          value: { k: "name", v: q.name, line: q.line } } };
@@ -4395,7 +4410,8 @@
                            pathOf(stripParens(cbody[0].e).fn) === "super";
               cbody = first0 ? [cbody[0]].concat(sets, cbody.slice(1)) : sets.concat(cbody);
             }
-            cls.ctors.push({ params: params, body: cbody, inits: inits, line: ct.line, lead: lead });
+            cls.ctors.push({ params: params, body: cbody, inits: inits, line: ct.line, lead: lead,
+                             vis: seenBy(mods, section) });
             continue;
           }
           if (js) {
@@ -4412,19 +4428,27 @@
               if (isOp("?") || isOp("!")) { next(); }
               if (isOp("<")) { skipAngles(); }
             }
+            // #count: private, whatever else is said
+            var jsSeen = mt.hash ? "private" : seenBy(mods, null);
             if (isOp("(")) {
               var mps = cParams();
-              if (ts && accept(":")) { tsType(); }
+              var tsGives = ts && accept(":") ? tsType() : null;
               // abstract area(): number; -- nothing to run
-              if (ts && !isOp("{")) { accept(";"); continue; }
+              if (ts && !isOp("{")) {
+                accept(";");
+                cls.declared.push({ name: String(mt.v), params: mps, rtype: tsGives ? tsGives.name : null,
+                                    rtypeInfo: tsGives, vis: jsSeen, statik: !!mods.static, abstract: true, line: mt.line });
+                continue;
+              }
               cls.methods.push({ k: "func", name: String(mt.v), params: mps, rtype: null, body: cBraces(),
                                  line: mt.line, statik: !!mods.static, kind: kind, gen: gen, lead: lead,
-                                 getter: kind === "get", setter: kind === "set" });
+                                 getter: kind === "get", setter: kind === "set", vis: jsSeen, umlGives: tsGives });
             } else {
-              if (ts && accept(":")) { tsType(); }
+              var tsHolds = ts && accept(":") ? tsType() : null;
               var fv = accept("=") ? cAssign() : null;
               accept(";");
-              cls.fields.push({ name: String(mt.v), value: fv, statik: !!mods.static, line: mt.line, lead: lead });
+              cls.fields.push({ name: String(mt.v), value: fv, statik: !!mods.static, line: mt.line, lead: lead,
+                                vis: jsSeen, umlType: tsHolds, written: mt.hash ? "#" + String(mt.v).slice(1) : null });
             }
             continue;
           }
@@ -4455,20 +4479,28 @@
           var nmt = next();
           if (nmt.t !== "name") { throw odd(nmt); }
           if (nmt.v === "operator") { skipMember(); continue; }
-          if (cs && isOp("{")) { csProperty(cls, rtype, nmt, mods); continue; }
+          if (cs && isOp("{")) { csProperty(cls, rtype, nmt, mods, seenBy(mods, null)); continue; }
           if (cs && isOp("=>")) {                          // int Area => w * h;
             next();
             var pe = cAssign();
             accept(";");
             cls.methods.push({ k: "func", name: nmt.v, params: [], body: [{ k: "return", value: pe, line: nmt.line }],
-                               rtype: rtype.name, line: nmt.line, statik: !!mods.static, kind: "get", getter: true, lead: lead });
+                               rtype: rtype.name, line: nmt.line, statik: !!mods.static, kind: "get", getter: true, lead: lead,
+                               vis: seenBy(mods, section), rtypeInfo: rtype });
             continue;
           }
           if ((isOp("(") && !madeAt(pos)) || (isOp("<", 0) && templateAhead())) {
             if (isOp("<")) { skipAngles(); }
             var params2 = cParams();
             skipQualifiers();
-            if (accept(";")) { continue; }                  // abstract, or defined further on
+            // abstract, or defined further on; and C++'s = 0, which is abstract
+            var bodiless = isOp(";") ? "" : isOp("=") && peek(1).t === "num" ? "pure" : null;
+            if (bodiless !== null) {
+              cls.declared.push({ name: nmt.v, params: params2, rtype: rtype.name, rtypeInfo: rtype,
+                                  vis: seenBy(mods, section), statik: !!mods.static, line: nmt.line,
+                                  abstract: !!mods.abstract || bodiless === "pure" || cls.kind === "interface" });
+            }
+            if (accept(";")) { continue; }
             if (isOp("=")) { skipMember(); continue; }      // = 0;
             var body2;
             if (accept("=>")) {
@@ -4481,7 +4513,7 @@
             }
             cls.methods.push({ k: "func", name: nmt.v, params: params2, rtype: rtype.name, rtypeInfo: rtype,
                                rdims: rtype.dims, body: body2, line: nmt.line, statik: !!mods.static,
-                               kind: "method", lead: lead });
+                               kind: "method", lead: lead, vis: seenBy(mods, section) });
             continue;
           }
           pos = save;
@@ -4490,7 +4522,8 @@
             // C#'s const belongs to the class, as a static does
             cls.fields.push({ name: one.name, value: one.value, sizes: one.sizes, dims: one.dims,
                               statik: !!mods.static || (cs && !!(mods.const || decl.konst && !mods.readonly)),
-                              konst: decl.konst, type: decl.typeInfo, line: one.line, lead: lead });
+                              konst: decl.konst, type: decl.typeInfo, line: one.line, lead: lead,
+                              vis: seenBy(mods, section) });
           });
         }
       }
@@ -4656,7 +4689,7 @@
         }
       }
       // public int Age { get; set; } = 0;   public int Area { get { ... } }
-      function csProperty(cls, rtype, nmt, mods) {
+      function csProperty(cls, rtype, nmt, mods, vis) {
         expect("{");
         var getter = null, setter = null, auto = true, init = null;
         while (!isOp("}")) {
@@ -4678,16 +4711,18 @@
         expect("}");
         if (accept("=")) { init = cAssign(); accept(";"); }
         if (auto) {
-          cls.fields.push({ name: nmt.v, value: init, statik: !!mods.static, type: rtype, line: nmt.line });
+          cls.fields.push({ name: nmt.v, value: init, statik: !!mods.static, type: rtype, line: nmt.line,
+                            vis: vis, property: true });
           return;
         }
         if (getter) {
           cls.methods.push({ k: "func", name: nmt.v, params: [], body: getter, kind: "get", getter: true, rtype: rtype.name,
-                             statik: !!mods.static, line: nmt.line });
+                             statik: !!mods.static, line: nmt.line, vis: vis, rtypeInfo: rtype });
         }
         if (setter) {
           cls.methods.push({ k: "func", name: nmt.v, params: [{ name: "value", type: rtype.name, line: nmt.line }],
-                             body: setter, kind: "set", setter: true, rtype: "void", statik: !!mods.static, line: nmt.line });
+                             body: setter, kind: "set", setter: true, rtype: "void", statik: !!mods.static, line: nmt.line,
+                             vis: vis });
         }
       }
 
@@ -9977,6 +10012,8 @@
         var isData = c.marks.some(function (m) { return /dataclass$/.test(m); }) ||
                      node.bases.some(function (b) { return /^(NamedTuple|TypedDict)$/.test(b); });
         c.isError = node.bases.some(function (b) { return /(Exception|Error)$/.test(b); });
+        // class Shape(ABC): one there are only kinds of (a class diagram's {abstract})
+        c.abstract = node.bases.some(function (b) { return /^(ABC|ABCMeta)$/.test(b); });
         c.bases = c.bases.filter(function (b) { return !/^(Enum|IntEnum|StrEnum|Flag|IntFlag|NamedTuple|TypedDict|Generic|Protocol|object|ABC)$/.test(b); });
         if (isEnum) { c.kind = "enum"; }
         var dataFields = [];
@@ -10001,6 +10038,7 @@
             }
             st.kind = has(/^property$/) ? "get" : has(/\.setter$/) ? "set" : "method";
             st.getter = st.kind === "get"; st.setter = st.kind === "set";
+            st.abstract = has(/abstractmethod$/);
             st.self = st.params[0] ? st.params[0].name : "self";
             st.params = st.params.slice(1);
             c.methods.push(st);
@@ -10044,6 +10082,28 @@
       for (var ti = 0; ti < (top.types || []).length; ti++) { addClass(top.types[ti]); }
       clsOrder.forEach(function (c) {
         c.parent = (c.bases || []).filter(function (b) { return CLS[b] && b !== c.name; })[0] || null;
+      });
+      // The classes as they were written, for a class diagram (umlClasses,
+      // at the end).  From here on a class is turned into a record and
+      // functions -- its methods renamed, each handed the record first,
+      // what it says it is written for it -- and a diagram wants none of
+      // that: what was written is kept here, before any of it happens.
+      clsOrder.forEach(function (c) {
+        c.uml = {
+          fields: c.fields.slice(),
+          methods: c.methods.filter(function (m) { return m !== c.recordShown; }).map(function (m) {
+            return { fn: m, name: m.name, params: (m.params || []).slice(), vis: m.vis || null,
+                     statik: !!m.statik, get: !!m.getter, set: !!m.setter, abstract: !!m.abstract,
+                     said: m.rtypeInfo || m.rtype || m.umlGives || null, op: m.opSign || null, line: m.line || 0,
+                     body: m.body || [], self: m.self || selfWord };
+          }),
+          ctors: c.ctors.filter(function (k) { return !k.fromFields && !k.record; }).map(function (k) {
+            return { params: (k.params || []).slice(), vis: k.vis || null, line: k.line || 0,
+                     body: k.body || [], self: k.self || selfWord };
+          }),
+          declared: (c.declared || []).slice(),
+          values: (c.values || []).map(function (v) { return v.name; })
+        };
       });
       // An error of the program's own -- class TooBig(Exception), class
       // NotFound extends Error -- is a record like any other, holding what
@@ -19851,8 +19911,258 @@
 
       notes.sort(function (a, b) { return a.line - b.line; });
       return { text: rows.join("\n") + "\n", notes: notes.filter(function (n) { return n.line; }),
-               title: titleHint() };
+               title: titleHint(), uml: umlClasses() };
+
+      // ---- the classes, for a class diagram -------------------------------
+      // Each class as it was written (c.uml, kept before it was taken apart):
+      // its fields, its constructors and its methods, each with who may use
+      // it and the kind of thing it holds, takes or hands back -- in the
+      // words of the language it is written in, as written where the code
+      // says (int year, List<String> names) and as worked out by the
+      // reading where it does not (Python, JavaScript).  And the lines
+      // between them: a class built on another, a class saying it has an
+      // interface's methods, a field holding one of another class, or a
+      // list of them.  19-uml.js draws it.
+      function umlClasses() {
+        // the class Java and C# keep main in, with nothing else in it, is not one
+        var mine = clsOrder.filter(function (c) {
+          if (!c.uml || c.builtIn) { return false; }
+          var empty = !c.uml.fields.length && !c.uml.methods.length && !c.uml.ctors.length &&
+                      !c.uml.declared.length && !c.uml.values.length && !(c.fieldNames || []).length;
+          return !(empty && c.name === top.mainClass) &&
+                 !(empty && /^(Program|Main)$/.test(c.name) && !c.subclassed);
+        });
+        var out = { lang: dialect, classes: [], links: [] };
+        if (!mine.length) { return out; }
+        var named = Object.create(null);
+        mine.forEach(function (c) { named[c.name] = true; });
+        var words = UML_WORDS[dialect] || UML_WORDS[lang] || UML_WORDS.java;
+        function kindText(k) {
+          if (!k || /^(mixed|any|none|obj|null)$/.test(k)) { return ""; }
+          var rec = recordOf(k);
+          if (rec) { return rec; }
+          if (isListKind(k)) {
+            var inner = kindText(elemKind(k));
+            return words.many(/^set/.test(k) ? "set" : "list", inner);
+          }
+          return words[k] || "";
+        }
+        function saidText(t) {
+          if (!t) { return ""; }
+          if (typeof t === "string") { return /^(any|auto|var|let|dynamic)$/.test(t) ? "" : t; }
+          var s = String(t.name || "");
+          if (!s || /^(any|auto|var|dynamic)$/.test(s)) { return ""; }
+          if (t.args && t.args.length) {
+            s += "<" + t.args.map(saidText).map(function (a) { return a || "?"; }).join(", ") + ">";
+          }
+          for (var p = 0; p < (t.ptr || 0); p++) { s += "*"; }
+          var dims = (t.dims || 0) - (t.varargs ? 1 : 0);
+          for (var d = 0; d < dims; d++) { s += "[]"; }
+          if (t.varargs) { s += "..."; }
+          return s;
+        }
+        // Who may use it, where the code does not say: Python by its name
+        // (__speed is the class's own, _speed is for it and those built on
+        // it), and each of the others as the language has it.
+        function seen(vis, name, c) {
+          if (py) {
+            if (/^__/.test(name) && !/__$/.test(name)) { return "private"; }
+            return /^_/.test(name) && !/__$/.test(name) ? "protected" : "public";
+          }
+          if (vis) { return vis; }
+          if (c.kind === "interface") { return "public"; }
+          if (go) { return /^[A-Z]/.test(name) ? "public" : "private"; }
+          return java && !kt && !sw && !rs ? "package" : cs ? "private" : "public";
+        }
+        // `chs`: the charts that know what each is handed, best first
+        function paramsOf(list, chs) {
+          return (list || []).filter(function (p) { return !p.self; }).map(function (p) {
+            var type = saidText(p.umlType || p.typeInfo || p.type);
+            (chs || []).forEach(function (ch) {
+              var have = ch && ch.params[p.name];
+              if (!type && have) { type = kindText(have.kind); }
+            });
+            return { name: p.name, type: type };
+          });
+        }
+        function givesText(fn, said) {
+          var t = saidText(said);
+          if (t) { return t; }
+          if (!fn || !fn.chart) { return ""; }
+          var gives = false;
+          eachReturn(fn.chart.body || [], function () { gives = true; });
+          return gives ? kindText(fn.kind) : "";
+        }
+        // the functions a constructor became -- the one setting the fields
+        // first, where it has one of its own, then the one making it -- and
+        // what each of them knows it is handed
+        function madeBy(c, n) {
+          var by = function (key) {
+            return madeFns.filter(function (fn) { return fn[key] === c.name && fn.arity === n && fn.chart; })
+                          .map(function (fn) { return fn.chart; });
+          };
+          return by("initOf").concat(by("factoryOf"));
+        }
+        // the statements of a class's constructors and methods, as written,
+        // each with the name it calls itself by and a chart that knows its names
+        function bodiesOf(c) {
+          return c.uml.ctors.map(function (k) {
+            return { body: k.body, self: k.self, ch: madeBy(c, k.params.length)[0] || null };
+          }).concat(c.uml.methods.map(function (m) {
+            return { body: m.body, self: m.self, ch: m.fn.chart || null };
+          }));
+        }
+        function ownField(t, self, name) {
+          t = stripParens(t);
+          return !!t && t.k === "member" && t.name === name && !!t.obj && t.obj.k === "name" && t.obj.v === self;
+        }
+        // where self.x is first set (Python's fields, in the order they come)
+        function firstSet(c, name) {
+          var at = 1e9;
+          bodiesOf(c).forEach(function (b) {
+            eachNode(b.body, function (x) {
+              var set = x.k === "expr" && x.e && x.e.k === "assignx" ? x.e : x;
+              if ((set.k === "assign" || set.k === "aug" || set.k === "assignx") && ownField(set.target, b.self, name) &&
+                  x.line && x.line < at) { at = x.line; }
+            });
+          });
+          return at;
+        }
+        // what a list of its own is filled with, where nothing says what it
+        // holds: what goes into it -- self.shapes.append(s), this.list.push(x)
+        function filledWith(c, name) {
+          var k = null;
+          bodiesOf(c).forEach(function (b) {
+            eachNode(b.body, function (x) {
+              if (x.k !== "call" || !x.fn || x.fn.k !== "member" || !(x.args || []).length ||
+                  !/^(append|push|add|Add|insert|push_back|unshift|appendleft|offer)$/.test(x.fn.name)) { return; }
+              var on = stripParens(x.fn.obj);
+              if (!ownField(on, b.self, name) && !(!py && on && on.k === "name" && on.v === name)) { return; }
+              var put = x.args[x.fn.name === "insert" && x.args.length > 1 ? 1 : 0];
+              k = mergeKinds(k, kindOf(put, b.ch));
+            });
+          });
+          return k && k !== "mixed" ? k : null;
+        }
+        function declaredAs(c, name, n) {
+          return c.uml.declared.filter(function (d) { return d.name === name && (d.params || []).length === n; })[0] ||
+                 c.uml.declared.filter(function (d) { return d.name === name; })[0] || null;
+        }
+        mine.forEach(function (c) {
+          var fieldKinds = FIELD_KINDS[c.name] || {};
+          var one = { name: c.name, kind: c.kind || "class",
+                      abstract: !!c.abstract, parent: c.parent || null,
+                      bases: (c.bases || []).filter(function (b) { return b !== c.name; }),
+                      ifaces: (c.ifaces || []).slice(), fields: [], methods: [], values: c.uml.values.slice(),
+                      line: c.line || 0 };
+          // the fields: those it says it has, then (Python) whatever self.x is set to
+          var have = Object.create(null);
+          // `at`: the line it is on, for putting them in the order they were written
+          function addField(name, said, vis, statik, konst, kindNow, at, written) {
+            if (have[name]) { return; }
+            have[name] = true;
+            if (!saidText(said) && isListKind(kindNow) && !elemKind(kindNow)) {
+              var inner = filledWith(c, name);
+              if (inner) { kindNow = (/^set/.test(kindNow) ? "set" : "list") + "<" + inner + ">"; }
+            }
+            var type = saidText(said) || kindText(kindNow);
+            one.fields.push({ name: written || name, type: type, vis: seen(vis, name, c), statik: !!statik,
+                              konst: !!konst, kind: kindNow || null, at: at || 0 });
+          }
+          c.uml.fields.forEach(function (f) {
+            var k = f.statik ? (globalChart.names[f.name] && globalChart.names[f.name].kind) || kindOf(f.value, mainChart)
+                             : fieldKinds[f.name] || kindOfType(f.type);
+            addField(f.name, f.type || f.umlType, f.vis, f.statik, f.konst, k, f.line, f.written);
+          });
+          (c.fieldNames || []).forEach(function (name) {
+            addField(name, null, null, false, false, fieldKinds[name], firstSet(c, name));
+          });
+          // properties -- @property, get area(), C#'s get and set -- are fields to whoever uses them
+          c.uml.methods.forEach(function (m) {
+            if (m.get) { addField(m.name, m.said, m.vis, m.statik, false, m.fn.chart ? m.fn.kind : null, m.line); }
+          });
+          // what makes one, then what it does
+          c.uml.ctors.forEach(function (k) {
+            var said = declaredAs(c, c.name, k.params.length);
+            one.methods.push({ name: py ? "__init__" : js ? "constructor" : c.name, ctor: true,
+                               params: paramsOf(k.params, madeBy(c, k.params.length)),
+                               type: "", vis: seen(k.vis || (said && said.vis), py ? "__init__" : c.name, c),
+                               statik: false, abstract: false, at: said ? said.line : k.line });
+          });
+          var shown = Object.create(null);
+          c.uml.methods.forEach(function (m) {
+            if (m.get || m.set) { return; }
+            var said = declaredAs(c, m.name, m.params.length);
+            var name = m.op && !py ? "operator" + m.op : m.name;
+            shown[m.name + "/" + m.params.length] = true;
+            one.methods.push({ name: name, params: paramsOf(m.params, [m.fn.chart]), type: givesText(m.fn, m.said),
+                               vis: seen(m.vis || (said && said.vis), m.name, c), statik: m.statik,
+                               abstract: m.abstract || !!(said && said.abstract), at: said ? said.line : m.line });
+          });
+          // and what it only says it does: abstract, or an interface's
+          c.uml.declared.forEach(function (d) {
+            if (d.ctor || shown[d.name + "/" + (d.params || []).length]) { return; }
+            shown[d.name + "/" + (d.params || []).length] = true;
+            one.methods.push({ name: d.name, params: paramsOf(d.params, null), type: saidText(d.rtypeInfo || d.rtype),
+                               vis: seen(d.vis, d.name, c), statik: !!d.statik, abstract: !!d.abstract, at: d.line });
+          });
+          // in the order they were written, constructors first; and the
+          // lines they were on are the reading's business, not the diagram's
+          function byLine(a, b) { return (b.ctor ? 1 : 0) - (a.ctor ? 1 : 0) || (a.at || 0) - (b.at || 0); }
+          one.fields.sort(byLine);
+          one.methods.sort(byLine);
+          one.fields.concat(one.methods).forEach(function (x) { delete x.at; });
+          if (one.methods.some(function (m) { return m.abstract; }) && one.kind !== "interface") { one.abstract = true; }
+          out.classes.push(one);
+          // the lines: built on, says it has, holds
+          var up = (c.bases || []).filter(function (b) { return b !== c.name; });
+          up.forEach(function (b) { out.links.push({ from: c.name, to: b, kind: "extends" }); });
+          one.ifaces.forEach(function (b) { out.links.push({ from: c.name, to: b, kind: "implements" }); });
+          one.fields.forEach(function (f) {
+            var k = f.kind || "", many = false;
+            while (isListKind(k)) { k = elemKind(k) || ""; many = true; }
+            var to = recordOf(k);
+            if (!to || !named[to]) { return; }
+            out.links.push({ from: c.name, to: to, kind: "has", label: f.name, many: many });
+          });
+        });
+        return out;
+      }
     }
+
+    // Each language's words for the kinds of thing a name holds, for a
+    // class diagram (umlClasses): Python's str, Java's String, C#'s string.
+    // `many` says a list of them.
+    function umlMany(open, close, boxed) {
+      return function (kind, inner) {
+        var base = open[kind] || open.list;
+        return inner ? base + "<" + (boxed && boxed[inner] || inner) + close : base;
+      };
+    }
+    var JAVA_BOXED = { int: "Integer", double: "Double", boolean: "Boolean", long: "Long", char: "Character" };
+    var UML_WORDS = {
+      python: { int: "int", real: "float", text: "str", bool: "bool", map: "dict", fn: "function",
+                many: function (kind, inner) { return inner ? kind + "[" + inner + "]" : kind; } },
+      java: { int: "int", real: "double", text: "String", bool: "boolean", map: "Map", fn: "Function",
+              many: umlMany({ list: "ArrayList", set: "Set" }, ">", JAVA_BOXED) },
+      csharp: { int: "int", real: "double", text: "string", bool: "bool", map: "Dictionary", fn: "Func",
+                many: umlMany({ list: "List", set: "HashSet" }, ">") },
+      cpp: { int: "int", real: "double", text: "string", bool: "bool", map: "map", fn: "function",
+             many: umlMany({ list: "vector", set: "set" }, ">") },
+      c: { int: "int", real: "double", text: "char*", bool: "bool",
+           many: function (kind, inner) { return inner ? inner + "[]" : "array"; } },
+      javascript: { int: "number", real: "number", text: "string", bool: "boolean", map: "Map", fn: "Function",
+                    many: function (kind, inner) { return kind === "set" ? "Set" : inner ? inner + "[]" : "Array"; } },
+      kotlin: { int: "Int", real: "Double", text: "String", bool: "Boolean", map: "Map",
+                many: umlMany({ list: "List", set: "Set" }, ">") },
+      swift: { int: "Int", real: "Double", text: "String", bool: "Bool", map: "Dictionary",
+               many: function (kind, inner) { return kind === "set" ? "Set" : "[" + (inner || "Any") + "]"; } },
+      go: { int: "int", real: "float64", text: "string", bool: "bool", map: "map",
+            many: function (kind, inner) { return "[]" + (inner || "any"); } },
+      rust: { int: "i64", real: "f64", text: "String", bool: "bool", map: "HashMap",
+              many: umlMany({ list: "Vec", set: "HashSet" }, ">") }
+    };
+    UML_WORDS.typescript = UML_WORDS.javascript;
 
     // ==================================================== which language ==
     // Code is its own best label.  Each language has things only it says --

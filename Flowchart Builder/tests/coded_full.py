@@ -2170,3 +2170,78 @@ console.log(existsSync("w.txt") ? "yes" : "no", existsSync("nope.txt") ? "yes" :
      ['a b c', 'yes no']),
 ]
 CODED = CODED + FILES
+
+
+
+# The Car class assignment: three private attributes (Python's __year), the
+# methods that read and change them, and a menu that loops until Exit --
+# braking below 0 stays at 0, and a choice off the menu is said to be one.
+CAR_MENU = ('py car class with private attributes, and its menu', 'python', r'''# Car class program
+# A Car keeps its year, make and speed private, and the main program
+# lets the user speed it up or slow it down from a menu until they exit.
+
+
+class Car:
+    def __init__(self, year, make):
+        self.__year = year
+        self.__make = make
+        self.__speed = 0
+
+    def getYear(self):
+        return self.__year
+
+    def getMake(self):
+        return self.__make
+
+    def getSpeed(self):
+        return self.__speed
+
+    def accelerate(self):
+        self.__speed = self.__speed + 5
+
+    def brake(self):
+        self.__speed = self.__speed - 5
+        if self.__speed < 0:
+            self.__speed = 0
+
+
+def main():
+    myCar = Car(2014, "Mitsubishi")
+    choice = ""
+    while choice != "3":
+        print()
+        print("Year:", myCar.getYear())
+        print("Make:", myCar.getMake())
+        print("Speed:", myCar.getSpeed())
+        print()
+        print("1. Accelerate")
+        print("2. Brake")
+        print("3. Exit")
+        choice = input("Enter your choice: ")
+        if choice == "1":
+            myCar.accelerate()
+        elif choice == "2":
+            myCar.brake()
+        elif choice == "3":
+            print("Goodbye!")
+        else:
+            print("Invalid selection.")
+
+
+main()
+''', ['1', '1', '1', '2', '9', '2', '2', '2', '3'],
+     ['', 'Year: 2014', 'Make: Mitsubishi', 'Speed: 0', '', '1. Accelerate', '2. Brake',
+      '3. Exit', 'Enter your choice: ', '', 'Year: 2014', 'Make: Mitsubishi', 'Speed: 5', '',
+      '1. Accelerate', '2. Brake', '3. Exit', 'Enter your choice: ', '', 'Year: 2014',
+      'Make: Mitsubishi', 'Speed: 10', '', '1. Accelerate', '2. Brake', '3. Exit',
+      'Enter your choice: ', '', 'Year: 2014', 'Make: Mitsubishi', 'Speed: 15', '',
+      '1. Accelerate', '2. Brake', '3. Exit', 'Enter your choice: ', '', 'Year: 2014',
+      'Make: Mitsubishi', 'Speed: 10', '', '1. Accelerate', '2. Brake', '3. Exit',
+      'Enter your choice: ', 'Invalid selection.', '', 'Year: 2014', 'Make: Mitsubishi',
+      'Speed: 10', '', '1. Accelerate', '2. Brake', '3. Exit', 'Enter your choice: ', '',
+      'Year: 2014', 'Make: Mitsubishi', 'Speed: 5', '', '1. Accelerate', '2. Brake', '3. Exit',
+      'Enter your choice: ', '', 'Year: 2014', 'Make: Mitsubishi', 'Speed: 0', '',
+      '1. Accelerate', '2. Brake', '3. Exit', 'Enter your choice: ', '', 'Year: 2014',
+      'Make: Mitsubishi', 'Speed: 0', '', '1. Accelerate', '2. Brake', '3. Exit',
+      'Enter your choice: ', 'Goodbye!'])
+CODED = CODED + [CAR_MENU]

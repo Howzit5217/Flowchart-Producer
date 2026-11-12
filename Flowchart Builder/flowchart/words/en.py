@@ -43,6 +43,11 @@ EN = {
     "mm_head": "Mermaid",
     "mm_bad": "This couldn't be read as a Mermaid flowchart.",
     "mm_opened": "Opened as a drawing.",
+    # Options: code with classes drawn as a UML class diagram (19-uml.js)
+    "o_draw_as": "Draw as", "o_draw_flow": "Flowchart",
+    "o_draw_uml": "Class diagram",
+    "o_draw_tip": "A UML class diagram: each class with its fields and methods",
+    "o_draw_none": "This code has no classes, so it is drawn as a flowchart.",
     "print_head": "Print",
     "print_go": "Print…",
     "print_paper": "Paper",

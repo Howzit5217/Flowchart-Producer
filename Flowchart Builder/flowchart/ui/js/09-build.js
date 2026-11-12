@@ -1240,7 +1240,7 @@
   // They are read straight off the page rather than kept in a variable
   // beside it: one place a thing is true is one place it can be wrong.
   var OPTIONS = ["o-tint", "o-everyout", "o-onechart", "o-roomy", "o-tight",
-                 "o-chains", "o-columns", "o-steady"];
+                 "o-chains", "o-columns", "o-steady", "o-classes"];
 
   function optionOn(id) {
     var box = el("#" + id);
@@ -1272,7 +1272,8 @@
       tight: optionOn("o-tight"),
       chains: optionOn("o-chains"),
       steady: optionOn("o-steady"),
-      columns: optionOn("o-columns") ? 1400 : 0
+      columns: optionOn("o-columns") ? 1400 : 0,
+      classes: optionOn("o-classes")
     };
   }
 
@@ -1311,6 +1312,7 @@
   function dressMore() {
     sideOn("#space-seg", optionOn("o-roomy") ? "roomy" : optionOn("o-tight") ? "tight" : "plain",
            "space");
+    sideOn("#draw-seg", optionOn("o-classes") ? "classes" : "flow", "draw");
     var button = el("#more");
     if (!button) { return; }
     var shape = el("#f-shape");
@@ -1355,6 +1357,16 @@
       var roomy = el("#o-roomy"), tight = el("#o-tight");
       if (roomy) { roomy.checked = b.dataset.space === "roomy"; }
       if (tight) { tight.checked = b.dataset.space === "tight"; }
+      optionChanged();
+    };
+  });
+  // Flowchart or class diagram (19-uml.js): one switch of two places, the
+  // box behind it remembered
+  all("#draw-seg .seg-btn").forEach(function (b) {
+    b.onclick = function () {
+      if (b.classList.contains("on")) { return; }
+      var box = el("#o-classes");
+      if (box) { box.checked = b.dataset.draw === "classes"; }
       optionChanged();
     };
   });
@@ -1441,6 +1453,9 @@
   // from where it was to where it now goes, rather than have the whole
   // chart jump.
   function putSheet(svg, again) {
+    // code with classes, where Options asks for them as a class diagram:
+    // that, in the flowchart's place (19-uml.js)
+    svg = classesInstead(svg);
     el("#sheet").innerHTML = svg;
     // In the palette from its first frame, before bind() or anything else
     // measures it (see freshCoat).  bind() takes it up again after this.
@@ -1537,8 +1552,9 @@
         el("#svg-link").download = FILE + ".svg";
         document.title = data.title || FILE;
         el(".brand").firstChild.textContent = data.title || FILE;
-        el("#sub").textContent = TXT.flowchart + " · " + data.w + " x " +
-                                 data.h + " px";
+        el("#sub").textContent = umlOnPaper
+          ? TXT.o_draw_uml + " · " + umlOnPaper.w + " x " + umlOnPaper.h + " px"
+          : TXT.flowchart + " · " + data.w + " x " + data.h + " px";
         AST = data.ast || null;
         if (builtText !== asked) { clearPauses(false); }
         builtText = asked;
@@ -1565,8 +1581,9 @@
         // Nothing is said when it works.  The button goes green and the chart
         // appears, which is two ways of saying it already; a line of text
         // underneath saying it a third time is just something else to read.
-        // What goes wrong is still said, because nothing else says that.
-        says.textContent = "";
+        // What goes wrong is still said, because nothing else says that --
+        // and a class diagram asked for, of code with no classes to draw.
+        says.textContent = umlNone ? TXT.o_draw_none : "";
         showProblems(data.problems);
         barEnd(true);
         builtNow();

@@ -183,6 +183,9 @@
     if (byHand) {
       if (!hand.nodes.length) { handSays(TXT.h_tidy_none, true); return; }
       text = mermaidOfHand();
+    } else if (umlOnPaper) {
+      // a class diagram on the paper (19-uml.js): Mermaid's classDiagram of it
+      text = umlMermaid(umlOnPaper.model);
     } else {
       if (!AST) { talkOnce(TXT.r_nothing, "warn"); return; }
       text = mermaidOf(AST);

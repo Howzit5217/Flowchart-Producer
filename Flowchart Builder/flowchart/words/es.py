@@ -42,6 +42,11 @@ ES = {
     "mm_head": "Mermaid",
     "mm_bad": "No se pudo leer como diagrama de flujo Mermaid.",
     "mm_opened": "Abierto como dibujo.",
+    # Opciones: el código con clases como diagrama de clases UML (19-uml.js)
+    "o_draw_as": "Dibujar como", "o_draw_flow": "Diagrama de flujo",
+    "o_draw_uml": "Diagrama de clases",
+    "o_draw_tip": "Un diagrama de clases UML: cada clase con sus campos y métodos",
+    "o_draw_none": "Este código no tiene clases, así que se dibuja como diagrama de flujo.",
     "print_head": "Imprimir",
     "print_go": "Imprimir…",
     "print_paper": "Papel",

@@ -41,6 +41,11 @@ FR = {
     "mm_head": "Mermaid",
     "mm_bad": "Impossible de lire ceci comme un organigramme Mermaid.",
     "mm_opened": "Ouvert comme dessin.",
+    # Options : le code avec des classes en diagramme de classes UML (19-uml.js)
+    "o_draw_as": "Dessiner en", "o_draw_flow": "Organigramme",
+    "o_draw_uml": "Diagramme de classes",
+    "o_draw_tip": "Un diagramme de classes UML : chaque classe avec ses champs et ses méthodes",
+    "o_draw_none": "Ce code n’a pas de classes, il est donc dessiné en organigramme.",
     "print_head": "Imprimer",
     "print_go": "Imprimer…",
     "print_paper": "Papier",
