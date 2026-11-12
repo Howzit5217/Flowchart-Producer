@@ -1126,9 +1126,20 @@
     // the class main is kept in, or the one function main calls -- called
     // as a function of its own, not acct.deposit(), a thing done to a thing
     var hint = info.hint || "";
-    if (hint && (new RegExp("\\b(?:class|struct|object)\\s+" + hint + "\\b").test(text) ||
-                 new RegExp("(?:^|[^.\\w])(?<!\\b(?:def|function|fun|func|fn|void|int|double|float|bool|string|String|static|public|private|protected)\\s+)" +
-                            hint + "\\s*\\(", "m").test(runs))) {
+    // (2026-11-12: "make sure the program can run in all browsers") -- not where it is declared, the
+    // words before it looked at once it is found, not by a look-behind (Safari before 16.4 has none,
+    // and the pattern would not even be made there)
+    var called = function () {
+      var find = new RegExp("(?:^|[^.\\w])" + hint + "\\s*\\(", "gm"), m2;
+      var made = /\b(?:def|function|fun|func|fn|void|int|double|float|bool|string|String|static|public|private|protected)\s+$/;
+      while ((m2 = find.exec(runs))) {
+        var at = m2.index + (m2[0].slice(0, hint.length) === hint ? 0 : 1);
+        if (!made.test(runs.slice(0, at))) { return true; }
+        if (find.lastIndex === m2.index) { find.lastIndex++; }
+      }
+      return false;
+    };
+    if (hint && (new RegExp("\\b(?:class|struct|object)\\s+" + hint + "\\b").test(text) || called())) {
       out.push(hint);
     }
     // The one class of its own the program makes, where it is named for

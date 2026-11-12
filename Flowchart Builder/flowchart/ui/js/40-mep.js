@@ -105,15 +105,19 @@
     return true;
   }
   function mpRoomOf(n) {
+    // (while the design is only looked over -- a check, 40-smooth.js -- the rooms filed by where they
+    // are, and only those near asked: every outlet of a tower asked all seven thousand pieces, 2026-11-12)
+    var near = typeof smoothRooms === "function" ? smoothRooms() : null;
+    function around(x, y) { return near ? near.around(x, y, x, y) : hand.nodes; }
     // (what hangs on a wall is in the room it faces: a panel on a hall's wall is the hall's, not the
     // closet's behind it -- the smallest room either side was taken, 2026-10-04)
     if (ON_THE_WALL[n.kind]) {
       var t = (n.turn || 0) * Math.PI / 180, d = (n.h || 12) / 2 + 8, fx = n.x - Math.sin(t) * d, fy = n.y + Math.cos(t) * d;
-      var faced = hand.nodes.filter(function (r) { return r.kind === "i_room" && insideArea(r, fx, fy); })
+      var faced = around(fx, fy).filter(function (r) { return r.kind === "i_room" && insideArea(r, fx, fy); })
         .sort(function (p, q) { return p.w * p.h - q.w * q.h; })[0];
       if (faced) { return faced; }
     }
-    return hand.nodes.filter(function (r) { return r.kind === "i_room" && insideArea(r, n.x, n.y, -14); })
+    return around(n.x, n.y).filter(function (r) { return r.kind === "i_room" && insideArea(r, n.x, n.y, -14); })
       .sort(function (p, q) { return p.w * p.h - q.w * q.h; })[0] || null;
   }
   function mpPipe(cfh, lenFt) {
@@ -520,6 +524,9 @@
     mpStoreysOnce = mpStoreysEach();
     try { return mpIssuesEach.apply(this, arguments); } finally { mpStoreysOnce = null; }
   };
+  // (it only looks: what it would put right it hands back -- what it asks again and again worked out
+  // once a look, 40-smooth.js)
+  if (typeof smoothRead === "function") { mpIssues = smoothRead(mpIssues); }
   if (typeof homeAdvice === "function") {
     var homeAdviceMp = homeAdvice;
     homeAdvice = function () {

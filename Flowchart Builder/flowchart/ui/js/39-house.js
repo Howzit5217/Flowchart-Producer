@@ -60,12 +60,32 @@
     }
     return { lines: lines, snap: snap };
   }
-  function houseBuilt(floors, x, y, level) {
-    return hand.nodes.some(function (u) {
-      if (u.kind !== "i_room") { return false; }
-      var fu = floors.length ? floorAt(floors, u.x, u.y) : null;
-      return (fu ? fu.level : 0) >= level && insideArea(u, x - (fu ? fu.dx : 0), y - (fu ? fu.dy : 0));
+  // (2026-11-12) The rooms with their floors found once for these floors and this drawing, filed by where
+  // they stand once stacked -- not every piece of a tower asked, for every quarter metre of every eave.
+  var houseBuiltKept = null;
+  function houseBuiltRooms(floors) {
+    var K = houseBuiltKept;
+    if (K && K.floors === floors && K.nodes === hand.nodes && K.n === hand.nodes.length) { return K; }
+    var S = 4 * FLOOR_PX, cells = new Map(), all = [];
+    hand.nodes.forEach(function (u) {
+      if (u.kind !== "i_room") { return; }
+      var fu = floors.length ? floorAt(floors, u.x, u.y) : null, e = { u: u, level: fu ? fu.level : 0, dx: fu ? fu.dx : 0, dy: fu ? fu.dy : 0 };
+      all.push(e);
+      var r = Math.hypot(u.w, u.h) / 2, cx = u.x + e.dx, cy = u.y + e.dy;
+      for (var gy = Math.floor((cy - r) / S); gy <= Math.floor((cy + r) / S); gy++) {
+        for (var gx = Math.floor((cx - r) / S); gx <= Math.floor((cx + r) / S); gx++) {
+          var k = gx + "," + gy, L = cells.get(k);
+          if (!L) { L = []; cells.set(k, L); }
+          L.push(e);
+        }
+      }
     });
+    houseBuiltKept = K = { floors: floors, nodes: hand.nodes, n: hand.nodes.length, cells: cells, S: S, all: all };
+    return K;
+  }
+  function houseBuilt(floors, x, y, level) {
+    var K = houseBuiltRooms(floors), L = K.cells.get(Math.floor(x / K.S) + "," + Math.floor(y / K.S)) || [];
+    return L.some(function (e) { return e.level >= level && insideArea(e.u, x - e.dx, y - e.dy); });
   }
   function roofWhole(rects, floors) {
     var out = [], groups = [];

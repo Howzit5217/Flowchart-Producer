@@ -740,7 +740,10 @@
     var cells = plan.cells, through = function (i) { return cells[i] === 2 || (wallsOpen && cells[i] === 1); };
     // (straight there, if nothing is in the way)
     if (typeof clearLine === "function" && clearLine(plan, s, e)) { return [a.slice(), b.slice()]; }
-    var way = wkPlanWay(plan, s, e, through);
+    // (2026-11-12) No way there at all -- walls shut, the two in patches of floor nothing joins (40-movein.js
+    // moReach) -- not searched for: a block of flats' timetable asked 1,400 of those, thirty thousand squares
+    // each, four fifths of its making; and with walls open every square is open, so all are searched as before
+    var way = wallsOpen || typeof moReach !== "function" || moReach(plan, s, [e]) ? wkPlanWay(plan, s, e, through) : null;
     if (!way) { return [a, b]; }
     var pts = (typeof moPts === "function" ? moPts(plan, way) : walkPoints(plan, way)).map(function (q) { return [q[0] + dx, q[1] + dy, L.z]; });
     if (pts.length) { pts[0] = a.slice(); pts[pts.length - 1] = b.slice(); }
@@ -1074,14 +1077,17 @@
   }
   // The jobs, a few each picture (a big building's took seconds all at once):
   // as many phases as fit in `budget` ms, at least one.
+  // (a phase with more to do than a picture's worth sets plan.again: asked again, the next picture --
+  // a mall's movers' ways through it, 2026-11-12, were thirteen seconds of one picture)
   function wkMakeSome(plan, budget) {
     var t0 = performance.now();
     while (plan.next < WK_PHASES.length) {
-      var ph = WK_PHASES[plan.next++], s0 = performance.now();
+      var ph = WK_PHASES[plan.next], s0 = performance.now();
+      plan.pcLevel = undefined; plan.again = false;
+      try { ph.make(plan); } catch (e) { plan.again = false; if (window.console && console.warn) { console.warn("works, " + ph.name + ":", e && e.stack || e); } }
       plan.pcLevel = undefined;
-      try { ph.make(plan); } catch (e) { if (window.console && console.warn) { console.warn("works, " + ph.name + ":", e && e.stack || e); } }
-      plan.pcLevel = undefined;
-      plan.phaseMs[ph.name] = Math.round(performance.now() - s0);
+      plan.phaseMs[ph.name] = (plan.phaseMs[ph.name] || 0) + Math.round(performance.now() - s0);
+      if (!plan.again) { plan.next++; }
       if (performance.now() - t0 > budget) { break; }
     }
     if (plan.next >= WK_PHASES.length && !plan.done) { wkMakeEnd(plan); }

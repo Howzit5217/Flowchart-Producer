@@ -824,7 +824,9 @@
     v3Watch = function () {
       if (V3 && !(typeof STILL !== "undefined" && STILL)) {
         var now = performance.now();
-        if (now - (V3.folkAt || 0) > Math.max(33, (V3.drawMs || 0) * 3) && worldLive()) { V3.folkAt = now; V3.dirty = true; }
+        // (left alone a good while, less often: 40-perf.js v3RestGap)
+        var folkGap = Math.max(33, (V3.drawMs || 0) * 3, typeof v3RestGap === "function" ? v3RestGap() : 0);
+        if (now - (V3.folkAt || 0) > folkGap && worldLive()) { V3.folkAt = now; V3.dirty = true; }
       }
       return v3WatchWorld.apply(this, arguments);
     };

@@ -1059,12 +1059,18 @@
     }
     if (!kept) {
       var all = hand.nodes, made = { key: keyNow, faces: null, stand: null, labels: null, doors: [] };
+      // (a step every forty pieces -- or sooner, eight milliseconds on: a shop's shelves of goods, or a
+      // car, made the first time, are many times a chair's work, 2026-11-12)
+      var yieldAt = performance.now();
       for (var ni = 0; ni < all.length; ni++) {
         var node = all[ni];
         if (!shown(floorOfNode(node))) { continue; }
         if (WALK_DOORS[node.kind]) { made.doors.push(node); continue; }
         putUp(node);
-        if (ni % 40 === 39) { yield [big && !hush ? "models" : "house", (ni + 1) / all.length]; }
+        if (ni % 40 === 39 || performance.now() - yieldAt > 8) {
+          yield [big && !hush ? "models" : "house", (ni + 1) / all.length];
+          yieldAt = performance.now();
+        }
       }
       made.faces = faces; made.stand = stand;
       // the names of things: rooms, furniture, people, out in the garden too
@@ -1167,7 +1173,7 @@
           else { z = 0.8; }
           z *= FLOOR_PX;
         }
-        var said = { x: n.x + (f ? f.dx : 0), y: n.y + (f ? f.dy : 0), z: z + (f ? f.z : 0), text: text, room: room };
+        var said = { x: n.x + (f ? f.dx : 0), y: n.y + (f ? f.dy : 0), z: z + (f ? f.z : 0), text: text, room: room, of: n.id };
         if (within !== undefined) { said.within = within; }
         return said;
     }
@@ -1701,13 +1707,17 @@
       var a = now ? now.level : 0, b = there ? there.level : 0;
       if (a !== b || (a !== 0 && !there)) { return true; }
     }
+    // (2026-11-12) walking, with what the picture is made of taken in (40-collide.js), the walls and the
+    // furniture are what is drawn, by their own outlines -- not these squares; a door shut still fills
+    // its doorway here
+    var drawn = typeof hbLive === "function" && hbLive();
     var pts = [[x, y], [x - WALK_BODY, y - WALK_BODY], [x + WALK_BODY, y - WALK_BODY],
                [x - WALK_BODY, y + WALK_BODY], [x + WALK_BODY, y + WALK_BODY]];
     if (pts.some(function (p) {
       var c = Math.floor((p[0] - plan.x0) / WALK_CELL), r = Math.floor((p[1] - plan.y0) / WALK_CELL);
       if (c < 0 || r < 0 || c >= plan.cols || r >= plan.rows) { return false; }   // outdoors
       var i = r * plan.cols + c, cell = plan.cells[i];
-      return cell === 1 || cell === 2 || shut[i];
+      return drawn ? !!shut[i] : cell === 1 || cell === 2 || shut[i];
     })) { return true; }
     return v3Bumps(x, y);
   }
@@ -1748,7 +1758,12 @@
     return best;
   }
   function v3Bumps(x, y) {
-    if (!V3 || !V3.solids || !V3.me) { return false; }
+    if (!V3 || !V3.me) { return false; }
+    if (typeof hbBlocked === "function") {          // (by what is drawn, 40-collide.js)
+      var drawn = hbBlocked(x, y);
+      if (drawn !== null) { return drawn; }
+    }
+    if (!V3.solids) { return false; }
     var floors = v3Ground().floors || [], f = floorAt(floors, x, y), g = floorAt(floors, V3.me.x, V3.me.y);
     var to = v3Nearest(x + (f ? f.dx : 0), y + (f ? f.dy : 0), f ? f.z : 0);
     if (to >= V3_CLEAR) { return false; }
@@ -1805,15 +1820,20 @@
     var pace = WALK_PACE * (k.shift ? 2 : 1) * (0.45 + 0.55 * me.go) * dt;
     var mx = (Math.cos(me.head) * ahead - Math.sin(me.head) * side) * pace;
     var my = (Math.sin(me.head) * ahead + Math.cos(me.head) * side) * pace;
-    // in steps no longer than a wall is thick, so a slow frame cannot carry
-    // you through one; along each way on its own, so a wall met at a slant
-    // is slid along
+    v3Move(me, mx, my);
+    v3Stairs();
+    return true;
+  }
+  // A step's worth, kept off what is in the way: in steps no longer than a
+  // wall is thick, so a slow frame cannot carry you through one; along each
+  // way on its own, so a wall met at a slant is slid along.  (40-collide.js
+  // slides along what is drawn, by the way out of what it meets.)
+  function v3Move(me, mx, my) {
     var steps = Math.max(1, Math.ceil(Math.hypot(mx, my) / 4));
     for (var i = 0; i < steps; i++) {
       if (mx && !v3Blocked(me.x + mx / steps, me.y)) { me.x += mx / steps; }
       if (my && !v3Blocked(me.x, me.y + my / steps)) { me.y += my / steps; }
     }
-    v3Stairs();
     return true;
   }
 
@@ -2078,10 +2098,16 @@
       if (V3.roof) { v3Tween("roofV", 1, 650, 800); }
       if (V3.labels) { v3Tween("labelV", 1, 450, 1000); }
     }
-    if (big) {
-      V3.roofV = V3.roof ? 1 : 0; V3.labelV = V3.labels ? 1 : 0;
+    // (2026-11-12) Not so big, but more than a handful of pieces: its models made first a slice at a
+    // time, as a big one's are -- the bar up if it takes a while, the page answering -- then risen out
+    // of the paper as always (a shop's shelves, a terrace of townhouses: one and a half seconds, frozen).
+    var warmFirst = !big && scene.name !== "space" && typeof workLive === "function" && hand.nodes.length > 40;
+    if (big || warmFirst) {
+      if (big) { V3.roofV = V3.roof ? 1 : 0; V3.labelV = V3.labels ? 1 : 0; }
+      var many = hand.nodes.length;
       var warm = workLive(v3BuildSteps(), {
         stages: ["house", "models", "scene"],
+        kind: "3d:" + (big ? "big:" : "") + Math.round(Math.log(many + 1) / Math.LN2), guess: Math.round(200 + many * (big ? 1.1 : 2.5)),
         putBack: function () { if (V3 && V3.box === box && V3.warming) { V3.warming = null; v3Leave(); } }
       });
       V3.warming = workNow;
@@ -2150,7 +2176,7 @@
     v3Hands(box.firstChild);
     var openBtn = el("#view3d-open");
     if (openBtn) { openBtn.setAttribute("aria-pressed", "true"); }
-    if (!big) { v3Watch(); }
+    if (!big && !warmFirst) { v3Watch(); }
   }
 
   // From above, or walking round inside -- a home only.

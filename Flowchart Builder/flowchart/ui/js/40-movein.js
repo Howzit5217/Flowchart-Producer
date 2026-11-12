@@ -605,10 +605,53 @@
   // The way to a piece from where the movers come in, in the walk plan's own
   // squares: round what stands in the way where it can, up the stairs to
   // another floor.  World points, and the doors gone through.
+  // (2026-11-12, "can freeze the browser") Which squares can be got to from which, at all, by a way
+  // that may go through what stands there (moWay's own, with `any`): the squares of floor, doorway and
+  // furniture each given the number of the patch of them it is in, once a plan.  A piece in a patch the
+  // way in is not in is not looked for -- it had been, square by square over the whole plan, and then
+  // again from the top and the foot of every flight and lift: walking into a mall waited five minutes.
+  function moParts(plan) {
+    if (plan.moParts) { return plan.moParts; }
+    var cols = plan.cols, rows = plan.rows, cells = plan.cells, n = cols * rows, lab = new Int32Array(n).fill(-1), q = new Int32Array(n), id = 0;
+    for (var s = 0; s < n; s++) {
+      if (lab[s] >= 0 || cells[s] === 1) { continue; }
+      var h = 0, t = 0;
+      q[t++] = s; lab[s] = id;
+      while (h < t) {
+        var i = q[h++], c = i % cols;
+        if (c + 1 < cols && lab[i + 1] < 0 && cells[i + 1] !== 1) { lab[i + 1] = id; q[t++] = i + 1; }
+        if (c > 0 && lab[i - 1] < 0 && cells[i - 1] !== 1) { lab[i - 1] = id; q[t++] = i - 1; }
+        if (i + cols < n && lab[i + cols] < 0 && cells[i + cols] !== 1) { lab[i + cols] = id; q[t++] = i + cols; }
+        if (i - cols >= 0 && lab[i - cols] < 0 && cells[i - cols] !== 1) { lab[i - cols] = id; q[t++] = i - cols; }
+      }
+      id++;
+    }
+    plan.moParts = lab;
+    return lab;
+  }
+  function moReach(plan, from, goals) {
+    if (!plan.cells || from < 0 || from >= plan.cells.length) { return true; }      // (moWay says so itself)
+    var lab = moParts(plan), cols = plan.cols, n = lab.length;
+    function parts(i) {
+      if (lab[i] >= 0) { return [lab[i]]; }
+      var out = [], c = i % cols;
+      if (c + 1 < cols && lab[i + 1] >= 0) { out.push(lab[i + 1]); }
+      if (c > 0 && lab[i - 1] >= 0) { out.push(lab[i - 1]); }
+      if (i + cols < n && lab[i + cols] >= 0) { out.push(lab[i + cols]); }
+      if (i - cols >= 0 && lab[i - cols] >= 0) { out.push(lab[i - cols]); }
+      return out;
+    }
+    var mine = parts(from);
+    return goals.some(function (g) {
+      if (g < 0 || g >= n) { return false; }
+      if (g === from || g === from + 1 || g === from - 1 || g === from + cols || g === from - cols) { return true; }
+      return parts(g).some(function (p) { return mine.indexOf(p) >= 0; });
+    });
+  }
   function moLegs(M, from, n, depth) {
     var plan = M.plan, floors = M.floors, start = cellOf(plan, from[0], from[1]), goal = [cellOf(plan, n.x, n.y)];
     var mine = function (i) { return plan.owner[i] === n.id; }, any = function (i) { return plan.cells[i] === 2; };
-    var way = moWay(plan, start, goal, mine) || moWay(plan, start, goal, any);
+    var way = moReach(plan, start, goal) ? moWay(plan, start, goal, mine) || moWay(plan, start, goal, any) : null;
     if (way) { return { pts: moPts(plan, way).map(function (p) { return moWorldPt(floors, p); }), doors: moDoorsOn(M, way) }; }
     if (depth >= 2) { return null; }
     var fa = floors.length ? floorAt(floors, from[0], from[1]) : null, links = plan.links || [];
@@ -616,7 +659,13 @@
       for (var e = 0; e < 2; e++) {
         var s0 = links[k][e], s1 = links[k][1 - e];
         if ((floors.length ? floorAt(floors, s0.x, s0.y) : null) !== fa) { continue; }
-        var onto = moWay(plan, start, cellsUnder(plan, s0), any);
+        // (the way onto a flight from here is the same for every piece: found once a move)
+        var ontoKey = start + "|" + s0.id, kept = M.onto || (M.onto = {}), onto;
+        if (kept[ontoKey] !== undefined) { onto = kept[ontoKey]; }
+        else {
+          var under = cellsUnder(plan, s0);
+          onto = kept[ontoKey] = moReach(plan, start, under) ? moWay(plan, start, under, any) : null;
+        }
         if (!onto) { continue; }
         var rest = moLegs(M, [s1.x, s1.y], n, depth + 1);
         if (!rest) { continue; }
@@ -654,7 +703,7 @@
     var M = moPlan(ctx), P = ctx.P, n = it.n, pts = null, lift = false;
     var high = ctx.frame === "tall" ? it.level >= 1 : it.level >= 2;
     if (!high && M.door && M.plan.cells) {
-      var legs = moLegs(M, M.door.in, n, 0);
+      var legs = moLegsIn(M, it);
       if (legs) {
         pts = (fromDoor ? M.outside.slice(M.doorIdx) : M.outside.slice()).concat(legs.pts);
         it.doors = legs.doors.concat([M.door.d.id]);
@@ -662,7 +711,7 @@
       }
     }
     if (!pts && M.plan.cells) {
-      var s = moLiftFor(M, n), up = s ? moLegs(M, [s.x, s.y], n, 2) : null;
+      var s = moLiftFor(M, n), up = s ? moLegsUp(M, it, s) : null;
       if (up) { var w0 = moWorldPt(M.floors, [s.x, s.y]); pts = [w0].concat(up.pts); it.doors = up.doors; it.doorAt = 0; lift = true; }
     }
     if (!pts) { it.route = null; return null; }
@@ -670,6 +719,36 @@
     it.lift = lift;
     it.route = moPath(pts);
     return it.route;
+  }
+  // Its ways in, found once a move and kept with it (the way round to the door outside is worked out
+  // again when the lorry stands elsewhere, 40-works-finish.js; these do not change with that) -- and,
+  // a few a picture, found ahead of the move-in's own timetable (moWaysSome).
+  function moLegsIn(M, it) {
+    if (it.legsIn === undefined || it.legsFor !== M) { it.legsFor = M; it.legsUp = undefined; it.legsIn = moLegs(M, M.door.in, it.n, 0); }
+    return it.legsIn;
+  }
+  function moLegsUp(M, it, s) {
+    if (it.legsFor !== M) { it.legsFor = M; it.legsIn = undefined; it.legsUp = undefined; }
+    if (it.legsUp === undefined || it.legsUpOf !== s) { it.legsUpOf = s; it.legsUp = moLegs(M, [s.x, s.y], it.n, 2); }
+    return it.legsUp;
+  }
+  // As moRoute would ask them: the way in from the door, and where there is none, from the lift.
+  function moWaysFor(ctx, it) {
+    var M = moPlan(ctx);
+    if (!M.plan.cells || it.route !== undefined) { return; }
+    var high = ctx.frame === "tall" ? it.level >= 1 : it.level >= 2, legs = null;
+    if (!high && M.door) { legs = moLegsIn(M, it); }
+    if (!legs) { var s = moLiftFor(M, it.n); if (s) { moLegsUp(M, it, s); } }
+  }
+  // Some of them, for `budget` ms: true when they are all found.
+  function moWaysSome(ctx, budget, from) {
+    var M = moPlan(ctx), list = M.items.concat(M.residents), t0 = performance.now(), i = from.at || 0;
+    for (; i < list.length; i++) {
+      moWaysFor(ctx, list[i]);
+      if (performance.now() - t0 > budget && i + 1 < list.length) { from.at = i + 1; return false; }
+    }
+    from.at = list.length;
+    return true;
   }
   function moPath(pts) {
     var L = [0];

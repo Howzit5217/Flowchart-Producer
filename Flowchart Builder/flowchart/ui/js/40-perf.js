@@ -127,9 +127,47 @@
       return v3DrawPerf.apply(this, arguments);
     };
   }
+  // (asked for, 2026-11-12: "make sure it does not cook computers") Out of sight -- the tab behind
+  // another, the window shrunk away -- the 3D view rests: no picture made (a timer had gone on making
+  // thirty a second of a scene nobody saw), looked in on twice a second, and back the moment it is shown.
+  // And left alone a good while with nothing but the passers-by moving, they are drawn less often
+  // (v3RestGap, 39-world.js): two minutes untouched, fifteen a second; ten minutes, five.  Anything
+  // touched -- a key, the mouse, a finger -- and it is all at the screen's own pace again.
+  // window.V3_AWAKE (a test driving a hidden page) keeps it going as it was.
+  var v3Touched = performance.now();
+  ["pointerdown", "pointermove", "keydown", "wheel", "touchstart"].forEach(function (t) {
+    try { window.addEventListener(t, function () { v3Touched = performance.now(); }, { capture: true, passive: true }); } catch (e) { /* always awake */ }
+  });
+  function v3Resting() { return document.visibilityState === "hidden" && !window.V3_AWAKE; }
+  function v3RestGap() {
+    if (window.V3_AWAKE) { return 0; }
+    var idle = performance.now() - v3Touched;
+    return idle > 600000 ? 200 : idle > 120000 ? 66 : 0;
+  }
+  var v3RestT = null, v3Ticks = 0;
+  document.addEventListener("visibilitychange", function () {
+    if (document.visibilityState !== "visible" || typeof V3 === "undefined" || !V3) { return; }
+    if (v3RestT !== null) { clearTimeout(v3RestT); v3RestT = null; V3.dirty = true; v3Watch(); return; }
+    // (shown again, and its pictures not going on by themselves within a moment -- a frame asked for
+    // while it was hidden, that the browser never gave -- set going again: once, only if stopped)
+    var was = v3Ticks;
+    setTimeout(function () { if (typeof V3 !== "undefined" && V3 && v3Ticks === was && v3RestT === null && document.visibilityState === "visible") { V3.dirty = true; v3Watch(); } }, 400);
+  });
   if (typeof v3Watch === "function") {
     var v3WatchPerf = v3Watch;
-    v3Watch = function () {
+    var v3FrameAt = -1;
+    v3Watch = function (stamp) {
+      // (two going at once -- one started again as another, late, came back: the same frame's stamp twice --
+      // the second let end, so it never runs twice a frame)
+      if (typeof stamp === "number" && stamp === v3FrameAt) { return undefined; }
+      if (typeof stamp === "number") { v3FrameAt = stamp; }
+      v3Ticks++;
+      if (V3 && v3Resting()) {
+        clearTimeout(v3RestT);
+        v3RestT = setTimeout(function () { v3RestT = null; v3Watch(); }, 500);
+        V3Q.last = 0;                    // (the pause not measured as a slow picture)
+        return undefined;
+      }
       var t = performance.now(), drewLast = V3Q.drewAt && V3Q.drewAt >= V3Q.last && V3Q.last > 0, iv = t - V3Q.last;
       V3Q.last = t;
       if (drewLast && document.visibilityState === "visible" && iv < 400 && V3) { v3qMeasure(iv, V3.drawMs || 0); }

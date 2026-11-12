@@ -1280,10 +1280,14 @@
     starterOwed.said = words;
     if (!starterQuiet) { starterSettle(); }
   }
-  function starterSettle() {
+  function starterSettle() { stepsDrive(starterSettleSteps()); }
+  // (the same, a part at a time, for 40-work.js to paint the bar between)
+  function* starterSettleSteps() {
     var owed = starterOwed;
     starterOwed = {};
-    drawHand(); drawHandPanel(); showReport();
+    drawHand(); yield;
+    drawHandPanel(); yield;
+    showReport(); yield;
     if (owed.keep && typeof handKeep === "function") { handKeep(); }
     if (owed.fit && el("#fit")) { el("#fit").click(); }
     if (owed.said) { handSays(owed.said); }

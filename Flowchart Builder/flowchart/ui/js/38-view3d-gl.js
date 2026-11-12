@@ -2394,9 +2394,14 @@
         gl.bindFramebuffer(gl.FRAMEBUFFER, null);
         gl.viewport(0, 0, W, H);
         gl.clearColor(bg[0], bg[1], bg[2], 1);
-        gl.clear(gl.COLOR_BUFFER_BIT | (gl.getContextAttributes().depth ? gl.DEPTH_BUFFER_BIT : 0));
         gl3Waiting(true);
-        V3.dirty = true;
+        // (2026-11-12, "does not cook computers") asked again eight times a second, not every picture: the
+        // programs are made on the side, and a picture of nothing drawn sixty or a hundred and eighty times a
+        // second meanwhile (a big shader took ten seconds on some graphics) was work for nothing
+        if (!G.askLater) {
+          G.askLater = setTimeout(function () { G.askLater = null; if (V3 && V3.gl === G) { V3.dirty = true; } }, 120);
+        }
+        gl.clear(gl.COLOR_BUFFER_BIT | (gl.getContextAttributes().depth ? gl.DEPTH_BUFFER_BIT : 0));
         return true;
       }
       gl3Waiting(false);

@@ -393,23 +393,52 @@
         }
       }
     }
+    // (2026-11-12, "generating buildings takes too long") Only the squares that can be what is asked:
+    // a square-standing room's walls are a ring round its edge, not every square of the square round
+    // its longest side (a tower's sixty-metre corridor was ninety thousand squares, each asked); a
+    // piece, the squares its own box covers.  Every square that can be is asked just as before.
+    function box(n, out, fn) {
+      var t = turned(n), ex = t.w / 2 + out, ey = t.h / 2 + out;
+      var c0 = Math.max(0, Math.floor((n.x - ex - plan.x0) / WALK_CELL)), c1 = Math.min(plan.cols - 1, Math.ceil((n.x + ex - plan.x0) / WALK_CELL));
+      var r0 = Math.max(0, Math.floor((n.y - ey - plan.y0) / WALK_CELL)), r1 = Math.min(plan.rows - 1, Math.ceil((n.y + ey - plan.y0) / WALK_CELL));
+      for (var row = r0; row <= r1; row++) {
+        for (var col = c0; col <= c1; col++) { fn(row * plan.cols + col, plan.x0 + (col + 0.5) * WALK_CELL, plan.y0 + (row + 0.5) * WALK_CELL); }
+      }
+    }
     rooms.forEach(function (room) {
       var wall = Math.max(1, Math.min(6, Math.min(room.w, room.h) * 0.06));
       // (a room cut to a shape, 40-shaped.js: its walls traced along its edges, not every square in it tried)
       if (room.shape && typeof shpWallCells === "function") { shpWallCells(plan, room, wall, function (i) { cells[i] = 1; }); return; }
-      each(room, 6, function (i, x, y) {
-        if (wallAt(room, x, y, wall)) { cells[i] = 1; }
-      });
+      if ((room.turn || 0) % 90) {
+        each(room, 6, function (i, x, y) { if (wallAt(room, x, y, wall)) { cells[i] = 1; } });
+        return;
+      }
+      // the ring: the rows along its two ends whole, the rows between only at its two sides
+      var t = turned(room), ex = t.w / 2, ey = t.h / 2, inn = wall + 4 + 1;
+      var c0 = Math.max(0, Math.floor((room.x - ex - 5 - plan.x0) / WALK_CELL)), c1 = Math.min(plan.cols - 1, Math.ceil((room.x + ex + 5 - plan.x0) / WALK_CELL));
+      var r0 = Math.max(0, Math.floor((room.y - ey - 5 - plan.y0) / WALK_CELL)), r1 = Math.min(plan.rows - 1, Math.ceil((room.y + ey + 5 - plan.y0) / WALK_CELL));
+      var ia = Math.ceil((room.x - ex + inn - plan.x0) / WALK_CELL - 0.5), ib = Math.floor((room.x + ex - inn - plan.x0) / WALK_CELL - 0.5);
+      for (var row = r0; row <= r1; row++) {
+        var y = plan.y0 + (row + 0.5) * WALK_CELL, mid = Math.abs(y - room.y) < ey - inn;
+        for (var col = c0; col <= c1; col++) {
+          if (mid && col >= ia && col <= ib) { col = ib; continue; }      // (inside the floor the walls go round)
+          var x = plan.x0 + (col + 0.5) * WALK_CELL;
+          if (wallAt(room, x, y, wall)) { cells[row * plan.cols + col] = 1; }
+        }
+      }
     });
     walls.forEach(function (w) {
-      each(w, 4, function (i, x, y) { if (insideArea(w, x, y, -4)) { cells[i] = 1; } });
+      box(w, 4 + WALK_CELL, function (i, x, y) { if (insideArea(w, x, y, -4)) { cells[i] = 1; } });
     });
     pieces.forEach(function (p) {
       // up on the wall, on a table, flat on the floor, or a stair: walked
       // under, round, over or up -- not in the way
       if (ON_THE_WALL[p.kind] || ON_TOP[p.kind] || LIES_FLAT[p.kind] || BETWEEN_FLOORS[p.kind]) { return; }
-      each(p, 0, function (i, x, y) {
-        if (insideArea(p, x, y, 1) && cells[i] !== 1) { cells[i] = 2; owner[i] = p.id; }
+      // (insideArea's own sums, its turn worked out once a piece)
+      var a = -(p.turn || 0) * Math.PI / 180, c = Math.cos(a), s = Math.sin(a), hw = p.w / 2 - 1, hh = p.h / 2 - 1, pid = p.id;
+      box(p, WALK_CELL, function (i, x, y) {
+        var dx = x - p.x, dy = y - p.y, ux = dx * c - dy * s, uy = dx * s + dy * c;
+        if (Math.abs(ux) <= hw && Math.abs(uy) <= hh && (!p.shape || shpHolds(p.shape, ux, uy, 1)) && cells[i] !== 1) { cells[i] = 2; owner[i] = pid; }
       });
     });
     // A door opens the wall it stands in -- and the wall of the room on

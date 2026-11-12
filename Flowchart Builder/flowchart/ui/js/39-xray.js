@@ -60,7 +60,19 @@
       if (n && n.kind === kind) { n.wired = true; n.own = true; if (lift !== undefined) { n.lift = lift; } made++; }
       return n;
     }
-    var standingIn = wireStanding;
+    // (each room's furniture found once while it is wired, among what is filed near it: only what hangs on
+    // a wall is put meanwhile, and none of that stands in front of an outlet -- a tower's five hundred
+    // rooms each asked all seven thousand pieces, for every outlet, two seconds, 2026-11-12)
+    var standingKept = new Map(), standingNear = listNear(hand.nodes.filter(function (o) { return !ON_THE_WALL[o.kind]; }));
+    var standingIn = function (r) {
+      var got = standingKept.get(r);
+      if (!got) {
+        var reach = Math.hypot(r.w, r.h) / 2 + 2;       // (turned any way: all of it)
+        got = wireStanding(r, standingNear.around(r.x - reach, r.y - reach, r.x + reach, r.y + reach));
+        standingKept.set(r, got);
+      }
+      return got;
+    };
     var wireRoom = function (r) {
       var kind = wireKindOf(plan, r), b = tieBox(r);
       if (r.noWire || WIRE_SKIP[kind] || WIRE_SKIP[r.use] || Math.min(r.w, r.h) < 1.2 * P) { return; }
@@ -135,9 +147,9 @@
   }
   // What stands in a room, a hand's width round it: an outlet round the walls kept that far off
   // it, to be seen and reached (2026-10-05, "the socket locations can be a little weird and jank")
-  function wireStanding(r) {
+  function wireStanding(r, among) {
     var pad = 0.2 * FLOOR_PX * 2;
-    return hand.nodes.filter(function (o) {
+    return (among || hand.nodes).filter(function (o) {
       return o !== r && ICONS[o.kind] && !isArea(o.kind) && o.kind !== "i_room" && o.kind !== "i_floor" && o.kind !== "i_lot" &&
              !ON_THE_WALL[o.kind] && !WALK_DOORS[o.kind] && o.kind !== "i_window" && !LIES_FLAT[o.kind] && !FROM_CEILING[o.kind] &&
              o.kind !== "i_rug" && insideArea(r, o.x, o.y);

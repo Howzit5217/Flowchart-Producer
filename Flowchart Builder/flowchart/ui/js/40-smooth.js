@@ -74,12 +74,23 @@
   var smoothHashEach = smoothHash;
   smoothHash = function (H) { return smoothKeyed(H, "hash", function () { return smoothHashEach(H); }); };
   if (typeof v3Ground === "function") {
-    v3Ground = function () {
+    var v3GroundQuick = function () {
       return smoothGet("ground", hand, function () {
         var key = smoothHash(hand);
         if (!V3.ground || V3.groundKey !== key) { V3.ground = walkPlan(); V3.groundKey = key; }
         return V3.ground;
       });
+    };
+    // (2026-11-12) What the ones it stands in for did round it, kept: the house put together (39-join.js
+    // tieWith -- asked from outside a picture, a step taken, it had been the plan of the rooms as drawn
+    // apart, and the plan made again at every step, it and the one put together in turn) and, while a door
+    // is used, that door only (40-open3d.js).
+    var v3GroundJoined = typeof tieWith === "function" ? tieWith(v3GroundQuick, 1) : v3GroundQuick;
+    v3Ground = function () {
+      var g = v3GroundJoined.apply(this, arguments);
+      if (typeof o3DoorOnly === "undefined" || o3DoorOnly === null || !g || !g.doors) { return g; }
+      var only = g.doors.filter(function (d) { return d.id === o3DoorOnly; });
+      return only.length ? Object.assign({}, g, { doors: only }) : g;
     };
   }
   // The floors and how they stack: once a picture (asked by the house, the
@@ -87,4 +98,39 @@
   if (typeof floorsOf === "function") {
     var floorsOfSmooth = floorsOf;
     floorsOf = function () { var self = this, args = arguments; return smoothGet("floors", hand, function () { return floorsOfSmooth.apply(self, args); }); };
+  }
+  // (2026-11-12, "generating buildings takes too long and can freeze the browser") A check of the whole
+  // design (checkDesign, 12-check.js) reads the drawing and changes nothing while it does -- what it puts
+  // right it hands back to be done after -- so what it asks again and again is worked out once for it,
+  // as for a picture: the drawing's key (asked by every spot along every wall, 39-join's tieCovers), the
+  // plan walked on (asked afresh by each part of the advice), the floors.  Start building checks a
+  // sixteen-storey tower a few times over as it puts it right (40-clean.js): each was five seconds.
+  var smoothReadDepth = 0, smoothReadN = 0;  // (and which look it is: what is kept for one is not another's)
+  function smoothRead(fn) {
+    return function () {
+      if (!smoothReadDepth) { smoothReadN++; }
+      smoothDepth++; smoothReadDepth++;
+      try { return fn.apply(this, arguments); }
+      finally { smoothReadDepth--; smoothDepth--; if (!smoothDepth) { smoothMemo = null; } }
+    };
+  }
+  if (typeof checkDesign === "function") { checkDesign = smoothRead(checkDesign); }
+  // The rooms, filed by where they stand (38-walk.js listNear), while only looked at: in the drawing's
+  // own order, as hand.nodes has them.  null outside a look -- asked then, every room, as before.
+  function smoothRooms() {
+    if (!smoothReadDepth || typeof listNear !== "function") { return null; }
+    return smoothGet("rooms", hand, function () {
+      var rooms = hand.nodes.filter(function (r) { return r.kind === "i_room"; });
+      // (a room on the slant is filed by its unturned box: all of them asked)
+      if (rooms.some(function (r) { return (r.turn || 0) % 90; })) { return { around: function () { return rooms; } }; }
+      return listNear(rooms);
+    });
+  }
+  if (typeof walkPlan === "function") {
+    var walkPlanSmooth = walkPlan;
+    walkPlan = function () {
+      var self = this, args = arguments;
+      if (!smoothReadDepth) { return walkPlanSmooth.apply(self, args); }
+      return smoothGet("plan", hand, function () { return walkPlanSmooth.apply(self, args); });
+    };
   }

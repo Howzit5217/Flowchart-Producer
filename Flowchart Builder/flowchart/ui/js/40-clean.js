@@ -110,14 +110,38 @@
   function clSaid() {
     try { return checkDesign() || []; } catch (e) { if (window.console && console.warn) { console.warn("clean check:", e && e.message); } return []; }
   }
-  function clTidy() {
+  function clTidy() { return typeof stepsDrive === "function" ? stepsDrive(clTidySteps()) : 0; }
+  // (2026-11-12, "make sure the browser never freezes") A step at a time: each look over it, and each
+  // thing put right, its own -- Start building runs them between the page's own turns (40-work.js),
+  // the bar saying how far round it is; a tower's few rounds had been one five-second wait.
+  function* clTidySteps() {
     var left = [];
     clDid.fixed.length = 0; clDid.taken.length = 0;        // (kept the same lists: read from outside)
     for (var round = 0; round < CL_ROUNDS; round++) {
+      yield ["tidy", round / (CL_ROUNDS + 1)];
       var said = clSaid(), acted = 0, taken = {};
       left = said;
       if (!said.length) { break; }
-      said.forEach(function (b) {
+      for (var k = 0; k < said.length; k++) {
+        if (k) { yield ["tidy", (round + k / said.length) / (CL_ROUNDS + 1)]; }
+        acted += clPutRight(said[k], taken);
+      }
+      if (typeof mpKept === "object" && mpKept) { mpKept.key = null; }
+      if (!acted) { break; }
+      left = [];
+    }
+    yield ["tidy", CL_ROUNDS / (CL_ROUNDS + 1)];
+    if (!left.length) { left = clSaid(); }
+    // (what is left said where the sweep reads it, tests and the console)
+    clLeft.length = 0;
+    left.forEach(function (b) { clLeft.push(b.text); });
+    if (clLeft.length && window.console && console.info) { console.info("clean: left " + clLeft.length + ": " + clLeft.slice(0, 4).join(" / ")); }
+    return clLeft.length;
+  }
+  // One finding put right: by its own fix, or what is in the way taken out.  1 if anything was done.
+  function clPutRight(b, taken) {
+    var acted = 0;
+    [b].forEach(function (b) {
         // (not a floor drawn above for the stairs: they are taken out instead, clLooseStairs)
         if (b.fix && typeof b.fix.go === "function" && b.fix.says !== TXT.ad_fix_upstairs) {
           try { b.fix.go(); acted++; clDid.fixed.push(b.text); return; } catch (e) { /* taken out, below */ }
@@ -134,16 +158,7 @@
         hand.links = hand.links.filter(function (l) { return l.from !== n.id && l.to !== n.id; });
         acted++;
       });
-      if (typeof mpKept === "object" && mpKept) { mpKept.key = null; }
-      if (!acted) { break; }
-      left = [];
-    }
-    if (!left.length) { left = clSaid(); }
-    // (what is left said where the sweep reads it, tests and the console)
-    clLeft.length = 0;
-    left.forEach(function (b) { clLeft.push(b.text); });
-    if (clLeft.length && window.console && console.info) { console.info("clean: left " + clLeft.length + ": " + clLeft.slice(0, 4).join(" / ")); }
-    return clLeft.length;
+    return acted;
   }
   var clLeft = [], clDid = { fixed: [], taken: [] };
 
@@ -155,7 +170,7 @@
       if ((want && want.services === "diy") || window.CL_OFF) { return out; }
       try {
         clLooseStairs();
-        clTidy();
+        yield* clTidySteps();
       } catch (e) { if (window.console && console.warn) { console.warn("clean:", e && e.message); } }
       return out;
     };

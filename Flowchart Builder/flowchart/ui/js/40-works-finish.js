@@ -312,6 +312,14 @@
   } });
 
   // ---- 11. moving in: the removal lorry, as many loads as it takes; the family home ------------------------
+  // (2026-11-12) The movers' ways through the building found first, a few each picture (40-movein.js
+  // moWaysSome) -- the move-in's timetable then asks for them all at once, found already.
+  WK_PHASES.push({ name: "moveinWays", make: function (plan) {
+    if (typeof moWaysSome !== "function" || typeof moPlan !== "function") { return; }
+    var J = jbJ(plan);
+    plan.moWays = plan.moWays || {};
+    if (!moWaysSome(J.ctx, 10, plan.moWays)) { plan.again = true; }
+  } });
   WK_PHASES.push({ name: "movein", make: function (plan) {
     var J = jbJ(plan), P = J.P, S = J.S, site = J.site, ctx = J.ctx, groups = plan.groups;
     if (typeof moPlan !== "function") { return; }

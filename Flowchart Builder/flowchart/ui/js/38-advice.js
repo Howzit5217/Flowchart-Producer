@@ -107,6 +107,14 @@
                  { name: "foot", across: true, line: b, from: l, to: r, into: -1 },
                  { name: "left", across: false, line: l, from: t, to: b, into: 1 },
                  { name: "right", across: false, line: r, from: t, to: b, into: -1 }];
+    // (only the rooms filed near each spot asked, 38-walk.js listNear: a tower of five hundred rooms
+    // asked every room twelve times for each of them, 2026-11-12)
+    var near = plan._roomsSquare;
+    if (near === undefined) {
+      // (a room on the slant is filed by its unturned box: then every room is asked, as before)
+      near = plan._roomsSquare = plan.rooms.some(function (o) { return (o.turn || 0) % 90; }) ? null
+           : plan._roomsNear || (plan._roomsNear = listNear(plan.rooms));
+    }
     edges.forEach(function (e) {
       e.len = e.to - e.from;
       // (and not against a room an arrow joins it to, once the house is
@@ -114,7 +122,7 @@
       e.outside = [0.25, 0.5, 0.75].every(function (f) {
         var at = e.from + e.len * f, out = e.line - e.into * 12;
         var x = e.across ? at : out, y = e.across ? out : at;
-        return !plan.rooms.some(function (o) { return o !== room && insideArea(o, x, y); }) &&
+        return !(near ? near.around(x, y, x, y) : plan.rooms).some(function (o) { return o !== room && insideArea(o, x, y); }) &&
                !(typeof tieCovers === "function" && tieCovers(room, x, y));
       });
     });
@@ -125,7 +133,21 @@
   // nothing hung on it.
   function edgeGaps(plan, room, e) {
     var taken = [];
-    plan.doors.concat(hand.nodes.filter(function (n) { return n.kind === "i_window" || ON_THE_WALL[n.kind]; })).forEach(function (d) {
+    // (while the design is only looked over -- a check, 40-smooth.js -- what is in the walls filed once
+    // for the plan, and only what is near this wall asked: what is further along the line, or further
+    // off it, makes no gap in it.  Every wall of a tower asked all its pieces, 2026-11-12)
+    var inWalls = null;
+    if (typeof smoothReadDepth === "number" && smoothReadDepth > 0) {
+      var K = plan._inWalls;
+      if (!K || K.nodes !== hand.nodes || K.n !== hand.nodes.length || K.look !== smoothReadN) {
+        var list = plan.doors.concat(hand.nodes.filter(function (n) { return n.kind === "i_window" || ON_THE_WALL[n.kind]; })), most = 0;
+        list.forEach(function (d) { var t = turned(d); most = Math.max(most, t.w, t.h); });
+        K = plan._inWalls = { nodes: hand.nodes, n: hand.nodes.length, look: smoothReadN, near: listNear(list), most: most };
+      }
+      var pad = K.most / 2 + 14, a = e.from - 20, b = e.to + 20;
+      inWalls = e.across ? K.near.around(a, e.line - pad, b, e.line + pad) : K.near.around(e.line - pad, a, e.line + pad, b);
+    }
+    (inWalls || plan.doors.concat(hand.nodes.filter(function (n) { return n.kind === "i_window" || ON_THE_WALL[n.kind]; }))).forEach(function (d) {
       var t = turned(d), lo = (e.across ? d.x : d.y) - (e.across ? t.w : t.h) / 2;
       var off = Math.abs((e.across ? d.y : d.x) - e.line);
       if (off > (e.across ? t.h : t.w) / 2 + 12) { return; }
@@ -181,15 +203,17 @@
     reach[start] = 1;
     // the two ends of each flight of stairs: reached one, reached both
     var ends = plan.links.map(function (pair) { return [cellsUnder(plan, pair[0]), cellsUnder(plan, pair[1])]; });
+    // (each square's four neighbours tried in plain sums, not a list made and walked for every square:
+    // a tower's floors side by side on the paper are a million squares, 2026-11-12)
+    var cols = plan.cols, rows = plan.rows, cells = plan.cells;
+    function spread(j) { if (!reach[j] && (cells[j] === 0 || cells[j] === 3)) { reach[j] = 1; todo.push(j); } }
     for (var round = 0; round <= ends.length; round++) {
       while (todo.length) {
-        var i = todo.pop(), c = i % plan.cols, r = Math.floor(i / plan.cols);
-        [[1, 0], [-1, 0], [0, 1], [0, -1]].forEach(function (s) {
-          var cc = c + s[0], rr = r + s[1];
-          if (cc < 0 || rr < 0 || cc >= plan.cols || rr >= plan.rows) { return; }
-          var j = rr * plan.cols + cc;
-          if (!reach[j] && (plan.cells[j] === 0 || plan.cells[j] === 3)) { reach[j] = 1; todo.push(j); }
-        });
+        var i = todo.pop(), c = i % cols, r = (i - c) / cols;
+        if (c + 1 < cols) { spread(i + 1); }
+        if (c > 0) { spread(i - 1); }
+        if (r + 1 < rows) { spread(i + cols); }
+        if (r > 0) { spread(i - cols); }
       }
       ends.forEach(function (two) {
         [0, 1].forEach(function (e) {

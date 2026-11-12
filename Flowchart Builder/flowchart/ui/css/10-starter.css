@@ -454,6 +454,14 @@
   .work-stop:hover, .work-stop:focus-visible { border-color: var(--bad); color: var(--bad); }
   #build-bar.work-bar.full .work-stop { visibility: hidden; }
   .work-veil { position: absolute; inset: 0; z-index: 12; cursor: progress; background: transparent; }
+  /* how long it has been, and about how long more and when it will be done (40-work.js): under the
+     track, once there has been a second of it; the figures hold their width as they count */
+  .work-bar .bb-time {
+    display: none; justify-content: space-between; gap: 10px; margin-top: 7px;
+    font-size: 11.5px; line-height: 16px; color: var(--muted); font-variant-numeric: tabular-nums;
+  }
+  .work-bar.timed .bb-time { display: flex; }
+  .work-bar .bb-left { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: right; }
   /* the 3D view's programs being made on the side, the first time it is drawn (38-view3d-gl.js):
      the build bar's look, a light running along it (.ro-run, 05-chart.css) -- the page free meanwhile */
   .view3d .gl3-wait {
