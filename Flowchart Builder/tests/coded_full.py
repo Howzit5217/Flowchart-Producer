@@ -2245,3 +2245,282 @@ main()
       'Make: Mitsubishi', 'Speed: 0', '', '1. Accelerate', '2. Brake', '3. Exit',
       'Enter your choice: ', 'Goodbye!'])
 CODED = CODED + [CAR_MENU]
+
+# The Car class, taken for a test drive: the class in a file of its own, a
+# dashboard with a speedometer, answers typed in capitals and as words
+# (input().strip().lower()), and a summary of the trip at the end.
+CAR_DRIVE = ('py car class in its own file, and a test drive of it', 'python', [
+    ('car.py', r'''# car.py
+# The Car class: a car's year, make and speed, kept private, and the
+# methods that read them and change the speed.
+
+
+class Car:
+    def __init__(self, year, make):
+        self.__year = year
+        self.__make = make
+        self.__speed = 0
+
+    def getYear(self):
+        return self.__year
+
+    def getMake(self):
+        return self.__make
+
+    def getSpeed(self):
+        return self.__speed
+
+    def accelerate(self):
+        self.__speed = self.__speed + 5
+
+    def brake(self):
+        self.__speed = self.__speed - 5
+        if self.__speed < 0:
+            self.__speed = 0
+'''),
+    ('car_demo.py', r'''# car_demo.py
+# A test drive of the Car class.  Each turn shows the car's year, make and
+# speed on a dashboard with a speedometer, then a menu to accelerate, brake
+# or exit.  Every choice is one minute of driving, so the trip meter counts
+# the miles, and the drive ends with a summary of how it went.
+
+import car
+
+SPEED_LIMIT = 65      # mph: over this, the dashboard warns you
+GAUGE_TOP = 100       # the last mark on the speedometer, in mph
+GAUGE_MARKS = 20      # how many marks the speedometer has
+
+
+def show_welcome():
+    print("=" * 44)
+    print("              _______")
+    print("          ___/   |   |___")
+    print("         |  _          _ |")
+    print("         '-(_)--------(_)'")
+    print()
+    print("        WELCOME TO THE TEST DRIVE")
+    print("=" * 44)
+
+
+# The speedometer: one # for every 5 mph, up to GAUGE_TOP.
+def speedometer(speed):
+    filled = min(speed, GAUGE_TOP) * GAUGE_MARKS // GAUGE_TOP
+    return "[" + "#" * filled + "-" * (GAUGE_MARKS - filled) + "]"
+
+
+# What the dashboard says about the speed.
+def speed_message(speed):
+    if speed == 0:
+        return "Parked. Press 1 to get moving!"
+    elif speed <= 25:
+        return "Rolling through town."
+    elif speed <= SPEED_LIMIT:
+        return "Cruising down the highway."
+    else:
+        return "Over the speed limit! Ease off the gas."
+
+
+def show_dashboard(myCar, miles):
+    speed = myCar.getSpeed()
+    print()
+    print("-" * 44)
+    print("Year:", myCar.getYear())
+    print("Make:", myCar.getMake())
+    print("Speed:", speed, "mph")
+    print(speedometer(speed), "limit", SPEED_LIMIT, "mph")
+    print(f"Trip meter: {miles:.2f} miles")
+    print(speed_message(speed))
+    print("-" * 44)
+
+
+def show_menu():
+    print("1. Accelerate  (or a)")
+    print("2. Brake       (or b)")
+    print("3. Exit        (or q)")
+
+
+# The menu choice, as 1, 2 or 3: the letters and words work too.
+def read_choice():
+    answer = input("Enter your choice: ").strip().lower()
+    if answer == "a" or answer == "accelerate":
+        answer = "1"
+    elif answer == "b" or answer == "brake":
+        answer = "2"
+    elif answer == "q" or answer == "exit" or answer == "quit":
+        answer = "3"
+    return answer
+
+
+def show_summary(name, accelerations, brakes, top_speed, miles, wrong):
+    print()
+    print("=" * 44)
+    print("Trip summary for", name)
+    print("  Times you accelerated:", accelerations)
+    print("  Times you braked:", brakes)
+    print("  Top speed:", top_speed, "mph")
+    print(f"  Distance driven: {miles:.2f} miles")
+    if wrong > 0:
+        print("  Choices that weren't on the menu:", wrong)
+    if top_speed > SPEED_LIMIT:
+        print("  You went over the speed limit. Watch out for tickets!")
+    elif top_speed == 0:
+        print("  You never left the driveway!")
+    else:
+        print("  A safe drive. Nice job!")
+    print("=" * 44)
+
+
+def main():
+    show_welcome()
+    name = input("What's your name, driver? ").strip()
+    if name == "":
+        name = "Driver"
+    print("Hi,", name + "! Your car is ready.")
+
+    myCar = car.Car(2014, "Mitsubishi")
+    accelerations = 0
+    brakes = 0
+    wrong = 0
+    top_speed = 0
+    miles = 0.0
+    choice = ""
+    while choice != "3":
+        show_dashboard(myCar, miles)
+        show_menu()
+        choice = read_choice()
+        if choice == "1":
+            myCar.accelerate()
+            accelerations = accelerations + 1
+            print("Vroom! You speed up to", myCar.getSpeed(), "mph.")
+        elif choice == "2":
+            was = myCar.getSpeed()
+            myCar.brake()
+            brakes = brakes + 1
+            if was == 0:
+                print("You're already stopped.")
+            else:
+                print("Screech! You slow down to", myCar.getSpeed(), "mph.")
+        elif choice == "3":
+            print("Goodbye,", name + "! Thanks for driving the", myCar.getMake() + ".")
+        else:
+            wrong = wrong + 1
+            print("Invalid selection. Please choose 1, 2 or 3.")
+        if myCar.getSpeed() > top_speed:
+            top_speed = myCar.getSpeed()
+        # one minute of driving at this speed
+        miles = miles + myCar.getSpeed() / 60
+    show_summary(name, accelerations, brakes, top_speed, miles, wrong)
+
+
+main()
+''')], ['Sam', 'b', '1', '1', '1', '1', '1', '1', '1', '1', '1', '1', '1', '1', '1', '1', 'x', '2', 'B', 'brake', 'Q'],
+    ['============================================', '              _______',
+     '          ___/   |   |___', '         |  _          _ |', "         '-(_)--------(_)'",
+     '', '        WELCOME TO THE TEST DRIVE', '============================================',
+     "What's your name, driver? ", 'Hi, Sam! Your car is ready.', '',
+     '--------------------------------------------', 'Year: 2014', 'Make: Mitsubishi',
+     'Speed: 0 mph', '[--------------------] limit 65 mph', 'Trip meter: 0.00 miles',
+     'Parked. Press 1 to get moving!', '--------------------------------------------',
+     '1. Accelerate  (or a)', '2. Brake       (or b)', '3. Exit        (or q)',
+     'Enter your choice: ', "You're already stopped.", '',
+     '--------------------------------------------', 'Year: 2014', 'Make: Mitsubishi',
+     'Speed: 0 mph', '[--------------------] limit 65 mph', 'Trip meter: 0.00 miles',
+     'Parked. Press 1 to get moving!', '--------------------------------------------',
+     '1. Accelerate  (or a)', '2. Brake       (or b)', '3. Exit        (or q)',
+     'Enter your choice: ', 'Vroom! You speed up to 5 mph.', '',
+     '--------------------------------------------', 'Year: 2014', 'Make: Mitsubishi',
+     'Speed: 5 mph', '[#-------------------] limit 65 mph', 'Trip meter: 0.08 miles',
+     'Rolling through town.', '--------------------------------------------',
+     '1. Accelerate  (or a)', '2. Brake       (or b)', '3. Exit        (or q)',
+     'Enter your choice: ', 'Vroom! You speed up to 10 mph.', '',
+     '--------------------------------------------', 'Year: 2014', 'Make: Mitsubishi',
+     'Speed: 10 mph', '[##------------------] limit 65 mph', 'Trip meter: 0.25 miles',
+     'Rolling through town.', '--------------------------------------------',
+     '1. Accelerate  (or a)', '2. Brake       (or b)', '3. Exit        (or q)',
+     'Enter your choice: ', 'Vroom! You speed up to 15 mph.', '',
+     '--------------------------------------------', 'Year: 2014', 'Make: Mitsubishi',
+     'Speed: 15 mph', '[###-----------------] limit 65 mph', 'Trip meter: 0.50 miles',
+     'Rolling through town.', '--------------------------------------------',
+     '1. Accelerate  (or a)', '2. Brake       (or b)', '3. Exit        (or q)',
+     'Enter your choice: ', 'Vroom! You speed up to 20 mph.', '',
+     '--------------------------------------------', 'Year: 2014', 'Make: Mitsubishi',
+     'Speed: 20 mph', '[####----------------] limit 65 mph', 'Trip meter: 0.83 miles',
+     'Rolling through town.', '--------------------------------------------',
+     '1. Accelerate  (or a)', '2. Brake       (or b)', '3. Exit        (or q)',
+     'Enter your choice: ', 'Vroom! You speed up to 25 mph.', '',
+     '--------------------------------------------', 'Year: 2014', 'Make: Mitsubishi',
+     'Speed: 25 mph', '[#####---------------] limit 65 mph', 'Trip meter: 1.25 miles',
+     'Rolling through town.', '--------------------------------------------',
+     '1. Accelerate  (or a)', '2. Brake       (or b)', '3. Exit        (or q)',
+     'Enter your choice: ', 'Vroom! You speed up to 30 mph.', '',
+     '--------------------------------------------', 'Year: 2014', 'Make: Mitsubishi',
+     'Speed: 30 mph', '[######--------------] limit 65 mph', 'Trip meter: 1.75 miles',
+     'Cruising down the highway.', '--------------------------------------------',
+     '1. Accelerate  (or a)', '2. Brake       (or b)', '3. Exit        (or q)',
+     'Enter your choice: ', 'Vroom! You speed up to 35 mph.', '',
+     '--------------------------------------------', 'Year: 2014', 'Make: Mitsubishi',
+     'Speed: 35 mph', '[#######-------------] limit 65 mph', 'Trip meter: 2.33 miles',
+     'Cruising down the highway.', '--------------------------------------------',
+     '1. Accelerate  (or a)', '2. Brake       (or b)', '3. Exit        (or q)',
+     'Enter your choice: ', 'Vroom! You speed up to 40 mph.', '',
+     '--------------------------------------------', 'Year: 2014', 'Make: Mitsubishi',
+     'Speed: 40 mph', '[########------------] limit 65 mph', 'Trip meter: 3.00 miles',
+     'Cruising down the highway.', '--------------------------------------------',
+     '1. Accelerate  (or a)', '2. Brake       (or b)', '3. Exit        (or q)',
+     'Enter your choice: ', 'Vroom! You speed up to 45 mph.', '',
+     '--------------------------------------------', 'Year: 2014', 'Make: Mitsubishi',
+     'Speed: 45 mph', '[#########-----------] limit 65 mph', 'Trip meter: 3.75 miles',
+     'Cruising down the highway.', '--------------------------------------------',
+     '1. Accelerate  (or a)', '2. Brake       (or b)', '3. Exit        (or q)',
+     'Enter your choice: ', 'Vroom! You speed up to 50 mph.', '',
+     '--------------------------------------------', 'Year: 2014', 'Make: Mitsubishi',
+     'Speed: 50 mph', '[##########----------] limit 65 mph', 'Trip meter: 4.58 miles',
+     'Cruising down the highway.', '--------------------------------------------',
+     '1. Accelerate  (or a)', '2. Brake       (or b)', '3. Exit        (or q)',
+     'Enter your choice: ', 'Vroom! You speed up to 55 mph.', '',
+     '--------------------------------------------', 'Year: 2014', 'Make: Mitsubishi',
+     'Speed: 55 mph', '[###########---------] limit 65 mph', 'Trip meter: 5.50 miles',
+     'Cruising down the highway.', '--------------------------------------------',
+     '1. Accelerate  (or a)', '2. Brake       (or b)', '3. Exit        (or q)',
+     'Enter your choice: ', 'Vroom! You speed up to 60 mph.', '',
+     '--------------------------------------------', 'Year: 2014', 'Make: Mitsubishi',
+     'Speed: 60 mph', '[############--------] limit 65 mph', 'Trip meter: 6.50 miles',
+     'Cruising down the highway.', '--------------------------------------------',
+     '1. Accelerate  (or a)', '2. Brake       (or b)', '3. Exit        (or q)',
+     'Enter your choice: ', 'Vroom! You speed up to 65 mph.', '',
+     '--------------------------------------------', 'Year: 2014', 'Make: Mitsubishi',
+     'Speed: 65 mph', '[#############-------] limit 65 mph', 'Trip meter: 7.58 miles',
+     'Cruising down the highway.', '--------------------------------------------',
+     '1. Accelerate  (or a)', '2. Brake       (or b)', '3. Exit        (or q)',
+     'Enter your choice: ', 'Vroom! You speed up to 70 mph.', '',
+     '--------------------------------------------', 'Year: 2014', 'Make: Mitsubishi',
+     'Speed: 70 mph', '[##############------] limit 65 mph', 'Trip meter: 8.75 miles',
+     'Over the speed limit! Ease off the gas.', '--------------------------------------------',
+     '1. Accelerate  (or a)', '2. Brake       (or b)', '3. Exit        (or q)',
+     'Enter your choice: ', 'Invalid selection. Please choose 1, 2 or 3.', '',
+     '--------------------------------------------', 'Year: 2014', 'Make: Mitsubishi',
+     'Speed: 70 mph', '[##############------] limit 65 mph', 'Trip meter: 9.92 miles',
+     'Over the speed limit! Ease off the gas.', '--------------------------------------------',
+     '1. Accelerate  (or a)', '2. Brake       (or b)', '3. Exit        (or q)',
+     'Enter your choice: ', 'Screech! You slow down to 65 mph.', '',
+     '--------------------------------------------', 'Year: 2014', 'Make: Mitsubishi',
+     'Speed: 65 mph', '[#############-------] limit 65 mph', 'Trip meter: 11.00 miles',
+     'Cruising down the highway.', '--------------------------------------------',
+     '1. Accelerate  (or a)', '2. Brake       (or b)', '3. Exit        (or q)',
+     'Enter your choice: ', 'Screech! You slow down to 60 mph.', '',
+     '--------------------------------------------', 'Year: 2014', 'Make: Mitsubishi',
+     'Speed: 60 mph', '[############--------] limit 65 mph', 'Trip meter: 12.00 miles',
+     'Cruising down the highway.', '--------------------------------------------',
+     '1. Accelerate  (or a)', '2. Brake       (or b)', '3. Exit        (or q)',
+     'Enter your choice: ', 'Screech! You slow down to 55 mph.', '',
+     '--------------------------------------------', 'Year: 2014', 'Make: Mitsubishi',
+     'Speed: 55 mph', '[###########---------] limit 65 mph', 'Trip meter: 12.92 miles',
+     'Cruising down the highway.', '--------------------------------------------',
+     '1. Accelerate  (or a)', '2. Brake       (or b)', '3. Exit        (or q)',
+     'Enter your choice: ', 'Goodbye, Sam! Thanks for driving the Mitsubishi.', '',
+     '============================================', 'Trip summary for Sam',
+     '  Times you accelerated: 14', '  Times you braked: 4', '  Top speed: 70 mph',
+     '  Distance driven: 13.83 miles', "  Choices that weren't on the menu: 1",
+     '  You went over the speed limit. Watch out for tickets!',
+     '============================================'])
+CODED = CODED + [CAR_DRIVE]

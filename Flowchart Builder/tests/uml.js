@@ -486,18 +486,37 @@ CASES.forEach(function (one) {
          JSON.stringify(links) + " wanted " + JSON.stringify(one.links));
 
   // ---- drawn
-  var drawn = umlSvg(model, 1, { title: one.name, by: "A. Student" });
+  var drawn = umlSvg(model, 1, { title: one.name, by: "A. Student", grid: true });
   var svg = drawn.svg;
   var opens = (svg.match(/<g[ >]/g) || []).length, shuts = (svg.match(/<\/g>/g) || []).length;
-  expect(one.name + ": an SVG, every group shut", /^<svg [^>]*viewBox="0 0 \d+ \d+"/.test(svg) &&
+  expect(one.name + ": an SVG, every group shut", /^<\?xml [^>]*\?>\n<svg [^>]*viewBox="0 0 \d+ \d+"/.test(svg) &&
          /<\/svg>$/.test(svg) && opens === shuts && !/NaN|undefined/.test(svg),
          svg.slice(0, 120));
+  // made the way the chart is, so the Style side paints it (02-paint.js):
+  // the paper, the ruling, one group carrying the typeface and the line
+  // weight, each class a shape of the chart's, each line one of its arrows
+  var inner = svg.slice(svg.indexOf("<g font-family"));
+  var within = inner.slice(inner.indexOf(">") + 1);      // inside that group
+  expect(one.name + ": paper, ruling and one group of words, as the chart has them",
+         /<rect class="sheet" /.test(svg) && /class="grid fine"/.test(svg) && /class="grid major"/.test(svg) &&
+         (svg.match(/<g font-family=/g) || []).length === 1);
+  var shapes = (svg.match(/<g class="node" data-kind="(sub|rect)" data-i="cls-[^"]+"/g) || []).length;
+  expect(one.name + ": each class a shape of the chart's", shapes === drawn.laid.boxes.length,
+         shapes + " of " + drawn.laid.boxes.length);
+  expect(one.name + ": nothing sets its own typeface or line weight",
+         !/font-family|stroke-width|stroke="#/.test(within));
+  var lines = (within.match(/<path [^>]*>/g) || []).filter(function (p) { return !/class="flow/.test(p); });
+  var dividers = lines.every(function (p) { return /^<path d="M[\d.]+ [\d.]+ H[\d.]+"\/>$/.test(p); });
+  expect(one.name + ": every line between boxes one of the chart's arrows", dividers, lines.join(" "));
+  expect(one.name + ": every word along a line a label", !model.links.some(function (l) { return l.kind === "has"; }) ||
+         /<text class="label"/.test(svg));
   var boxes = drawn.laid.boxes;
-  var top = 36;                                     // under the title
   boxes.forEach(function (b) {
-    expect(one.name + ": " + b.name + " on the paper",
-           b.x >= 0 && b.y >= 0 && b.x + b.w <= drawn.w && b.y + b.h + top <= drawn.h,
+    expect(one.name + ": " + b.name + " on the paper, under the title",
+           b.x >= 0 && b.y >= 60 && b.x + b.w <= drawn.w && b.y + b.h <= drawn.h,
            [b.x, b.y, b.w, b.h, drawn.w, drawn.h].join(" "));
+    expect(one.name + ": " + b.name + " on the ruling", b.x % 20 === 0 && b.y % 20 === 0 && b.w % 20 === 0,
+           [b.x, b.y, b.w].join(" "));
     expect(one.name + ": " + b.name + " named in the drawing", svg.indexOf(">" + umlEsc(b.name) + "<") >= 0);
     boxes.forEach(function (o) {
       if (o === b) { return; }
@@ -521,6 +540,21 @@ CASES.forEach(function (one) {
     expect(one.name + ": Mermaid says " + line.trim(), mm.split("\n").indexOf(line) >= 0, "\n" + mm);
   });
 });
+
+// The words set the way the Style side sets them -- another typeface, a
+// bigger size, all bold -- are what the boxes are measured in: bigger
+// words, bigger boxes, and the group says the size they are drawn at.
+(function () {
+  var car = codeToPseudo(CASES[0].code, "python").uml;
+  var plain = umlSvg(car, 1, {}), big = umlSvg(car, 1, { px: 18, face: "Georgia, serif" });
+  var bold = umlSvg(car, 1, { bold: true });
+  var w0 = plain.laid.boxes[0].w, w1 = big.laid.boxes[0].w, h0 = plain.laid.boxes[0].h, h1 = big.laid.boxes[0].h;
+  expect("bigger words, a bigger box", w1 > w0 && h1 > h0, [w0, h0, w1, h1].join(" "));
+  expect("the size and typeface said on the group", /<g font-family="Georgia, serif" font-size="18"/.test(big.svg));
+  expect("bold words, a box at least as wide", bold.laid.boxes[0].w >= w0);
+  expect("no ruling where the paper has none", !/class="grid/.test(plain.svg) &&
+         /class="grid/.test(umlSvg(car, 1, { grid: true }).svg));
+})();
 
 if (bad.length) {
   bad.forEach(function (b) { console.log("FAIL " + b); });

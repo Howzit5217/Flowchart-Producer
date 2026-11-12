@@ -692,7 +692,8 @@
   if (typeof window !== "undefined") window.addEventListener("keydown", function (ev) {
     if (ev.key !== "F9" || ev.ctrlKey || ev.altKey || ev.metaKey || !chart) { return; }
     var g = byHand ? (picked ? el('.node[data-i="h' + picked + '"]', chart) : null) : sel;
-    if (!g) { return; }
+    // a class of a class diagram (19-uml.js) is no step to pause on
+    if (!g || /^cls-/.test(g.dataset.i || "")) { return; }
     ev.preventDefault();
     togglePause(pauseKey(g));
   });

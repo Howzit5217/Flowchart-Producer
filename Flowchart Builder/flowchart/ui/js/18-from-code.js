@@ -11501,7 +11501,7 @@
                 if (asked.prompt) {
                   out.push({ k: "display", parts: piecesOf(walk(asked.prompt)), line: x.line });
                 }
-                askFor(into, out, x.line, ch);
+                askFor(into, out, x.line, ch, asked.cased);
                 return into;
               }
               if (py && x.fn.k === "name" && x.fn.v === "dict" && !userFn("dict") && x.args.length) {
@@ -14153,7 +14153,7 @@
           if (asked.prompt) {
             out.push({ k: "display", parts: piecesOf(ready(asked.prompt, ch, out).e), line: line });
           }
-          askFor(target.k === "name" ? target : ready(target, ch, out).e, out, line, ch);
+          askFor(target.k === "name" ? target : ready(target, ch, out).e, out, line, ch, asked.cased);
           return;
         }
         if (v.k === "cond") {
@@ -14500,7 +14500,9 @@
       // -- "Enter score: ", said just before it -- is the one pseudocode's
       // Input already asks by itself, so code read back from what the page
       // wrote comes back as the Input it was, not a Display and an Input.
-      function askFor(target, out, line, ch) {
+      // `cased`: what was typed is wanted in small letters or capitals --
+      // input().strip().lower() -- so it is made so once it is in (inputOf)
+      function askFor(target, out, line, ch, cased) {
         var last = out[out.length - 1];
         var name = target.k === "name" ? target.v : null;
         if (last && last.k === "display" && last.parts.length === 1 && name &&
@@ -14509,6 +14511,9 @@
         }
         if (target.k !== "name") { intoPlace(target, { k: "str", v: "" }, ch); }
         out.push({ k: "input", target: target, line: line });
+        if (cased) {
+          out.push({ k: "set", target: copyOf(target), value: builtinCall(cased, [copyOf(target)], line), line: line });
+        }
       }
 
       // ---- asking for something ----------------------------------------
@@ -14517,7 +14522,7 @@
       // double.Parse(Console.ReadLine()), Number(prompt("Price")).
       function inputOf(e) {
         e = stripParens(e);
-        var kind = null, prompt = null, seen = false;
+        var kind = null, prompt = null, seen = false, cased = null;
         function wrap(k) { if (!kind) { kind = k; } }
         for (var guard = 0; guard < 12 && e; guard++) {
           if (e.k === "bin" && e.op === "==" && stripParens(e.b).k === "str" &&
@@ -14542,6 +14547,9 @@
           }
           if (/^(str|String)$/.test(p) && e.args.length === 1) { e = stripParens(e.args[0]); continue; }
           if (dot && /^(strip|trim|Trim|lower|upper|toLowerCase|toUpperCase|ToLower|ToUpper|rstrip|lstrip|trimEnd|TrimEnd|trimStart|TrimStart)$/.test(dot) && !e.args.length) {
+            // the outermost of lower() and upper() is the one that counts
+            if (!cased && /^(lower|toLowerCase|ToLower)$/.test(dot)) { cased = "toLower"; }
+            if (!cased && /^(upper|toUpperCase|ToUpper)$/.test(dot)) { cased = "toUpper"; }
             e = stripParens(e.fn.obj); continue;
           }
           // and the reading itself
@@ -14567,7 +14575,7 @@
         }
         if (!seen) { return null; }
         return { kind: kind || "text", prompt: prompt && stripParens(prompt).k === "str" &&
-                 !stripParens(prompt).v ? null : prompt };
+                 !stripParens(prompt).v ? null : prompt, cased: kind && kind !== "text" ? null : cased };
       }
 
       // ---- prints that do not end the line ------------------------------

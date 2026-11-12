@@ -73,7 +73,8 @@
     chart.oncontextmenu = function (ev) {
       if (!byHand) {
         var shape = ev.target.closest ? ev.target.closest(".node") : null;
-        if (!shape) { return; }
+        // (nor a class of a class diagram, 19-uml.js: no step to pause on)
+        if (!shape || /^cls-/.test(shape.dataset.i || "")) { return; }
         ev.preventDefault();
         openMenu(ev.clientX, ev.clientY, pauseRows(shape));
         return;

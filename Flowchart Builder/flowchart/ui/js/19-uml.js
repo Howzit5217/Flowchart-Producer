@@ -16,14 +16,26 @@
   // dashed), and which holds one or a list of another (an open arrow).
   //
   // The reading of the code (18-from-code.js) hands over the classes as they
-  // were written, in `said.uml`; this draws them, as an SVG like the chart's,
-  // to be saved as SVG or PNG or copied, and writes them as Mermaid, whose
-  // classDiagram GitHub, GitLab and Notion draw.
+  // were written, in `said.uml`; this draws them and writes them as Mermaid,
+  // whose classDiagram GitHub, GitLab and Notion draw.
+  //
+  // The drawing is made the way the chart's own drawing is (draw/svg.py):
+  // the paper a .sheet, the ruling .grid lines, every word inside the one
+  // group that carries the typeface, each class a .node, each line a .flow
+  // and each name along one a .label.  So whatever the Style side says --
+  // the palette, a box's own colors, its border, the typeface and size of
+  // the words, how heavy the lines are, the grid, Depth -- paint() (02-paint.js)
+  // puts on a class diagram exactly as it puts it on a flowchart, a box can
+  // be picked and styled on its own, and a saved SVG or PNG is what is shown.
 
   var UML_MARK = { "private": "-", "protected": "#", "public": "+", "package": "~", "internal": "~" };
-  var UML_FACE = "'Segoe UI', 'Helvetica Neue', Arial, sans-serif";
-  var UML_SIZE = 13, UML_LINE = 18, UML_PAD = 10, UML_EDGE = 24, UML_GAP = 48, UML_ROWS = 64;
-  var UML_INK = "#1f2328", UML_SOFT = "#57606a", UML_HEAD = "#eaf0f7", UML_PAPER = "#ffffff";
+  var UML_STEP = 20;                    // the ruling, as the chart's (GRID_STEP)
+  var UML_EDGE = 40, UML_GAP = 60, UML_ROWS = 80;   // two, three and four squares
+  var UML_INK = "#000000", UML_SOFT = "#57606a", UML_PAPER = "#ffffff";
+  var UML_FINE = "#e7ebf0", UML_MAJOR = "#d8dfe8";  // the ruling, before any palette
+  // How the words are set while a drawing is made: the chart's typeface, its
+  // size in pixels, whether all of it is bold, and the height of a line.
+  var umlType = { face: "Arial, Helvetica, sans-serif", px: 11, bold: false, line: 17, pad: 9 };
 
   // ------------------------------------------------------- what each says --
   // One field or method as a line of its box, the way UML writes it:
@@ -43,11 +55,12 @@
          : c.abstract ? "«abstract»" : "";
   }
 
-  // How wide some words come out.  On the page the browser measures them
-  // in the typeface they are drawn in; with no page about (the tests), a
-  // fair guess at it.
+  // How wide some words come out, in the typeface and size they are drawn
+  // in.  On the page the browser measures them; with no page about (the
+  // tests), a fair guess at it.
   var umlPen = null;
-  function umlWide(text, bold) {
+  function umlWide(text, bold, px) {
+    px = px || umlType.px;
     if (umlPen === null) {
       umlPen = false;
       try {
@@ -58,16 +71,18 @@
       } catch (e) { umlPen = false; }
     }
     if (umlPen) {
-      umlPen.font = (bold ? "bold " : "") + UML_SIZE + "px " + UML_FACE;
+      umlPen.font = (bold || umlType.bold ? "bold " : "") + px + "px " + umlType.face;
       return umlPen.measureText(text).width;
     }
-    return String(text).length * UML_SIZE * (bold ? 0.62 : 0.56);
+    return String(text).length * px * (bold || umlType.bold ? 0.62 : 0.56);
   }
+  function umlSnap(n) { return Math.round(n / UML_STEP) * UML_STEP; }
 
   // -------------------------------------------------------------- the boxes --
   // Each class as a box: its rows of words, how wide and tall, and where
-  // its compartments meet.  A class the code builds on but does not have
-  // -- Exception, JFrame, Comparable -- is a box with only its name (a stub).
+  // its compartments meet -- as wide as a whole number of squares, so that
+  // both its sides stand on the ruling.  A class the code builds on but does
+  // not have -- Exception, JFrame, Comparable -- is a box with only its name.
   function umlBox(c) {
     var head = [], body = [[], []];
     var kindWord = umlKindWord(c);
@@ -84,14 +99,15 @@
         body[1].push({ text: umlMember(m, true), under: m.statik, italic: m.abstract });
       });
     }
-    var w = 0;
-    head.forEach(function (r) { w = Math.max(w, umlWide(r.text, r.bold) + 2 * UML_PAD); });
+    var w = 0, pad = umlType.pad;
+    head.forEach(function (r) { w = Math.max(w, umlWide(r.text, r.bold, r.soft ? umlType.px - 1 : 0) + 2 * pad); });
     body.forEach(function (rows) {
-      rows.forEach(function (r) { w = Math.max(w, umlWide(r.text, false) + 2 * UML_PAD); });
+      rows.forEach(function (r) { w = Math.max(w, umlWide(r.text, false) + 2 * pad); });
     });
-    w = Math.ceil(Math.max(w, c.stub ? 90 : 130));
-    var headH = head.length * UML_LINE + 10;
-    var parts = c.stub ? [] : body.map(function (rows) { return rows.length ? rows.length * UML_LINE + 10 : 12; });
+    w = Math.max(UML_STEP * Math.ceil(w / UML_STEP), c.stub ? 100 : 120);
+    var L = umlType.line;
+    var headH = head.length * L + 10;
+    var parts = c.stub ? [] : body.map(function (rows) { return rows.length ? rows.length * L + 10 : 12; });
     var h = headH + parts.reduce(function (a, b) { return a + b; }, 0);
     return { cls: c, name: c.name, head: head, body: c.stub ? [] : body, w: w, h: h, headH: headH, parts: parts,
              kids: [], up: null, x: 0, y: 0, row: 0 };
@@ -105,7 +121,8 @@
   // neither, it starts a tree of its own.  Trees side by side, in the order
   // the code has them -- except that a class another one holds goes just
   // after the first that holds it, so the line between them is short.
-  function umlLaidOut(model) {
+  // `top` is the room the title takes above it all.
+  function umlLaidOut(model, top) {
     var boxes = [], byName = Object.create(null);
     function add(c) {
       var b = umlBox(c);
@@ -155,7 +172,8 @@
       roots.splice(fi + 1, 0, to);
     });
     // Room between two trees side by side, or two branches of one: more
-    // where a line joins them, for the name of the field it is.
+    // where a line joins them, for the name of the field it is -- a whole
+    // number of squares, like the boxes, so they all stay on the ruling.
     var held = (model.links || []).filter(function (l) { return l.kind === "has" && byName[l.from] && byName[l.to]; });
     function under(b, into) { into.push(b); b.kids.forEach(function (k) { under(k, into); }); return into; }
     function gapAfter(a, b) {
@@ -166,7 +184,7 @@
           most = Math.max(most, umlWide(l.label + (l.many ? "  *" : ""), false) + 56);
         }
       });
-      return Math.ceil(Math.max(UML_GAP, most));
+      return UML_STEP * Math.ceil(Math.max(UML_GAP, most) / UML_STEP);
     }
     function kidsWide(b) {
       return b.kids.reduce(function (s, k, i) { return s + k.span + (i ? gapAfter(b.kids[i - 1], k) : 0); }, 0);
@@ -181,10 +199,13 @@
     roots.forEach(function (r) { wide(r); rows(r, 0); });
     var rowH = [];
     boxes.forEach(function (b) { rowH[b.row] = Math.max(rowH[b.row] || 0, b.h); });
-    var rowY = [], y = UML_EDGE;
-    for (var r = 0; r < rowH.length; r++) { rowY[r] = y; y += rowH[r] + UML_ROWS; }
+    var rowY = [], y = UML_EDGE + (top || 0);
+    for (var r = 0; r < rowH.length; r++) {
+      rowY[r] = y;
+      y = umlSnap(y + rowH[r] + UML_ROWS);
+    }
     function place(b, x0) {
-      b.x = Math.round(x0 + (b.span - b.w) / 2);
+      b.x = umlSnap(x0 + (b.span - b.w) / 2);
       b.y = rowY[b.row];
       var x = x0 + (b.span - kidsWide(b)) / 2;
       b.kids.forEach(function (k, i) {
@@ -199,8 +220,10 @@
       place(rt, x);
       x += rt.span;
     });
+    var foot = 0;
+    boxes.forEach(function (b) { foot = Math.max(foot, b.y + b.h); });
     var w = Math.max(x + UML_EDGE, 160);
-    var h = Math.max(y - UML_ROWS + UML_EDGE, 80);
+    var h = Math.max(umlSnap(foot + UML_EDGE + UML_STEP / 2), 120);
     return { boxes: boxes, byName: byName, ups: ups, w: Math.ceil(w), h: Math.ceil(h), rowY: rowY, rowH: rowH };
   }
 
@@ -220,87 +243,117 @@
     return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
   }
 
-  // A hollow triangle with its point at (x, y), pointing the way (dx, dy) goes.
+  // A line between the boxes: the color, weight and dashes of the chart's
+  // arrows (.flow), unless it is one of UML's dashed ones.
+  function umlFlow(d, dashed) {
+    return '<path class="flow" d="' + d + '" fill="none"' + (dashed ? ' stroke-dasharray="6 4"' : "") + "/>";
+  }
+  // A hollow triangle with its point at (x, y), pointing the way (dx, dy)
+  // goes: drawn in the arrows' ink and filled with the paper (.sheet), so it
+  // stays hollow whatever color the paper is.
   function umlTriangle(x, y, dx, dy) {
     var len = Math.sqrt(dx * dx + dy * dy) || 1, ux = dx / len, uy = dy / len;
     var bx = x - ux * 14, by = y - uy * 14, px = -uy * 8, py = ux * 8;
-    return '<path d="M' + umlNum(x) + " " + umlNum(y) + " L" + umlNum(bx + px) + " " + umlNum(by + py) +
-           " L" + umlNum(bx - px) + " " + umlNum(by - py) + ' Z" fill="' + UML_PAPER + '" stroke="' + UML_INK +
-           '" stroke-width="1.3" stroke-linejoin="round"/>';
+    return '<polygon class="flow sheet" points="' + umlNum(x) + "," + umlNum(y) + " " + umlNum(bx + px) + "," +
+           umlNum(by + py) + " " + umlNum(bx - px) + "," + umlNum(by - py) + '" fill="' + UML_PAPER + '"/>';
   }
   // An open arrowhead, the same way.
   function umlArrowHead(x, y, dx, dy) {
     var len = Math.sqrt(dx * dx + dy * dy) || 1, ux = dx / len, uy = dy / len;
     var bx = x - ux * 11, by = y - uy * 11, px = -uy * 6, py = ux * 6;
-    return '<path d="M' + umlNum(bx + px) + " " + umlNum(by + py) + " L" + umlNum(x) + " " + umlNum(y) +
-           " L" + umlNum(bx - px) + " " + umlNum(by - py) + '" fill="none" stroke="' + UML_INK +
-           '" stroke-width="1.3" stroke-linejoin="round" stroke-linecap="round"/>';
+    return umlFlow("M" + umlNum(bx + px) + " " + umlNum(by + py) + " L" + umlNum(x) + " " + umlNum(y) +
+                   " L" + umlNum(bx - px) + " " + umlNum(by - py), false);
   }
 
+  // Words.  `cls` names what they are to the page: "label" along a line,
+  // "title" and "author" at the top, nothing inside a box (the box's own).
   function umlText(x, y, text, how) {
     how = how || {};
-    return '<text x="' + umlNum(x) + '" y="' + umlNum(y) + '"' +
+    return '<text' + (how.cls ? ' class="' + how.cls + '"' : "") + ' x="' + umlNum(x) + '" y="' + umlNum(y) + '"' +
            (how.anchor ? ' text-anchor="' + how.anchor + '"' : "") +
            (how.bold ? ' font-weight="bold"' : "") + (how.italic ? ' font-style="italic"' : "") +
            (how.under ? ' text-decoration="underline"' : "") +
-           ' fill="' + (how.soft ? UML_SOFT : UML_INK) + '"' +
-           (how.small ? ' font-size="' + (UML_SIZE - 1) + '"' : "") + ">" + umlEsc(text) + "</text>";
+           (how.size ? ' font-size="' + umlNum(how.size) + '"' : "") +
+           ' stroke="none" fill="' + (how.soft ? UML_SOFT : UML_INK) + '">' + umlEsc(text) + "</text>";
+  }
+
+  // The ruling, as the chart's: a fine line every square, a darker one
+  // every fifth, from the corner of the sheet.
+  function umlRuling(W, H) {
+    var fine = [], major = [], n, at;
+    for (n = 0, at = 0; at <= W + 0.01; n++, at += UML_STEP) {
+      (n % 5 ? fine : major).push("M" + at + ",0V" + H);
+    }
+    for (n = 0, at = 0; at <= H + 0.01; n++, at += UML_STEP) {
+      (n % 5 ? fine : major).push("M0," + at + "H" + W);
+    }
+    return '<path class="grid fine" d="' + fine.join("") + '" fill="none" stroke="' + UML_FINE +
+           '" stroke-width="0.7" stroke-linecap="butt"/>\n' +
+           '<path class="grid major" d="' + major.join("") + '" fill="none" stroke="' + UML_MAJOR +
+           '" stroke-width="1" stroke-linecap="butt"/>';
   }
 
   // ------------------------------------------------------------ the drawing --
-  // The whole diagram as an SVG, white paper and dark ink, to be shown on
-  // the page and saved as it is.  `scale` makes it bigger (for a PNG);
-  // `said` may hold a title and who made it, written at the top the way the
-  // chart has them.
+  // The whole diagram as an SVG made the way the chart is, to be put on the
+  // paper, painted by the Style side and saved as it is.  `scale` makes it
+  // bigger.  `said` says how: `title` and `by` (who made it), written at
+  // the top as the chart has them; `face`, `px` and `bold`, how the words are
+  // set; `grid`, whether the paper is ruled.
   function umlSvg(model, scale, said) {
     scale = scale || 1;
     said = said || {};
-    var laid = umlLaidOut(model), out = [];
+    var px = said.px > 0 ? said.px : 11;
+    umlType = { face: said.face || "Arial, Helvetica, sans-serif", px: px, bold: !!said.bold,
+                line: Math.max(14, Math.round(px * 1.5)), pad: Math.max(6, Math.round(px * 0.8)) };
     var title = String(said.title || "").trim(), by = String(said.by || "").trim();
-    var top = title || by ? 36 : 0;
-    var W = Math.max(laid.w, title || by ? Math.ceil(umlWide(title + "   " + by, true) * 15 / UML_SIZE) + 2 * UML_EDGE : 0);
-    var H = laid.h + top;
+    var top = title && by ? 40 : title || by ? 20 : 0;
+    var laid = umlLaidOut(model, top), out = [];
+    var W = Math.max(laid.w, title || by ? UML_STEP * Math.ceil((Math.max(umlWide(title, true, 16) * 1.1,
+                                                                            umlWide(by, false)) + 2 * UML_EDGE) / UML_STEP) : 0);
+    var H = laid.h;
+    var names = (model.classes || []).map(function (c) { return c.name; }).join(", ");
+    out.push('<?xml version="1.0" encoding="UTF-8"?>');
     out.push('<svg xmlns="http://www.w3.org/2000/svg" width="' + Math.ceil(W * scale) + '" height="' +
-             Math.ceil(H * scale) + '" viewBox="0 0 ' + W + " " + H + '" font-family="' + umlEsc(UML_FACE) +
-             '" font-size="' + UML_SIZE + '">');
-    out.push('<rect x="0" y="0" width="' + W + '" height="' + H + '" fill="' + UML_PAPER + '"/>');
-    if (top) {
-      out.push('<text x="' + UML_EDGE + '" y="' + (UML_EDGE + 4) + '" font-size="15" fill="' + UML_INK + '">' +
-               (title ? '<tspan font-weight="bold">' + umlEsc(title) + "</tspan>" : "") +
-               (by ? '<tspan fill="' + UML_SOFT + '"' + (title ? ' dx="12"' : "") + ">" + umlEsc(by) + "</tspan>" : "") +
-               "</text>");
-      out.push('<g transform="translate(0 ' + top + ')">');
+             Math.ceil(H * scale) + '" viewBox="0 0 ' + W + " " + H + '" aria-label="' +
+             umlEsc(title || names) + '">');
+    out.push("<desc>" + umlEsc("Class diagram: " + names) + "</desc>");
+    out.push('<rect class="sheet" width="100%" height="100%" fill="' + UML_PAPER + '"/>');
+    if (said.grid) { out.push(umlRuling(W, H)); }
+    // every word and every line inside the one group, as on the chart: the
+    // page sets the typeface, the size and how heavy the lines are on it
+    out.push('<g font-family="' + umlEsc(umlType.face) + '" font-size="' + umlNum(px) + '" fill="none" stroke="' +
+             UML_INK + '" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round">');
+    if (title) {
+      out.push(umlText(UML_EDGE, UML_EDGE + 12, title, { cls: "title", bold: true, size: 16 }));
     }
+    if (by) { out.push(umlText(UML_EDGE, UML_EDGE + (title ? 29 : 12), by, { cls: "author" })); }
     var lines = [], marks = [], words = [];
+    var small = px - 1;
     // built on: each parent's own drawn as one tree, the triangle at the parent
     laid.boxes.forEach(function (up) {
       if (!up.kids.length) { return; }
-      var px = up.x + up.w / 2, py = up.y + up.h;
+      var tx = up.x + up.w / 2, ty = up.y + up.h;
       var bus = laid.rowY[up.row + 1] - UML_ROWS / 2;
       var dashedAll = up.kids.every(function (k) { return k.upKind === "implements"; });
-      var dash = dashedAll ? ' stroke-dasharray="6 4"' : "";
-      var xs = up.kids.map(function (k) { return k.x + k.w / 2; }).concat([px]);
-      lines.push('<path d="M' + umlNum(px) + " " + umlNum(py + 14) + " V" + umlNum(bus) + '" fill="none" stroke="' +
-                 UML_INK + '" stroke-width="1.3"' + dash + "/>");
-      if (up.kids.length > 1 || Math.abs(xs[0] - px) > 0.5) {
-        lines.push('<path d="M' + umlNum(Math.min.apply(null, xs)) + " " + umlNum(bus) + " H" +
-                   umlNum(Math.max.apply(null, xs)) + '" fill="none" stroke="' + UML_INK + '" stroke-width="1.3"' + dash + "/>");
+      var xs = up.kids.map(function (k) { return k.x + k.w / 2; }).concat([tx]);
+      lines.push(umlFlow("M" + umlNum(tx) + " " + umlNum(ty + 14) + " V" + umlNum(bus), dashedAll));
+      if (up.kids.length > 1 || Math.abs(xs[0] - tx) > 0.5) {
+        lines.push(umlFlow("M" + umlNum(Math.min.apply(null, xs)) + " " + umlNum(bus) + " H" +
+                           umlNum(Math.max.apply(null, xs)), dashedAll));
       }
       up.kids.forEach(function (k) {
-        var kx = k.x + k.w / 2;
-        lines.push('<path d="M' + umlNum(kx) + " " + umlNum(bus) + " V" + umlNum(k.y) + '" fill="none" stroke="' +
-                   UML_INK + '" stroke-width="1.3"' + (k.upKind === "implements" ? ' stroke-dasharray="6 4"' : "") + "/>");
+        lines.push(umlFlow("M" + umlNum(k.x + k.w / 2) + " " + umlNum(bus) + " V" + umlNum(k.y),
+                           k.upKind === "implements"));
       });
-      marks.push(umlTriangle(px, py, 0, -1));
+      marks.push(umlTriangle(tx, ty, 0, -1));
     });
     // built on, or saying it does, away from its own tree: a line of its own
     laid.ups.forEach(function (u) {
       if (u.kid.up === u.up) { return; }
       var to = { x: u.up.x + u.up.w / 2, y: u.up.y + u.up.h / 2 };
       var a = umlEdgeOf(u.kid, to.x, to.y), z = umlEdgeOf(u.up, a.x, a.y);
-      lines.push('<path d="M' + umlNum(a.x) + " " + umlNum(a.y) + " L" + umlNum(z.x) + " " + umlNum(z.y) +
-                 '" fill="none" stroke="' + UML_INK + '" stroke-width="1.3"' +
-                 (u.kind === "implements" ? ' stroke-dasharray="6 4"' : "") + "/>");
+      lines.push(umlFlow("M" + umlNum(a.x) + " " + umlNum(a.y) + " L" + umlNum(z.x) + " " + umlNum(z.y),
+                         u.kind === "implements"));
       marks.push(umlTriangle(z.x, z.y, z.x - a.x, z.y - a.y));
     });
     // holds: an open arrow to what it holds, the field's name beside it,
@@ -315,11 +368,10 @@
       var a, z;
       if (a0 === z0) {
         // a field holding one of its own kind: a loop off its right side
-        var rx = a0.x + a0.w, ty = a0.y + 14 + shift;
-        lines.push('<path d="M' + umlNum(rx) + " " + umlNum(ty) + " h26 v26 h-26" + '" fill="none" stroke="' +
-                   UML_INK + '" stroke-width="1.3"/>');
-        marks.push(umlArrowHead(rx, ty + 26, -1, 0));
-        words.push(umlText(rx + 30, ty + 17, l.label + (l.many ? " *" : ""), { soft: true, small: true }));
+        var rx = a0.x + a0.w, ry = a0.y + 14 + shift;
+        lines.push(umlFlow("M" + umlNum(rx) + " " + umlNum(ry) + " h26 v26 h-26", false));
+        marks.push(umlArrowHead(rx, ry + 26, -1, 0));
+        words.push(umlText(rx + 30, ry + 17, l.label + (l.many ? " *" : ""), { cls: "label", soft: true, size: small }));
         return;
       }
       var ay0 = a0.y, ay1 = a0.y + a0.h, zy0 = z0.y, zy1 = z0.y + z0.h;
@@ -350,8 +402,7 @@
         a = pts[2];
         z = pts[3];
       }
-      lines.push('<path d="M' + pts.map(function (p) { return umlNum(p.x) + " " + umlNum(p.y); }).join(" L") +
-                 '" fill="none" stroke="' + UML_INK + '" stroke-width="1.3" stroke-linejoin="round"/>');
+      lines.push(umlFlow("M" + pts.map(function (p) { return umlNum(p.x) + " " + umlNum(p.y); }).join(" L"), false));
       marks.push(umlArrowHead(z.x, z.y, z.x - a.x, z.y - a.y));
       // the field's name and how many, at the end it points to, the way
       // UML names an end: * by the arrow, the name just past it, on one
@@ -359,48 +410,58 @@
       var len = Math.sqrt(Math.pow(z.x - a.x, 2) + Math.pow(z.y - a.y, 2)) || 1;
       var ux = (z.x - a.x) / len, uy = (z.y - a.y) / len, side = nth % 2 ? 1 : -1;
       // across the line: upwards where it runs sideways, rightwards where it runs up or down
-      var px = uy, py = -ux;
-      if (Math.abs(ux) > 0.7 ? py > 0 : px < 0) { px = -px; py = -py; }
-      px *= side; py *= side;
-      var nameW = umlWide(l.label, false) * (UML_SIZE - 1) / UML_SIZE;
+      var cx = uy, cy = -ux;
+      if (Math.abs(ux) > 0.7 ? cy > 0 : cx < 0) { cx = -cx; cy = -cy; }
+      cx *= side; cy *= side;
+      var nameW = umlWide(l.label, false, small);
       var flat = Math.abs(ux) > 0.7, star = l.many ? 12 : 0;
       var back = flat ? 16 + star + nameW / 2 : 26 + star;
-      var nx = z.x - ux * back + px * (flat ? 9 : 8 + nameW / 2), ny = z.y - uy * back + py * 9;
-      words.push(umlText(nx, ny + 4, l.label, { anchor: "middle", soft: true, small: true }));
+      var nx = z.x - ux * back + cx * (flat ? 9 : 8 + nameW / 2), ny = z.y - uy * back + cy * 9;
+      words.push(umlText(nx, ny + 4, l.label, { cls: "label", anchor: "middle", soft: true, size: small }));
       if (l.many) {
-        var sx = z.x - ux * 16 + px * (flat ? 9 : 12), sy = z.y - uy * 16 + py * 9;
-        words.push(umlText(sx, sy + 5, "*", { anchor: "middle", soft: true }));
+        var sx = z.x - ux * 16 + cx * (flat ? 9 : 12), sy = z.y - uy * 16 + cy * 9;
+        words.push(umlText(sx, sy + 5, "*", { cls: "label", anchor: "middle", soft: true }));
       }
     });
-    out.push(lines.join(""));
-    // the boxes over the lines
+    out.push(lines.join("\n"));
+    // The boxes over the lines, each a shape of the chart's (.node), drawn
+    // in the colors a module wears on a flowchart (the kind "sub", Call a
+    // module), which is what a class nearest is -- or, for one the program
+    // only builds on, a plain step's (the kind "rect"): its outline,
+    // a band across its name in a wash of the outline's own color (.inked,
+    // filled with it by the page, faintly), so it shows on dark paper as on
+    // light, and the lines between its parts.
     laid.boxes.forEach(function (b) {
-      var g = ['<g data-class="' + umlEsc(b.name) + '">'];
-      g.push('<rect x="' + b.x + '" y="' + b.y + '" width="' + b.w + '" height="' + b.h + '" fill="' + UML_PAPER +
-             '" stroke="' + UML_INK + '" stroke-width="1.3"' + (b.cls.stub ? ' stroke-dasharray="5 3"' : "") + "/>");
-      g.push('<rect x="' + (b.x + 0.65) + '" y="' + (b.y + 0.65) + '" width="' + (b.w - 1.3) + '" height="' +
-             (b.headH - 1.3) + '" fill="' + UML_HEAD + '"/>');
+      var g = ['<g class="node" data-kind="' + (b.cls.stub ? "rect" : "sub") + '" data-i="cls-' + umlEsc(b.name) +
+               '" data-class="' + umlEsc(b.name) + '">'];
+      g.push('<rect x="' + b.x + '" y="' + b.y + '" width="' + b.w + '" height="' + b.h + '" fill="' + UML_PAPER + '"' +
+             (b.cls.stub ? ' stroke-dasharray="5 3"' : "") + "/>");
+      if (!b.cls.stub) {
+        g.push('<rect class="inked" x="' + b.x + '" y="' + b.y + '" width="' + b.w + '" height="' + b.headH +
+               '" fill="' + UML_INK + '" fill-opacity="0.08"/>');
+      }
       var y = b.y + 5;
       b.head.forEach(function (r) {
-        y += UML_LINE;
-        g.push(umlText(b.x + b.w / 2, y - 5, r.text, { anchor: "middle", bold: r.bold, italic: r.italic, soft: r.soft, small: r.soft }));
+        y += umlType.line;
+        g.push(umlText(b.x + b.w / 2, y - 5, r.text, { anchor: "middle", bold: r.bold, italic: r.italic,
+                                                       soft: r.soft, size: r.soft ? small : 0 }));
       });
-      var top = b.y + b.headH;
+      var at = b.y + b.headH;
       b.body.forEach(function (rows, k) {
-        g.push('<path d="M' + b.x + " " + top + " H" + (b.x + b.w) + '" stroke="' + UML_INK + '" stroke-width="1.3"/>');
-        var yy = top + 5;
+        g.push('<path d="M' + b.x + " " + at + " H" + (b.x + b.w) + '"/>');
+        var yy = at + 5;
         rows.forEach(function (r) {
-          yy += UML_LINE;
-          g.push(umlText(b.x + UML_PAD, yy - 5, r.text, { under: r.under, italic: r.italic }));
+          yy += umlType.line;
+          g.push(umlText(b.x + umlType.pad, yy - 5, r.text, { under: r.under, italic: r.italic }));
         });
-        top += b.parts[k];
+        at += b.parts[k];
       });
       g.push("</g>");
       out.push(g.join(""));
     });
-    out.push(marks.join(""));
-    out.push(words.join(""));
-    if (top) { out.push("</g>"); }
+    out.push(marks.join("\n"));
+    out.push(words.join("\n"));
+    out.push("</g>");
     out.push("</svg>");
     return { svg: out.join("\n"), w: W, h: H, laid: laid };
   }
@@ -440,12 +501,12 @@
   }
 
   // ---------------------------------------------------------- on the paper --
-  // Options' "Draw the code as: Class diagram" (#o-classes, the Code tab
-  // only).  Build reads the code and runs it as it always does; what goes
-  // on the paper is the class diagram in the flowchart's place, so the
-  // Files buttons -- SVG, PNG, PDF, Copy, Print -- take it as they take a
-  // chart, and Mermaid text writes it as Mermaid's classDiagram.  Code with
-  // no classes is drawn as a flowchart still, and Build says why.
+  // Options' "Draw as: Class diagram" (#o-classes, the Code tab only).
+  // Build reads the code and runs it as it always does; what goes on the
+  // paper is the class diagram in the flowchart's place, so the Files
+  // buttons -- SVG, PNG, PDF, Copy, Print -- take it as they take a chart,
+  // and Mermaid text writes it as Mermaid's classDiagram.  Code with no
+  // classes is drawn as a flowchart still, and Build says why.
   var umlOnPaper = null;            // { model, w, h } while one is on the paper
   var umlNone = false;              // asked for, and the code had no classes
 
@@ -464,6 +525,17 @@
     return langUml;
   }
 
+  // How the chart's words are set now, as the Style side has them: the
+  // typeface and size paint() will put on the drawing, so the boxes are
+  // measured in what they will be drawn in.  A new typeface or size has the
+  // chart drawn again (reflowSoon), and this again with it.
+  function classesLook() {
+    var L = lettersOf();
+    return { face: CAN_REFLOW && L.face && FACES[L.face] ? FACES[L.face] : FACES.sans,
+             px: CAN_REFLOW && chartPt() !== PLAIN_PT ? ptPx(chartPt()) : typeBase(),
+             bold: !!L.bold };
+  }
+
   // What Build puts on the paper: `svg`, the flowchart, or the class
   // diagram in its place.
   function classesInstead(svg) {
@@ -475,8 +547,11 @@
       umlNone = true;
       return svg;
     }
+    var look = classesLook();
     var drawn = umlSvg(model, 1, { title: el("#f-title") ? el("#f-title").value : "",
-                                   by: el("#f-author") ? el("#f-author").value : "" });
+                                   by: el("#f-author") ? el("#f-author").value : "",
+                                   face: look.face, px: look.px, bold: look.bold,
+                                   grid: el("#f-grid") ? el("#f-grid").checked : true });
     umlOnPaper = { model: model, w: drawn.w, h: drawn.h };
     return drawn.svg;
   }
